@@ -53,9 +53,13 @@ export function useChat(initialThreadId: string | null) {
     const [isStreaming, setIsStreaming] = useState(false);
     const abortRef = useRef<AbortController | null>(null);
     const threadRef = useRef<string | null>(initialThreadId);
+    // The thread whose history is already on screen (a new thread is adopted when its first turn ends).
+    const loadedFor = useRef<string | null>(null);
 
     // Load history (and any confirmation still waiting) when a thread is opened.
     useEffect(() => {
+        if (initialThreadId === loadedFor.current) return;
+        loadedFor.current = initialThreadId;
         abortRef.current?.abort();
         threadRef.current = initialThreadId;
         setThreadId(initialThreadId);
@@ -96,6 +100,7 @@ export function useChat(initialThreadId: string | null) {
             }
             if (event.event === 'done') {
                 threadRef.current = event.data.threadId;
+                loadedFor.current = event.data.threadId;
                 setThreadId(event.data.threadId);
                 qc.invalidateQueries({ queryKey: ['ai', 'threads'] });
             }

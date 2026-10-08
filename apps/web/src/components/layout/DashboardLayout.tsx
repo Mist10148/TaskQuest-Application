@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { 
   LayoutDashboard, ListTodo, User, Sword, Sparkles, Trophy, BarChart3,
-  Settings, LogOut, Menu, X, Flame, Gamepad2
+  Settings, LogOut, Menu, X, Flame, Gamepad2, Bot
 } from "lucide-react";
 import { useState } from "react";
 import { ClassBadge, PlayerClass } from "@/components/game/ClassBadge";
@@ -24,6 +24,9 @@ const navItems = [
   { path: "/achievements", icon: Trophy, label: "Achievements" },
   { path: "/leaderboard", icon: BarChart3, label: "Leaderboard" },
 ];
+
+// Shown only when the server has AI enabled for this user.
+const aiNavItem = { path: "/chat", icon: Bot, label: "AI Chat" };
 
 export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
@@ -115,7 +118,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
         {/* Navigation */}
         <nav className="flex-1 p-2 sm:p-4 space-y-0.5 sm:space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {(user?.features?.ai ? [...navItems.slice(0, 2), aiNavItem, ...navItems.slice(2)] : navItems).map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Link

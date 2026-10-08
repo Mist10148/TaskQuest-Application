@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLists, useList, useCreateList, useUpdateList, useDeleteList, useCreateItem, useToggleItem, useUpdateItem, useDeleteItem } from "@/hooks/useApi";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { SummarizeButton } from "@/components/ai/SummarizeButton";
 import { PriorityPanel } from "@/components/ai/PriorityPanel";
@@ -60,7 +61,9 @@ const Tasks = () => {
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
 
-  const [selectedListId, setSelectedListId] = useState<number | null>(null);
+  // /tasks?list=42 opens a quest directly (used by links from AI answers).
+  const [searchParams] = useSearchParams();
+  const [selectedListId, setSelectedListId] = useState<number | null>(() => Number(searchParams.get("list")) || null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");

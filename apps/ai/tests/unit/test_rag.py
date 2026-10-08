@@ -145,6 +145,42 @@ async def test_reconcile_finds_missing_and_stale(seeded):
         assert {lid for _, lid in await indexer.stale_lists(conn, store)} == {1, 2, 3}
 
 
+async def test_reconcile_catches_list_only_edits(seeded):
+    store, emb = make_store(), FakeEmbedder()
+    async with seeded.begin() as conn:
+        await indexer.reconcile(conn, store, emb)
+        old, edited = "2000-01-01 00:00:00", "2001-01-01 00:00:00"
+        await conn.execute(text("UPDATE ai_embeddings SET updated_at = :t"), {"t": old})
+        await conn.execute(text("UPDATE items SET updated_at = :t"), {"t": old})
+        await conn.execute(text("UPDATE lists SET updated_at = :t"), {"t": old})
+        assert await indexer.stale_lists(conn, store) == []
+        # Renaming a quest touches only the list row, not its subtasks
+        await conn.execute(
+            text("UPDATE lists SET name = 'Algebra homework', updated_at = :t WHERE id = 1"), {"t": edited}
+        )
+        assert await indexer.stale_lists(conn, store) == [(UID, 1)]
+        calls = emb.doc_calls
+        assert await indexer.reconcile(conn, store, emb) == 1
+        assert emb.doc_calls == calls + 1
+        content = (await conn.execute(text("SELECT content FROM ai_embeddings WHERE source_id = 'L1'"))).scalar()
+        assert "Algebra homework" in content
+        assert await indexer.stale_lists(conn, store) == []
+
+
+async def test_unchanged_text_is_not_stale_twice(seeded):
+    store, emb = make_store(), FakeEmbedder()
+    async with seeded.begin() as conn:
+        await indexer.reconcile(conn, store, emb)
+        await conn.execute(text("UPDATE ai_embeddings SET updated_at = '2000-01-01 00:00:00'"))
+        # A change that does not alter the chunk text (e.g. a reorder) still bumps the timestamp
+        await conn.execute(text("UPDATE lists SET updated_at = '2001-01-01 00:00:00' WHERE id = 2"))
+        assert (UID, 2) in await indexer.stale_lists(conn, store)
+        calls = emb.doc_calls
+        await indexer.reconcile(conn, store, emb)
+        assert emb.doc_calls == calls  # nothing re-embedded
+        assert (UID, 2) not in await indexer.stale_lists(conn, store)
+
+
 async def test_index_docs_is_idempotent_and_global(engine):
     store, emb = make_store(), FakeEmbedder()
     docs = {"gameplay": "# Games\nBlackjack pays 3:2.\n# Quests\nComplete subtasks for XP."}

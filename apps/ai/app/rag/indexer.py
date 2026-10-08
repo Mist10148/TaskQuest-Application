@@ -65,6 +65,14 @@ async def index_list(
     chunks = [list_chunk(lst, items), *item_chunks(lst, items)]
     existing = await store.existing_hashes(conn, discord_id, list_id=list_id)
     n = await _sync(conn, store, embedder, discord_id, chunks, existing)
+    # The list was checked even if its text did not change (e.g. a subtask was reordered).
+    unchanged = [
+        c.source_id
+        for c in chunks
+        if c.source_type == "list" and existing.get(("list", c.source_id)) == c.content_hash
+    ]
+    if unchanged:
+        await store.touch(conn, "list", unchanged)
     # Long subtasks that became short (or were deleted) no longer have a chunk.
     stale_items = [sid for (st, sid) in existing if st == "item" and sid not in {c.source_id for c in chunks}]
     if stale_items:
@@ -104,11 +112,12 @@ async def index_docs(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Em
 
 
 async def stale_lists(conn: AsyncConnection, store: MySQLNumpyStore) -> list[tuple[str, int]]:
-    """Lists (of users who allow AI) missing an embedding or edited after it was written."""
+    """Lists (of users who allow AI) missing an embedding, or whose list or subtasks changed after it was written."""
     lists = (
         await conn.execute(
             text(
-                "SELECT l.discord_id, l.id, (SELECT MAX(i.updated_at) FROM items i WHERE i.list_id = l.id) AS last_item "
+                "SELECT l.discord_id, l.id, l.updated_at, "
+                "(SELECT MAX(i.updated_at) FROM items i WHERE i.list_id = l.id) AS last_item "
                 "FROM lists l JOIN users u ON u.discord_id = l.discord_id WHERE u.ai_enabled = 1"
             )
         )
@@ -123,10 +132,10 @@ async def stale_lists(conn: AsyncConnection, store: MySQLNumpyStore) -> list[tup
         ).all()
     }
     out = []
-    for discord_id, list_id, last_item in lists:
+    for discord_id, list_id, list_updated, last_item in lists:
         at = embedded.get(f"L{list_id}")
-        last = repo.to_datetime(last_item)
-        if at is None or (last is not None and last > at):
+        changes = [d for d in (repo.to_datetime(list_updated), repo.to_datetime(last_item)) if d is not None]
+        if at is None or (changes and max(changes) > at):
             out.append((discord_id, list_id))
     return out
 

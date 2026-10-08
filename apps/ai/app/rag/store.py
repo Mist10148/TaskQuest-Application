@@ -118,7 +118,8 @@ class MySQLNumpyStore:
             updated = await conn.execute(
                 text(
                     "UPDATE ai_embeddings SET discord_id = :uid, list_id = :lid, content = :content, "
-                    "content_hash = :hash, embedding = :emb WHERE source_type = :st AND source_id = :sid AND model = :model"
+                    "content_hash = :hash, embedding = :emb, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE source_type = :st AND source_id = :sid AND model = :model"
                 ),
                 params,
             )
@@ -131,6 +132,17 @@ class MySQLNumpyStore:
                     params,
                 )
             self.invalidate(row.discord_id)
+
+    async def touch(self, conn: AsyncConnection, source_type: str, source_ids: list[str]) -> None:
+        """Mark unchanged rows as checked now, so the reconcile job does not flag them again."""
+        for sid in source_ids:
+            await conn.execute(
+                text(
+                    "UPDATE ai_embeddings SET updated_at = CURRENT_TIMESTAMP "
+                    "WHERE source_type = :st AND source_id = :sid AND model = :model"
+                ),
+                {"st": source_type, "sid": sid, "model": self.model},
+            )
 
     async def delete(self, conn: AsyncConnection, discord_id: str, *, list_id: int | None = None) -> None:
         if list_id is None:

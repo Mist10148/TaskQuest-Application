@@ -6,9 +6,9 @@
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
-import MySQLStoreFactory from 'express-mysql-session';
 import db from '@taskquest/shared/db';
 import config from '../config.js';
+import { MySQLSessionStore } from './sessionStore.js';
 
 /** Security headers, with a CSP matching what the SPA actually loads. */
 export function securityHeaders() {
@@ -83,21 +83,9 @@ export function csrfProtection(req, res, next) {
     next();
 }
 
-/** express-session backed by the web_sessions table (survives restarts). */
+/** express-session backed by the web_sessions table (survives restarts and redeploys). */
 export function sessionMiddleware(cookieName) {
-    const MySQLStore = MySQLStoreFactory(session);
-    const store = new MySQLStore(
-        {
-            createDatabaseTable: false, // owned by migration 001
-            clearExpired: true,
-            checkExpirationInterval: 15 * 60 * 1000,
-            expiration: config.sessionMaxAgeMs,
-            schema: { tableName: 'web_sessions', columnNames: { session_id: 'session_id', expires: 'expires', data: 'data' } }
-        },
-        db.getPool()
-    );
-    // Don't let the cleanup timer keep the process alive during shutdown.
-    store.onReady?.().then(() => store._expirationInterval?.unref?.()).catch(() => {});
+    const store = new MySQLSessionStore(db.getPool(), { ttlMs: config.sessionMaxAgeMs });
 
     return session({
         name: cookieName,

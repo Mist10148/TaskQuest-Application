@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from app.config import get_settings
@@ -34,3 +35,11 @@ def embeddings_model() -> Any:
     return GoogleGenerativeAIEmbeddings(
         model=s.gemini_embed_model, google_api_key=s.gemini_api_key, output_dimensionality=s.embed_dim
     )
+
+
+def get_llm_factory() -> Callable[[], Any]:
+    """FastAPI dependency returning a lazy model factory (overridden in tests with a scripted fake).
+
+    Lazy so cached answers and deterministic fallbacks work without a Gemini key.
+    """
+    return chat_model

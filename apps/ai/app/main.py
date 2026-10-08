@@ -6,11 +6,14 @@ import asyncio
 import contextlib
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.db import pool
+from app.llm import AIUnavailable
 from app.routers import internal, v1
+from app.usage import QuotaExceeded
 
 log = logging.getLogger("taskquest.ai")
 
@@ -51,6 +54,17 @@ def create_app() -> FastAPI:
             "database": db_ok,
             "gemini_configured": bool(settings.gemini_api_key),
         }
+
+    @app.exception_handler(QuotaExceeded)
+    async def _quota(request: Request, exc: QuotaExceeded):
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Daily AI energy used up. It resets at midnight UTC.", "code": "AI_QUOTA"},
+        )
+
+    @app.exception_handler(AIUnavailable)
+    async def _unavailable(request: Request, exc: AIUnavailable):
+        return JSONResponse(status_code=503, content={"error": "AI is not available.", "code": "AI_UNAVAILABLE"})
 
     app.include_router(v1.router)
     app.include_router(internal.router)

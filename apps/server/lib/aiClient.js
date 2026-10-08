@@ -29,7 +29,7 @@ async function toError(response) {
         return new TaskQuestError('AI_QUOTA', body.error || 'Daily AI energy used up. It resets at midnight UTC.', 429);
     }
     if (response.status === 400 || response.status === 404) {
-        return new TaskQuestError(body.code || 'VALIDATION', body.error || 'Request rejected by the AI service.', response.status);
+        return new TaskQuestError(body.code || 'VALIDATION', body.error || body.detail || 'Request rejected by the AI service.', response.status);
     }
     return new TaskQuestError('AI_UNAVAILABLE', UNAVAILABLE, 503);
 }

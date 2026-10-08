@@ -8,6 +8,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
+const { TEXT_LIMITS, validation, levelProgress } = require('@taskquest/shared');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🎨 COLOR SYSTEM
@@ -220,7 +221,7 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
 }
 
 function profileEmbed(user, stats, member) {
-    const xp = user.player_xp % 100;
+    const xp = levelProgress(user.lifetime_xp ?? user.player_xp).current;
     const items = parseInt(stats.items.total) || 0;
     const done = parseInt(stats.items.completed) || 0;
     const rate = items > 0 ? Math.round((done / items) * 100) : 0;
@@ -325,7 +326,7 @@ function helpEmbed() {
             { name: 'Settings', value: '`/toggle` `/automation`', inline: true },
             { name: 'Web App', value: '`/app` Open dashboard', inline: true }
         )
-        .setFooter({ text: 'TaskQuest v3.8' });
+        .setFooter({ text: 'TaskQuest v4.0' });
 }
 
 const success = (t, d) => new EmbedBuilder().setColor(COLORS.success).setDescription(`✅ **${t}**${d ? `\n${d}` : ''}`);
@@ -532,35 +533,40 @@ function priSelect(id) {
 function listModal(existing = null) {
     const m = new ModalBuilder().setCustomId(existing ? `m_editlist_${existing.id}` : 'm_newlist').setTitle(existing ? 'Edit List' : 'Create List');
     const n = new TextInputBuilder().setCustomId('name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
-    const d = new TextInputBuilder().setCustomId('desc').setLabel('Description (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false);
-    const dl = new TextInputBuilder().setCustomId('deadline').setLabel('Deadline YYYY-MM-DD (optional)').setStyle(TextInputStyle.Short).setRequired(false);
-    if (existing) { n.setValue(existing.name); if (existing.description) d.setValue(existing.description); if (existing.deadline) dl.setValue(existing.deadline); }
+    const d = new TextInputBuilder().setCustomId('desc').setLabel('Description (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(TEXT_LIMITS.DESCRIPTION);
+    const dl = new TextInputBuilder().setCustomId('deadline').setLabel('Deadline YYYY-MM-DD (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMinLength(10).setMaxLength(10).setPlaceholder('2030-12-31');
+    if (existing) {
+        n.setValue(existing.name);
+        if (existing.description) d.setValue(String(existing.description).slice(0, TEXT_LIMITS.DESCRIPTION));
+        const deadline = validation.formatDate(existing.deadline);
+        if (deadline) dl.setValue(deadline);
+    }
     m.addComponents(new ActionRowBuilder().addComponents(n), new ActionRowBuilder().addComponents(d), new ActionRowBuilder().addComponents(dl));
     return m;
 }
 
 function itemModal(listId) {
     return new ModalBuilder().setCustomId(`m_additem_${listId}`).setTitle('Add Item').addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Description (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false))
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(TEXT_LIMITS.ITEM_NAME)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Description (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(TEXT_LIMITS.DESCRIPTION))
     );
 }
 
 function editItemModal(item) {
     return new ModalBuilder().setCustomId(`m_edititem_${item.id}`).setTitle('Edit Item').addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true).setValue(item.name))
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(TEXT_LIMITS.ITEM_NAME).setValue(item.name))
     );
 }
 
 function descModal(item) {
-    const d = new TextInputBuilder().setCustomId('desc').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false);
-    if (item.description) d.setValue(item.description);
+    const d = new TextInputBuilder().setCustomId('desc').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(TEXT_LIMITS.DESCRIPTION);
+    if (item.description) d.setValue(String(item.description).slice(0, TEXT_LIMITS.DESCRIPTION));
     return new ModalBuilder().setCustomId(`m_desc_${item.id}`).setTitle(`Description: ${item.name.substring(0, 30)}`).addComponents(new ActionRowBuilder().addComponents(d));
 }
 
 function searchModal() {
     return new ModalBuilder().setCustomId('m_search').setTitle('Search').addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q').setLabel('Search').setStyle(TextInputStyle.Short).setRequired(true))
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q').setLabel('Search').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100))
     );
 }
 
@@ -602,7 +608,7 @@ function skillTreeEmbed(user, classKey, skillTree, userSkills) {
             progressDisplay = ` \`${'■'.repeat(filled)}${'□'.repeat(5 - filled)}\` ${skillLevel}/${skill.maxLevel}`;
         }
         
-        const effectText = skill.effect(Math.max(1, skillLevel));
+        const effectText = skill.description;
         
         skillList += `${statusIcon} ${skill.emoji} **${skill.name}**${progressDisplay}\n`;
         skillList += `└ ${effectText} • ${skill.cost} XP\n\n`;
@@ -636,7 +642,7 @@ function skillInfoEmbed(skill, skillId, userSkillLevel, requirementMet) {
             `**Progress**`,
             progressDisplay,
             ``,
-            `**Effect:** ${skill.effect(Math.max(1, currentLevel))}`,
+            `**Effect (per level):** ${skill.description}`,
             `**Cost:** ${skill.cost} XP`
         ].join('\n'));
     
@@ -936,7 +942,7 @@ function skillSelectMenu(skillTree, userSkills) {
             label: skill.name,
             value: skillId,
             emoji: skill.emoji,
-            description: `${status} ${skill.effect(Math.max(1, skillLevel))}`
+            description: `${status} ${skill.description}`.slice(0, 100)
         });
     });
     

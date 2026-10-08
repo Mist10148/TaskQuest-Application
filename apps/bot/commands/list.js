@@ -1,629 +1,363 @@
 /**
- * ═══════════════════════════════════════════════════════════════════════════════
- *  📋 LIST COMMAND (v3.0 - Dank Memer Style)
- * 
- *  STATE MACHINE:
- *  LIST_OVERVIEW → LIST_VIEW (READ-ONLY: search, sort only)
- *                → LIST_EDIT (ALL mutations happen here)
- * 
- *  ⚠️ CRITICAL: VIEW = READ-ONLY | EDIT = MUTATION HUB
- * ═══════════════════════════════════════════════════════════════════════════════
+ * /list — view and manage lists.
+ *
+ *   LIST_OVERVIEW → LIST_VIEW (read-only: sort, search)
+ *                 → LIST_EDIT (all mutations)
+ *
+ * Every lookup and mutation goes through @taskquest/shared/db tasks
+ * services, which only ever match rows owned by the clicking user. A
+ * button on someone else's (public) list message therefore just reports
+ * "not found" instead of acting on their data.
  */
 
-const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const db = require('../database/db');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { tasks, users } = require('@taskquest/shared/db');
 const ui = require('../utils/ui');
-const { calculateFinalXP, addXP, updateStreak, checkAchievements } = require('../utils/gameLogic');
+const { EPHEMERAL, handleError, sendRewards, idFrom } = require('../utils/respond');
 
+/** Pending two-step reorder selections: `${userId}_${listId}` → first item id. */
 const swapState = new Map();
 
 const data = new SlashCommandBuilder()
     .setName('list')
     .setDescription('📋 View and manage your lists')
-    .addStringOption(opt => opt.setName('name').setDescription('List name').setAutocomplete(true));
+    .addStringOption((opt) => opt.setName('name').setDescription('List name').setAutocomplete(true).setMaxLength(100));
+
+// ─── Rendering helpers ───────────────────────────────────────────────────────
+
+function overviewComponents(lists, { withCategoryFilter = false } = {}) {
+    const components = [];
+    if (withCategoryFilter) components.push(ui.categoryFilterSelect());
+    const sel = ui.listSelect(lists);
+    if (sel) components.push(sel);
+    components.push(...ui.overviewButtons());
+    return components.slice(0, 5);
+}
+
+async function renderList(userId, listId, mode) {
+    const list = await tasks.getList(userId, listId);
+    if (!list) return null;
+    const items = await tasks.getItems(userId, listId);
+    return {
+        embeds: [ui.listViewEmbed(list, items, mode)],
+        components: mode === 'edit' ? ui.editButtons(list.id) : ui.viewButtons(list.id)
+    };
+}
+
+const denied = (interaction) => interaction.reply({ embeds: [ui.error('Not found', 'That list no longer exists or is not yours.')], ...EPHEMERAL });
+
+function metaEditComponents(listId, done = false) {
+    const buttons = [new ButtonBuilder().setCustomId(`rename_${listId}`).setLabel('Edit Name/Desc/Deadline').setStyle(done ? ButtonStyle.Secondary : ButtonStyle.Primary)];
+    if (done) buttons.push(new ButtonBuilder().setCustomId(`metadone_${listId}`).setLabel('Done').setEmoji('✅').setStyle(ButtonStyle.Success));
+    return [ui.catSelect(`cat_${listId}`), ui.priSelect(`pri_${listId}`), new ActionRowBuilder().addComponents(...buttons)];
+}
+
+const isExpired = (list) => Boolean(list.deadline) && list.deadline < new Date().toISOString().slice(0, 10);
+
+// ─── Slash command ───────────────────────────────────────────────────────────
 
 async function execute(interaction) {
     const userId = interaction.user.id;
-    const listName = interaction.options.getString('name');
-    await db.getOrCreateUser(userId);
-    
-    if (listName) {
-        // Direct to VIEW mode (READ-ONLY)
-        const list = await db.getListByName(userId, listName);
-        if (!list) return interaction.reply({ embeds: [ui.error('Not Found', 'List not found.')], flags: MessageFlags.Ephemeral });
-        
-        const items = await db.getItems(list.id);
-        await interaction.reply({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(list.id) });
-    } else {
-        // LIST_OVERVIEW state
-        const lists = await db.getLists(userId);
-        const components = [];
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        await interaction.reply({ embeds: [ui.listsOverviewEmbed(lists)], components });
+    await users.ensureUser(userId);
+    const name = interaction.options.getString('name');
+
+    if (name) {
+        const list = await tasks.getListByName(userId, name);
+        if (!list) return interaction.reply({ embeds: [ui.error('Not Found', 'List not found.')], ...EPHEMERAL });
+        return interaction.reply(await renderList(userId, list.id, 'view'));
     }
+
+    const lists = await tasks.getLists(userId);
+    return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists)], components: overviewComponents(lists) });
 }
+
+async function autocomplete(interaction) {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name !== 'name') return interaction.respond([]);
+    const q = String(focused.value || '').toLowerCase();
+    const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
+    return interaction.respond(
+        lists
+            .filter((l) => l.name.toLowerCase().includes(q))
+            .slice(0, 25)
+            .map((l) => ({ name: l.name.slice(0, 100), value: l.name.slice(0, 100) }))
+    );
+}
+
+// ─── Buttons ─────────────────────────────────────────────────────────────────
 
 async function handleButton(interaction) {
-    const id = interaction.customId;
-    const userId = interaction.user.id;
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  📋 LIST_OVERVIEW STATE
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    if (id === 'sort_az' || id === 'sort_date' || id === 'sort_pri') {
-        const sort = id === 'sort_az' ? 'name' : id === 'sort_date' ? 'created_at' : 'priority';
-        const order = id === 'sort_az' ? 'ASC' : 'DESC';
-        const lists = await db.getLists(userId, sort, order);
-        const components = [];
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, sort)], components });
-    }
-    
-    // Category filter button - show filter select
-    if (id === 'filter_cat') {
-        const lists = await db.getLists(userId);
-        const components = [];
-        components.push(ui.categoryFilterSelect());
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, 'category')], components });
-    }
-
-    // Filter: All lists
-    if (id === 'filter_all') {
-        const lists = await db.getLists(userId);
-        const components = [];
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, '', 'All')], components });
-    }
-
-    // Filter: Current (incomplete, not expired)
-    if (id === 'filter_current') {
-        let lists = await db.getLists(userId);
-        const now = new Date();
-        lists = lists.filter(list => {
-            const isExpired = list.deadline && new Date(list.deadline) < now;
-            return !isExpired;
-        });
-        const components = [];
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, '', 'Current')], components });
-    }
-
-    // Filter: Expired (past deadline)
-    if (id === 'filter_expired') {
-        let lists = await db.getLists(userId);
-        const now = new Date();
-        lists = lists.filter(list => {
-            return list.deadline && new Date(list.deadline) < now;
-        });
-        const components = [];
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, '', 'Expired')], components });
-    }
-
-    // Filter: Completed (all items done)
-    if (id === 'filter_completed') {
-        let lists = await db.getLists(userId);
-        // Get list stats to check completion
-        const listsWithStats = await Promise.all(lists.map(async (list) => {
-            const items = await db.getItems(list.id);
-            const total = items.length;
-            const completed = items.filter(i => i.completed).length;
-            return { ...list, isComplete: total > 0 && total === completed };
-        }));
-        lists = listsWithStats.filter(list => list.isComplete);
-        const components = [];
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, '', 'Completed')], components });
-    }
-
-    if (id === 'create') {
-        return interaction.showModal(ui.listModal());
-    }
-    
-    if (id === 'back') {
-        const lists = await db.getLists(userId);
-        const components = [];
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists)], components });
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  👁️ LIST_VIEW STATE (READ-ONLY - Sort & Search ONLY)
-    //  ❌ No editing, deleting, reordering, marking done here
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    // Sort A→Z
-    if (id.startsWith('sort_az_')) {
-        const listId = parseInt(id.replace('sort_az_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        let items = await db.getItems(listId);
-        items.sort((a, b) => a.name.localeCompare(b.name));
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
-    }
-    
-    // Sort Z→A
-    if (id.startsWith('sort_za_')) {
-        const listId = parseInt(id.replace('sort_za_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        let items = await db.getItems(listId);
-        items.sort((a, b) => b.name.localeCompare(a.name));
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
-    }
-    
-    // Sort by priority (incomplete first)
-    if (id.startsWith('sort_pri_')) {
-        const listId = parseInt(id.replace('sort_pri_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        let items = await db.getItems(listId);
-        items.sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0));
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
-    }
-
-    // Search (opens modal)
-    if (id.startsWith('search_')) {
-        return interaction.showModal(ui.searchModal());
-    }
-    
-    // Refresh (re-render from DB)
-    if (id.startsWith('refresh_')) {
-        const listId = parseInt(id.replace('refresh_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        const items = await db.getItems(listId);
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  🔄 STATE TRANSITION: VIEW → EDIT
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    if (id.startsWith('edit_')) {
-        const listId = parseInt(id.replace('edit_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        const items = await db.getItems(listId);
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'edit')], components: ui.editButtons(listId) });
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  🔄 STATE TRANSITION: EDIT → VIEW
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    if (id.startsWith('view_')) {
-        const listId = parseInt(id.replace('view_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        const items = await db.getItems(listId);
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  ✏️ LIST_EDIT STATE - ITEM OPERATIONS (Single Mutation Hub)
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    // ITEM_ADD
-    if (id.startsWith('item_add_')) {
-        const listId = parseInt(id.replace('item_add_', ''));
-        return interaction.showModal(ui.itemModal(listId));
-    }
-    
-    // ITEM_EDIT (select menu)
-    if (id.startsWith('item_edit_')) {
-        const listId = parseInt(id.replace('item_edit_', ''));
-        const items = await db.getItems(listId);
-        if (!items.length) return interaction.reply({ embeds: [ui.info('Empty', 'No items to edit')], flags: MessageFlags.Ephemeral });
-        return interaction.reply({ embeds: [ui.info('Edit Item', 'Select item:')], components: [ui.itemSelect(items, `sel_edit_${listId}`)], flags: MessageFlags.Ephemeral });
-    }
-    
-    // ITEM_DELETE (select menu)
-    if (id.startsWith('item_del_')) {
-        const listId = parseInt(id.replace('item_del_', ''));
-        const items = await db.getItems(listId);
-        if (!items.length) return interaction.reply({ embeds: [ui.info('Empty', 'No items')], flags: MessageFlags.Ephemeral });
-        return interaction.reply({ embeds: [ui.info('Delete Item', 'Select item:')], components: [ui.itemSelect(items, `sel_del_${listId}`)], flags: MessageFlags.Ephemeral });
-    }
-    
-    // ITEM_MARK_DONE (select menu)
-    if (id.startsWith('item_done_')) {
-        const listId = parseInt(id.replace('item_done_', ''));
-        const items = await db.getItems(listId);
-        if (!items.length) return interaction.reply({ embeds: [ui.info('Empty', 'No items')], flags: MessageFlags.Ephemeral });
-        return interaction.reply({ embeds: [ui.info('Toggle Status', 'Select item:')], components: [ui.itemSelect(items, `sel_done_${listId}`)], flags: MessageFlags.Ephemeral });
-    }
-    
-    // ITEM_REORDER (two-step swap)
-    if (id.startsWith('item_swap_')) {
-        const listId = parseInt(id.replace('item_swap_', ''));
-        const items = await db.getItems(listId);
-        if (items.length < 2) return interaction.reply({ embeds: [ui.info('Not Enough', 'Need 2+ items')], flags: MessageFlags.Ephemeral });
-        return interaction.reply({ embeds: [ui.info('Reorder', 'Select FIRST item:')], components: [ui.itemSelect(items, `sel_swap1_${listId}`)], flags: MessageFlags.Ephemeral });
-    }
-    
-    // DESCRIPTION_EDIT (select menu)
-    if (id.startsWith('item_desc_')) {
-        const listId = parseInt(id.replace('item_desc_', ''));
-        const items = await db.getItems(listId);
-        if (!items.length) return interaction.reply({ embeds: [ui.info('Empty', 'No items')], flags: MessageFlags.Ephemeral });
-        return interaction.reply({ embeds: [ui.info('Edit Description', 'Select item:')], components: [ui.itemSelect(items, `sel_desc_${listId}`)], flags: MessageFlags.Ephemeral });
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  ✏️ LIST_EDIT STATE - LIST_META_EDIT
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    if (id.startsWith('list_meta_')) {
-        const listId = parseInt(id.replace('list_meta_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        
-        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-        await interaction.reply({
-            embeds: [ui.info('Edit List Info', 'Choose category/priority or edit name/description/deadline:')],
-            components: [
-                ui.catSelect(`cat_${listId}`),
-                ui.priSelect(`pri_${listId}`),
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`rename_${listId}`).setLabel('Edit Name/Desc/Deadline').setStyle(ButtonStyle.Primary)
-                )
-            ],
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-    
-    if (id.startsWith('rename_')) {
-        const listId = parseInt(id.replace('rename_', ''));
-        const list = await db.getListById(listId);
-        return interaction.showModal(ui.listModal(list));
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  ✏️ LIST_EDIT STATE - LIST_DELETE_CONFIRM
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    if (id.startsWith('list_del_')) {
-        const listId = parseInt(id.replace('list_del_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        return interaction.reply({ embeds: [ui.warn('Confirm Delete', `Delete **${list.name}** and all items?`)], components: [ui.confirmButtons(listId)], flags: MessageFlags.Ephemeral });
-    }
-    
-    if (id.startsWith('yes_')) {
-        const listId = parseInt(id.replace('yes_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.update({ embeds: [ui.error('Access Denied')], components: [] });
-        await db.deleteList(listId);
-        return interaction.update({ embeds: [ui.success('Deleted', `**${list.name}** deleted`)], components: [] });
-    }
-    
-    if (id.startsWith('no_')) {
-        return interaction.update({ embeds: [ui.info('Cancelled', 'Delete cancelled')], components: [] });
-    }
-    
-    // PHASE 4: Done button for category/priority edit
-    if (id.startsWith('metadone_')) {
-        const listId = parseInt(id.replace('metadone_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.update({ embeds: [ui.error('Access Denied')], components: [] });
-        const items = await db.getItems(listId);
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'edit')], components: ui.editButtons(listId) });
+    try {
+        return await routeButton(interaction);
+    } catch (err) {
+        return handleError(interaction, err);
     }
 }
 
+async function routeButton(interaction) {
+    const id = interaction.customId;
+    const userId = interaction.user.id;
+
+    // LIST_OVERVIEW
+    if (id === 'sort_az' || id === 'sort_date' || id === 'sort_pri') {
+        const sortBy = id === 'sort_az' ? 'name' : id === 'sort_date' ? 'created_at' : 'priority';
+        const lists = await tasks.getLists(userId, { sortBy, order: id === 'sort_az' ? 'ASC' : 'DESC' });
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, sortBy)], components: overviewComponents(lists) });
+    }
+    if (id === 'filter_cat') {
+        const lists = await tasks.getLists(userId);
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, 'category')], components: overviewComponents(lists, { withCategoryFilter: true }) });
+    }
+    if (['filter_all', 'filter_current', 'filter_expired', 'filter_completed', 'back'].includes(id)) {
+        let lists = await tasks.getLists(userId);
+        let label = '';
+        if (id === 'filter_all') label = 'All';
+        if (id === 'filter_current') (label = 'Current'), (lists = lists.filter((l) => !isExpired(l)));
+        if (id === 'filter_expired') (label = 'Expired'), (lists = lists.filter(isExpired));
+        if (id === 'filter_completed') (label = 'Completed'), (lists = lists.filter((l) => l.items_total > 0 && l.items_completed === l.items_total));
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, '', label)], components: overviewComponents(lists) });
+    }
+    if (id === 'create') return interaction.showModal(ui.listModal());
+
+    // LIST_VIEW (read-only)
+    const viewSorts = { sort_az_: ['name', 'ASC'], sort_za_: ['name', 'DESC'], sort_pri_: ['completed', 'ASC'] };
+    for (const [prefix, [sortBy, order]] of Object.entries(viewSorts)) {
+        if (id.startsWith(prefix)) {
+            const listId = idFrom(id, prefix);
+            const list = listId && (await tasks.getList(userId, listId));
+            if (!list) return denied(interaction);
+            const items = await tasks.getItems(userId, listId, { sortBy, order });
+            return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
+        }
+    }
+    if (id.startsWith('search_')) return interaction.showModal(ui.searchModal());
+
+    for (const [prefix, mode] of [['refresh_', 'view'], ['view_', 'view'], ['edit_', 'edit'], ['metadone_', 'edit']]) {
+        if (id.startsWith(prefix)) {
+            const view = await renderList(userId, idFrom(id, prefix), mode);
+            if (!view) return denied(interaction);
+            return interaction.update(view);
+        }
+    }
+
+    // LIST_EDIT — item operations
+    if (id.startsWith('item_add_')) {
+        const list = await tasks.getList(userId, idFrom(id, 'item_add_'));
+        if (!list) return denied(interaction);
+        return interaction.showModal(ui.itemModal(list.id));
+    }
+
+    const pickers = {
+        item_edit_: ['sel_edit_', 'Edit Item', 1],
+        item_del_: ['sel_del_', 'Delete Item', 1],
+        item_done_: ['sel_done_', 'Toggle Status', 1],
+        item_desc_: ['sel_desc_', 'Edit Description', 1],
+        item_swap_: ['sel_swap1_', 'Reorder — select the FIRST item', 2]
+    };
+    for (const [prefix, [selectId, title, min]] of Object.entries(pickers)) {
+        if (id.startsWith(prefix)) {
+            const listId = idFrom(id, prefix);
+            const items = listId ? await tasks.getItems(userId, listId) : null;
+            if (!items) return denied(interaction);
+            if (items.length < min) {
+                return interaction.reply({ embeds: [ui.info('Not enough tasks', min > 1 ? 'You need at least 2 tasks.' : 'This list has no tasks.')], ...EPHEMERAL });
+            }
+            return interaction.reply({ embeds: [ui.info(title, 'Select a task:')], components: [ui.itemSelect(items, `${selectId}${listId}`)], ...EPHEMERAL });
+        }
+    }
+
+    // LIST_EDIT — list metadata
+    if (id.startsWith('list_meta_')) {
+        const list = await tasks.getList(userId, idFrom(id, 'list_meta_'));
+        if (!list) return denied(interaction);
+        return interaction.reply({
+            embeds: [ui.info('Edit List Info', 'Choose category/priority or edit name/description/deadline:')],
+            components: metaEditComponents(list.id),
+            ...EPHEMERAL
+        });
+    }
+    if (id.startsWith('rename_')) {
+        const list = await tasks.getList(userId, idFrom(id, 'rename_'));
+        if (!list) return denied(interaction);
+        return interaction.showModal(ui.listModal(list));
+    }
+
+    // LIST_EDIT — delete with confirmation
+    if (id.startsWith('list_del_')) {
+        const list = await tasks.getList(userId, idFrom(id, 'list_del_'));
+        if (!list) return denied(interaction);
+        return interaction.reply({ embeds: [ui.warn('Confirm Delete', `Delete **${list.name}** and all its tasks?`)], components: [ui.confirmButtons(list.id)], ...EPHEMERAL });
+    }
+    if (id.startsWith('yes_')) {
+        const list = await tasks.getList(userId, idFrom(id, 'yes_'));
+        if (!list) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
+        await tasks.deleteList(userId, list.id);
+        return interaction.update({ embeds: [ui.success('Deleted', `**${list.name}** deleted`)], components: [] });
+    }
+    if (id.startsWith('no_')) return interaction.update({ embeds: [ui.info('Cancelled', 'Delete cancelled')], components: [] });
+}
+
+// ─── Select menus ────────────────────────────────────────────────────────────
+
 async function handleSelectMenu(interaction) {
+    try {
+        return await routeSelect(interaction);
+    } catch (err) {
+        return handleError(interaction, err);
+    }
+}
+
+async function routeSelect(interaction) {
     const id = interaction.customId;
     const userId = interaction.user.id;
     const val = interaction.values[0];
-    
-    // Category filter for overview
+
     if (id === 'filter_category') {
-        let lists;
-        if (val === 'ALL') {
-            lists = await db.getLists(userId);
-        } else if (val === 'NONE') {
-            lists = await db.getLists(userId);
-            lists = lists.filter(l => !l.category);
-        } else {
-            lists = await db.getLists(userId);
-            lists = lists.filter(l => l.category === val);
-        }
-        
-        const components = [];
-        components.push(ui.categoryFilterSelect());
-        const sel = ui.listSelect(lists);
-        if (sel) components.push(sel);
-        components.push(...ui.overviewButtons());
-        
-        const filterLabel = val === 'ALL' ? 'All Categories' : val === 'NONE' ? 'Uncategorized' : val;
-        return interaction.update({ 
-            embeds: [ui.listsOverviewEmbed(lists, `category: ${filterLabel}`)], 
-            components 
-        });
+        let lists = await tasks.getLists(userId);
+        if (val === 'NONE') lists = lists.filter((l) => !l.category);
+        else if (val !== 'ALL') lists = lists.filter((l) => l.category === val);
+        const label = val === 'ALL' ? 'All Categories' : val === 'NONE' ? 'Uncategorized' : val;
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, `category: ${label}`)], components: overviewComponents(lists, { withCategoryFilter: true }) });
     }
-    
-    // List selection → VIEW mode
+
     if (id === 'sel_list') {
-        const listId = parseInt(val);
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        const items = await db.getItems(listId);
-        return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
+        const view = await renderList(userId, Number(val), 'view');
+        if (!view) return denied(interaction);
+        return interaction.update(view);
     }
-    
-    // Category select (EDIT mode) - PHASE 4 FIX: Keep UI open
-    if (id.startsWith('cat_')) {
-        const listId = parseInt(id.replace('cat_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        
-        await db.updateList(listId, { category: val === 'NONE' ? null : val });
-        
-        // Refresh list to show updated values
-        const updatedList = await db.getListById(listId);
-        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-        
+
+    if (id.startsWith('cat_') || id.startsWith('pri_')) {
+        const isCat = id.startsWith('cat_');
+        const listId = idFrom(id, isCat ? 'cat_' : 'pri_');
+        const value = val === 'NONE' ? null : val;
+        const list = await tasks.updateList(userId, listId, isCat ? { category: value } : { priority: value });
         return interaction.update({
-            embeds: [ui.info('Edit List Info', 
-                `✅ Category set to: **${val === 'NONE' ? 'None' : val}**\n\n` +
-                `Current: 📁 ${updatedList.category || 'None'} • ${updatedList.priority ? `${updatedList.priority}` : 'No priority'}\n\n` +
-                `Select another option or click Done.`
-            )],
-            components: [
-                ui.catSelect(`cat_${listId}`),
-                ui.priSelect(`pri_${listId}`),
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`rename_${listId}`).setLabel('Edit Name/Desc').setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`metadone_${listId}`).setLabel('Done').setEmoji('✅').setStyle(ButtonStyle.Success)
+            embeds: [
+                ui.info(
+                    'Edit List Info',
+                    `✅ ${isCat ? 'Category' : 'Priority'} set to: **${value || 'None'}**\n\n` +
+                        `Current: 📁 ${list.category || 'None'} • ${list.priority || 'No priority'}\n\nSelect another option or click Done.`
                 )
-            ]
+            ],
+            components: metaEditComponents(listId, true)
         });
     }
-    
-    // Priority select (EDIT mode) - PHASE 4 FIX: Keep UI open
-    if (id.startsWith('pri_')) {
-        const listId = parseInt(id.replace('pri_', ''));
-        const list = await db.getListById(listId);
-        if (!list || list.discord_id !== userId) return interaction.reply({ embeds: [ui.error('Access Denied')], flags: MessageFlags.Ephemeral });
-        
-        await db.updateList(listId, { priority: val === 'NONE' ? null : val });
-        
-        // Refresh list to show updated values
-        const updatedList = await db.getListById(listId);
-        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-        
-        return interaction.update({
-            embeds: [ui.info('Edit List Info', 
-                `✅ Priority set to: **${val === 'NONE' ? 'None' : val}**\n\n` +
-                `Current: 📁 ${updatedList.category || 'None'} • ${updatedList.priority ? `${updatedList.priority}` : 'No priority'}\n\n` +
-                `Select another option or click Done.`
-            )],
-            components: [
-                ui.catSelect(`cat_${listId}`),
-                ui.priSelect(`pri_${listId}`),
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`rename_${listId}`).setLabel('Edit Name/Desc').setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`metadone_${listId}`).setLabel('Done').setEmoji('✅').setStyle(ButtonStyle.Success)
-                )
-            ]
-        });
-    }
-    
-    // Edit item select (EDIT mode)
-    if (id.startsWith('sel_edit_')) {
-        const item = await db.getItemById(parseInt(val));
+
+    if (id.startsWith('sel_edit_') || id.startsWith('sel_desc_')) {
+        const item = await tasks.getItem(userId, val);
         if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
-        return interaction.showModal(ui.editItemModal(item));
+        return interaction.showModal(id.startsWith('sel_edit_') ? ui.editItemModal(item) : ui.descModal(item));
     }
-    
-    // Delete item select (EDIT mode)
+
     if (id.startsWith('sel_del_')) {
-        const item = await db.getItemById(parseInt(val));
+        const item = await tasks.getItem(userId, val);
         if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
-        await db.deleteItem(parseInt(val));
+        await tasks.deleteItem(userId, item.id);
         return interaction.update({ embeds: [ui.success('Deleted', `**${item.name}** deleted`)], components: [] });
     }
-    
-    // Mark done select (EDIT mode) - Awards XP
-    // FIX: Must deferUpdate() FIRST, then followUp() for XP notifications
+
     if (id.startsWith('sel_done_')) {
-        // Step 1: Acknowledge the interaction IMMEDIATELY
         await interaction.deferUpdate();
-        
-        const itemId = parseInt(val);
-        const item = await db.getItemById(itemId);
-        if (!item) return interaction.editReply({ embeds: [ui.error('Not Found')], components: [] });
-        
-        const newStatus = await db.toggleItemComplete(itemId, userId);
-        
-        // Step 2: Update the message with result
-        await interaction.editReply({ embeds: [ui.success(newStatus ? '✅ Completed' : '⬜ Uncompleted', `**${item.name}**`)], components: [] });
-        
-        // Step 3: XP notifications via followUp (ephemeral, never public)
-        // NOW followUp() is valid because we already deferred
-        if (newStatus) {
-            let user = await db.getUser(userId);
-            if (user.gamification_enabled) {
-                const userSkills = await db.getUserSkills(userId);
-                const { finalXP, bonusInfo, userUpdates } = calculateFinalXP(user, userSkills, 8);
-                const xpResult = addXP(user, finalXP);
-                const streakResult = updateStreak(user);
-                await db.updateUser(userId, { player_xp: user.player_xp, player_level: user.player_level, ...userUpdates, ...streakResult.updates });
-                
-                user = await db.getUser(userId);
-                const achs = await db.getAchievements(userId);
-                const newAchs = checkAchievements(user, achs.map(a => a.achievement_key)) || [];
-                for (const a of newAchs) await db.unlockAchievement(userId, a.key);
-                
-                // Private XP notification (ephemeral)
-                if (xpResult.xpGained) await interaction.followUp({ embeds: [ui.xpEmbed(xpResult.xpGained, bonusInfo, xpResult.leveledUp, xpResult.newLevel)], flags: MessageFlags.Ephemeral });
-                for (const a of newAchs) await interaction.followUp({ embeds: [ui.achievementUnlockEmbed(a)], flags: MessageFlags.Ephemeral });
-            }
-        }
-        return;
+        const result = await tasks.setItemCompleted(userId, val);
+        const note = result.completed && !result.firstCompletion ? '\n-# XP is only awarded the first time a task is completed.' : '';
+        await interaction.editReply({
+            embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${result.item.name}**${note}`)],
+            components: []
+        });
+        return sendRewards(interaction, result);
     }
-    
-    // Swap step 1
+
     if (id.startsWith('sel_swap1_')) {
-        const listId = parseInt(id.replace('sel_swap1_', ''));
-        swapState.set(`${userId}_${listId}`, parseInt(val));
-        const items = await db.getItems(listId);
-        return interaction.update({ embeds: [ui.info('Reorder', 'Select SECOND item:')], components: [ui.itemSelect(items.filter(i => i.id !== parseInt(val)), `sel_swap2_${listId}`)] });
+        const listId = idFrom(id, 'sel_swap1_');
+        const items = await tasks.getItems(userId, listId);
+        if (!items) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
+        swapState.set(`${userId}_${listId}`, Number(val));
+        return interaction.update({
+            embeds: [ui.info('Reorder', 'Select the SECOND task:')],
+            components: [ui.itemSelect(items.filter((i) => i.id !== Number(val)), `sel_swap2_${listId}`)]
+        });
     }
-    
-    // Swap step 2
+
     if (id.startsWith('sel_swap2_')) {
-        const listId = parseInt(id.replace('sel_swap2_', ''));
+        const listId = idFrom(id, 'sel_swap2_');
         const firstId = swapState.get(`${userId}_${listId}`);
-        if (!firstId) return interaction.update({ embeds: [ui.error('Expired')], components: [] });
-        await db.swapItemPositions(firstId, parseInt(val));
         swapState.delete(`${userId}_${listId}`);
+        if (!firstId) return interaction.update({ embeds: [ui.error('Expired', 'Start the reorder again.')], components: [] });
+        await tasks.swapItemPositions(userId, firstId, val);
         return interaction.update({ embeds: [ui.success('Swapped', 'Positions swapped')], components: [] });
     }
-    
-    // Description edit
-    if (id.startsWith('sel_desc_')) {
-        const item = await db.getItemById(parseInt(val));
-        if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
-        return interaction.showModal(ui.descModal(item));
-    }
 }
+
+// ─── Modals ──────────────────────────────────────────────────────────────────
 
 async function handleModal(interaction) {
-    const id = interaction.customId;
-    const userId = interaction.user.id;
-    
-    // Create list
-    if (id === 'm_newlist') {
-        const name = interaction.fields.getTextInputValue('name').trim();
-        const desc = interaction.fields.getTextInputValue('desc')?.trim() || null;
-        let deadline = interaction.fields.getTextInputValue('deadline')?.trim() || null;
-        if (deadline && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) deadline = null;
-        
-        if (!name) return interaction.reply({ embeds: [ui.error('Required', 'Name required')], flags: MessageFlags.Ephemeral });
-        
-        const existing = await db.getListByName(userId, name);
-        if (existing) return interaction.reply({ embeds: [ui.error('Exists', 'List already exists')], flags: MessageFlags.Ephemeral });
-        
-        const listId = await db.createList(userId, name, desc, null, null, deadline);
-        
-        // Award XP (ephemeral)
-        let user = await db.getUser(userId);
-        if (user.gamification_enabled) {
-            const userSkills = await db.getUserSkills(userId);
-            const { finalXP, bonusInfo, userUpdates } = calculateFinalXP(user, userSkills, 10);
-            const xpResult = addXP(user, finalXP);
-            const streakResult = updateStreak(user);
-            await db.updateUser(userId, { player_xp: user.player_xp, player_level: user.player_level, ...userUpdates, ...streakResult.updates });
-            
-            user = await db.getUser(userId);
-            const achs = await db.getAchievements(userId);
-            const newAchs = checkAchievements(user, achs.map(a => a.achievement_key)) || [];
-            for (const a of newAchs) await db.unlockAchievement(userId, a.key);
-
-            await interaction.reply({ embeds: [ui.success('Created!', `**${name}**`)], components: [ui.catSelect(`cat_${listId}`), ui.priSelect(`pri_${listId}`)], flags: MessageFlags.Ephemeral });
-            if (xpResult.xpGained) await interaction.followUp({ embeds: [ui.xpEmbed(xpResult.xpGained, bonusInfo, xpResult.leveledUp, xpResult.newLevel)], flags: MessageFlags.Ephemeral });
-            for (const a of newAchs) await interaction.followUp({ embeds: [ui.achievementUnlockEmbed(a)], flags: MessageFlags.Ephemeral });
-        } else {
-            await interaction.reply({ embeds: [ui.success('Created!', `**${name}**`)], components: [ui.catSelect(`cat_${listId}`), ui.priSelect(`pri_${listId}`)], flags: MessageFlags.Ephemeral });
-        }
-        return;
-    }
-    
-    // Edit list
-    if (id.startsWith('m_editlist_')) {
-        const listId = parseInt(id.replace('m_editlist_', ''));
-        const name = interaction.fields.getTextInputValue('name').trim();
-        const desc = interaction.fields.getTextInputValue('desc')?.trim() || null;
-        let deadline = interaction.fields.getTextInputValue('deadline')?.trim() || null;
-        if (deadline && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) deadline = null;
-        
-        if (!name) return interaction.reply({ embeds: [ui.error('Required', 'Name required')], flags: MessageFlags.Ephemeral });
-        await db.updateList(listId, { name, description: desc, deadline, deadline_notified: false });
-        return interaction.reply({ embeds: [ui.success('Updated', `**${name}**`)], flags: MessageFlags.Ephemeral });
-    }
-    
-    // Add item
-    if (id.startsWith('m_additem_')) {
-        const listId = parseInt(id.replace('m_additem_', ''));
-        const name = interaction.fields.getTextInputValue('name').trim();
-        const desc = interaction.fields.getTextInputValue('desc')?.trim() || null;
-        
-        if (!name) return interaction.reply({ embeds: [ui.error('Required', 'Name required')], flags: MessageFlags.Ephemeral });
-        await db.addItem(listId, name, desc);
-        
-        // Award XP (ephemeral)
-        let user = await db.getUser(userId);
-        if (user.gamification_enabled) {
-            const userSkills = await db.getUserSkills(userId);
-            const { finalXP, bonusInfo, userUpdates } = calculateFinalXP(user, userSkills, 5);
-            const xpResult = addXP(user, finalXP);
-            const streakResult = updateStreak(user);
-            await db.updateUser(userId, { player_xp: user.player_xp, player_level: user.player_level, ...userUpdates, ...streakResult.updates });
-            
-            user = await db.getUser(userId);
-            const achs = await db.getAchievements(userId);
-            const newAchs = checkAchievements(user, achs.map(a => a.achievement_key)) || [];
-            for (const a of newAchs) await db.unlockAchievement(userId, a.key);
-            
-            const list = await db.getListById(listId);
-            const items = await db.getItems(listId);
-            await interaction.reply({ embeds: [ui.listViewEmbed(list, items, 'edit')], components: ui.editButtons(listId) });
-            if (xpResult.xpGained) await interaction.followUp({ embeds: [ui.xpEmbed(xpResult.xpGained, bonusInfo, xpResult.leveledUp, xpResult.newLevel)], flags: MessageFlags.Ephemeral });
-            for (const a of newAchs) await interaction.followUp({ embeds: [ui.achievementUnlockEmbed(a)], flags: MessageFlags.Ephemeral });
-        } else {
-            const list = await db.getListById(listId);
-            const items = await db.getItems(listId);
-            await interaction.reply({ embeds: [ui.listViewEmbed(list, items, 'edit')], components: ui.editButtons(listId) });
-        }
-        return;
-    }
-    
-    // Edit item name
-    if (id.startsWith('m_edititem_')) {
-        const itemId = parseInt(id.replace('m_edititem_', ''));
-        const name = interaction.fields.getTextInputValue('name').trim();
-        if (!name) return interaction.reply({ embeds: [ui.error('Required', 'Name required')], flags: MessageFlags.Ephemeral });
-        await db.updateItem(itemId, { name });
-        return interaction.reply({ embeds: [ui.success('Updated', `**${name}**`)], flags: MessageFlags.Ephemeral });
-    }
-    
-    // Item description
-    if (id.startsWith('m_desc_')) {
-        const itemId = parseInt(id.replace('m_desc_', ''));
-        const desc = interaction.fields.getTextInputValue('desc')?.trim() || null;
-        await db.updateItem(itemId, { description: desc });
-        return interaction.reply({ embeds: [ui.success('Updated', desc ? 'Description saved' : 'Description cleared')], flags: MessageFlags.Ephemeral });
-    }
-    
-    // Search
-    if (id === 'm_search') {
-        const q = interaction.fields.getTextInputValue('q').trim();
-        const lists = await db.searchLists(userId, q);
-        if (!lists.length) return interaction.reply({ embeds: [ui.info('No Results', `Nothing for "${q}"`)], flags: MessageFlags.Ephemeral });
-        const sel = ui.listSelect(lists);
-        await interaction.reply({ embeds: [ui.listsOverviewEmbed(lists, `Search: ${q}`)], components: sel ? [sel] : [] });
+    try {
+        return await routeModal(interaction);
+    } catch (err) {
+        return handleError(interaction, err);
     }
 }
 
-module.exports = { data, execute, handleButton, handleSelectMenu, handleModal };
+const field = (interaction, name) => {
+    try {
+        return interaction.fields.getTextInputValue(name);
+    } catch {
+        return undefined;
+    }
+};
+
+async function routeModal(interaction) {
+    const id = interaction.customId;
+    const userId = interaction.user.id;
+
+    if (id === 'm_newlist') {
+        const result = await tasks.createList(userId, {
+            name: field(interaction, 'name'),
+            description: field(interaction, 'desc'),
+            deadline: field(interaction, 'deadline')
+        });
+        await interaction.reply({
+            embeds: [ui.success('Created!', `**${result.list.name}**\nPick a category and priority below (optional).`)],
+            components: [ui.catSelect(`cat_${result.list.id}`), ui.priSelect(`pri_${result.list.id}`)],
+            ...EPHEMERAL
+        });
+        return sendRewards(interaction, result);
+    }
+
+    if (id.startsWith('m_editlist_')) {
+        const list = await tasks.updateList(userId, idFrom(id, 'm_editlist_'), {
+            name: field(interaction, 'name'),
+            description: field(interaction, 'desc'),
+            deadline: field(interaction, 'deadline')
+        });
+        return interaction.reply({ embeds: [ui.success('Updated', `**${list.name}**`)], ...EPHEMERAL });
+    }
+
+    if (id.startsWith('m_additem_')) {
+        const listId = idFrom(id, 'm_additem_');
+        const result = await tasks.addItem(userId, listId, { name: field(interaction, 'name'), description: field(interaction, 'desc') });
+        await interaction.reply({ ...(await renderList(userId, listId, 'edit')), ...EPHEMERAL });
+        return sendRewards(interaction, result);
+    }
+
+    if (id.startsWith('m_edititem_')) {
+        const item = await tasks.updateItem(userId, idFrom(id, 'm_edititem_'), { name: field(interaction, 'name') });
+        return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**`)], ...EPHEMERAL });
+    }
+
+    if (id.startsWith('m_desc_')) {
+        const desc = field(interaction, 'desc');
+        await tasks.updateItem(userId, idFrom(id, 'm_desc_'), { description: desc || null });
+        return interaction.reply({ embeds: [ui.success('Updated', desc ? 'Description saved' : 'Description cleared')], ...EPHEMERAL });
+    }
+
+    if (id === 'm_search') {
+        const q = (field(interaction, 'q') || '').trim();
+        const lists = await tasks.searchLists(userId, q);
+        if (!lists.length) return interaction.reply({ embeds: [ui.info('No Results', `Nothing found for "${q.slice(0, 100)}"`)], ...EPHEMERAL });
+        const sel = ui.listSelect(lists);
+        return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists, `Search: ${q.slice(0, 100)}`)], components: sel ? [sel] : [], ...EPHEMERAL });
+    }
+}
+
+module.exports = { data, execute, autocomplete, handleButton, handleSelectMenu, handleModal };

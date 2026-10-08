@@ -1,355 +1,224 @@
 /**
- * ═══════════════════════════════════════════════════════════════════════════════
- *  🎮 TASKQUEST BOT (v3.8.0 - Clean UI + Web App Integration)
- * 
- *  STATE MACHINE:
- *  IDLE → PING (stateless, no DB) → RETURN_LATENCY
- *       → LIST_OVERVIEW → LIST_VIEW (read-only: sort, search)
- *                       → LIST_EDIT (single mutation hub)
- *       → AUTOMATION_SETTINGS → TOGGLE_ON / TOGGLE_OFF
- *       → GAME_CENTER → BLACKJACK → BET_ENTRY → GAME_PLAY → RESOLUTION
- * 
- *  RULES:
- *  - VIEW = READ-ONLY (no mutations)
- *  - EDIT = ALL mutations
- *  - XP/Achievements = EPHEMERAL ONLY (never public)
- *  - Automation runs outside interactions (background)
- *  - Games use XP transaction logging (escrow model)
- * ═══════════════════════════════════════════════════════════════════════════════
+ * TaskQuest Discord bot.
+ *
+ *   /list → overview → view (read-only) → edit (all mutations)
+ *   /game → blackjack · rock paper scissors · hangman
+ *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
+ *
+ * XP and achievements are always shown ephemerally. Background jobs send
+ * deadline DMs, clean up old lists and expire abandoned game sessions.
  */
 
 require('dotenv').config();
 
-const { Client, GatewayIntentBits, Events, ActivityType, MessageFlags, Partials } = require('discord.js');
 const http = require('http');
-const db = require('./database/db');
+const { Client, GatewayIntentBits, Events, ActivityType, MessageFlags, Partials } = require('discord.js');
+const db = require('@taskquest/shared/db');
+const { version } = require('./package.json');
 const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
-const sessionManager = require('./utils/games/sessionManager');
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  🌐 KEEP-ALIVE SERVER (for Render free tier)
-// ═══════════════════════════════════════════════════════════════════════════════
+const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
+
+// ─── Keep-alive / health endpoint (Render web services need an open port) ─────
+
 const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ 
-        status: 'online', 
-        bot: 'TaskQuest',
-        version: '3.8.0',
-        uptime: process.uptime()
-    }));
+    const ok = client.isReady();
+    res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: ok ? 'online' : 'starting', bot: 'TaskQuest', version }));
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🌐 Keep-alive server running on port ${PORT}`);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  🤖 DISCORD CLIENT
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Discord client ──────────────────────────────────────────────────────────
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.DirectMessages],
+    // No privileged intents: slash commands only need Guilds; DMs are sent, not read.
+    intents: [GatewayIntentBits.Guilds],
     partials: [Partials.Channel]
 });
 
-const log = (e, c, m) => console.log(`[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${e} [${c}] ${m}`);
+// ─── Background jobs ─────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  ⏰ AUTOMATION SCHEDULER - Background task (not tied to interactions)
-//  - Runs hourly
-//  - DMs users when deadline == today
-//  - Notifies once per list per day
-//  - Never spams public channels
-// ═══════════════════════════════════════════════════════════════════════════════
-
-async function checkDeadlines() {
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        const lists = await db.getListsDueToday(today);
-        
-        for (const list of lists) {
-            try {
-                const user = await client.users.fetch(list.discord_id);
-                if (user) {
-                    const items = await db.getItems(list.id);
-                    const done = items.filter(i => i.completed).length;
-                    
-                    // Private DM notification
-                    await user.send({
-                        embeds: [{
-                            color: 0xFF6B6B,
-                            title: '⏰ Deadline Today!',
-                            description: `Your list **${list.name}** is due today!`,
-                            fields: [
-                                { name: '📊 Progress', value: `${done}/${items.length} items`, inline: true },
-                                { name: '📁 Category', value: list.category || 'None', inline: true }
-                            ],
-                            footer: { text: 'TaskQuest • /automation to toggle' }
-                        }]
-                    });
-                    
-                    await db.markDeadlineNotified(list.id);
-                    log('📬', 'DEADLINE', `Notified ${user.tag} for "${list.name}"`);
-                }
-            } catch (e) {
-                // User has DMs disabled - fail silently
-            }
+/** Run a job, logging (not crashing on) failures. */
+function job(name, fn) {
+    return async () => {
+        try {
+            await fn();
+        } catch (err) {
+            log('❌', name, err.stack || err.message);
         }
-    } catch (e) {
-        log('❌', 'DEADLINE', e.message);
+    };
+}
+
+const checkDeadlines = job('DEADLINE', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const list of await db.tasks.getListsDueOn(today)) {
+        try {
+            const user = await client.users.fetch(list.discord_id);
+            const items = (await db.tasks.getItems(list.discord_id, list.id)) || [];
+            const done = items.filter((i) => i.completed).length;
+            await user.send({
+                embeds: [
+                    {
+                        color: 0xff6b6b,
+                        title: '⏰ Deadline Today!',
+                        description: `Your list **${list.name}** is due today!`,
+                        fields: [
+                            { name: '📊 Progress', value: `${done}/${items.length} tasks`, inline: true },
+                            { name: '📁 Category', value: list.category || 'None', inline: true }
+                        ],
+                        footer: { text: 'TaskQuest • /automation to turn reminders off' }
+                    }
+                ]
+            });
+            log('📬', 'DEADLINE', `Reminded ${list.discord_id} about list ${list.id}`);
+        } catch (err) {
+            // 50007 = cannot DM this user (DMs closed). Anything else is worth logging.
+            if (err.code !== 50007) log('⚠️', 'DEADLINE', `list ${list.id}: ${err.message}`);
+        }
+        // Mark even when the DM fails so a closed inbox isn't retried every hour.
+        await db.tasks.markDeadlineNotified(list.id);
+    }
+});
+
+const cleanupLists = job('AUTO-DELETE', async () => {
+    const deleted = await db.tasks.cleanupOldLists();
+    if (deleted > 0) log('🗑️', 'AUTO-DELETE', `Removed ${deleted} old lists`);
+});
+
+const expireGames = job('GAMES', async () => {
+    const expired = await db.games.expireStaleSessions();
+    if (expired > 0) log('🧹', 'GAMES', `Expired ${expired} abandoned game sessions (bets refunded)`);
+});
+
+const timers = [];
+
+client.once(Events.ClientReady, (c) => {
+    log('🎉', 'READY', `${c.user.tag} v${version} in ${c.guilds.cache.size} servers`);
+    c.user.setPresence({ activities: [{ name: '/help', type: ActivityType.Playing }], status: 'online' });
+
+    setTimeout(checkDeadlines, 5_000);
+    setTimeout(cleanupLists, 10_000);
+    expireGames();
+    timers.push(setInterval(checkDeadlines, 60 * 60 * 1000));
+    timers.push(setInterval(cleanupLists, 24 * 60 * 60 * 1000));
+    timers.push(setInterval(expireGames, 5 * 60 * 1000));
+});
+
+// ─── Interaction routing ─────────────────────────────────────────────────────
+
+const LIST_BUTTON_IDS = new Set(['create', 'back', 'filter_cat', 'filter_all', 'filter_current', 'filter_expired', 'filter_completed']);
+const LIST_BUTTON_PREFIXES = ['sort_', 'search_', 'refresh_', 'edit_', 'view_', 'item_', 'list_', 'rename_', 'yes_', 'no_', 'metadone_'];
+const CLASS_BUTTON_IDS = new Set([
+    'class_overview', 'class_skills', 'skill_back', 'class_browse', 'class_prev', 'class_next',
+    'class_return_default', 'skill_back_to_class', 'class_equipped_placeholder', 'class_return_current'
+]);
+
+const COMMANDS = {
+    list: listCommand.execute,
+    game: gameCommand.execute,
+    ping: gamification.ping,
+    daily: gamification.daily,
+    automation: gamification.automation,
+    profile: gamification.profile,
+    achievements: gamification.achievements,
+    class: gamification.classShop,
+    leaderboard: gamification.leaderboard,
+    toggle: gamification.toggle,
+    help: gamification.help,
+    app: gamification.app
+};
+
+async function route(interaction) {
+    if (interaction.isAutocomplete()) {
+        if (interaction.commandName === 'list') return listCommand.autocomplete(interaction);
+        return interaction.respond([]);
+    }
+
+    if (interaction.isChatInputCommand()) {
+        const handler = COMMANDS[interaction.commandName];
+        if (!handler) return interaction.reply({ content: '❌ Unknown command', flags: MessageFlags.Ephemeral });
+        return handler(interaction);
+    }
+
+    if (interaction.isButton()) {
+        const id = interaction.customId;
+        if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
+        if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
+            return gamification.handleClassButton(interaction);
+        }
+        if (id.startsWith('ach_')) return gamification.handleAchievementPagination(interaction);
+        if (id === 'bj_bet_custom') return gameCommand.handleButtonNoDefer(interaction);
+        if (id.startsWith('bj_') || id.startsWith('game_') || id.startsWith('rps_') || id.startsWith('hm_')) return gameCommand.handleButton(interaction);
+        return interaction.reply({ content: '❌ This button has expired.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (interaction.isStringSelectMenu()) {
+        const id = interaction.customId;
+        if (id === 'game_select') return gameCommand.handleSelectMenu(interaction);
+        if (id.startsWith('hm_letter_select')) return gameCommand.handleHangmanSelect(interaction);
+        if (id === 'class_select') return gamification.handleClassSelect(interaction);
+        if (id === 'skill_select') return gamification.handleSkillSelect(interaction);
+        return listCommand.handleSelectMenu(interaction);
+    }
+
+    if (interaction.isModalSubmit()) {
+        if (interaction.customId === 'bj_bet_modal') return gameCommand.handleModal(interaction);
+        return listCommand.handleModal(interaction);
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  🚀 READY
-// ═══════════════════════════════════════════════════════════════════════════════
-
-client.once(Events.ClientReady, async (c) => {
-    console.log('\n╔═══════════════════════════════════════════════════════╗');
-    console.log('║   🎮 TASKQUEST BOT v3.8.0 - ONLINE (Clean UI) 🎮    ║');
-    console.log('╚═══════════════════════════════════════════════════════╝\n');
-    
-    try {
-        await db.initializeDatabase();
-        log('✅', 'DB', 'Connected');
-        
-        // Cleanup expired game sessions on startup
-        const expired = await sessionManager.expireOldSessions();
-        if (expired > 0) log('🧹', 'CLEANUP', `Expired ${expired} old game sessions`);
-    } catch (e) {
-        log('❌', 'DB', e.message);
-    }
-    
-    c.user.setPresence({ activities: [{ name: '/game', type: ActivityType.Playing }], status: 'online' });
-    
-    // Start deadline scheduler
-    setTimeout(checkDeadlines, 5000);
-    setInterval(checkDeadlines, 60 * 60 * 1000); // Every hour
-
-    // Auto-delete old lists cleanup - every 24 hours
-    setTimeout(async () => {
-        try {
-            const deleted = await db.cleanupOldLists();
-            if (deleted > 0) log('🗑️', 'AUTO-DELETE', `Cleaned up ${deleted} old lists`);
-        } catch (e) {
-            log('❌', 'AUTO-DELETE', e.message);
-        }
-    }, 10000); // Run 10 seconds after startup
-
-    setInterval(async () => {
-        try {
-            const deleted = await db.cleanupOldLists();
-            if (deleted > 0) log('🗑️', 'AUTO-DELETE', `Cleaned up ${deleted} old lists`);
-        } catch (e) {
-            log('❌', 'AUTO-DELETE', e.message);
-        }
-    }, 24 * 60 * 60 * 1000); // Every 24 hours
-
-    // Game session cleanup - every 15 minutes
-    setInterval(async () => {
-        const expired = await sessionManager.expireOldSessions();
-        if (expired > 0) log('🧹', 'CLEANUP', `Expired ${expired} old game sessions`);
-    }, 15 * 60 * 1000);
-    
-    log('🎉', 'READY', `${c.user.tag} | ${c.guilds.cache.size} servers`);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  🎯 INTERACTION HANDLER
-// ═══════════════════════════════════════════════════════════════════════════════
-
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
-        // ═══════════════════════════════════════════════════════════════════════
-        //  AUTOCOMPLETE
-        // ═══════════════════════════════════════════════════════════════════════
-        if (interaction.isAutocomplete()) {
-            const focused = interaction.options.getFocused(true);
-            if (focused.name === 'name') {
-                const lists = await db.getLists(interaction.user.id);
-                const filtered = lists.filter(l => l.name.toLowerCase().includes(focused.value.toLowerCase())).slice(0, 25);
-                await interaction.respond(filtered.map(l => ({ name: l.name, value: l.name })));
-            } else {
-                await interaction.respond([]);
-            }
-            return;
-        }
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  SLASH COMMANDS
-        // ═══════════════════════════════════════════════════════════════════════
-        if (interaction.isChatInputCommand()) {
-            const cmd = interaction.commandName;
-            log('⌨️', 'CMD', `${interaction.user.tag} /${cmd}`);
-            
-            switch (cmd) {
-                case 'list': await listCommand.execute(interaction); break;
-                case 'game': await gameCommand.execute(interaction); break;
-                case 'ping': await gamification.ping(interaction); break;
-                case 'daily': await gamification.daily(interaction); break;
-                case 'automation': await gamification.automation(interaction); break;
-                case 'profile': await gamification.profile(interaction); break;
-                case 'achievements': await gamification.achievements(interaction); break;
-                case 'class': await gamification.classShop(interaction); break;
-                case 'leaderboard': await gamification.leaderboard(interaction); break;
-                case 'toggle': await gamification.toggle(interaction); break;
-                case 'help': await gamification.help(interaction); break;
-                case 'app': await gamification.app(interaction); break;
-                default: await interaction.reply({ content: '❌ Unknown command', flags: MessageFlags.Ephemeral });
-            }
-            return;
-        }
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  BUTTONS
-        // ═══════════════════════════════════════════════════════════════════════
-        if (interaction.isButton()) {
-            const id = interaction.customId;
-            log('🔘', 'BTN', `${interaction.user.tag} ${id}`);
-            
-            // List command buttons
-            if (['sort_az', 'sort_date', 'sort_pri', 'create', 'back', 'filter_cat', 'filter_all', 'filter_current', 'filter_expired', 'filter_completed'].includes(id) ||
-                id.startsWith('sort_') || id.startsWith('search_') || id.startsWith('refresh_') ||
-                id.startsWith('edit_') || id.startsWith('view_') ||
-                id.startsWith('item_') || id.startsWith('list_') ||
-                id.startsWith('rename_') || id.startsWith('yes_') || id.startsWith('no_') ||
-                id.startsWith('metadone_')) {
-                await listCommand.handleButton(interaction);
-                return;
-            }
-            
-            // Class shop buttons
-            if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_')) {
-                await gamification.handleClassButton(interaction);
-                return;
-            }
-            
-            // Class navigation & skill buttons (including new browser controls)
-            if (id === 'class_overview' || id === 'class_skills' || id === 'skill_back' || 
-                id === 'class_browse' || id === 'class_prev' || id === 'class_next' ||
-                id === 'class_return_default' || id === 'skill_back_to_class' ||
-                id === 'class_equipped_placeholder' || id === 'class_return_current' ||
-                id.startsWith('skill_unlock_')) {
-                await gamification.handleClassButton(interaction);
-                return;
-            }
-            
-            // Achievement pagination
-            if (id.startsWith('ach_')) {
-                await gamification.handleAchievementPagination(interaction);
-                return;
-            }
-            
-            // ═══════════════════════════════════════════════════════════════════
-            //  🎰 GAME BUTTONS (Blackjack, RPS, etc.)
-            //  Note: bj_bet_custom needs modal, handled separately (no defer)
-            // ═══════════════════════════════════════════════════════════════════
-            if (id === 'bj_bet_custom') {
-                // Must NOT defer before showing modal
-                await gameCommand.handleButtonNoDefer(interaction);
-                return;
-            }
-            
-            if (id.startsWith('bj_') || id.startsWith('game_') || id.startsWith('rps_') || id.startsWith('hm_')) {
-                await gameCommand.handleButton(interaction);
-                return;
-            }
-            
-            // Unknown button - try to respond, but catch if interaction expired
-            try {
-                await interaction.reply({ content: '❌ Button expired or unknown', flags: MessageFlags.Ephemeral });
-            } catch (e) {
-                // Interaction already expired, can't respond
-                console.log('⚠️ Could not respond to expired interaction:', id);
-            }
-            return;
-        }
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  SELECT MENUS
-        // ═══════════════════════════════════════════════════════════════════════
-        if (interaction.isStringSelectMenu()) {
-            const id = interaction.customId;
-            log('📋', 'SELECT', `${interaction.user.tag} ${id}`);
-            
-            // Game select menu
-            if (id === 'game_select') {
-                await gameCommand.handleSelectMenu(interaction);
-                return;
-            }
-            
-            // Hangman letter select
-            if (id === 'hm_letter_select') {
-                await gameCommand.handleHangmanSelect(interaction);
-                return;
-            }
-            
-            // Class select menu
-            if (id === 'class_select') {
-                await gamification.handleClassSelect(interaction);
-                return;
-            }
-            
-            // Skill select menu
-            if (id === 'skill_select') {
-                await gamification.handleSkillSelect(interaction);
-                return;
-            }
-            
-            // List select menus
-            await listCommand.handleSelectMenu(interaction);
-            return;
-        }
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  MODALS
-        // ═══════════════════════════════════════════════════════════════════════
-        if (interaction.isModalSubmit()) {
-            const id = interaction.customId;
-            log('📝', 'MODAL', `${interaction.user.tag} ${id}`);
-            
-            // Game modals
-            if (id === 'bj_bet_modal') {
-                await gameCommand.handleModal(interaction);
-                return;
-            }
-            
-            // List modals
-            await listCommand.handleModal(interaction);
-            return;
-        }
-        
-    } catch (e) {
-        log('❌', 'ERROR', e.message);
-        console.error(e.stack);
+        await route(interaction);
+    } catch (err) {
+        log('❌', 'INTERACTION', `${interaction.customId || interaction.commandName}: ${err.stack || err.message}`);
+        if (interaction.isAutocomplete()) return;
         try {
-            const msg = { content: '❌ An error occurred', flags: MessageFlags.Ephemeral };
+            const msg = { content: '❌ Something went wrong. Please try again.', flags: MessageFlags.Ephemeral };
             if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
             else await interaction.reply(msg);
-        } catch (x) {}
+        } catch {
+            /* interaction expired */
+        }
     }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  ⚠️ ERROR HANDLERS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Lifecycle ───────────────────────────────────────────────────────────────
 
-process.on('unhandledRejection', (e) => log('❌', 'UNHANDLED', e?.message || e));
-process.on('uncaughtException', (e) => { log('❌', 'UNCAUGHT', e.message); setTimeout(() => process.exit(1), 1000); });
-process.on('SIGINT', async () => {
-    log('🛑', 'SHUTDOWN', 'Goodbye!');
-    try { await db.closePool(); } catch (e) {}
+let shuttingDown = false;
+async function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log('🛑', 'SHUTDOWN', `${signal} received`);
+    timers.forEach(clearInterval);
     server.close();
-    client.destroy();
+    await client.destroy();
+    await db.closePool().catch(() => {});
     process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (err) => log('❌', 'UNHANDLED', err?.stack || err));
+process.on('uncaughtException', (err) => {
+    log('❌', 'UNCAUGHT', err.stack || err.message);
+    setTimeout(() => process.exit(1), 1000);
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  🚀 START
-// ═══════════════════════════════════════════════════════════════════════════════
+async function main() {
+    if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is not set (see apps/bot/.env.example)');
+    await db.ping();
+    if (process.env.MIGRATE_ON_START !== 'false') await db.runMigrations({ log: (m) => log('🗄️', 'DB', m) });
+    else await db.assertSchemaCurrent();
+    log('✅', 'DB', 'Connected');
 
-if (!process.env.DISCORD_TOKEN) { console.error('❌ Set DISCORD_TOKEN in .env'); process.exit(1); }
-client.login(process.env.DISCORD_TOKEN);
+    const port = parseInt(process.env.PORT, 10) || 3000;
+    server.listen(port, () => log('🌐', 'HTTP', `Health endpoint on :${port}`));
+    await client.login(process.env.DISCORD_TOKEN);
+}
+
+main().catch((err) => {
+    log('❌', 'STARTUP', err.message);
+    process.exit(1);
+});

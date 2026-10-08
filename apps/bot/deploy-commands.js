@@ -1,9 +1,13 @@
 /**
- * ═══════════════════════════════════════════════════════════════════════════════
- *  🚀 DEPLOY COMMANDS - Clears ALL old commands (global + guild) first!
- *  Run: node deploy-commands.js
- *  Run with guild: node deploy-commands.js --guild YOUR_GUILD_ID
- * ═══════════════════════════════════════════════════════════════════════════════
+ * Register slash commands with Discord.
+ *
+ *   npm run deploy -w @taskquest/bot                  # global (can take up to 1h to propagate)
+ *   npm run deploy -w @taskquest/bot -- --guild=ID    # one guild, instant (development)
+ *   npm run deploy -w @taskquest/bot -- --guild ID --clear-global
+ *
+ * A bulk PUT replaces the whole command set atomically, so there is never a
+ * window with no commands registered. `--clear-global` removes global
+ * commands (useful when switching a dev bot to guild-only commands).
  */
 
 require('dotenv').config();
@@ -13,91 +17,50 @@ const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 
 const commands = [
-    listCommand.data.toJSON(),
-    gameCommand.data.toJSON(),
-    gamification.pingData.toJSON(),
-    gamification.automationData.toJSON(),
-    gamification.profileData.toJSON(),
-    gamification.achievementsData.toJSON(),
-    gamification.classData.toJSON(),
-    gamification.leaderboardData.toJSON(),
-    gamification.toggleData.toJSON(),
-    gamification.helpData.toJSON(),
-    gamification.dailyData.toJSON(),
-    gamification.appData.toJSON()  // NEW: /app command
-];
+    listCommand.data,
+    gameCommand.data,
+    gamification.pingData,
+    gamification.dailyData,
+    gamification.automationData,
+    gamification.profileData,
+    gamification.achievementsData,
+    gamification.classData,
+    gamification.leaderboardData,
+    gamification.toggleData,
+    gamification.helpData,
+    gamification.appData
+].map((c) => c.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+function argValue(name) {
+    const args = process.argv.slice(2);
+    const eq = args.find((a) => a.startsWith(`--${name}=`));
+    if (eq) return eq.slice(name.length + 3);
+    const i = args.indexOf(`--${name}`);
+    return i !== -1 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : undefined;
+}
 
-// Get guild ID from command line or env
-const guildId = process.argv[2]?.replace('--guild=', '') || process.env.GUILD_ID;
+async function main() {
+    const { DISCORD_TOKEN, CLIENT_ID } = process.env;
+    if (!DISCORD_TOKEN || !CLIENT_ID) throw new Error('DISCORD_TOKEN and CLIENT_ID must be set');
 
-(async () => {
-    try {
-        console.log('╔═══════════════════════════════════════════════════════════════╗');
-        console.log('║          🚀 TASKQUEST COMMAND DEPLOYMENT v3.2                 ║');
-        console.log('╚═══════════════════════════════════════════════════════════════╝\n');
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  STEP 1: Clear ALL global commands
-        // ═══════════════════════════════════════════════════════════════════════
-        console.log('🗑️  Clearing ALL global commands...');
-        await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
-            { body: [] }
-        );
-        console.log('✅ Global commands cleared!\n');
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  STEP 2: Clear guild commands if guild ID provided
-        // ═══════════════════════════════════════════════════════════════════════
-        if (guildId) {
-            console.log(`🗑️  Clearing ALL guild commands for ${guildId}...`);
-            await rest.put(
-                Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId),
-                { body: [] }
-            );
-            console.log('✅ Guild commands cleared!\n');
-        }
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  STEP 3: Deploy new commands
-        // ═══════════════════════════════════════════════════════════════════════
-        if (guildId) {
-            // Guild commands (instant update - for development)
-            console.log(`🚀 Deploying ${commands.length} commands to guild ${guildId}...\n`);
-            await rest.put(
-                Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId),
-                { body: commands }
-            );
-            console.log('✅ Guild commands deployed (instant update)!\n');
-        } else {
-            // Global commands (can take up to 1 hour)
-            console.log(`🚀 Deploying ${commands.length} commands globally...\n`);
-            await rest.put(
-                Routes.applicationCommands(process.env.CLIENT_ID),
-                { body: commands }
-            );
-            console.log('✅ Global commands deployed!\n');
-        }
-        
-        // ═══════════════════════════════════════════════════════════════════════
-        //  STEP 4: Show deployed commands
-        // ═══════════════════════════════════════════════════════════════════════
-        console.log('📋 Deployed commands:');
-        commands.forEach(c => console.log(`   /${c.name} - ${c.description}`));
-        
-        console.log('\n═══════════════════════════════════════════════════════════════');
-        if (guildId) {
-            console.log('✅ Done! Guild commands are available immediately.');
-        } else {
-            console.log('⚠️  Global commands can take up to 1 hour to update.');
-            console.log('   For instant updates, use: node deploy-commands.js --guild=YOUR_GUILD_ID');
-        }
-        console.log('═══════════════════════════════════════════════════════════════\n');
-        
-    } catch (error) {
-        console.error('❌ Deploy failed:', error);
-        process.exit(1);
+    const guildId = argValue('guild') || process.env.GUILD_ID || undefined;
+    if (guildId && !/^\d{5,25}$/.test(guildId)) throw new Error(`Invalid guild id: ${guildId}`);
+
+    const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
+
+    if (process.argv.includes('--clear-global')) {
+        await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
+        console.log('🗑️  Cleared global commands');
     }
-})();
+
+    const route = guildId ? Routes.applicationGuildCommands(CLIENT_ID, guildId) : Routes.applicationCommands(CLIENT_ID);
+    const deployed = await rest.put(route, { body: commands });
+
+    console.log(`✅ Deployed ${deployed.length} commands ${guildId ? `to guild ${guildId} (instant)` : 'globally (may take up to 1 hour)'}:`);
+    for (const c of commands) console.log(`   /${c.name} — ${c.description}`);
+}
+
+main().catch((err) => {
+    console.error('❌ Deploy failed:', err.message);
+    process.exit(1);
+});

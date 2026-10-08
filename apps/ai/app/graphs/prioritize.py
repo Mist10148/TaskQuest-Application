@@ -118,7 +118,7 @@ def build_features(lists: list[dict[str, Any]], today: date) -> list[TaskFeature
 
 
 def template_reason(f: TaskFeatures) -> str:
-    if f.is_overdue:
+    if f.is_overdue and f.days_to_deadline is not None:
         return f"Overdue by {-f.days_to_deadline} day(s)"
     if f.days_to_deadline == 0:
         return "Due today"
@@ -226,9 +226,10 @@ def build_graph(conn: AsyncConnection, llm_factory: Callable[..., Any]):
         return {"llm_ranking": ranking, "retries": retries + 1}
 
     async def validate(state: PrioritizeState) -> dict:
-        if state.get("llm_failed") or state.get("llm_ranking") is None:
+        ranking = state.get("llm_ranking")
+        if state.get("llm_failed") or ranking is None:
             return {"valid": False}
-        errors = validate_ranking(state["llm_ranking"], [t.id for t in state["tasks"]])
+        errors = validate_ranking(ranking, [t.id for t in state["tasks"]])
         return {"valid": not errors, "errors": errors}
 
     def route_after_validate(state: PrioritizeState) -> str:
@@ -240,6 +241,8 @@ def build_graph(conn: AsyncConnection, llm_factory: Callable[..., Any]):
 
     async def merge_scores(state: PrioritizeState) -> dict:
         tasks, ranking = state["tasks"], state["llm_ranking"]
+        if ranking is None:  # only reached after validate; kept for type safety
+            return await fallback_rank(state)
         n = len(tasks)
         by_base = {t.id: i + 1 for i, t in enumerate(sorted(tasks, key=lambda t: -t.baseline))}
         llm_by_id = {r.id: r for r in ranking.ranked}

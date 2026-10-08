@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -25,6 +25,7 @@ from langchain_core.messages import (
     HumanMessage,
     RemoveMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
 )
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -94,23 +95,23 @@ def text_of(content: Any) -> str:
     return ""
 
 
-def last_human_text(messages: list[BaseMessage]) -> str:
+def last_human_text(messages: Sequence[BaseMessage]) -> str:
     for m in reversed(messages):
         if isinstance(m, HumanMessage):
             return text_of(m.content)
     return ""
 
 
-def window(messages: list[BaseMessage], size: int = WINDOW) -> list[BaseMessage]:
+def window(messages: Sequence[BaseMessage], size: int = WINDOW) -> list[BaseMessage]:
     """Last ``size`` messages, never starting mid tool-call (a ToolMessage without its AI call)."""
-    recent = messages[-size:]
+    recent = list(messages[-size:])
     for i, m in enumerate(recent):
         if isinstance(m, HumanMessage):
             return recent[i:]
     return recent
 
 
-def tool_rounds_this_turn(messages: list[BaseMessage]) -> int:
+def tool_rounds_this_turn(messages: Sequence[BaseMessage]) -> int:
     n = 0
     for m in reversed(messages):
         if isinstance(m, HumanMessage):
@@ -118,6 +119,12 @@ def tool_rounds_this_turn(messages: list[BaseMessage]) -> int:
         if isinstance(m, AIMessage) and m.tool_calls:
             n += 1
     return n
+
+
+def pending_tool_calls(messages: Sequence[BaseMessage]) -> list[ToolCall]:
+    """Tool calls of the latest message (only AI messages carry them)."""
+    last = messages[-1] if messages else None
+    return list(last.tool_calls) if isinstance(last, AIMessage) else []
 
 
 def _json(data: Any) -> str:
@@ -248,8 +255,7 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
         return {"messages": [reply]}
 
     def after_agent(state: ChatState) -> str:
-        last = state["messages"][-1]
-        calls = getattr(last, "tool_calls", None) or []
+        calls = pending_tool_calls(state["messages"])
         if not calls:
             return "end"
         if any(c["name"] in TOOLS and TOOLS[c["name"]].write for c in calls):
@@ -261,21 +267,22 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
         ctx = ctx_for(state)
         pending: list[dict[str, Any]] = []
         decisions: dict[str, Any] = {}
-        for call in state["messages"][-1].tool_calls:
+        for call in pending_tool_calls(state["messages"]):
             spec = TOOLS.get(call["name"])
             if spec is None or not spec.write:
                 continue
+            call_id = call["id"] or ""
             try:
                 args = spec.args(**call["args"])
-                preview = await spec.preview(ctx, args)
+                preview = await spec.preview(ctx, args) if spec.preview else f"Run {spec.name}?"
             except ValidationError as err:
-                decisions[call["id"]] = f"Invalid arguments: {err.errors()[0]['msg']}"
+                decisions[call_id] = f"Invalid arguments: {err.errors()[0]['msg']}"
                 continue
             except ToolError as err:
-                decisions[call["id"]] = str(err)
+                decisions[call_id] = str(err)
                 continue
             pending.append(
-                {"id": call["id"], "action": spec.name, "args": args.model_dump(exclude_none=True), "preview": preview}
+                {"id": call_id, "action": spec.name, "args": args.model_dump(exclude_none=True), "preview": preview}
             )
         if pending:
             answer = interrupt({"actions": pending})
@@ -288,13 +295,14 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
         approvals = state.get("approvals") or {}
         results: list[ToolMessage] = []
         events: list[dict[str, Any]] = []
-        for call in state["messages"][-1].tool_calls:
+        for call in pending_tool_calls(state["messages"]):
             spec = TOOLS.get(call["name"])
+            call_id = call["id"] or ""
             event: dict[str, Any] = {"name": call["name"], "status": "done"}
             if spec is None:
                 content, event["status"] = f"Unknown tool {call['name']}.", "error"
-            elif spec.write and approvals.get(call["id"]) is not True:
-                decision = approvals.get(call["id"])
+            elif spec.write and approvals.get(call_id) is not True:
+                decision = approvals.get(call_id)
                 if isinstance(decision, str):  # validation/ownership problem found before asking
                     content, event["status"] = f"Could not do that: {decision}", "error"
                 else:
@@ -315,7 +323,7 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
                 except Exception:  # noqa: BLE001 - tool crashes must not break the conversation
                     log.exception("tool %s crashed", call["name"])
                     content, event["status"] = "That tool failed unexpectedly.", "error"
-            results.append(ToolMessage(content=content, tool_call_id=call["id"], name=call["name"]))
+            results.append(ToolMessage(content=content, tool_call_id=call_id, name=call["name"]))
             events.append(event)
         return {"messages": results, "tool_events": events, "approvals": {}}
 

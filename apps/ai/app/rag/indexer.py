@@ -67,9 +67,7 @@ async def index_list(
     n = await _sync(conn, store, embedder, discord_id, chunks, existing)
     # The list was checked even if its text did not change (e.g. a subtask was reordered).
     unchanged = [
-        c.source_id
-        for c in chunks
-        if c.source_type == "list" and existing.get(("list", c.source_id)) == c.content_hash
+        c.source_id for c in chunks if c.source_type == "list" and existing.get(("list", c.source_id)) == c.content_hash
     ]
     if unchanged:
         await store.touch(conn, "list", unchanged)

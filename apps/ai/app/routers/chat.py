@@ -75,7 +75,7 @@ async def chat(body: ChatBody, caller: Caller = Depends(get_caller), deps: ChatD
     new_thread = body.threadId is None
     async with pool.connection() as conn:
         await usage.check(conn, caller.discord_id)  # 429 before any stream starts
-        if new_thread:
+        if body.threadId is None:
             thread_id = await threads.create_thread(conn, caller.discord_id, body.message)
         else:
             thread_id = _valid_uuid(body.threadId)

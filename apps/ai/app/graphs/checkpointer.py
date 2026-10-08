@@ -59,8 +59,10 @@ class MySQLCheckpointSaver(BaseCheckpointSaver[str]):
                 {"t": thread_id, "ns": ns, "c": checkpoint_id},
             )
         ).all()
-        config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ns, "checkpoint_id": checkpoint_id}}
-        parent = (
+        config: RunnableConfig = {
+            "configurable": {"thread_id": thread_id, "checkpoint_ns": ns, "checkpoint_id": checkpoint_id}
+        }
+        parent: RunnableConfig | None = (
             {"configurable": {"thread_id": thread_id, "checkpoint_ns": ns, "checkpoint_id": parent_id}}
             if parent_id
             else None

@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import SecretStr
+
 from app.config import get_settings
 
 
@@ -33,7 +35,7 @@ def embeddings_model() -> Any:
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
     return GoogleGenerativeAIEmbeddings(
-        model=s.gemini_embed_model, google_api_key=s.gemini_api_key, output_dimensionality=s.embed_dim
+        model=s.gemini_embed_model, api_key=SecretStr(s.gemini_api_key), output_dimensionality=s.embed_dim
     )
 
 

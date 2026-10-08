@@ -58,7 +58,7 @@ jobs:
       - run: npm test
 
   ai:
-    name: AI service (ruff, pytest)
+    name: AI service (ruff, mypy, pytest)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -72,6 +72,7 @@ jobs:
           cache-dependency-path: apps/ai/pyproject.toml
       - run: pip install -e ".[dev]"
       - run: ruff check .
+      - run: mypy
       # Unit and graph tests run offline against in-memory SQLite and fake models.
       # Evals that call Gemini are not part of CI (run them manually with a key).
       - run: pytest tests/unit tests/graphs

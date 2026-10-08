@@ -94,7 +94,8 @@ async def render_input(
 
     if mode == "digest":
         lists = await repo.lists_for_user(conn, discord_id, open_only=True)
-        blocks, ids = [], set()
+        blocks: list[str] = []
+        ids = set()
         for lst in lists:
             items = [i for i in await repo.items_for_list(conn, discord_id, lst["id"]) if not i["completed"]]
             blocks.append(_fmt_list(lst, items, today))
@@ -113,7 +114,7 @@ async def render_input(
         f"XP earned: {xp}",
         f"Subtasks completed: {len(done)}",
     ]
-    ids: set[str] = set()
+    ids = set()
     for c in done:
         ids |= {item_label(c["id"]), list_label(c["list_id"])}
         lines.append(

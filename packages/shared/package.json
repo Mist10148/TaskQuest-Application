@@ -1,0 +1,16 @@
+{
+  "name": "@taskquest/shared",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Game rules, XP formulas and data access shared by the TaskQuest bot and web API.",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

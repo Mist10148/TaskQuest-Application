@@ -4,9 +4,12 @@
  */
 
 import crypto from 'crypto';
-import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import sharedEnv from '@taskquest/shared/env';
 
-dotenv.config();
+// apps/server/.env first, then the shared root .env.
+sharedEnv.loadEnv(path.dirname(fileURLToPath(import.meta.url)));
 
 const env = process.env;
 const isProduction = env.NODE_ENV === 'production';
@@ -21,7 +24,8 @@ const publicUrl = stripSlash(env.PUBLIC_URL || env.FRONTEND_URL || (isProduction
 
 const config = {
     isProduction,
-    port: parseInt(env.PORT, 10) || 3001,
+    // SERVER_PORT lets the bot and web server share one root .env without clashing.
+    port: parseInt(env.SERVER_PORT || env.PORT, 10) || 3001,
     publicUrl,
     /** Origins allowed to make state-changing requests (CSRF protection). */
     allowedOrigins: [publicUrl, ...(env.ALLOWED_ORIGINS || '').split(',').map((s) => stripSlash(s.trim()))].filter(Boolean),

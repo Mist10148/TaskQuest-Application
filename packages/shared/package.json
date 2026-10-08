@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./db": "./src/db/index.js"
+    "./db": "./src/db/index.js",
+    "./env": "./src/env.js"
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",

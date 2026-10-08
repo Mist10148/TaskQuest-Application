@@ -10,7 +10,7 @@
  * commands (useful when switching a dev bot to guild-only commands).
  */
 
-require('dotenv').config();
+require('@taskquest/shared/env').loadEnv(__dirname);
 const { REST, Routes } = require('discord.js');
 const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');

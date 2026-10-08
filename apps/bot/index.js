@@ -9,7 +9,7 @@
  * deadline DMs, clean up old lists and expire abandoned game sessions.
  */
 
-require('dotenv').config();
+require('@taskquest/shared/env').loadEnv(__dirname);
 
 const http = require('http');
 const { Client, GatewayIntentBits, Events, ActivityType, MessageFlags, Partials } = require('discord.js');
@@ -213,7 +213,8 @@ async function main() {
     else await db.assertSchemaCurrent();
     log('✅', 'DB', 'Connected');
 
-    const port = parseInt(process.env.PORT, 10) || 3000;
+    // BOT_PORT lets the bot and web server share one root .env without clashing.
+    const port = parseInt(process.env.BOT_PORT || process.env.PORT, 10) || 3000;
     server.listen(port, () => log('🌐', 'HTTP', `Health endpoint on :${port}`));
     await client.login(process.env.DISCORD_TOKEN);
 }

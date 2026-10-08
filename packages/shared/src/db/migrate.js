@@ -153,11 +153,7 @@ async function assertSchemaCurrent() {
 module.exports = { runMigrations, assertSchemaCurrent, loadMigrations };
 
 if (require.main === module) {
-    try {
-        require('dotenv').config();
-    } catch {
-        /* dotenv optional */
-    }
+    require('../env').loadEnv(process.cwd());
     runMigrations()
         .then(() => closePool())
         .catch(async (err) => {

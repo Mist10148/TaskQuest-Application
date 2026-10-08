@@ -1,0 +1,14 @@
+{
+  "name": "taskquest-application",
+  "version": "4.0.0",
+  "private": true,
+  "description": "TaskQuest: a gamified task manager delivered as a Discord bot and a web dashboard sharing one database.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {},
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

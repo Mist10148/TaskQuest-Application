@@ -147,3 +147,17 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# ─── TaskQuest monorepo ───────────────────────────────────────────────
+# Never commit secrets (any depth)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local tooling
+.claude/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db

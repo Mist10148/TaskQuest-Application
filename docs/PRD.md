@@ -171,7 +171,7 @@ TaskQuest addresses this in three ways:
 
 | Capability | Bot | Web |
 |---|---|---|
-| Lists & tasks (CRUD, filter, sort, search) | ✓ | ✓ (search: Planned) |
+| Lists & tasks (CRUD, filter, sort, search) | ✓ | ✓ |
 | Daily reward, profile, achievements | ✓ | ✓ |
 | Classes & skills | ✓ | ✓ |
 | Leaderboard | ✓ | ✓ |
@@ -214,7 +214,7 @@ TaskQuest addresses this in three ways:
 
 | Priority | Item |
 |---|---|
-| Next | Web list search UI; per-task due dates and priorities; leaderboard tabs (lifetime XP, streaks) |
+| Next | Per-task due dates and priorities; leaderboard tabs (lifetime XP, streaks); web search in task descriptions |
 | Next | Server-side anti-cheat telemetry for arcade games (input replays or signed checkpoints) |
 | Later | Recurring tasks; reminder time-of-day; weekly summary DM |
 | Later | Shared or team lists (would require a permission model) |

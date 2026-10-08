@@ -3,7 +3,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
-import session from 'express-session';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import config from './config.js';
@@ -13,6 +12,7 @@ import userRouter from './routes/user.js';
 import { listsRouter, itemsRouter } from './routes/tasks.js';
 import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } from './routes/progression.js';
 import gamesRouter from './routes/games.js';
+import { securityHeaders, sessionMiddleware, csrfProtection, apiLimiter, authLimiter, gameLimiter } from './lib/security.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.resolve(__dirname, '../web/dist');
@@ -24,22 +24,12 @@ export function createApp() {
     app.set('trust proxy', config.trustProxy);
     app.set('sessionCookieName', SESSION_COOKIE);
 
+    app.use(securityHeaders());
     app.use(express.json({ limit: '16kb' }));
-
-    app.use(
-        session({
-            name: SESSION_COOKIE,
-            secret: config.sessionSecret,
-            resave: false,
-            saveUninitialized: false,
-            cookie: {
-                httpOnly: true,
-                secure: config.isProduction,
-                sameSite: 'lax',
-                maxAge: config.sessionMaxAgeMs
-            }
-        })
-    );
+    app.use(sessionMiddleware(SESSION_COOKIE));
+    app.use('/api', apiLimiter, csrfProtection);
+    app.use(['/api/auth/discord', '/api/auth/callback'], authLimiter);
+    app.use('/api/games', gameLimiter);
 
     // ── Public endpoints ─────────────────────────────────────────────────────
     app.get('/api/health', async (req, res) => {

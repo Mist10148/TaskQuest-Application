@@ -32,7 +32,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `001_initial_schema` | Creates every table for a fresh database (`CREATE TABLE IF NOT EXISTS`) |
 | `002_upgrade_legacy` | Brings databases from older releases up to the 001 schema (see below). Does nothing on a fresh database. |
 
-To add a migration, create `packages/shared/src/db/migrations/003_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
+To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
 ## Upgrading a legacy database
 
@@ -84,7 +84,7 @@ Index: `(gamification_enabled, player_xp)` for the leaderboard.
 
 ### `lists`
 
-`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `created_at`.
+`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
 
 Unique key `(discord_id, name)`, index on `deadline`.
 

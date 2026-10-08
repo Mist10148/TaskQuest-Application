@@ -298,7 +298,8 @@ async function getListsDueOn(date) {
 }
 
 async function markDeadlineNotified(listId) {
-    await run('UPDATE lists SET deadline_notified = TRUE WHERE id = ?', [listId]);
+    // Keep updated_at: a reminder being sent is not an edit of the list.
+    await run('UPDATE lists SET deadline_notified = TRUE, updated_at = updated_at WHERE id = ?', [listId]);
 }
 
 /**

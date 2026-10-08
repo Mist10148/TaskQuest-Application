@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.db import pool
 from app.llm import AIUnavailable
+from app.observability import add_request_logging, configure_logging, configure_tracing
 from app.routers import chat, internal, v1
 from app.usage import QuotaExceeded
 
@@ -21,9 +22,8 @@ log = logging.getLogger("taskquest.ai")
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    logging.basicConfig(
-        level=settings.log_level, format='{"t":"%(asctime)s","lvl":"%(levelname)s","msg":"%(message)s"}'
-    )
+    configure_logging(settings)
+    configure_tracing(settings)
     tasks: list[asyncio.Task] = []
     if settings.gemini_api_key and not settings.db_url.startswith("sqlite"):
         from app.rag.indexer import reconcile_loop
@@ -40,6 +40,8 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="TaskQuest AI", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+
+    add_request_logging(app)
 
     @app.get("/health")
     async def health():

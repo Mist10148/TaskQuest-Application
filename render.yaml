@@ -1,6 +1,6 @@
 # Render Blueprint for TaskQuest (https://render.com/docs/blueprint-spec)
 #
-# Two services share one MySQL database (bring your own: Aiven, PlanetScale,
+# Services share one MySQL database (bring your own: Aiven, PlanetScale,
 # Railway, TiDB, ...). Database migrations run automatically on startup.
 #
 #   taskquest-web  Express API + built React app on ONE origin (first-party cookies)
@@ -24,6 +24,14 @@ envVarGroups:
       - key: DB_SSL_CA         # optional: provider CA certificate (PEM contents)
         sync: false
 
+  # Optional AI features (docs/AI_INTEGRATION.md). Shared by web and ai so both
+  # get the same service-to-service token. Keep AI_ENABLED=false on web until the
+  # taskquest-ai service is deployed and GEMINI_API_KEY is set.
+  - name: taskquest-ai
+    envVars:
+      - key: AI_INTERNAL_TOKEN
+        generateValue: true
+
 services:
   - type: web
     name: taskquest-web
@@ -34,6 +42,11 @@ services:
     healthCheckPath: /api/health
     envVars:
       - fromGroup: taskquest-database
+      - fromGroup: taskquest-ai
+      - key: AI_ENABLED
+        value: "false"          # set to "true" once taskquest-ai is running
+      - key: AI_SERVICE_URL     # internal host of the private service, e.g. http://taskquest-ai:10000
+        sync: false
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
@@ -67,4 +80,26 @@ services:
       - key: CLIENT_ID
         sync: false
       - key: WEB_APP_URL
+        sync: false
+
+  # Private AI service (Gemini + LangChain + LangGraph). Reachable only from the
+  # other Render services, never from the internet. Needs a paid plan.
+  - type: pserv
+    name: taskquest-ai
+    runtime: python
+    plan: starter
+    rootDir: apps/ai
+    # index_docs embeds the help docs once per deploy; it never fails the build
+    # (it is skipped if the database or GEMINI_API_KEY is unavailable at build time).
+    buildCommand: pip install . && python -m app.rag.index_docs
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: taskquest-database
+      - fromGroup: taskquest-ai
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: WEB_INTERNAL_URL   # internal host of taskquest-web, e.g. http://taskquest-web:10000
         sync: false

@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLists, useList, useCreateList, useUpdateList, useDeleteList, useCreateItem, useToggleItem, useUpdateItem, useDeleteItem } from "@/hooks/useApi";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { SummarizeButton } from "@/components/ai/SummarizeButton";
+import { PriorityPanel } from "@/components/ai/PriorityPanel";
 
 const CATEGORIES = [
   { value: 'all', label: 'All Categories', emoji: '📋' },
@@ -366,6 +368,7 @@ const Tasks = () => {
                 </div>
               </div>
               <div className="flex gap-2">
+                <SummarizeButton body={{ mode: "list", listId: selectedListId }} title={`Summary: ${selectedListData.name}`} />
                 <Button variant="outline" size="sm" onClick={() => setShowAddItem(true)} className="gap-1">
                   <Plus className="h-4 w-4" /> Add Task
                 </Button>
@@ -595,6 +598,8 @@ const Tasks = () => {
             <Plus className="h-4 w-4" /> Create Quest
           </Button>
         </div>
+
+        <PriorityPanel onOpen={setSelectedListId} />
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 p-1 bg-background-secondary rounded-lg w-fit">

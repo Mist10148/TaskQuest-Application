@@ -13,6 +13,7 @@ import { useLists, useClaimDaily } from "@/hooks/useApi";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { BriefingCard } from "@/components/ai/BriefingCard";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -123,6 +124,8 @@ const Dashboard = () => {
             <StatCard label="Achievements" value={achievementCount} icon={<Trophy className="h-4 w-4 sm:h-5 sm:w-5" />} colorScheme="xp" subValue="Unlock more!" />
           </motion.div>
         </div>
+
+        <BriefingCard />
 
         {/* Recent Quests */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from app.chains import summarize as summarize_chain
 from app.db import pool
 from app.deps import Caller, get_caller
+from app.graphs import prioritize as prioritize_graph
 from app.llm import get_llm_factory
 
 router = APIRouter(prefix="/v1")
@@ -38,3 +39,19 @@ async def summary(
             )
         except summarize_chain.NotFound:
             raise HTTPException(status_code=404, detail="List not found") from None
+
+
+class PrioritizeBody(BaseModel):
+    limit: int | None = Field(default=None, ge=1, le=20)
+
+
+@router.post("/prioritize")
+async def prioritize(
+    body: PrioritizeBody | None = None,
+    caller: Caller = Depends(get_caller),
+    llm_factory: Callable[..., Any] = Depends(get_llm_factory),
+):
+    async with pool.connection() as conn:
+        return await prioritize_graph.prioritize(
+            conn, caller.discord_id, llm_factory, limit=body.limit if body else None
+        )

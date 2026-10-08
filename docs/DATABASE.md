@@ -126,6 +126,20 @@ Indexes `(discord_id, created_at)` and `(discord_id, source, created_at)`. The s
 
 `session_id` VARCHAR(128) PK · `expires` INT UNSIGNED (unix seconds) · `data` MEDIUMTEXT (JSON). This holds web login sessions. Expired rows are purged every 15 minutes.
 
+### AI tables (migration `003_ai`)
+
+Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All user-owned rows cascade-delete with the user.
+
+| Table | Purpose |
+|---|---|
+| `ai_embeddings` | RAG vectors, one row per chunk: `discord_id` (NULL = global docs), `source_type` (`list`/`item`/`history`/`doc`), `source_id`, `list_id`, `content`, `content_hash` (SHA-256, skips unchanged text), `embedding` (float32 BLOB), `model`. Unique on `(source_type, source_id, model)`. |
+| `ai_chat_threads` | Chat conversations: `id` (UUID, also the LangGraph `thread_id`), `discord_id`, `title`. |
+| `ai_checkpoints`, `ai_checkpoint_writes` | LangGraph state snapshots per thread. |
+| `ai_usage` | Daily per-user, per-feature request and token counts, used for quotas. |
+| `ai_summary_cache` | Cached summaries keyed by `(discord_id, scope_key)` with an input hash. |
+
+`users.ai_enabled` (TINYINT, default 1) lets a user opt out of AI features.
+
 ### `schema_migrations`
 
 `id` VARCHAR(100) PK · `applied_at`.

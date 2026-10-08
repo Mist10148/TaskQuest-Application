@@ -16,7 +16,8 @@
     "start:bot": "npm start -w @taskquest/bot",
     "deploy:commands": "npm run deploy -w @taskquest/bot",
     "lint": "npm run lint -w @taskquest/web",
-    "typecheck": "npm run typecheck -w @taskquest/web"
+    "typecheck": "npm run typecheck -w @taskquest/web",
+    "db:migrate": "node packages/shared/src/db/migrate.js"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -773,10 +773,11 @@ const appData = new SlashCommandBuilder()
     .setDescription('🌐 Open the TaskQuest web app');
 
 async function app(interaction) {
-    const userId = interaction.user.id;
-
-    // Web app URL - configured in .env or defaults
-    const webAppUrl = process.env.WEB_APP_URL || 'https://taskquest.app';
+    // Only link to a URL the operator configured; never guess a domain.
+    const webAppUrl = process.env.WEB_APP_URL;
+    if (!webAppUrl || !/^https?:\/\//.test(webAppUrl)) {
+        return interaction.reply({ embeds: [ui.info('Web app not configured', 'Ask the bot owner to set WEB_APP_URL.')], ...EPHEMERAL });
+    }
 
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)

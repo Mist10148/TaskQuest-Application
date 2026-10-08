@@ -1,0 +1,70 @@
+# Render Blueprint for TaskQuest (https://render.com/docs/blueprint-spec)
+#
+# Two services share one MySQL database (bring your own: Aiven, PlanetScale,
+# Railway, TiDB, ...). Database migrations run automatically on startup.
+#
+#   taskquest-web  Express API + built React app on ONE origin (first-party cookies)
+#   taskquest-bot  Discord bot (long-lived gateway connection)
+#
+# After the first deploy:
+#   1. Set PUBLIC_URL to the web service URL (e.g. https://taskquest-web.onrender.com)
+#   2. Add <PUBLIC_URL>/api/auth/callback as an OAuth2 redirect in the Discord developer portal
+#   3. Register slash commands once: npm run deploy:commands (with DISCORD_TOKEN + CLIENT_ID set)
+# See docs/DEPLOYMENT.md for details.
+
+envVarGroups:
+  - name: taskquest-database
+    envVars:
+      - key: DB_URL            # mysql://user:password@host:port/database
+        sync: false
+      - key: DB_SSL
+        value: "true"
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: "true"
+      - key: DB_SSL_CA         # optional: provider CA certificate (PEM contents)
+        sync: false
+
+services:
+  - type: web
+    name: taskquest-web
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:server
+    healthCheckPath: /api/health
+    envVars:
+      - fromGroup: taskquest-database
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+      - key: PUBLIC_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+
+  # Background workers need a paid plan on Render. The bot also exposes a small
+  # health endpoint on $PORT, so it can run as a free "web" service instead,
+  # but free web services sleep when idle, which disconnects the bot.
+  - type: worker
+    name: taskquest-bot
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: npm run start:bot
+    envVars:
+      - fromGroup: taskquest-database
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: WEB_APP_URL
+        sync: false

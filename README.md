@@ -98,14 +98,11 @@ npm install
 ```
 
 1. **Create a database.** Use something like `CREATE DATABASE taskquest CHARACTER SET utf8mb4;`.
-2. **Configure the apps.** Copy the examples and fill them in:
+2. **Configure.** One `.env` at the repository root is shared by the bot, the web server and the web build:
    ```bash
-   cp apps/bot/.env.example apps/bot/.env
-   cp apps/server/.env.example apps/server/.env
+   cp .env.example .env
    ```
-   - The bot needs `DISCORD_TOKEN` and `CLIENT_ID`.
-   - The server needs `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`.
-   - Both need the database settings.
+   - Fill in `DISCORD_TOKEN`, `CLIENT_ID`/`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET` and the database settings.
    - In the Discord portal, add the OAuth2 redirect `http://localhost:8080/api/auth/callback`.
 3. **Create the tables.** Both apps also do this on startup.
    ```bash
@@ -139,7 +136,13 @@ Open <http://localhost:8080> and log in with Discord.
 
 ## Configuration
 
-Each app reads its own `.env`. Every variable is documented in [`apps/bot/.env.example`](apps/bot/.env.example), [`apps/server/.env.example`](apps/server/.env.example), [`apps/web/.env.example`](apps/web/.env.example) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+All apps share one git-ignored `.env` at the repository root, documented in [`.env.example`](.env.example) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#3-environment-variables). Settings are read in this order, and the first one found wins:
+
+1. Real environment variables (Render, CI, your shell).
+2. Optional per-app overrides in `apps/bot/.env` or `apps/server/.env`.
+3. The root `.env`.
+
+Vite only exposes `VITE_*` variables to the browser, so the secrets in that file never reach the client.
 
 ## Documentation
 

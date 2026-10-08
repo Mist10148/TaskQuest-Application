@@ -18,7 +18,7 @@ TaskQuest stores everything in one MySQL 8 or MariaDB 10.4+ database, which the 
 ## Migrations
 
 ```bash
-npm run db:migrate          # uses apps' .env-style variables from the current shell / .env
+npm run db:migrate          # reads DB_* from the environment / the root .env
 ```
 
 Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`, in which case they refuse to start if the schema is behind.

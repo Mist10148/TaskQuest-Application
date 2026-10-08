@@ -53,12 +53,20 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON taskqu
 
 ## 3. Environment variables
 
+For local development, everything lives in one git-ignored file at the repository root: `cp .env.example .env`. Settings are read in this order, and the first one found wins:
+
+1. Real environment variables (Render, CI, your shell).
+2. `apps/bot/.env` or `apps/server/.env` (optional per-app overrides).
+3. The root `.env`.
+
+In production, set the variables in your host's dashboard instead. Because the bot and server can share a file, they use `BOT_PORT` and `SERVER_PORT`. Each falls back to `PORT`, which hosting platforms set per service.
+
 ### Web server (`apps/server`)
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `NODE_ENV` | prod | `development` | `production` enables secure cookies, HSTS, static serving and the strict config checks |
-| `PORT` | | `3001` | Listen port |
+| `SERVER_PORT` / `PORT` | | `3001` | Listen port (`SERVER_PORT` wins) |
 | `PUBLIC_URL` | prod | `http://localhost:8080` in dev | The origin users open. Used for OAuth redirects and CSRF origin checks. |
 | `ALLOWED_ORIGINS` | | — | Extra comma-separated origins allowed to make write requests |
 | `SESSION_SECRET` | prod | random per run in dev | ≥ 32 characters. `openssl rand -base64 48` |
@@ -78,7 +86,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON taskqu
 | `CLIENT_ID` | for `deploy:commands` | Application ID |
 | `GUILD_ID` | | Default guild for `deploy:commands` |
 | `WEB_APP_URL` | | Link used by `/app` (e.g. your `PUBLIC_URL`) |
-| `PORT` | | Health endpoint port (default 3000) |
+| `BOT_PORT` / `PORT` | | Health endpoint port (default 3000; `BOT_PORT` wins) |
 | `MIGRATE_ON_START` | | Default `true` |
 | `DB_*` | ✓ | See below |
 
@@ -93,7 +101,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON taskqu
 | `DB_SSL_CA` | — | PEM CA certificate contents |
 | `DB_POOL_SIZE` | `10` | Connections per process |
 
-### Web build (`apps/web`, optional)
+### Web build (`apps/web`, optional; read from the root `.env`, only `VITE_*` reach the browser)
 
 | Variable | Description |
 |---|---|

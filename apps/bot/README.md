@@ -4,7 +4,7 @@ The TaskQuest Discord bot (discord.js 14, CommonJS). It is a thin Discord view o
 [`@taskquest/shared`](../../packages/shared), so all rules, XP and data access live there.
 
 ```bash
-cp .env.example .env            # DISCORD_TOKEN, CLIENT_ID, database settings
+# configure the shared root .env (cp ../../.env.example ../../.env)
 npm run deploy -- --guild=ID    # register slash commands (omit --guild for global)
 npm run dev                     # run with auto-reload
 ```

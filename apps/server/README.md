@@ -4,7 +4,7 @@ The Express API for the TaskQuest web app. It handles Discord OAuth2 login and M
 the built web app in production.
 
 ```bash
-cp .env.example .env    # DISCORD_CLIENT_ID/SECRET, SESSION_SECRET, database
+# configure the shared root .env (cp ../../.env.example ../../.env)
 npm run dev             # http://localhost:3001
 npm test                # integration tests need TEST_DB_NAME (see CONTRIBUTING.md)
 ```

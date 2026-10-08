@@ -8,8 +8,7 @@ Follow the [Quick start](README.md#quick-start). In short:
 
 ```bash
 npm install
-cp apps/bot/.env.example apps/bot/.env
-cp apps/server/.env.example apps/server/.env
+cp .env.example .env      # one shared, git-ignored file for every app
 npm run db:migrate
 npm run dev:server   # :3001
 npm run dev:web      # :8080 (proxies /api)

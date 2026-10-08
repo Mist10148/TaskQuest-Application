@@ -103,7 +103,13 @@ router.get(
             db.users.getAchievements(id)
         ]);
         if (!stats) return res.status(401).json({ error: 'Not authenticated', code: 'UNAUTHENTICATED' });
-        res.json({ discord: req.session.user, ...stats, skills, userAchievements: achievements });
+        res.json({
+            discord: req.session.user,
+            ...stats,
+            skills,
+            userAchievements: achievements,
+            features: { ai: config.ai.enabled && stats.user.ai_enabled !== 0 }
+        });
     })
 );
 

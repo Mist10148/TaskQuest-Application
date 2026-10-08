@@ -71,3 +71,35 @@ export const arcadeFinishBody = z
     .object({ sessionId: z.number().int().positive(), score: z.number().int().min(0).max(1_000_000) })
     .strict();
 export const quitParam = z.object({ type: z.enum(GAME_TYPES) });
+
+// ── AI ───────────────────────────────────────────────────────────────────────
+export const uuidParam = z.object({ threadId: z.string().uuid() });
+export const aiSummaryBody = z
+    .object({
+        mode: z.enum(['list', 'digest', 'recap']),
+        listId: z.number().int().positive().optional(),
+        range: z.enum(['day', 'week']).optional()
+    })
+    .strict()
+    .refine((o) => o.mode !== 'list' || o.listId !== undefined, 'listId is required for mode "list"');
+export const aiPrioritizeBody = z.object({ limit: z.number().int().min(1).max(20).optional() }).strict();
+export const aiChatBody = z
+    .object({ threadId: z.string().uuid().optional(), message: z.string().trim().min(1).max(2000) })
+    .strict();
+export const aiResumeBody = z.object({ approved: z.boolean() }).strict();
+
+// Internal (AI service -> web) write endpoints. discordId comes from the trusted caller.
+const internalBase = { discordId: z.string().regex(/^\d{1,32}$/) };
+export const internalCreateListBody = z
+    .object({
+        ...internalBase,
+        ...listFields,
+        items: z.array(z.string().min(1).max(TEXT_LIMITS.ITEM_NAME)).max(20).optional()
+    })
+    .strict();
+export const internalAddItemBody = z.object({ ...internalBase, ...createItemBody.shape }).strict();
+export const internalToggleBody = z.object({ ...internalBase, completed: z.boolean().optional() }).strict();
+export const internalUpdateListBody = z
+    .object({ ...internalBase, priority: listFields.priority, deadline: listFields.deadline })
+    .strict();
+export const internalIndexBody = z.object({ discordId: internalBase.discordId, listId: z.number().int().positive().optional() }).strict();

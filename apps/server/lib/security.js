@@ -50,6 +50,8 @@ export const apiLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 10
 export const authLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 30 });
 export const gameLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 1000, limit: 90, keyGenerator: keyByUser });
 
+export const aiLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 1000, limit: 20, keyGenerator: keyByUser });
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function originOf(value) {

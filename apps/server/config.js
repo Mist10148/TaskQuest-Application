@@ -37,7 +37,14 @@ const config = {
         clientSecret: env.DISCORD_CLIENT_SECRET,
         redirectUri: env.DISCORD_REDIRECT_URI || `${publicUrl}/api/auth/callback`
     },
-    serveFrontend: env.SERVE_FRONTEND !== undefined ? env.SERVE_FRONTEND === 'true' : isProduction
+    serveFrontend: env.SERVE_FRONTEND !== undefined ? env.SERVE_FRONTEND === 'true' : isProduction,
+    /** Optional AI service (docs/AI_INTEGRATION.md). Off unless AI_ENABLED=true. */
+    ai: {
+        enabled: env.AI_ENABLED === 'true',
+        serviceUrl: stripSlash(env.AI_SERVICE_URL || 'http://localhost:8000'),
+        internalToken: env.AI_INTERNAL_TOKEN,
+        timeoutMs: parseInt(env.AI_TIMEOUT_MS, 10) || 20000
+    }
 };
 
 /** Throws with a list of every problem found. */
@@ -54,6 +61,10 @@ export function validateConfig() {
             config.sessionSecret = crypto.randomBytes(48).toString('base64');
             console.warn('⚠️  SESSION_SECRET missing/short: using a random one for this run (logins reset on restart).');
         }
+    }
+
+    if (config.ai.enabled && (!config.ai.internalToken || config.ai.internalToken.length < 32)) {
+        problems.push('AI_INTERNAL_TOKEN must be at least 32 characters when AI_ENABLED=true.');
     }
 
     if (problems.length) {

@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import config from '../config.js';
+import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, xpResult } from '../lib/http.js';
 import {
     idParam,
@@ -47,6 +48,7 @@ router.post(
             achievements.push(...(r.achievements || []));
             if (r.xp?.finalXP) xp = r.xp;
         }
+        aiClient.reindex(discordId, created.list.id);
         res.status(201).json({ ...created.list, items: addedItems, newAchievements: achievements, xpResult: xpResult(xp) });
     })
 );
@@ -57,6 +59,7 @@ router.post(
         const { id } = parse(idParam, req.params);
         const { discordId, ...fields } = parse(internalAddItemBody, req.body);
         const r = await db.tasks.addItem(discordId, id, fields);
+        aiClient.reindex(discordId, id);
         res.status(201).json({ ...r.item, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
     })
 );
@@ -67,6 +70,7 @@ router.patch(
         const { id } = parse(idParam, req.params);
         const { discordId, completed } = parse(internalToggleBody, req.body);
         const r = await db.tasks.setItemCompleted(discordId, id, completed);
+        if (r.item?.list_id) aiClient.reindex(discordId, r.item.list_id);
         res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
     })
 );
@@ -76,7 +80,9 @@ router.patch(
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
         const { discordId, ...fields } = parse(internalUpdateListBody, req.body);
-        res.json(await db.tasks.updateList(discordId, id, fields));
+        const updated = await db.tasks.updateList(discordId, id, fields);
+        aiClient.reindex(discordId, id);
+        res.json(updated);
     })
 );
 

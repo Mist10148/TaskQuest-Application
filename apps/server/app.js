@@ -13,6 +13,7 @@ import { listsRouter, itemsRouter } from './routes/tasks.js';
 import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } from './routes/progression.js';
 import gamesRouter from './routes/games.js';
 import aiRouter from './routes/ai.js';
+import internalRouter, { requireInternalToken } from './routes/internal.js';
 import { securityHeaders, sessionMiddleware, csrfProtection, apiLimiter, authLimiter, gameLimiter, aiLimiter } from './lib/security.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,8 @@ export function createApp() {
     app.set('sessionCookieName', SESSION_COOKIE);
 
     app.use(securityHeaders());
+    // Service-to-service (AI chat write tools): token-protected, no session or CSRF.
+    app.use('/internal', express.json({ limit: '16kb' }), requireInternalToken, internalRouter);
     app.use(express.json({ limit: '16kb' }));
     app.use(sessionMiddleware(SESSION_COOKIE));
     app.use('/api', apiLimiter, csrfProtection);

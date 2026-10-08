@@ -2,14 +2,35 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Spade, Hand, Type, Sparkles, ArrowLeft, RotateCcw, Loader2, Gamepad2, Trophy, Zap, Info, Crown, Target, Dice1, Minus, Plus, HelpCircle, Bug, Rocket, Skull } from "lucide-react";
+import { Spade, Hand, Type, Sparkles, ArrowLeft, RotateCcw, Loader2, Gamepad2, Trophy, Zap, Minus, Plus, HelpCircle, Bug, Rocket, Skull, Target } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRecordGame, useGameHistory, HANGMAN_WORDS, BLACKJACK_CONFIG } from "@/hooks/useApi";
+import { useGameHistory, invalidateProgress, showAchievementNotifications, showError } from "@/hooks/useApi";
+import {
+  gamesApi,
+  type AchievementUnlock,
+  type ArcadeType,
+  type BlackjackResult,
+  type Card,
+  type GameSession,
+  type HangmanActive,
+  type HangmanResult,
+  type RpsChoice,
+  type RpsResult,
+} from "@/lib/api";
 import { toast } from "sonner";
 
+/** Mirrors @taskquest/shared BLACKJACK_CONFIG; the server enforces it. */
+const BLACKJACK_CONFIG = { MIN_BET: 10, MAX_BET_PERCENT: 0.25, HARD_CAP: 1000 };
+const FREE_GAME_DAILY_CAP = 500;
+
+function useNotifyAchievements() {
+  const qc = useQueryClient();
+  return useCallback((achievements: AchievementUnlock[] | undefined) => showAchievementNotifications(achievements, qc), [qc]);
+}
+
 type GameType = "menu" | "blackjack" | "rps" | "hangman" | "snake" | "dino" | "invaders";
-interface Card { suit: "♠" | "♥" | "♦" | "♣"; value: string; numericValue: number; }
 
 // Neon Number Input Component
 const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) => {
@@ -50,21 +71,9 @@ const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: numbe
   );
 };
 
-const createDeck = (): Card[] => {
-  const suits: Card["suit"][] = ["♠", "♥", "♦", "♣"];
-  const values = [{ v: "A", n: 11 }, { v: "2", n: 2 }, { v: "3", n: 3 }, { v: "4", n: 4 }, { v: "5", n: 5 }, { v: "6", n: 6 }, { v: "7", n: 7 }, { v: "8", n: 8 }, { v: "9", n: 9 }, { v: "10", n: 10 }, { v: "J", n: 10 }, { v: "Q", n: 10 }, { v: "K", n: 10 }];
-  return suits.flatMap(suit => values.map(({ v, n }) => ({ suit, value: v, numericValue: n }))).sort(() => Math.random() - 0.5);
-};
-
-const calcHand = (cards: Card[]): number => {
-  let total = cards.reduce((s, c) => s + c.numericValue, 0), aces = cards.filter(c => c.value === "A").length;
-  while (total > 21 && aces > 0) { total -= 10; aces--; }
-  return total;
-};
-
-const PlayingCard = ({ card, hidden }: { card: Card; hidden?: boolean }) => {
-  if (hidden) return <div className="w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/50 flex items-center justify-center text-xl sm:text-2xl text-primary shadow-[0_0_20px_rgba(99,102,241,0.3)]">?</div>;
-  return <motion.div initial={{ rotateY: 180, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} className={cn("w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-foreground border-2 border-border flex flex-col items-center justify-center shadow-lg", ["♥","♦"].includes(card.suit) ? "text-destructive" : "text-background")}><span className="text-base sm:text-lg font-bold">{card.value}</span><span className="text-lg sm:text-xl">{card.suit}</span></motion.div>;
+const PlayingCard = ({ card }: { card: Card | null }) => {
+  if (!card) return <div className="w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/50 flex items-center justify-center text-xl sm:text-2xl text-primary shadow-[0_0_20px_rgba(99,102,241,0.3)]">?</div>;
+  return <motion.div initial={{ rotateY: 180, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} className={cn("w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-foreground border-2 border-border flex flex-col items-center justify-center shadow-lg", ["♥","♦"].includes(card.suit) ? "text-destructive" : "text-background")}><span className="text-base sm:text-lg font-bold">{card.rank}</span><span className="text-lg sm:text-xl">{card.suit}</span></motion.div>;
 };
 
 // Game Instructions Component
@@ -76,37 +85,37 @@ const GameInstructions = ({ game }: { game: 'blackjack' | 'rps' | 'hangman' | 's
       "🎯 Goal: Get as close to 21 without going over",
       "🃏 Number cards = face value, Face cards = 10, Ace = 11 or 1",
       "👆 Hit = draw card, ✋ Stand = keep hand",
-      "💰 Blackjack pays 1.5x, Win pays 1x, Push returns bet"
+      "💰 Blackjack pays 1.5x, Win pays 1x, Push returns bet. Double down on your first two cards."
     ],
     rps: [
       "🪨 Rock beats ✂️ Scissors",
       "📄 Paper beats 🪨 Rock", 
       "✂️ Scissors beats 📄 Paper",
-      "🛡️ 100% Risk-free! Lose = no XP lost"
+      "🛡️ 100% Risk-free! Win = +10 XP (plus class bonuses), lose = nothing"
     ],
     hangman: [
       "🔤 Guess the hidden word letter by letter",
       "❤️ You have 6 lives (wrong guesses)",
-      "🎁 Win bonus: +10 XP per remaining life",
-      "💀 Lose all lives = lose entry fee"
+      "🎁 Win: +10 XP per remaining life (min 10)",
+      "🆓 Free to play - losing costs nothing"
     ],
     snake: [
       "🐍 Swipe to move (or use arrow keys/WASD)",
       "🍎 Eat pellets to grow and earn XP",
       "💀 Don't hit walls or yourself!",
-      "🎁 XP = Pellets eaten × 2"
+      "🎁 XP = Pellets eaten × 2 (max 100 per run)"
     ],
     dino: [
       "🦖 Tap screen or press SPACE to jump",
       "🌵 Avoid cacti and birds!",
       "🏆 Score +1 for each obstacle passed",
-      "🎁 XP = Obstacles Passed"
+      "🎁 XP = Obstacles passed (max 100 per run)"
     ],
     invaders: [
       "🚀 Tap left/right to move & shoot",
       "👾 Destroy all aliens before they reach you!",
       "🏆 Desktop: Arrow keys/WASD + SPACE",
-      "🎁 XP = Aliens destroyed × 3"
+      "🎁 XP = Aliens destroyed × 3 (max 150 per run)"
     ]
   };
 
@@ -128,30 +137,48 @@ const GameInstructions = ({ game }: { game: 'blackjack' | 'rps' | 'hangman' | 's
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  BLACKJACK GAME
+//  BLACKJACK (server-dealt: the browser never sees the deck or hole card)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const BlackjackGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: number; onResult: (r: string, p: number) => void }) => {
-  const [deck, setDeck] = useState(createDeck), [pHand, setPHand] = useState<Card[]>([]), [dHand, setDHand] = useState<Card[]>([]), [state, setState] = useState<"bet"|"play"|"end">("bet"), [result, setResult] = useState<string|null>(null);
-  
-  const end = (r: string) => { 
-    setResult(r); setState("end"); 
-    const payout = r === "blackjack" ? Math.floor(bet * BLACKJACK_CONFIG.BLACKJACK_MULTIPLIER) + bet : r === "win" ? bet * 2 : r === "push" ? bet : 0;
-    const apiResult = r === "lose" ? "lost" : r === "win" ? "won" : r;
-    onResult(apiResult, payout); 
+const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: number; onSettled: () => void }) => {
+  const notifyAchievements = useNotifyAchievements();
+  const [hand, setHand] = useState<BlackjackResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Resume an unfinished hand (e.g. started from Discord or before a reload).
+  useEffect(() => {
+    gamesApi.getActive().then((a) => {
+      if (a.blackjack) setHand({ ...a.blackjack, balance: 0, maxBet: 0, settlement: null });
+    }).catch(() => {});
+  }, []);
+
+  const run = async (fn: () => Promise<BlackjackResult>) => {
+    setBusy(true);
+    try {
+      const result = await fn();
+      setHand(result);
+      if (result.settlement) {
+        const net = result.settlement.net;
+        if (net > 0) toast.success(`🃏 ${result.view.outcome === 'blackjack' ? 'Blackjack!' : 'You win!'} +${net} XP`, { description: result.settlement.bonusInfo?.details || undefined });
+        else if (net < 0) toast.error(`🃏 You lost ${-net} XP`);
+        else toast.info('🤝 Push - bet returned');
+        notifyAchievements(result.settlement.achievements);
+        onSettled();
+      }
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
+    }
   };
-  
-  const start = () => { const d = createDeck(), p = [d.pop()!, d.pop()!], de = [d.pop()!, d.pop()!]; setDeck(d); setPHand(p); setDHand(de); setState("play"); setResult(null); if (calcHand(p) === 21) setTimeout(() => end("blackjack"), 500); };
-  const hit = () => { const c = deck.pop()!, h = [...pHand, c]; setPHand(h); setDeck([...deck]); if (calcHand(h) > 21) end("lose"); };
-  const stand = () => { let d = [...dHand], dk = [...deck]; while (calcHand(d) < 17) d.push(dk.pop()!); setDHand(d); const pt = calcHand(pHand), dt = calcHand(d); if (dt > 21 || pt > dt) end("win"); else if (pt < dt) end("lose"); else end("push"); };
-  
-  const pt = calcHand(pHand), dt = calcHand(dHand);
-  const getDisplayPayout = () => {
-    if (result === "blackjack") return Math.floor(bet * BLACKJACK_CONFIG.BLACKJACK_MULTIPLIER);
-    if (result === "win") return bet;
-    if (result === "push") return 0;
-    return -bet;
-  };
+
+  const deal = () => run(() => gamesApi.blackjackStart(bet));
+  const act = (action: 'hit' | 'stand' | 'double') => run(() => gamesApi.blackjackAction(action));
+
+  const view = hand?.view;
+  const playing = Boolean(view && !view.finished);
+  const ended = Boolean(view?.finished);
+  const net = hand?.settlement?.net ?? 0;
 
   return (
     <div className="max-w-2xl mx-auto px-4">
@@ -161,52 +188,53 @@ const BlackjackGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: num
         </button>
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500/20 to-purple-500/5 border border-violet-500/30 shadow-[0_0_20px_rgba(139,92,246,0.2)]">
           <Sparkles className="h-4 w-4 text-violet-400" />
-          <span className="font-heading font-bold text-lg text-violet-400">{bet} XP</span>
+          <span className="font-heading font-bold text-lg text-violet-400">{view?.bet ?? bet} XP</span>
         </div>
       </div>
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(139,92,246,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-violet-500/20" style={{ boxShadow: 'inset 0 0 30px rgba(139,92,246,0.05)' }} />
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
-        
-        {state === "bet" ? (
+
+        {!view ? (
           <div className="text-center py-8 relative z-10">
             <Spade className="h-16 w-16 mx-auto text-violet-400 mb-4 drop-shadow-[0_0_20px_rgba(139,92,246,0.5)]" />
             <h2 className="text-2xl font-heading font-bold mb-4 bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Ready to Play?</h2>
-            <Button onClick={start} className="gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-[0_0_20px_rgba(139,92,246,0.4)]">
-              <Gamepad2 className="h-4 w-4" /> Deal Cards ({bet} XP)
+            <Button onClick={deal} disabled={busy} className="gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-[0_0_20px_rgba(139,92,246,0.4)]">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gamepad2 className="h-4 w-4" />} Deal Cards ({bet} XP)
             </Button>
             <GameInstructions game="blackjack" />
           </div>
         ) : (
           <div className="relative z-10">
             <div className="text-center mb-6 pb-4 border-b border-border/50">
-              <p className="text-xs text-foreground-muted mb-2">DEALER {state !== "end" && "(1 hidden)"}</p>
-              <div className="flex justify-center gap-2 mb-2">{dHand.map((c, i) => <PlayingCard key={i} card={c} hidden={state === "play" && i === 1} />)}</div>
-              <p className="text-sm font-bold">{state === "end" ? dt : calcHand([dHand[0]])}</p>
+              <p className="text-xs text-foreground-muted mb-2">DEALER {playing && "(1 hidden)"}</p>
+              <div className="flex justify-center gap-2 mb-2">{view.dealerHand.map((c, i) => <PlayingCard key={i} card={c} />)}</div>
+              <p className="text-sm font-bold">{view.dealerValue.value}{playing ? '+?' : ''}</p>
             </div>
             <div className="text-center mb-6">
               <p className="text-xs text-foreground-muted mb-2">YOUR HAND</p>
-              <div className="flex justify-center gap-2 mb-2">{pHand.map((c, i) => <PlayingCard key={i} card={c} />)}</div>
-              <p className="text-lg font-bold">{pt}</p>
+              <div className="flex justify-center gap-2 mb-2">{view.playerHand.map((c, i) => <PlayingCard key={i} card={c} />)}</div>
+              <p className="text-lg font-bold">{view.playerValue.value}{view.playerValue.soft ? ' (soft)' : ''}</p>
             </div>
-            {state === "play" ? (
+            {playing ? (
               <div className="flex justify-center gap-3">
-                <Button onClick={hit} variant="outline" className="border-violet-500/50 hover:bg-violet-500/10">👆 Hit</Button>
-                <Button onClick={stand} className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500">✋ Stand</Button>
+                <Button onClick={() => act('hit')} disabled={busy} variant="outline" className="border-violet-500/50 hover:bg-violet-500/10">👆 Hit</Button>
+                <Button onClick={() => act('stand')} disabled={busy} className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500">✋ Stand</Button>
+                {view.canDouble && <Button onClick={() => act('double')} disabled={busy} variant="outline" className="border-amber-500/50 text-amber-400 hover:bg-amber-500/10">💰 Double</Button>}
               </div>
-            ) : (
+            ) : ended ? (
               <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-                <p className={cn("text-2xl font-heading font-bold mb-2", result === "win" || result === "blackjack" ? "text-success" : result === "lose" ? "text-destructive" : "text-xp")}>
-                  {result === "blackjack" ? "🎰 BLACKJACK!" : result === "win" ? "🎉 YOU WIN!" : result === "lose" ? "💔 BUST!" : "🤝 PUSH"}
+                <p className={cn("text-2xl font-heading font-bold mb-2", view.outcome === "won" || view.outcome === "blackjack" ? "text-success" : view.outcome === "lost" ? "text-destructive" : "text-xp")}>
+                  {view.outcome === "blackjack" ? "🎰 BLACKJACK!" : view.outcome === "won" ? "🎉 YOU WIN!" : view.outcome === "lost" ? (view.playerValue.bust ? "💔 BUST!" : "💔 DEALER WINS") : "🤝 PUSH"}
                 </p>
-                <p className={cn("text-lg font-bold mb-4", getDisplayPayout() >= 0 ? "text-success" : "text-destructive")}>{getDisplayPayout() >= 0 ? "+" : ""}{getDisplayPayout()} XP</p>
+                <p className={cn("text-lg font-bold mb-4", net >= 0 ? "text-success" : "text-destructive")}>{net >= 0 ? "+" : ""}{net} XP</p>
                 <div className="flex justify-center gap-3">
-                  <Button onClick={start} variant="outline" className="gap-2 border-violet-500/50 hover:bg-violet-500/10"><RotateCcw className="h-4 w-4" /> Play Again</Button>
+                  <Button onClick={deal} disabled={busy} variant="outline" className="gap-2 border-violet-500/50 hover:bg-violet-500/10"><RotateCcw className="h-4 w-4" /> Play Again</Button>
                   <Button onClick={onBack} className="bg-gradient-to-r from-violet-600 to-purple-600">Back to Games</Button>
                 </div>
               </motion.div>
-            )}
-            {state !== "bet" && <GameInstructions game="blackjack" />}
+            ) : null}
+            <GameInstructions game="blackjack" />
           </div>
         )}
       </div>
@@ -215,25 +243,33 @@ const BlackjackGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: num
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  RPS GAME
+//  RPS GAME (risk-free; the server picks the CPU move)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RPSGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: number; onResult: (r: string, p: number) => void }) => {
-  const [state, setState] = useState<"pick"|"result">("pick"), [pChoice, setPChoice] = useState<string|null>(null), [cChoice, setCChoice] = useState<string|null>(null), [result, setResult] = useState<string|null>(null);
-  const choices = ["🪨", "📄", "✂️"];
-  
-  const play = (p: string) => {
-    const c = choices[Math.floor(Math.random() * 3)];
-    setPChoice(p); setCChoice(c); setState("result");
-    const win = (p === "🪨" && c === "✂️") || (p === "📄" && c === "🪨") || (p === "✂️" && c === "📄");
-    const tie = p === c;
-    const res = win ? "won" : tie ? "push" : "lost";
-    setResult(res);
-    onResult(res, win ? bet * 2 : tie ? bet : 0);
+const RPS_EMOJI: Record<RpsChoice, string> = { rock: "🪨", paper: "📄", scissors: "✂️" };
+
+const RPSGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () => void }) => {
+  const notifyAchievements = useNotifyAchievements();
+  const [round, setRound] = useState<RpsResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const play = async (choice: RpsChoice) => {
+    setBusy(true);
+    try {
+      const r = await gamesApi.rps(choice);
+      setRound(r);
+      if (r.outcome === 'won') {
+        if (r.xpGained > 0) toast.success(`🎮 Won +${r.xpGained} XP!`, { description: r.bonusInfo?.details || undefined });
+        else toast.info('You won, but today\'s free-game XP cap is reached.');
+      }
+      notifyAchievements(r.achievements);
+      onSettled();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
+    }
   };
-  
-  const reset = () => { setState("pick"); setPChoice(null); setCChoice(null); setResult(null); };
-  const getXP = () => result === "won" ? bet : 0;
 
   return (
     <div className="max-w-2xl mx-auto px-4">
@@ -243,19 +279,19 @@ const RPSGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: number; o
         </button>
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-500/5 border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
           <Sparkles className="h-4 w-4 text-emerald-400" />
-          <span className="font-heading font-bold text-emerald-400">{bet} XP • Risk-free!</span>
+          <span className="font-heading font-bold text-emerald-400">+10 XP per win • Risk-free!</span>
         </div>
       </div>
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-emerald-500/20" style={{ boxShadow: 'inset 0 0 30px rgba(16,185,129,0.05)' }} />
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
-        
-        {state === "pick" ? (
+
+        {!round ? (
           <div className="text-center py-4 relative z-10">
             <h2 className="text-xl font-heading font-bold mb-6 bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">Choose Your Weapon!</h2>
             <div className="flex justify-center gap-4 mb-6">
-              {choices.map((c) => (
-                <motion.button key={c} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => play(c)} className="text-5xl p-4 rounded-2xl bg-background-secondary/50 hover:bg-emerald-500/20 border border-border hover:border-emerald-500/50 transition-all hover:shadow-[0_0_25px_rgba(16,185,129,0.3)]">{c}</motion.button>
+              {(Object.keys(RPS_EMOJI) as RpsChoice[]).map((c) => (
+                <motion.button key={c} disabled={busy} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => play(c)} aria-label={c} className="text-5xl p-4 rounded-2xl bg-background-secondary/50 hover:bg-emerald-500/20 border border-border hover:border-emerald-500/50 transition-all hover:shadow-[0_0_25px_rgba(16,185,129,0.3)] disabled:opacity-50">{RPS_EMOJI[c]}</motion.button>
               ))}
             </div>
             <GameInstructions game="rps" />
@@ -263,16 +299,16 @@ const RPSGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: number; o
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-4 relative z-10">
             <div className="flex justify-center items-center gap-8 mb-6">
-              <div className="text-center"><p className="text-xs text-foreground-muted mb-2">YOU</p><span className="text-5xl">{pChoice}</span></div>
+              <div className="text-center"><p className="text-xs text-foreground-muted mb-2">YOU</p><span className="text-5xl">{RPS_EMOJI[round.player]}</span></div>
               <span className="text-2xl font-bold text-foreground-muted">VS</span>
-              <div className="text-center"><p className="text-xs text-foreground-muted mb-2">CPU</p><span className="text-5xl">{cChoice}</span></div>
+              <div className="text-center"><p className="text-xs text-foreground-muted mb-2">CPU</p><span className="text-5xl">{RPS_EMOJI[round.opponent]}</span></div>
             </div>
-            <p className={cn("text-2xl font-heading font-bold mb-2", result === "won" ? "text-success" : result === "lost" ? "text-foreground-muted" : "text-xp")}>
-              {result === "won" ? "🎉 YOU WIN!" : result === "lost" ? "😅 You Lose (No XP lost!)" : "🤝 TIE!"}
+            <p className={cn("text-2xl font-heading font-bold mb-2", round.outcome === "won" ? "text-success" : round.outcome === "lost" ? "text-foreground-muted" : "text-xp")}>
+              {round.outcome === "won" ? "🎉 YOU WIN!" : round.outcome === "lost" ? "😅 You Lose (No XP lost!)" : "🤝 TIE!"}
             </p>
-            {result === "won" && <p className="text-lg font-bold text-success mb-4">+{getXP()} XP</p>}
+            {round.outcome === "won" && <p className="text-lg font-bold text-success mb-4">+{round.xpGained} XP</p>}
             <div className="flex justify-center gap-3">
-              <Button onClick={reset} variant="outline" className="gap-2 border-emerald-500/50 hover:bg-emerald-500/10"><RotateCcw className="h-4 w-4" /> Play Again</Button>
+              <Button onClick={() => setRound(null)} variant="outline" className="gap-2 border-emerald-500/50 hover:bg-emerald-500/10"><RotateCcw className="h-4 w-4" /> Play Again</Button>
               <Button onClick={onBack} className="bg-gradient-to-r from-emerald-600 to-green-600">Back to Games</Button>
             </div>
             <GameInstructions game="rps" />
@@ -361,127 +397,160 @@ const HangmanFigure = ({ wrongGuesses }: { wrongGuesses: number }) => {
   );
 };
 
-const HangmanGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: number; onResult: (r: string, p: number) => void }) => {
-  const [word] = useState(() => HANGMAN_WORDS[Math.floor(Math.random() * HANGMAN_WORDS.length)]);
-  const [guessed, setGuessed] = useState<string[]>([]);
-  const [lives, setLives] = useState(6);
-  const [state, setState] = useState<"play"|"end">("play");
-  
-  const wrongGuesses = 6 - lives;
-  
-  const guess = (l: string) => {
-    if (guessed.includes(l) || state === "end") return;
-    setGuessed([...guessed, l]);
-    if (!word.includes(l)) {
-      const newLives = lives - 1;
-      setLives(newLives);
-      if (newLives === 0) { setState("end"); onResult("lost", 0); }
-    } else {
-      const won = word.split("").every(c => [...guessed, l].includes(c));
-      if (won) {
-        setState("end");
-        const payout = bet + (lives * 10);
-        onResult("won", payout);
+const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () => void }) => {
+  const notifyAchievements = useNotifyAchievements();
+  const [game, setGame] = useState<HangmanResult | HangmanActive | null>(null);
+  const [busy, setBusy] = useState(false);
+  const started = useRef(false);
+
+  const start = useCallback(async () => {
+    setBusy(true);
+    try {
+      setGame(await gamesApi.hangmanStart());
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    // Resume an unfinished word, otherwise start a new one.
+    gamesApi.getActive().then((a) => (a.hangman ? setGame(a.hangman) : start())).catch(start);
+  }, [start]);
+
+  const guess = async (letter: string) => {
+    if (!game || game.view.finished || busy || game.view.guessed.includes(letter)) return;
+    setBusy(true);
+    try {
+      const r = await gamesApi.hangmanGuess(letter);
+      setGame(r);
+      if (r.view.finished) {
+        if (r.view.outcome === 'won') {
+          if (r.xpGained > 0) toast.success(`📝 Won +${r.xpGained} XP!`, { description: r.bonusInfo?.details || undefined });
+          else toast.info('You won, but today\'s free-game XP cap is reached.');
+        }
+        notifyAchievements(r.achievements);
+        onSettled();
       }
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
     }
   };
+
+  const leave = () => {
+    if (game && !game.view.finished) gamesApi.quit('hangman').catch(() => {});
+    onBack();
+  };
+
+  const view = game?.view;
+  const lives = view?.lives ?? 6;
+  const maxLives = view?.maxLives ?? 6;
+  const xpGained = game && 'xpGained' in game ? game.xpGained : 0;
 
   return (
     <div className="max-w-2xl mx-auto px-4">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={leave} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-cyan-500/5 border border-cyan-500/30">
             <Sparkles className="h-4 w-4 text-cyan-400" />
-            <span className="font-heading font-bold text-cyan-400">{bet} XP</span>
+            <span className="font-heading font-bold text-cyan-400">Free play</span>
           </div>
           <div className="flex gap-1 px-3 py-2 rounded-lg bg-background-secondary/50 border border-border">
-            {Array(6).fill(0).map((_, i) => (
+            {Array(maxLives).fill(0).map((_, i) => (
               <span key={i} className={cn("text-lg transition-all", i < lives ? "text-destructive" : "text-foreground-muted/30 scale-75")}>❤️</span>
             ))}
           </div>
         </div>
       </div>
-      
+
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-cyan-500/20" style={{ boxShadow: 'inset 0 0 30px rgba(6,182,212,0.05)' }} />
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
-        
-        <div className="relative z-10">
-          {/* Hangman Figure */}
-          <HangmanFigure wrongGuesses={wrongGuesses} />
-          
-          {/* Word Display */}
-          <div className="text-center mb-6">
-            <div className="flex justify-center gap-2 text-3xl font-mono">
-              {word.split("").map((c, i) => (
-                <motion.span
-                  key={i}
-                  initial={guessed.includes(c) ? { scale: 1.2 } : {}}
-                  animate={{ scale: 1 }}
-                  className={cn(
-                    "w-8 h-12 flex items-center justify-center font-bold relative",
-                    guessed.includes(c) ? "text-cyan-400" : ""
-                  )}
-                  style={{
-                    borderBottom: guessed.includes(c)
-                      ? '3px solid rgb(6, 182, 212)'
-                      : '3px dashed rgb(148, 163, 184)'
-                  }}
-                >
-                  {guessed.includes(c) ? c : ""}
-                </motion.span>
-              ))}
-            </div>
-            <p className="text-xs text-foreground-muted mt-2">
-              {lives} {lives === 1 ? 'life' : 'lives'} remaining • +{lives * 10} XP bonus if you win
-            </p>
-          </div>
-          
-          {state === "play" ? (
-            <div className="flex flex-wrap justify-center gap-2">
-              {"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l => (
-                <motion.button 
-                  key={l} 
-                  onClick={() => guess(l)} 
-                  disabled={guessed.includes(l)}
-                  whileHover={{ scale: guessed.includes(l) ? 1 : 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={cn(
-                    "w-9 h-9 rounded-lg font-bold text-sm transition-all",
-                    guessed.includes(l) 
-                      ? word.includes(l) 
-                        ? "bg-success/20 text-success border border-success/50" 
-                        : "bg-destructive/20 text-destructive border border-destructive/50 opacity-50" 
-                      : "bg-background-secondary hover:bg-cyan-500/20 hover:text-cyan-400 border border-border hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.3)]"
-                  )}
-                >
-                  {l}
-                </motion.button>
-              ))}
-            </div>
-          ) : (
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-              {lives > 0 ? (
-                <>
-                  <p className="text-2xl font-heading font-bold text-success mb-2">🎉 YOU WIN!</p>
-                  <p className="text-foreground-muted mb-1">You guessed: <span className="font-bold text-cyan-400">{word}</span></p>
-                  <p className="text-lg font-bold text-success mb-4">+{lives * 10} XP</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 GAME OVER</p>
-                  <p className="text-foreground-muted mb-2">The word was: <span className="font-bold text-foreground">{word}</span></p>
-                  <p className="text-lg font-bold text-destructive mb-4">-{bet} XP</p>
-                </>
+
+        {!view ? (
+          <div className="py-12 text-center relative z-10"><Loader2 className="h-6 w-6 animate-spin mx-auto text-cyan-400" /></div>
+        ) : (
+          <div className="relative z-10">
+            <HangmanFigure wrongGuesses={maxLives - lives} />
+
+            <div className="text-center mb-6">
+              <div className="flex justify-center gap-2 text-3xl font-mono">
+                {(view.finished && view.word ? view.word.split("") : view.masked).map((c, i) => (
+                  <motion.span
+                    key={i}
+                    initial={c ? { scale: 1.2 } : {}}
+                    animate={{ scale: 1 }}
+                    className={cn("w-8 h-12 flex items-center justify-center font-bold relative", view.masked[i] ? "text-cyan-400" : view.finished ? "text-destructive" : "")}
+                    style={{ borderBottom: view.masked[i] ? '3px solid rgb(6, 182, 212)' : '3px dashed rgb(148, 163, 184)' }}
+                  >
+                    {c ?? ""}
+                  </motion.span>
+                ))}
+              </div>
+              {!view.finished && (
+                <p className="text-xs text-foreground-muted mt-2">
+                  {lives} {lives === 1 ? 'life' : 'lives'} remaining • {view.potentialReward} XP if you win
+                </p>
               )}
-              <Button onClick={onBack} className="bg-gradient-to-r from-cyan-600 to-blue-600">Back to Games</Button>
-            </motion.div>
-          )}
-        </div>
-        
+            </div>
+
+            {!view.finished ? (
+              <div className="flex flex-wrap justify-center gap-2">
+                {"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l => {
+                  const used = view.guessed.includes(l);
+                  const wrong = view.wrong.includes(l);
+                  return (
+                    <motion.button
+                      key={l}
+                      onClick={() => guess(l)}
+                      disabled={used || busy}
+                      whileHover={{ scale: used ? 1 : 1.1 }}
+                      whileTap={{ scale: 0.95 }}
+                      className={cn(
+                        "w-9 h-9 rounded-lg font-bold text-sm transition-all",
+                        used
+                          ? !wrong
+                            ? "bg-success/20 text-success border border-success/50"
+                            : "bg-destructive/20 text-destructive border border-destructive/50 opacity-50"
+                          : "bg-background-secondary hover:bg-cyan-500/20 hover:text-cyan-400 border border-border hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                      )}
+                    >
+                      {l}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ) : (
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
+                {view.outcome === 'won' ? (
+                  <>
+                    <p className="text-2xl font-heading font-bold text-success mb-2">🎉 YOU WIN!</p>
+                    <p className="text-foreground-muted mb-1">You guessed: <span className="font-bold text-cyan-400">{view.word}</span></p>
+                    <p className="text-lg font-bold text-success mb-4">+{xpGained} XP</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 GAME OVER</p>
+                    <p className="text-foreground-muted mb-4">The word was: <span className="font-bold text-foreground">{view.word}</span></p>
+                  </>
+                )}
+                <div className="flex justify-center gap-3">
+                  <Button onClick={start} disabled={busy} variant="outline" className="gap-2 border-cyan-500/50 hover:bg-cyan-500/10"><RotateCcw className="h-4 w-4" /> New Word</Button>
+                  <Button onClick={onBack} className="bg-gradient-to-r from-cyan-600 to-blue-600">Back to Games</Button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        )}
+
         <GameInstructions game="hangman" />
       </div>
     </div>
@@ -492,7 +561,7 @@ const HangmanGame = ({ onBack, bet, onResult }: { onBack: () => void; bet: numbe
 //  🐍 SNAKE GAME (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SnakeGame = ({ onBack, onResult }: { onBack: () => void; onResult: (r: string, p: number) => void }) => {
+const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
@@ -521,15 +590,15 @@ const SnakeGame = ({ onBack, onResult }: { onBack: () => void; onResult: (r: str
     };
     setScore(0);
     setGameState("playing");
+    onStart();
   };
 
   const endGame = useCallback((finalScore: number) => {
     setGameState("ended");
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
-    const xp = finalScore * 2;
-    // Always record the game, even if score is 0
-    onResult("won", xp);
+    // Report pellets eaten; the server converts points to XP and caps it.
+    onResult("won", finalScore);
   }, [highScore, onResult]);
 
   useEffect(() => {
@@ -728,7 +797,7 @@ const SnakeGame = ({ onBack, onResult }: { onBack: () => void; onResult: (r: str
 //  🦖 DINO RUNNER (Web Exclusive) - Improved Design
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const DinoGame = ({ onBack, onResult }: { onBack: () => void; onResult: (r: string, p: number) => void }) => {
+const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
@@ -762,13 +831,13 @@ const DinoGame = ({ onBack, onResult }: { onBack: () => void; onResult: (r: stri
     };
     setScore(0);
     setGameState("playing");
+    onStart();
   };
 
   const endGame = useCallback((finalScore: number) => {
     setGameState("ended");
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
-    // Always record the game, even if score is 0
     onResult("won", finalScore);
   }, [highScore, onResult]);
 
@@ -1120,7 +1189,7 @@ const DinoGame = ({ onBack, onResult }: { onBack: () => void; onResult: (r: stri
 //  👾 SPACE INVADERS (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SpaceInvadersGame = ({ onBack, onResult }: { onBack: () => void; onResult: (r: string, p: number) => void }) => {
+const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
@@ -1165,6 +1234,7 @@ const SpaceInvadersGame = ({ onBack, onResult }: { onBack: () => void; onResult:
     setScore(0);
     setAliensKilled(0);
     setGameState("playing");
+    onStart();
   };
 
   const endGame = useCallback((won: boolean, kills: number) => {
@@ -1173,8 +1243,8 @@ const SpaceInvadersGame = ({ onBack, onResult }: { onBack: () => void; onResult:
     const finalScore = kills * 3;
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
-    // Always record the game, even if score is 0
-    onResult("won", finalScore);
+    // Report aliens destroyed; the server converts points to XP and caps it.
+    onResult("won", kills);
   }, [highScore, onResult]);
 
   useEffect(() => {
@@ -1428,87 +1498,78 @@ const SpaceInvadersGame = ({ onBack, onResult }: { onBack: () => void; onResult:
 
 const gamesList = [
   { id: "blackjack", name: "Blackjack", desc: "Beat the dealer to 21!", risk: "Bet XP", icon: Spade, color: "from-violet-500 to-purple-600", glow: "shadow-[0_0_30px_rgba(139,92,246,0.3)]", border: "hover:border-violet-500/50", requiresBet: true },
-  { id: "rps", name: "Rock Paper Scissors", desc: "Win to earn XP!", risk: "Risk-free", icon: Hand, color: "from-emerald-500 to-green-600", glow: "shadow-[0_0_30px_rgba(16,185,129,0.3)]", border: "hover:border-emerald-500/50", requiresBet: true },
-  { id: "hangman", name: "Hangman", desc: "Guess the word!", risk: "Entry fee", icon: Type, color: "from-cyan-500 to-blue-600", glow: "shadow-[0_0_30px_rgba(6,182,212,0.3)]", border: "hover:border-cyan-500/50", requiresBet: true },
+  { id: "rps", name: "Rock Paper Scissors", desc: "Win to earn XP!", risk: "Risk-free", icon: Hand, color: "from-emerald-500 to-green-600", glow: "shadow-[0_0_30px_rgba(16,185,129,0.3)]", border: "hover:border-emerald-500/50", requiresBet: false },
+  { id: "hangman", name: "Hangman", desc: "Guess the word!", risk: "Free play", icon: Type, color: "from-cyan-500 to-blue-600", glow: "shadow-[0_0_30px_rgba(6,182,212,0.3)]", border: "hover:border-cyan-500/50", requiresBet: false },
   { id: "snake", name: "Snake", desc: "Eat pellets, don't crash!", risk: "Free play", icon: Bug, color: "from-green-500 to-emerald-600", glow: "shadow-[0_0_30px_rgba(34,197,94,0.3)]", border: "hover:border-green-500/50", requiresBet: false, webOnly: true },
   { id: "dino", name: "Dino Runner", desc: "Jump and survive!", risk: "Free play", icon: Zap, color: "from-amber-500 to-orange-600", glow: "shadow-[0_0_30px_rgba(245,158,11,0.3)]", border: "hover:border-amber-500/50", requiresBet: false, webOnly: true },
   { id: "invaders", name: "Space Invaders", desc: "Destroy the aliens!", risk: "Free play", icon: Rocket, color: "from-purple-500 to-pink-600", glow: "shadow-[0_0_30px_rgba(168,85,247,0.3)]", border: "hover:border-purple-500/50", requiresBet: false, webOnly: true }
 ];
+
+const GAME_NAMES: Record<string, string> = {
+  blackjack: 'Blackjack', rps: 'Rock Paper Scissors', hangman: 'Hangman', snake: 'Snake', dino: 'Dino Runner', invaders: 'Space Invaders'
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  MAIN GAMES COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const Games = () => {
-  const { user, refresh } = useAuth();
-  const recordGame = useRecordGame();
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const { data: history, isLoading } = useGameHistory();
   const [game, setGame] = useState<GameType>("menu");
   const [bet, setBet] = useState(BLACKJACK_CONFIG.MIN_BET);
-  
-  const xp = user?.user?.player_xp || 0;
-  const maxBet = Math.min(Math.floor(xp * BLACKJACK_CONFIG.MAX_BET_PERCENT), BLACKJACK_CONFIG.HARD_CAP);
-  const canPlay = xp >= BLACKJACK_CONFIG.MIN_BET;
+  const arcadeRun = useRef<number | null>(null);
+  const notifyAchievements = useNotifyAchievements();
 
-  const onResult = async (type: string, result: string, b: number, payout: number) => {
+  const xp = Number(user?.user?.player_xp) || 0;
+  const maxBet = Math.min(Math.floor(xp * BLACKJACK_CONFIG.MAX_BET_PERCENT), BLACKJACK_CONFIG.HARD_CAP);
+  const canBet = maxBet >= BLACKJACK_CONFIG.MIN_BET;
+
+  /** Refresh balance, history and leaderboard after any settled round. */
+  const onSettled = useCallback(() => {
+    invalidateProgress(qc);
+    qc.invalidateQueries({ queryKey: ['games'] });
+  }, [qc]);
+
+  const arcadeStart = useCallback((type: ArcadeType) => {
+    arcadeRun.current = null;
+    gamesApi.arcadeStart(type).then((r) => { arcadeRun.current = r.sessionId; }).catch(showError);
+  }, []);
+
+  const arcadeFinish = useCallback(async (type: ArcadeType, points: number) => {
+    const sessionId = arcadeRun.current;
+    arcadeRun.current = null;
+    if (!sessionId) return;
     try {
-      await recordGame.mutateAsync({ gameType: type, result, bet: b, payout });
-      refresh();
-    } catch (error) {
-      console.error('Failed to record game:', error);
-      toast.error('Failed to save game result');
+      const r = await gamesApi.arcadeFinish(type, sessionId, points);
+      if (r.xpGained > 0) toast.success(`🎮 ${GAME_NAMES[type]} +${r.xpGained} XP!`, { description: r.bonusInfo?.details || undefined });
+      else toast.info(points > 0 ? 'Daily free-game XP cap reached.' : `${GAME_NAMES[type]} - Game over! Try again.`);
+      notifyAchievements(r.achievements);
+      onSettled();
+    } catch (err) {
+      showError(err);
     }
-  };
+  }, [onSettled, notifyAchievements]);
 
   const start = (id: string) => {
     const gameConfig = gamesList.find(g => g.id === id);
-    
-    // Check if game requires bet and user has insufficient XP
-    if (gameConfig?.requiresBet && xp < BLACKJACK_CONFIG.MIN_BET) {
-      toast.error("Insufficient XP!", {
-        description: `You need at least ${BLACKJACK_CONFIG.MIN_BET} XP to play ${gameConfig.name}.`
-      });
+    if (gameConfig?.requiresBet && !canBet) {
+      toast.error("Insufficient XP!", { description: `You need at least ${BLACKJACK_CONFIG.MIN_BET * 4} XP to bet (max bet is 25% of your balance).` });
       return;
     }
-    
-    // Validate bet amount for bet-required games
-    if (gameConfig?.requiresBet && bet > xp) {
-      toast.error("Bet too high!", {
-        description: `Your bet (${bet} XP) exceeds your balance (${xp} XP).`
-      });
-      return;
-    }
-    
-    setGame(id as GameType); 
+    if (gameConfig?.requiresBet && bet > maxBet) setBet(Math.max(BLACKJACK_CONFIG.MIN_BET, maxBet));
+    setGame(id as GameType);
   };
 
-  // Game renders
-  if (game === "blackjack") return <DashboardLayout><BlackjackGame onBack={() => setGame("menu")} bet={bet} onResult={(r,p) => onResult("blackjack",r,bet,p)} /></DashboardLayout>;
-  if (game === "rps") return <DashboardLayout><RPSGame onBack={() => setGame("menu")} bet={bet} onResult={(r,p) => onResult("rps",r,bet,p)} /></DashboardLayout>;
-  if (game === "hangman") return <DashboardLayout><HangmanGame onBack={() => setGame("menu")} bet={bet} onResult={(r,p) => onResult("hangman",r,bet,p)} /></DashboardLayout>;
-  if (game === "snake") return <DashboardLayout><SnakeGame onBack={() => setGame("menu")} onResult={(r,p) => onResult("snake",r,0,p)} /></DashboardLayout>;
-  if (game === "dino") return <DashboardLayout><DinoGame onBack={() => setGame("menu")} onResult={(r,p) => onResult("dino",r,0,p)} /></DashboardLayout>;
-  if (game === "invaders") return <DashboardLayout><SpaceInvadersGame onBack={() => setGame("menu")} onResult={(r,p) => onResult("invaders",r,0,p)} /></DashboardLayout>;
+  const back = () => setGame("menu");
 
-  const getHistoryXP = (entry: any) => {
-    const state = entry.state, betAmt = entry.bet_amount || 0, payout = entry.payout || 0, gameType = entry.game_type;
-    
-    // Free arcade games: payout IS the XP (no bet)
-    if (['snake', 'dino', 'invaders'].includes(gameType)) {
-      return state === 'won' ? payout : 0;
-    }
-    
-    // RPS: risk-free, payout includes bet + xp on win
-    if (gameType === 'rps') {
-      return state === 'won' ? payout - betAmt : 0;
-    }
-    
-    // Betting games: payout = bet + xp on win
-    if (state === 'won' || state === 'blackjack') return payout - betAmt;
-    if (state === 'lost') return -betAmt;
-    if (state === 'push') return 0;
-    return 0;
-  };
+  if (game === "blackjack") return <DashboardLayout><BlackjackGame onBack={back} bet={Math.min(bet, Math.max(maxBet, BLACKJACK_CONFIG.MIN_BET))} onSettled={onSettled} /></DashboardLayout>;
+  if (game === "rps") return <DashboardLayout><RPSGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
+  if (game === "hangman") return <DashboardLayout><HangmanGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
+  if (game === "snake") return <DashboardLayout><SnakeGame onBack={back} onStart={() => arcadeStart("snake")} onResult={(_r, p) => arcadeFinish("snake", p)} /></DashboardLayout>;
+  if (game === "dino") return <DashboardLayout><DinoGame onBack={back} onStart={() => arcadeStart("dino")} onResult={(_r, p) => arcadeFinish("dino", p)} /></DashboardLayout>;
+  if (game === "invaders") return <DashboardLayout><SpaceInvadersGame onBack={back} onStart={() => arcadeStart("invaders")} onResult={(_r, p) => arcadeFinish("invaders", p)} /></DashboardLayout>;
 
   return (
     <DashboardLayout>
@@ -1522,7 +1583,7 @@ const Games = () => {
             </div>
             <span className="bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">Game Center</span>
           </h1>
-          <p className="text-foreground-muted text-sm sm:text-base">Test your luck and skills to win XP!</p>
+          <p className="text-foreground-muted text-sm sm:text-base">Test your luck and skills to win XP! Free games share a daily cap of {FREE_GAME_DAILY_CAP} XP.</p>
         </div>
 
         {/* Balance & Bet Section */}
@@ -1531,13 +1592,13 @@ const Games = () => {
             <div className="absolute inset-0 bg-gradient-to-r from-xp/5 to-transparent" />
             <div className="relative z-10">
               <p className="text-xs text-foreground-muted mb-1">Your Balance</p>
-              <p className="text-2xl font-heading font-bold text-xp drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]">{xp} XP</p>
+              <p className="text-2xl font-heading font-bold text-xp drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]">{xp.toLocaleString()} XP</p>
             </div>
           </div>
-          
+
           <div className="p-4 rounded-xl bg-card border border-border">
             <p className="text-xs text-foreground-muted mb-2 flex items-center gap-1">
-              <Target className="h-3 w-3" /> Bet Amount
+              <Target className="h-3 w-3" /> Blackjack Bet
             </p>
             <div className="flex items-center gap-3">
               <NeonNumberInput value={bet} onChange={setBet} min={BLACKJACK_CONFIG.MIN_BET} max={Math.max(BLACKJACK_CONFIG.MIN_BET, maxBet)} step={5} />
@@ -1547,22 +1608,21 @@ const Games = () => {
                 ))}
               </div>
             </div>
-            <p className="text-xs text-foreground-muted mt-2">Min: {BLACKJACK_CONFIG.MIN_BET} • Max: {maxBet}</p>
+            <p className="text-xs text-foreground-muted mt-2">Min: {BLACKJACK_CONFIG.MIN_BET} • Max: {Math.max(0, maxBet)} (25% of balance)</p>
           </div>
         </div>
 
-        {/* Insufficient XP Warning */}
-        {!canPlay && (
+        {!canBet && (
           <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30">
-            <p className="text-sm text-destructive font-medium">⚠️ Insufficient XP</p>
-            <p className="text-xs text-foreground-muted">You need at least {BLACKJACK_CONFIG.MIN_BET} XP to play betting games. Try the free arcade games below!</p>
+            <p className="text-sm text-destructive font-medium">⚠️ Not enough XP to bet</p>
+            <p className="text-xs text-foreground-muted">Blackjack needs at least {BLACKJACK_CONFIG.MIN_BET * 4} XP. Try the free games below!</p>
           </div>
         )}
 
         {/* Games Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {gamesList.map((g, i) => (
-            <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className={cn("group p-4 rounded-xl bg-card border border-border transition-all duration-300 cursor-pointer hover:scale-[1.02]", g.glow, g.border, g.requiresBet && !canPlay && "opacity-50")} onClick={() => start(g.id)}>
+            <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className={cn("group p-4 rounded-xl bg-card border border-border transition-all duration-300 cursor-pointer hover:scale-[1.02]", g.glow, g.border, g.requiresBet && !canBet && "opacity-50")} onClick={() => start(g.id)}>
               <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center bg-gradient-to-br mb-3 shadow-lg", g.color)}>
                 <g.icon className="h-6 w-6 text-white drop-shadow-lg" />
               </div>
@@ -1595,37 +1655,23 @@ const Games = () => {
             ) : !history?.length ? (
               <div className="p-8 text-center text-foreground-muted">No games played yet. Try your luck!</div>
             ) : (
-              history.slice(0, 10).map((e: any, i: number) => {
-                const xpChange = getHistoryXP(e);
+              history.slice(0, 10).map((e: GameSession) => {
                 const gameInfo = gamesList.find(g => g.id === e.game_type);
-                
-                // Get proper display name for all games
-                const getGameName = (type: string) => {
-                  const names: Record<string, string> = {
-                    'blackjack': 'Blackjack',
-                    'rps': 'Rock Paper Scissors',
-                    'hangman': 'Hangman',
-                    'snake': 'Snake',
-                    'dino': 'Dino Runner',
-                    'invaders': 'Space Invaders'
-                  };
-                  return names[type] || type.charAt(0).toUpperCase() + type.slice(1);
-                };
-                
+                const stateLabel: Record<string, string> = { blackjack: 'Blackjack!', won: 'Won', lost: 'Lost', push: 'Push', expired: 'Expired (refunded)', cancelled: 'Quit' };
                 return (
-                  <div key={i} className="flex items-center justify-between p-3 sm:p-4 border-b border-border last:border-0 hover:bg-background-secondary/30 transition-colors">
+                  <div key={e.id} className="flex items-center justify-between p-3 sm:p-4 border-b border-border last:border-0 hover:bg-background-secondary/30 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center bg-gradient-to-br", gameInfo?.color || 'from-primary to-violet-600')}>
                         {gameInfo?.icon && <gameInfo.icon className="h-5 w-5 text-white" />}
                       </div>
                       <div>
-                        <p className="font-medium text-sm sm:text-base">{getGameName(e.game_type)}</p>
-                        <p className="text-xs text-foreground-muted">{new Date(e.ended_at).toLocaleDateString()}</p>
+                        <p className="font-medium text-sm sm:text-base">{GAME_NAMES[e.game_type] || e.game_type}</p>
+                        <p className="text-xs text-foreground-muted">{new Date(e.ended_at || e.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={cn("font-bold", xpChange > 0 ? "text-success" : xpChange < 0 ? "text-destructive" : "text-foreground-muted")}>{xpChange > 0 ? "+" : ""}{xpChange} XP</p>
-                      <p className={cn("text-xs capitalize", e.state === 'won' || e.state === 'blackjack' ? "text-success" : e.state === 'lost' ? "text-destructive" : "text-foreground-muted")}>{e.state === 'blackjack' ? 'Blackjack!' : e.state === 'won' ? 'Won' : e.state === 'lost' ? 'Lost' : 'Push'}</p>
+                      <p className={cn("font-bold", e.net > 0 ? "text-success" : e.net < 0 ? "text-destructive" : "text-foreground-muted")}>{e.net > 0 ? "+" : ""}{e.net} XP</p>
+                      <p className={cn("text-xs", e.state === 'won' || e.state === 'blackjack' ? "text-success" : e.state === 'lost' ? "text-destructive" : "text-foreground-muted")}>{stateLabel[e.state] || e.state}</p>
                     </div>
                   </div>
                 );

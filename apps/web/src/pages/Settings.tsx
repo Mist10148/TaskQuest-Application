@@ -1,3 +1,4 @@
+import type { User } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -20,14 +21,14 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const Settings = () => {
-  const { user, logout, refresh, useMock } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const updateSettings = useUpdateSettings();
   const resetProgress = useResetProgress();
   
-  const dbUser = user?.user || {};
-  const [gamification, setGamification] = useState(dbUser.gamification_enabled ?? true);
-  const [automation, setAutomation] = useState(dbUser.automation_enabled ?? true);
-  const [autoDelete, setAutoDelete] = useState(dbUser.auto_delete_old_lists ?? true);
+  const dbUser: Partial<User> = user?.user ?? {};
+  const [gamification, setGamification] = useState(Boolean(dbUser.gamification_enabled ?? true));
+  const [automation, setAutomation] = useState(Boolean(dbUser.automation_enabled ?? true));
+  const [autoDelete, setAutoDelete] = useState(Boolean(dbUser.auto_delete_old_lists ?? true));
   const [confirmText, setConfirmText] = useState("");
 
   const handleToggle = async (key: string, value: boolean) => {
@@ -35,10 +36,6 @@ const Settings = () => {
     else if (key === 'automation') setAutomation(value);
     else if (key === 'autoDelete') setAutoDelete(value);
 
-    if (useMock) {
-      toast.success('Settings updated!');
-      return;
-    }
     try {
       const fieldName = key === 'gamification' ? 'gamification_enabled' :
                         key === 'automation' ? 'automation_enabled' :

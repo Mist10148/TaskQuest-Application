@@ -1,3 +1,4 @@
+import type { Item, ListWithCounts, Priority } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { TaskListCard, TaskItem } from "@/components/game/TaskComponents";
 import { Button } from "@/components/ui/button";
@@ -92,7 +93,7 @@ const Tasks = () => {
   
   // Task edit/delete state
   const [showEditItem, setShowEditItem] = useState(false);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [editItemName, setEditItemName] = useState("");
   const [editItemDesc, setEditItemDesc] = useState("");
   const [showDeleteItemConfirm, setShowDeleteItemConfirm] = useState(false);
@@ -149,13 +150,13 @@ const Tasks = () => {
         name: newListName.trim(),
         description: newListDesc.trim() || undefined,
         category: newListCategory !== 'none' ? newListCategory : undefined,
-        priority: newListPriority !== 'none' ? newListPriority : undefined,
+        priority: newListPriority !== 'none' ? (newListPriority as Priority) : undefined,
         deadline: newListDeadline || undefined,
       });
       // XP notification handled by hook
       setShowCreateList(false);
       setNewListName(""); setNewListDesc(""); setNewListCategory("none"); setNewListPriority("none"); setNewListDeadline("");
-    } catch { toast.error('Failed to create'); }
+    } catch { /* error toast shown by the mutation hook */ }
   };
 
   // Edit list handlers
@@ -179,14 +180,14 @@ const Tasks = () => {
           name: editListName.trim(),
           description: editListDesc.trim() || null,
           category: editListCategory !== 'none' ? editListCategory : null,
-          priority: editListPriority !== 'none' ? editListPriority : null,
+          priority: editListPriority !== 'none' ? (editListPriority as Priority) : null,
           deadline: editListDeadline || null,
         }
       });
       toast.success('✏️ Quest updated!');
       setShowEditList(false);
       refetchList();
-    } catch { toast.error('Failed to update'); }
+    } catch { /* error toast shown by the mutation hook */ }
   };
 
   const handleAddItem = async () => {
@@ -196,14 +197,14 @@ const Tasks = () => {
       // XP notification handled by hook
       setShowAddItem(false);
       setNewItemName(""); setNewItemDesc("");
-    } catch { toast.error('Failed to add'); }
+    } catch { /* error toast shown by the mutation hook */ }
   };
 
   const handleToggleItem = async (itemId: number) => {
     try {
       await toggleItem.mutateAsync(itemId);
       // XP notification handled by hook
-    } catch { toast.error('Failed'); }
+    } catch { /* error toast shown by the mutation hook */ }
   };
 
   const handleDeleteListClick = (listId: number) => {
@@ -219,12 +220,12 @@ const Tasks = () => {
       setSelectedListId(null);
       setShowDeleteListConfirm(false);
       setListToDelete(null);
-    } catch { toast.error('Failed to delete'); }
+    } catch { /* error toast shown by the mutation hook */ }
   };
 
   const handleEditItemClick = (itemId: number) => {
     const items = selectedListData?.items || [];
-    const item = items.find((i: any) => i.id === itemId);
+    const item = items.find((i: Item) => i.id === itemId);
     if (item) {
       setEditingItem(item);
       setEditItemName(item.name);
@@ -241,7 +242,7 @@ const Tasks = () => {
       setShowEditItem(false);
       setEditingItem(null);
       refetchList();
-    } catch { toast.error('Failed to update'); }
+    } catch { /* error toast shown by the mutation hook */ }
   };
 
   const handleDeleteItemClick = (itemId: number) => {
@@ -257,7 +258,7 @@ const Tasks = () => {
       setShowDeleteItemConfirm(false);
       setItemToDelete(null);
       refetchList();
-    } catch { toast.error('Failed to delete'); }
+    } catch { /* error toast shown by the mutation hook */ }
   };
 
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null);
@@ -301,8 +302,8 @@ const Tasks = () => {
     }
     
     const items = selectedListData?.items || [];
-    const draggedIndex = items.findIndex((i: any) => i.id === draggedItemId);
-    const targetIndex = items.findIndex((i: any) => i.id === targetItemId);
+    const draggedIndex = items.findIndex((i: Item) => i.id === draggedItemId);
+    const targetIndex = items.findIndex((i: Item) => i.id === targetItemId);
     
     if (draggedIndex === -1 || targetIndex === -1) {
       setDraggedItemId(null);
@@ -336,7 +337,7 @@ const Tasks = () => {
   // LIST DETAIL VIEW
   if (selectedListId && selectedListData) {
     const items = selectedListData.items || [];
-    const completed = items.filter((i: any) => i.completed).length;
+    const completed = items.filter((i: Item) => i.completed).length;
     const progress = items.length > 0 ? (completed / items.length) * 100 : 0;
 
     return (
@@ -410,13 +411,13 @@ const Tasks = () => {
                 Drag tasks to reorder • Hover to edit or delete
               </p>
               <div className="space-y-2">
-                {items.map((item: any) => (
+                {items.map((item: Item) => (
                   <TaskItem 
                     key={item.id} 
                     id={item.id} 
                     name={item.name} 
                     description={item.description} 
-                    completed={item.completed} 
+                    completed={Boolean(item.completed)} 
                     onToggle={handleToggleItem}
                     onEdit={handleEditItemClick}
                     onDelete={handleDeleteItemClick}
@@ -728,7 +729,7 @@ const Tasks = () => {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredAndSortedLists.map((list: any, i: number) => (
+            {filteredAndSortedLists.map((list: ListWithCounts, i: number) => (
               <motion.div key={list.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <TaskListCard 
                   name={list.name} 

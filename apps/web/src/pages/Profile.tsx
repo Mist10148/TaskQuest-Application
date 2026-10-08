@@ -1,3 +1,4 @@
+import type { User, UserData } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { XPProgressBar } from "@/components/game/XPProgressBar";
 import { motion } from "framer-motion";
@@ -18,13 +19,13 @@ const Profile = () => {
   const { user } = useAuth();
 
   const discord = user?.discord || { username: 'Adventurer', globalName: 'Adventurer', discordId: '0', avatar: null };
-  const dbUser = user?.user || {};
-  const stats = user || {};
+  const dbUser: Partial<User> = user?.user ?? {};
+  const stats: Partial<UserData> = user ?? {};
 
   const playerClass = CLASS_INFO[dbUser.player_class || 'DEFAULT'] || CLASS_INFO.DEFAULT;
   const level = dbUser.player_level || 1;
-  const totalXP = dbUser.player_xp || 0;
-  const currentXP = totalXP % 100;
+  const totalXP = Number(dbUser.player_xp) || 0;
+  const currentXP = (Number(dbUser.lifetime_xp ?? totalXP) || 0) % 100;
   const streak = dbUser.streak_count || 0;
   
   const totalTasks = parseInt(String(stats.items?.total)) || 0;

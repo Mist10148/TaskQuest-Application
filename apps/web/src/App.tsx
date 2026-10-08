@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthGate } from "@/components/AuthGate";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Tasks from "./pages/Tasks";
@@ -20,6 +21,7 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60,
       retry: 1,
+      refetchOnWindowFocus: true,
     },
   },
 });
@@ -31,6 +33,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <AuthGate>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/app" element={<Navigate to="/dashboard" replace />} />
@@ -45,6 +48,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </AuthGate>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

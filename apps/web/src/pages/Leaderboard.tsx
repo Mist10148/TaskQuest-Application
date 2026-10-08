@@ -1,8 +1,8 @@
+import type { LeaderboardEntry } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Trophy, Sparkles, Flame, Target, Crown, Medal, Zap } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboard } from "@/hooks/useApi";
 import { useState } from "react";
 
@@ -15,15 +15,14 @@ const CLASS_COLORS: Record<string, string> = {
 };
 
 // Better Avatar component with multiple fallbacks
-const PlayerAvatar = ({ discordId, avatar, username, size = 'md', rank }: { 
-  discordId: string; avatar: string | null; username: string | null; size?: 'sm' | 'md' | 'lg' | 'xl'; rank?: number
+const PlayerAvatar = ({ avatarUrl, username, size = 'md', rank }: {
+  avatarUrl: string | null; username: string | null; size?: 'sm' | 'md' | 'lg' | 'xl'; rank?: number
 }) => {
   const [imgError, setImgError] = useState(false);
   const sizeClasses = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-12 h-12 text-base', xl: 'w-16 h-16 text-xl' };
   const ringColors: Record<number, string> = { 1: 'ring-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]', 2: 'ring-gray-400 shadow-[0_0_10px_rgba(156,163,175,0.4)]', 3: 'ring-amber-600 shadow-[0_0_10px_rgba(217,119,6,0.4)]' };
   
-  const avatarUrl = avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png?size=128` : null;
-  const initials = username ? username.slice(0, 2).toUpperCase() : discordId?.slice(-2) || '??';
+  const initials = username ? username.slice(0, 2).toUpperCase() : '??';
   
   // Generate consistent gradient from discordId
   const gradients = [
@@ -36,7 +35,7 @@ const PlayerAvatar = ({ discordId, avatar, username, size = 'md', rank }: {
     'from-fuchsia-500 to-pink-600',
     'from-indigo-500 to-blue-600'
   ];
-  const gradientIndex = discordId ? Math.abs(parseInt(discordId.slice(-4), 10)) % gradients.length : 0;
+  const gradientIndex = (rank ?? (username ? username.charCodeAt(0) : 0)) % gradients.length;
   
   const ringColor = rank && rank <= 3 ? ringColors[rank] : 'ring-border';
   
@@ -64,16 +63,12 @@ const PlayerAvatar = ({ discordId, avatar, username, size = 'md', rank }: {
 };
 
 const Leaderboard = () => {
-  const { user } = useAuth();
   const { data: leaderboard, isLoading } = useLeaderboard();
   const entries = leaderboard || [];
-  const currentUserDiscordId = user?.discord?.discordId;
 
-  // Get display name
-  const getDisplayName = (entry: any, isCurrentUser: boolean) => {
+  const getDisplayName = (entry: LeaderboardEntry | undefined, isCurrentUser: boolean) => {
     if (isCurrentUser) return 'You';
-    if (entry.username) return entry.username;
-    return `Player #${entry.discordId?.slice(-4)}`;
+    return entry?.username || 'Adventurer';
   };
 
   return (
@@ -101,9 +96,9 @@ const Leaderboard = () => {
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-gray-400 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar discordId={entries[1]?.discordId} avatar={entries[1]?.avatar} username={entries[1]?.username} size="lg" rank={2} />
+                  <PlayerAvatar avatarUrl={entries[1]?.avatarUrl ?? null} username={entries[1]?.username} size="lg" rank={2} />
                 </div>
-                <p className="font-heading font-semibold truncate">{getDisplayName(entries[1], entries[1]?.discordId === currentUserDiscordId)}</p>
+                <p className="font-heading font-semibold truncate">{getDisplayName(entries[1], Boolean(entries[1]?.isYou))}</p>
                 <p className="text-xp font-bold text-lg">{entries[1]?.xp?.toLocaleString()} XP</p>
                 <p className="text-xs text-foreground-muted">Level {entries[1]?.level} • {CLASS_EMOJIS[entries[1]?.playerClass] || '⚪'}</p>
               </div>
@@ -118,9 +113,9 @@ const Leaderboard = () => {
               <div className="relative">
                 <Crown className="h-10 w-10 mx-auto text-yellow-500 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar discordId={entries[0]?.discordId} avatar={entries[0]?.avatar} username={entries[0]?.username} size="xl" rank={1} />
+                  <PlayerAvatar avatarUrl={entries[0]?.avatarUrl ?? null} username={entries[0]?.username} size="xl" rank={1} />
                 </div>
-                <p className="font-heading font-bold text-lg truncate">{getDisplayName(entries[0], entries[0]?.discordId === currentUserDiscordId)}</p>
+                <p className="font-heading font-bold text-lg truncate">{getDisplayName(entries[0], Boolean(entries[0]?.isYou))}</p>
                 <p className="text-xp font-bold text-2xl">{entries[0]?.xp?.toLocaleString()} XP</p>
                 <p className="text-sm text-foreground-muted">Level {entries[0]?.level} • {CLASS_EMOJIS[entries[0]?.playerClass] || '⚪'}</p>
               </div>
@@ -134,9 +129,9 @@ const Leaderboard = () => {
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-amber-600 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar discordId={entries[2]?.discordId} avatar={entries[2]?.avatar} username={entries[2]?.username} size="lg" rank={3} />
+                  <PlayerAvatar avatarUrl={entries[2]?.avatarUrl ?? null} username={entries[2]?.username} size="lg" rank={3} />
                 </div>
-                <p className="font-heading font-semibold truncate">{getDisplayName(entries[2], entries[2]?.discordId === currentUserDiscordId)}</p>
+                <p className="font-heading font-semibold truncate">{getDisplayName(entries[2], Boolean(entries[2]?.isYou))}</p>
                 <p className="text-xp font-bold text-lg">{entries[2]?.xp?.toLocaleString()} XP</p>
                 <p className="text-xs text-foreground-muted">Level {entries[2]?.level} • {CLASS_EMOJIS[entries[2]?.playerClass] || '⚪'}</p>
               </div>
@@ -164,13 +159,13 @@ const Leaderboard = () => {
             <p>No rankings yet. Be the first!</p>
           </div>
         ) : (
-          entries.map((entry: any, index: number) => {
-            const isCurrentUser = entry.discordId === currentUserDiscordId;
+          entries.map((entry: LeaderboardEntry, index: number) => {
+            const isCurrentUser = Boolean(entry.isYou);
             const rankBg = entry.rank === 1 ? 'bg-yellow-500/10' : entry.rank === 2 ? 'bg-gray-400/10' : entry.rank === 3 ? 'bg-amber-600/10' : '';
 
             return (
               <motion.div
-                key={entry.discordId}
+                key={entry.rank}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.25 + index * 0.05 }}
@@ -185,7 +180,7 @@ const Leaderboard = () => {
                        entry.rank === 3 ? <Medal className="h-5 w-5 text-amber-600" /> : 
                        <span className="font-heading font-bold text-foreground-muted">#{entry.rank}</span>}
                     </div>
-                    <PlayerAvatar discordId={entry.discordId} avatar={entry.avatar} username={entry.username} size="sm" rank={entry.rank} />
+                    <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} username={entry.username} size="sm" rank={entry.rank} />
                     <div className="flex-1 min-w-0">
                       <p className={cn("font-medium text-sm truncate", isCurrentUser && "text-primary")}>
                         {getDisplayName(entry, isCurrentUser)}
@@ -214,7 +209,7 @@ const Leaderboard = () => {
                      <span className="font-heading font-bold text-foreground-muted">#{entry.rank}</span>}
                   </div>
                   <div className="col-span-4 flex items-center gap-3">
-                    <PlayerAvatar discordId={entry.discordId} avatar={entry.avatar} username={entry.username} size="md" rank={entry.rank} />
+                    <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} username={entry.username} size="md" rank={entry.rank} />
                     <div className="min-w-0">
                       <p className={cn("font-medium truncate", isCurrentUser && "text-primary")}>
                         {getDisplayName(entry, isCurrentUser)}

@@ -1,183 +1,146 @@
 /**
- * ═══════════════════════════════════════════════════════════════════════════════
- *  🌐 API CLIENT - Connects frontend to backend
- * ═══════════════════════════════════════════════════════════════════════════════
+ * TaskQuest API client.
+ *
+ * The SPA and the API are served from the same origin (the Express server
+ * serves the built app in production; Vite proxies /api in development), so
+ * requests are relative and the session cookie is first-party.
+ * VITE_API_URL is only needed for unusual split deployments.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
-/**
- * Base fetch wrapper with credentials
- */
-async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export class ApiError extends Error {
+    constructor(message: string, public status: number, public code?: string, public details?: unknown) {
+        super(message);
+        this.name = 'ApiError';
+    }
+}
+
+async function apiFetch<T>(endpoint: string, options: RequestInit & { json?: unknown } = {}): Promise<T> {
+    const { json, headers, ...rest } = options;
     const response = await fetch(`${API_BASE}${endpoint}`, {
-        ...options,
+        ...rest,
         credentials: 'include',
         headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
+            Accept: 'application/json',
+            ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}),
+            ...headers,
         },
+        body: json !== undefined ? JSON.stringify(json) : rest.body,
     });
 
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(error.error || `HTTP ${response.status}`);
+        const body = await response.json().catch(() => ({}));
+        throw new ApiError(body.error || `Request failed (HTTP ${response.status})`, response.status, body.code, body.details);
     }
-
     return response.json();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  AUTH API
-// ═══════════════════════════════════════════════════════════════════════════════
+const post = <T>(endpoint: string, json?: unknown) => apiFetch<T>(endpoint, { method: 'POST', json: json ?? {} });
+const patch = <T>(endpoint: string, json?: unknown) => apiFetch<T>(endpoint, { method: 'PATCH', json: json ?? {} });
+const del = <T>(endpoint: string) => apiFetch<T>(endpoint, { method: 'DELETE' });
+
+// ─── Auth & user ─────────────────────────────────────────────────────────────
 
 export const authApi = {
     getLoginUrl: () => `${API_BASE}/api/auth/discord`,
-    
     getMe: () => apiFetch<UserData>('/api/auth/me'),
-    
-    logout: () => apiFetch<{ success: boolean }>('/api/auth/logout', { method: 'POST' }),
+    logout: () => post<{ success: boolean }>('/api/auth/logout'),
 };
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  USER API
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export const userApi = {
     getProfile: () => apiFetch<UserStats>('/api/user'),
-    
-    updateSettings: (settings: { gamification_enabled?: boolean; automation_enabled?: boolean; auto_delete_old_lists?: boolean }) =>
-        apiFetch<User>('/api/user', { method: 'PATCH', body: JSON.stringify(settings) }),
-    
-    claimDaily: () => apiFetch<DailyClaimResult>('/api/user/daily', { method: 'POST' }),
-    
-    resetProgress: () => apiFetch<{ success: boolean; message: string }>('/api/user/reset', { method: 'POST' }),
+    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists'>>) =>
+        patch<User>('/api/user', settings),
+    claimDaily: () => post<DailyClaimResult>('/api/user/daily'),
+    resetProgress: () => post<{ success: boolean; message: string }>('/api/user/reset', { confirm: 'RESET' }),
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  LISTS API
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Lists & items ───────────────────────────────────────────────────────────
 
 export const listsApi = {
     getAll: () => apiFetch<ListWithCounts[]>('/api/lists'),
-    
     getById: (id: number) => apiFetch<ListWithItems>(`/api/lists/${id}`),
-    
-    create: (data: CreateListData) =>
-        apiFetch<List>('/api/lists', { method: 'POST', body: JSON.stringify(data) }),
-    
-    update: (id: number, data: Partial<CreateListData>) =>
-        apiFetch<List>(`/api/lists/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    
-    delete: (id: number) =>
-        apiFetch<{ success: boolean }>(`/api/lists/${id}`, { method: 'DELETE' }),
+    create: (data: CreateListData) => post<List & RewardFields>('/api/lists', data),
+    update: (id: number, data: Partial<CreateListData>) => patch<List>(`/api/lists/${id}`, data),
+    delete: (id: number) => del<{ success: boolean }>(`/api/lists/${id}`),
 };
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  ITEMS API
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export const itemsApi = {
-    create: (listId: number, data: { name: string; description?: string }) =>
-        apiFetch<Item>(`/api/lists/${listId}/items`, { method: 'POST', body: JSON.stringify(data) }),
-    
-    update: (id: number, data: Partial<{ name: string; description: string; position: number }>) =>
-        apiFetch<Item>(`/api/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    
-    toggle: (id: number) =>
-        apiFetch<Item>(`/api/items/${id}/toggle`, { method: 'PATCH' }),
-    
-    delete: (id: number) =>
-        apiFetch<{ success: boolean }>(`/api/items/${id}`, { method: 'DELETE' }),
+    create: (listId: number, data: { name: string; description?: string }) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
+    update: (id: number, data: Partial<{ name: string; description: string | null; position: number }>) => patch<Item>(`/api/items/${id}`, data),
+    toggle: (id: number) => patch<Item & RewardFields>(`/api/items/${id}/toggle`),
+    delete: (id: number) => del<{ success: boolean }>(`/api/items/${id}`),
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  CLASSES API
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Progression ─────────────────────────────────────────────────────────────
 
 export const classesApi = {
     getAll: () => apiFetch<ClassesData>('/api/classes'),
-    
-    buy: (classKey: string) =>
-        apiFetch<{ success: boolean; user: User }>(`/api/classes/${classKey}/buy`, { method: 'POST' }),
-    
-    equip: (classKey: string) =>
-        apiFetch<{ success: boolean; user: User }>(`/api/classes/${classKey}/equip`, { method: 'POST' }),
+    buy: (classKey: string) => post<{ success: boolean; user: User; newAchievements?: AchievementUnlock[] }>(`/api/classes/${classKey}/buy`),
+    equip: (classKey: string) => post<{ success: boolean; user: User }>(`/api/classes/${classKey}/equip`),
 };
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  SKILLS API
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export const skillsApi = {
     getAll: () => apiFetch<SkillsData>('/api/skills'),
-    
-    unlock: (skillId: string, classKey: string) =>
-        apiFetch<{ success: boolean; skill: UserSkill }>(
-            `/api/skills/${skillId}/unlock`,
-            { method: 'POST', body: JSON.stringify({ classKey }) }
-        ),
+    unlock: (skillId: string) => post<{ success: boolean; skill: { skill_id: string; skill_level: number }; balance: number }>(`/api/skills/${skillId}/unlock`),
 };
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  ACHIEVEMENTS API
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export const achievementsApi = {
     getAll: () => apiFetch<AchievementsData>('/api/achievements'),
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  LEADERBOARD API
-// ═══════════════════════════════════════════════════════════════════════════════
-
 export const leaderboardApi = {
     get: () => apiFetch<LeaderboardEntry[]>('/api/leaderboard'),
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  GAMES API
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Games (server-authoritative) ────────────────────────────────────────────
 
 export const gamesApi = {
     getHistory: () => apiFetch<GameSession[]>('/api/games/history'),
-    
-    recordResult: (data: { gameType: string; result: string; bet: number; payout: number }) =>
-        apiFetch<{ success: boolean; xpChange: number; newBalance: number }>(
-            '/api/games/result',
-            { method: 'POST', body: JSON.stringify(data) }
-        ),
+    getActive: () => apiFetch<{ blackjack: BlackjackActive | null; hangman: HangmanActive | null }>('/api/games/active'),
+    blackjackStart: (bet: number) => post<BlackjackResult>('/api/games/blackjack/start', { bet }),
+    blackjackAction: (action: 'hit' | 'stand' | 'double') => post<BlackjackResult>('/api/games/blackjack/action', { action }),
+    rps: (choice: RpsChoice) => post<RpsResult>('/api/games/rps', { choice }),
+    hangmanStart: () => post<HangmanActive>('/api/games/hangman/start'),
+    hangmanGuess: (letter: string) => post<HangmanResult>('/api/games/hangman/guess', { letter }),
+    arcadeStart: (type: ArcadeType) => post<{ sessionId: number }>(`/api/games/arcade/${type}/start`),
+    arcadeFinish: (type: ArcadeType, sessionId: number, score: number) =>
+        post<ArcadeResult>(`/api/games/arcade/${type}/finish`, { sessionId, score }),
+    quit: (type: 'hangman' | ArcadeType) => post<{ success: boolean }>(`/api/games/${type}/quit`),
 };
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  XP API
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export const xpApi = {
     getHistory: () => apiFetch<XPTransaction[]>('/api/xp/history'),
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  TYPES
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export type PlayerClass = 'DEFAULT' | 'HERO' | 'GAMBLER' | 'ASSASSIN' | 'WIZARD' | 'ARCHER' | 'TANK';
 
 export interface User {
     discord_id: string;
+    discord_username: string | null;
+    discord_avatar: string | null;
     player_xp: number;
+    lifetime_xp: number;
     player_level: number;
-    player_class: string;
+    player_class: PlayerClass;
     skill_points: number;
-    gamification_enabled: boolean;
-    automation_enabled: boolean;
-    auto_delete_old_lists: boolean;
+    gamification_enabled: boolean | number;
+    automation_enabled: boolean | number;
+    auto_delete_old_lists: boolean | number;
     streak_count: number;
     last_daily_claim: string | null;
-    owns_hero: boolean;
-    owns_gambler: boolean;
-    owns_assassin: boolean;
-    owns_wizard: boolean;
-    owns_archer: boolean;
-    owns_tank: boolean;
+    owns_hero: boolean | number;
+    owns_gambler: boolean | number;
+    owns_assassin: boolean | number;
+    owns_wizard: boolean | number;
+    owns_archer: boolean | number;
+    owns_tank: boolean | number;
+    total_items_added: number;
+    total_items_completed: number;
+    total_lists_created: number;
 }
 
 export interface DiscordUser {
@@ -185,18 +148,13 @@ export interface DiscordUser {
     username: string;
     globalName: string | null;
     avatar: string | null;
-    discriminator: string;
 }
 
-export interface UserData {
-    discord: DiscordUser;
-    user: User;
-    lists: { total: number };
-    items: { total: number; completed: number };
-    achievements: number;
-    games: { played: number; won: number; lost: number; draws: number };
-    skills: UserSkill[];
-    userAchievements: Achievement[];
+export interface GameStats {
+    played: number;
+    won: number;
+    lost: number;
+    draws: number;
 }
 
 export interface UserStats {
@@ -204,9 +162,48 @@ export interface UserStats {
     lists: { total: number };
     items: { total: number; completed: number };
     achievements: number;
-    games: { played: number; won: number; lost: number; draws: number };
+    games: GameStats;
     skills: UserSkill[];
 }
+
+export interface UserData extends UserStats {
+    discord: DiscordUser;
+    userAchievements: { achievement_key: string; unlocked_at: string }[];
+}
+
+export interface BonusInfo {
+    type?: string | null;
+    details: string;
+    classBonus?: number;
+    skillBonus?: number;
+    critBonus?: number;
+    totalBonus?: number;
+}
+
+export interface XPResult {
+    baseXP: number;
+    finalXP: number;
+    bonusInfo: BonusInfo;
+    balanceAfter: number;
+    newLevel: number;
+    leveledUp: boolean;
+    capped: boolean;
+}
+
+export interface AchievementUnlock {
+    key: string;
+    name: string;
+    description: string;
+    emoji: string;
+    category: string;
+}
+
+export interface RewardFields {
+    xpResult: XPResult | null;
+    newAchievements: AchievementUnlock[];
+}
+
+export type Priority = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface List {
     id: number;
@@ -215,7 +212,7 @@ export interface List {
     description: string | null;
     category: string | null;
     deadline: string | null;
-    priority: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+    priority: Priority | null;
     created_at: string;
 }
 
@@ -229,7 +226,7 @@ export interface Item {
     list_id: number;
     name: string;
     description: string | null;
-    completed: boolean;
+    completed: boolean | number;
     position: number;
     created_at: string;
 }
@@ -240,27 +237,26 @@ export interface ListWithItems extends List {
 
 export interface CreateListData {
     name: string;
-    description?: string;
-    category?: string;
-    priority?: 'LOW' | 'MEDIUM' | 'HIGH';
-    deadline?: string;
+    description?: string | null;
+    category?: string | null;
+    priority?: Priority | null;
+    deadline?: string | null;
 }
 
 export interface ClassInfo {
-    key: string;
+    key: PlayerClass;
     name: string;
     emoji: string;
     cost: number;
     description: string;
     playstyle: string;
-    color: string;
     owned: boolean;
     equipped: boolean;
 }
 
 export interface ClassesData {
     classes: ClassInfo[];
-    currentClass: string;
+    currentClass: PlayerClass;
     playerXP: number;
 }
 
@@ -276,11 +272,11 @@ export interface Skill {
 }
 
 export interface SkillTree {
-    classKey: string;
+    classKey: PlayerClass;
     name: string;
     description: string;
     emoji: string;
-    color: string;
+    classOwned: boolean;
     skills: Skill[];
 }
 
@@ -288,21 +284,16 @@ export interface SkillsData {
     skillTrees: SkillTree[];
     skillPoints: number;
     userXP: number;
+    playerClass: PlayerClass;
 }
 
 export interface UserSkill {
-    discord_id: string;
     skill_id: string;
     skill_level: number;
     unlocked_at: string;
 }
 
-export interface Achievement {
-    key: string;
-    name: string;
-    description: string;
-    emoji: string;
-    category: string;
+export interface Achievement extends AchievementUnlock {
     unlocked: boolean;
     unlockedAt: string | null;
 }
@@ -315,29 +306,122 @@ export interface AchievementsData {
 
 export interface LeaderboardEntry {
     rank: number;
-    discordId: string;
+    username: string;
+    avatarUrl: string | null;
     xp: number;
     level: number;
-    playerClass: string;
+    playerClass: PlayerClass;
     streak: number;
     gamesPlayed: number;
     tasksCompleted: number;
+    isYou: boolean;
 }
 
 export interface GameSession {
     id: number;
-    discord_id: string;
     game_type: string;
     bet_amount: number;
-    state: string;
     payout: number;
-    started_at: string;
-    ended_at: string;
+    net: number;
+    state: 'won' | 'lost' | 'push' | 'blackjack' | 'expired' | 'cancelled';
+    created_at: string;
+    ended_at: string | null;
+}
+
+export interface Card {
+    rank: string;
+    suit: '♠' | '♥' | '♦' | '♣';
+}
+
+export interface HandValue {
+    value: number;
+    soft: boolean;
+    bust: boolean;
+}
+
+export interface BlackjackView {
+    bet: number;
+    doubled: boolean;
+    finished: boolean;
+    outcome: 'won' | 'lost' | 'push' | 'blackjack' | null;
+    playerHand: Card[];
+    playerValue: HandValue;
+    dealerHand: (Card | null)[];
+    dealerValue: HandValue;
+    canDouble: boolean;
+}
+
+export interface BlackjackActive {
+    sessionId: number;
+    view: BlackjackView;
+}
+
+export interface BlackjackResult extends BlackjackActive {
+    balance: number;
+    maxBet: number;
+    resumed?: boolean;
+    settlement: null | {
+        credited: number;
+        net: number;
+        bonusInfo: BonusInfo | null;
+        achievements: AchievementUnlock[];
+    };
+}
+
+export type RpsChoice = 'rock' | 'paper' | 'scissors';
+
+export interface RpsResult {
+    player: RpsChoice;
+    opponent: RpsChoice;
+    outcome: 'won' | 'lost' | 'push';
+    xpGained: number;
+    capped: boolean;
+    bonusInfo: BonusInfo | null;
+    balance: number;
+    achievements: AchievementUnlock[];
+}
+
+export interface HangmanView {
+    masked: (string | null)[];
+    length: number;
+    guessed: string[];
+    wrong: string[];
+    lives: number;
+    maxLives: number;
+    potentialReward: number;
+    finished: boolean;
+    outcome: 'won' | 'lost' | null;
+    word: string | null;
+}
+
+export interface HangmanActive {
+    sessionId: number;
+    view: HangmanView;
+}
+
+export interface HangmanResult extends HangmanActive {
+    xpGained: number;
+    capped?: boolean;
+    bonusInfo?: BonusInfo | null;
+    balance: number;
+    achievements: AchievementUnlock[];
+}
+
+export type ArcadeType = 'snake' | 'dino' | 'invaders';
+
+export interface ArcadeResult {
+    sessionId: number;
+    gameType: ArcadeType;
+    score: number;
+    xpGained: number;
+    capped: boolean;
+    bonusInfo: BonusInfo | null;
+    balance: number;
+    achievements: AchievementUnlock[];
 }
 
 export interface XPTransaction {
     id: number;
-    discord_id: string;
     amount: number;
     source: string;
     balance_before: number;
@@ -348,19 +432,18 @@ export interface XPTransaction {
 export interface DailyClaimResult {
     success: boolean;
     error?: string;
+    remaining?: number;
+    streak?: number;
     baseXP?: number;
     classBonus?: number;
     streakBonus?: number;
     skillDailyBonus?: number;
     totalXP?: number;
-    bonusInfo?: {
-        type: string | null;
-        details: string;
-    };
-    streak?: number;
+    bonusInfo?: BonusInfo;
     streakBroken?: boolean;
+    streakPreserved?: boolean;
     newBalance?: number;
     newLevel?: number;
-    remaining?: number;
-    newAchievements?: any[];
+    leveledUp?: boolean;
+    newAchievements?: AchievementUnlock[];
 }

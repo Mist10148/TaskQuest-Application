@@ -1,3 +1,4 @@
+import type { Skill, SkillTree } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -21,19 +22,19 @@ const Skills = () => {
 
   const skillTrees = data?.skillTrees || [];
   const userXP = data?.userXP || 0;
-  const selectedTree = skillTrees.find((t: any) => t.classKey === selectedTreeKey) || skillTrees[0];
+  const selectedTree = skillTrees.find((t: SkillTree) => t.classKey === selectedTreeKey) || skillTrees[0];
   
   // Check if selected class is owned (DEFAULT is always owned)
   const isClassOwned = selectedTree?.classOwned ?? (selectedTreeKey === 'DEFAULT');
 
-  const getSkillStatus = (skill: any): 'locked' | 'available' | 'unlocked' | 'maxed' | 'class_locked' => {
+  const getSkillStatus = (skill: Skill): 'locked' | 'available' | 'unlocked' | 'maxed' | 'class_locked' => {
     // If class not owned, all skills are class-locked (except DEFAULT)
     if (!isClassOwned) return 'class_locked';
     
     if (skill.currentLevel >= skill.maxLevel) return 'maxed';
     if (skill.currentLevel > 0) return 'unlocked';
     if (skill.requires) {
-      const prereq = selectedTree?.skills.find((s: any) => s.id === skill.requires);
+      const prereq = selectedTree?.skills.find((s: Skill) => s.id === skill.requires);
       if (!prereq || prereq.currentLevel === 0) return 'locked';
     }
     return 'available';
@@ -48,8 +49,8 @@ const Skills = () => {
       await unlockSkill.mutateAsync({ skillId, classKey: selectedTreeKey });
       toast.success('✨ Skill upgraded!');
       refresh();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to unlock');
+    } catch {
+      /* error toast shown by the mutation hook */
     }
   };
 
@@ -73,7 +74,7 @@ const Skills = () => {
 
       {/* Class Tabs - Scrollable on mobile */}
       <div className="flex gap-1.5 sm:gap-2 mb-6 sm:mb-8 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
-        {skillTrees.map((tree: any) => {
+        {skillTrees.map((tree: SkillTree) => {
           const owned = tree.classOwned ?? (tree.classKey === 'DEFAULT');
           return (
             <button
@@ -127,7 +128,7 @@ const Skills = () => {
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {selectedTree.skills.map((skill: any) => {
+            {selectedTree.skills.map((skill: Skill) => {
               const status = getSkillStatus(skill);
               const canAfford = userXP >= skill.cost;
               const isClassLocked = status === 'class_locked';
@@ -184,7 +185,7 @@ const Skills = () => {
                   )}
                   {status === 'maxed' && <div className="text-center text-[10px] sm:text-xs text-success font-medium">MAX LEVEL</div>}
                   {status === 'locked' && !isClassLocked && skill.requires && (
-                    <div className="text-center text-[10px] sm:text-xs text-foreground-muted">Requires: {selectedTree.skills.find((s: any) => s.id === skill.requires)?.name}</div>
+                    <div className="text-center text-[10px] sm:text-xs text-foreground-muted">Requires: {selectedTree.skills.find((s: Skill) => s.id === skill.requires)?.name}</div>
                   )}
                 </motion.div>
               );

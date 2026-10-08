@@ -1,3 +1,4 @@
+import type { ClassInfo } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -23,8 +24,8 @@ const Classes = () => {
       await buyClass.mutateAsync(classKey);
       toast.success(`🎉 Purchased ${classKey}!`);
       refresh();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to purchase');
+    } catch {
+      /* error toast shown by the mutation hook */
     }
   };
 
@@ -33,8 +34,8 @@ const Classes = () => {
       await equipClass.mutateAsync(classKey);
       toast.success(`⚔️ Equipped ${classKey}!`);
       refresh();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to equip');
+    } catch {
+      /* error toast shown by the mutation hook */
     }
   };
 
@@ -64,7 +65,7 @@ const Classes = () => {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            {classes.map((classInfo: any, index: number) => {
+            {classes.map((classInfo: ClassInfo, index: number) => {
               const color = CLASS_COLORS[classInfo.key] || '#888';
               const canAfford = playerXP >= classInfo.cost;
 

@@ -1,3 +1,5 @@
+import type { ListWithCounts } from "@/lib/api";
+import type { User } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { XPProgressBar } from "@/components/game/XPProgressBar";
 import { StatCard } from "@/components/game/StatCard";
@@ -13,18 +15,18 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const Dashboard = () => {
-  const { user, useMock } = useAuth();
+  const { user } = useAuth();
   const { data: apiLists } = useLists();
   const claimDaily = useClaimDaily();
   const [dailyClaimed, setDailyClaimed] = useState(false);
 
   const lists = apiLists || [];
   const discord = user?.discord || { username: 'Adventurer', globalName: 'Adventurer' };
-  const dbUser = user?.user || {};
+  const dbUser: Partial<User> = user?.user ?? {};
   
   const level = dbUser.player_level || 1;
-  const totalXP = dbUser.player_xp || 0;
-  const currentXP = totalXP % 100;
+  const totalXP = Number(dbUser.player_xp) || 0;
+  const currentXP = (Number(dbUser.lifetime_xp ?? totalXP) || 0) % 100;
   const streak = dbUser.streak_count || 0;
   
   const totalTasks = parseInt(String(user?.items?.total)) || 0;
@@ -35,20 +37,15 @@ const Dashboard = () => {
   const achievementCount = user?.achievements || 0;
 
   const handleClaimDaily = async () => {
-    if (useMock) {
-      toast.success('🎁 Daily reward claimed! +100 XP');
-      setDailyClaimed(true);
-      return;
-    }
     try {
       const result = await claimDaily.mutateAsync();
       if (result.success) {
         // Build description with bonus breakdown
         let description = '';
         const bonusParts = [];
-        if (result.classBonus > 0) bonusParts.push(`+${result.classBonus} class`);
-        if (result.streakBonus > 0) bonusParts.push(`+${result.streakBonus} streak (${result.streak} days)`);
-        if (result.skillDailyBonus > 0) bonusParts.push(`+${result.skillDailyBonus} skill`);
+        if ((result.classBonus ?? 0) > 0) bonusParts.push(`+${result.classBonus} class`);
+        if ((result.streakBonus ?? 0) > 0) bonusParts.push(`+${result.streakBonus} streak (${result.streak} days)`);
+        if ((result.skillDailyBonus ?? 0) > 0) bonusParts.push(`+${result.skillDailyBonus} skill`);
         if (bonusParts.length > 0) description = bonusParts.join(', ');
         if (result.bonusInfo?.details) description = result.bonusInfo.details;
         
@@ -58,10 +55,12 @@ const Dashboard = () => {
         });
         setDailyClaimed(true);
       } else {
-        toast.error(result.error || 'Already claimed today');
+        const hours = Math.ceil((result.remaining ?? 0) / 3_600_000);
+        toast.error('Already claimed today', { description: hours ? `Come back in about ${hours}h.` : undefined });
+        setDailyClaimed(true);
       }
     } catch {
-      toast.error('Failed to claim daily reward');
+      /* error toast shown by the mutation */
     }
   };
 
@@ -78,7 +77,6 @@ const Dashboard = () => {
               </motion.div>
             </h1>
             <p className="text-foreground-muted text-sm sm:text-base">Here's your adventure progress</p>
-            {useMock && <p className="text-xs text-yellow-500 mt-1">⚠️ Demo mode - Connect API for real data</p>}
           </div>
           <Button variant="outline" onClick={handleClaimDaily} disabled={dailyClaimed || claimDaily.isPending} className="shrink-0 border-xp/50 text-xp hover:bg-xp/10 hover:border-xp hover:shadow-[0_0_15px_rgba(234,179,8,0.3)] transition-all">
             <Calendar className="h-4 w-4 mr-2" />
@@ -144,7 +142,7 @@ const Dashboard = () => {
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {lists.slice(0, 3).map((list: any, index: number) => (
+              {lists.slice(0, 3).map((list: ListWithCounts, index: number) => (
                 <motion.div key={list.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + index * 0.05 }}>
                   <Link to="/tasks">
                     <TaskListCard name={list.name} description={list.description} itemsCompleted={list.itemsCompleted || 0} itemsTotal={list.itemsTotal || 0} category={list.category} priority={list.priority} />

@@ -1,3 +1,4 @@
+import type { Achievement } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -22,12 +23,12 @@ const Achievements = () => {
   const unlockedCount = data?.unlockedCount || 0;
   const totalCount = data?.totalCount || achievements.length;
 
-  const grouped = achievements.reduce((acc: Record<string, any[]>, ach: any) => {
+  const grouped = achievements.reduce((acc: Record<string, Achievement[]>, ach: Achievement) => {
     const cat = ach.category || 'other';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(ach);
     return acc;
-  }, {});
+  }, {} as Record<string, Achievement[]>);
 
   const sortedCategories = CATEGORY_ORDER.filter(cat => grouped[cat]);
   const progressPercent = totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
@@ -95,7 +96,7 @@ const Achievements = () => {
           sortedCategories.map((category, catIndex) => {
             const categoryInfo = CATEGORY_LABELS[category] || { label: category, emoji: '🏆', color: 'from-gray-500/20 to-gray-500/5' };
             const categoryAchievements = grouped[category];
-            const unlockedInCategory = categoryAchievements.filter((a: any) => a.unlocked).length;
+            const unlockedInCategory = categoryAchievements.filter((a: Achievement) => a.unlocked).length;
 
             return (
               <motion.div key={category} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + catIndex * 0.1 }} className="mb-6 sm:mb-8">
@@ -110,7 +111,7 @@ const Achievements = () => {
                 </div>
 
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  {categoryAchievements.map((ach: any, index: number) => (
+                  {categoryAchievements.map((ach: Achievement, index: number) => (
                     <motion.div
                       key={ach.key}
                       initial={{ opacity: 0, scale: 0.95 }}

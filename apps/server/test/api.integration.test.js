@@ -25,7 +25,8 @@ if (enabled) {
         PUBLIC_URL: ORIGIN,
         SESSION_SECRET: SECRET,
         DISCORD_CLIENT_ID: 'test',
-        DISCORD_CLIENT_SECRET: 'test'
+        DISCORD_CLIENT_SECRET: 'test',
+        AI_ENABLED: 'false'
     });
 }
 
@@ -154,6 +155,31 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const board = await (await call('GET', '/api/leaderboard')).json();
         assert.ok(board.length >= 1);
         for (const row of board) assert.equal(row.discordId, undefined);
+    });
+
+    await t.test('AI endpoints: authenticated, feature-flagged, and the internal API is not public', async () => {
+        // Not logged in
+        assert.equal((await call('GET', '/api/ai/ping')).status, 401);
+        assert.equal((await call('POST', '/api/ai/chat', { body: { message: 'hi' } })).status, 401);
+
+        // AI is off by default in tests
+        const off = await call('POST', '/api/ai/summary', { cookie: alice, body: { mode: 'digest' } });
+        assert.equal(off.status, 503);
+        assert.equal((await off.json()).code, 'AI_DISABLED');
+        assert.equal((await call('GET', '/api/ai/threads', { cookie: alice })).status, 503);
+
+        // Cross-site writes are still blocked by CSRF
+        assert.equal((await call('POST', '/api/ai/chat', { cookie: alice, body: { message: 'hi' }, origin: 'https://evil.example' })).status, 403);
+
+        // Browsers (even logged in) cannot reach the service-to-service API
+        const internal = await call('POST', '/internal/lists', { cookie: alice, body: { discordId: '200000000000000001', name: 'x' } });
+        assert.equal(internal.status, 404);
+        const noToken = await call('PATCH', '/internal/items/1/toggle', { body: { discordId: '1' } });
+        assert.equal(noToken.status, 404);
+
+        // /api/auth/me reports the feature flag
+        const me = await (await call('GET', '/api/auth/me', { cookie: alice })).json();
+        assert.equal(me.features.ai, false);
     });
 
     await t.test('logout destroys the session', async () => {

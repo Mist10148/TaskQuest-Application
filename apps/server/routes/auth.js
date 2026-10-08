@@ -108,7 +108,8 @@ router.get(
             ...stats,
             skills,
             userAchievements: achievements,
-            features: { ai: config.ai.enabled && stats.user.ai_enabled !== 0 }
+            // ai: usable now; aiAvailable: the server offers AI at all (so Settings can show the opt-out switch)
+            features: { ai: config.ai.enabled && stats.user.ai_enabled !== 0, aiAvailable: config.ai.enabled }
         });
     })
 );

@@ -195,3 +195,31 @@ async def test_internal_routes_require_token_and_noop_without_gemini(client):
     ok = {"X-AI-Token": "t" * 40}
     assert (await client.post("/internal/index", json=body, headers=ok)).status_code == 204
     assert (await client.post("/internal/index", json={"discordId": "x;"}, headers=ok)).status_code == 422
+
+
+async def test_opted_out_users_are_not_embedded_and_lose_their_vectors(seeded, monkeypatch):
+    from app.config import get_settings
+    from app.rag import runtime
+
+    store, emb = make_store(), FakeEmbedder()
+    runtime.set_runtime(store, emb)
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+    try:
+        async with seeded.begin() as conn:
+            await indexer.index_list(conn, store, emb, UID, 1)
+            await conn.execute(text("UPDATE users SET ai_enabled = 0 WHERE discord_id = :u"), {"u": UID})
+        import httpx
+
+        from app.main import create_app
+
+        calls_before = emb.doc_calls
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://ai") as c:
+            r = await c.post("/internal/index", json={"discordId": UID, "listId": 1}, headers={"X-AI-Token": "t" * 40})
+        assert r.status_code == 204 and emb.doc_calls == calls_before  # nothing sent to the embedding model
+        async with seeded.connect() as conn:
+            n = (
+                await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE discord_id = :u"), {"u": UID})
+            ).scalar()
+        assert n == 0
+    finally:
+        runtime.set_runtime(None, None)

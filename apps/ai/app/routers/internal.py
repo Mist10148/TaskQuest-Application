@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.db import pool, repo
 from app.deps import verify_internal_token
-from app.rag import indexer
+from app.rag import indexer, runtime
 
 log = logging.getLogger("taskquest.ai.internal")
 
@@ -23,13 +24,17 @@ class IndexBody(BaseModel):
 
 @router.post("/index", status_code=204)
 async def index(body: IndexBody):
-    """Re-embed one list (or a user's whole library when listId is omitted)."""
+    """Re-embed one list (or a user's whole library when listId is omitted).
+
+    Users who opted out of AI are never sent to Gemini; any vectors they had are removed.
+    """
+    async with pool.connection() as conn:
+        if not await repo.ai_enabled(conn, body.discordId):
+            await runtime.get_store().delete(conn, body.discordId)
+            return Response(status_code=204)
     if not get_settings().gemini_api_key:
         return Response(status_code=204)  # nothing to do without embeddings
     if body.listId is None:
-        from app.db import pool
-        from app.rag import runtime
-
         async with pool.connection() as conn:
             await indexer.index_user(conn, runtime.get_store(), runtime.get_embedder(), body.discordId)
     else:

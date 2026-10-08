@@ -4,7 +4,7 @@
 
 const { getPool, withTransaction } = require('./pool');
 
-const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists'];
+const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled'];
 
 const run = async (conn, sql, params = []) => (await (conn || getPool()).query(sql, params))[0];
 

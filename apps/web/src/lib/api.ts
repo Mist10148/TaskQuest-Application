@@ -50,7 +50,7 @@ export const authApi = {
 
 export const userApi = {
     getProfile: () => apiFetch<UserStats>('/api/user'),
-    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists'>>) =>
+    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled'>>) =>
         patch<User>('/api/user', settings),
     claimDaily: () => post<DailyClaimResult>('/api/user/daily'),
     resetProgress: () => post<{ success: boolean; message: string }>('/api/user/reset', { confirm: 'RESET' }),
@@ -192,6 +192,7 @@ export interface User {
     gamification_enabled: boolean | number;
     automation_enabled: boolean | number;
     auto_delete_old_lists: boolean | number;
+    ai_enabled?: boolean | number;
     streak_count: number;
     last_daily_claim: string | null;
     owns_hero: boolean | number;
@@ -232,7 +233,7 @@ export interface UserData extends UserStats {
     discord: DiscordUser;
     userAchievements: { achievement_key: string; unlocked_at: string }[];
     /** Optional features enabled on this server for this user. */
-    features?: { ai: boolean };
+    features?: { ai: boolean; aiAvailable: boolean };
 }
 
 export interface BonusInfo {

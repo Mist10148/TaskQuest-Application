@@ -3,7 +3,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { motion } from "framer-motion";
-import { Settings as SettingsIcon, Sparkles, Zap, LogOut, ExternalLink, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { Settings as SettingsIcon, Sparkles, Zap, LogOut, ExternalLink, AlertTriangle, Loader2, Trash2, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUpdateSettings, useResetProgress } from "@/hooks/useApi";
 import { toast } from "sonner";
@@ -29,16 +29,19 @@ const Settings = () => {
   const [gamification, setGamification] = useState(Boolean(dbUser.gamification_enabled ?? true));
   const [automation, setAutomation] = useState(Boolean(dbUser.automation_enabled ?? true));
   const [autoDelete, setAutoDelete] = useState(Boolean(dbUser.auto_delete_old_lists ?? true));
+  const [aiEnabled, setAiEnabled] = useState(Boolean(dbUser.ai_enabled ?? true));
   const [confirmText, setConfirmText] = useState("");
 
   const handleToggle = async (key: string, value: boolean) => {
     if (key === 'gamification') setGamification(value);
     else if (key === 'automation') setAutomation(value);
     else if (key === 'autoDelete') setAutoDelete(value);
+    else if (key === 'ai') setAiEnabled(value);
 
     try {
       const fieldName = key === 'gamification' ? 'gamification_enabled' :
                         key === 'automation' ? 'automation_enabled' :
+                        key === 'ai' ? 'ai_enabled' :
                         'auto_delete_old_lists';
       await updateSettings.mutateAsync({ [fieldName]: value });
       toast.success('Settings updated!');
@@ -139,6 +142,28 @@ const Settings = () => {
             <Switch checked={autoDelete} onCheckedChange={(v) => handleToggle('autoDelete', v)} />
           </div>
         </motion.div>
+
+        {/* AI assistant (only when the server offers it) */}
+        {user?.features?.aiAvailable && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }} className="rounded-xl bg-card border border-border p-4 sm:p-6 mb-4 sm:mb-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                <Bot className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-heading font-semibold">AI Assistant</h2>
+                <p className="text-sm text-foreground-muted truncate">Summaries, priorities and chat</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-3 border-t border-border gap-4">
+              <div className="min-w-0">
+                <p className="font-medium text-sm sm:text-base">Enable AI features</p>
+                <p className="text-xs sm:text-sm text-foreground-muted">Your quests are sent to Google Gemini only when you use an AI feature.</p>
+              </div>
+              <Switch checked={aiEnabled} onCheckedChange={(v) => handleToggle('ai', v)} />
+            </div>
+          </motion.div>
+        )}
 
         {/* Discord Bot */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-xl bg-card border border-border p-4 sm:p-6 mb-4 sm:mb-6">

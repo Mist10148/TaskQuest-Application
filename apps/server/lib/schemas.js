@@ -21,7 +21,8 @@ export const settingsBody = z
     .object({
         gamification_enabled: z.boolean().optional(),
         automation_enabled: z.boolean().optional(),
-        auto_delete_old_lists: z.boolean().optional()
+        auto_delete_old_lists: z.boolean().optional(),
+        ai_enabled: z.boolean().optional()
     })
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');

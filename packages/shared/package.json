@@ -9,7 +9,7 @@
     "./db": "./src/db/index.js"
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test \"test/**/*.test.js\"",
     "db:migrate": "node src/db/migrate.js"
   },
   "engines": {

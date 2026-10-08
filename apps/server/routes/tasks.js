@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import db from '@taskquest/shared/db';
+import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, uid, xpResult } from '../lib/http.js';
 import { idParam, listIdParam, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody } from '../lib/schemas.js';
 
@@ -25,6 +26,7 @@ listsRouter.post(
     '/',
     asyncRoute(async (req, res) => {
         const r = await db.tasks.createList(uid(req), parse(createListBody, req.body));
+        aiClient.reindex(uid(req), r.list.id);
         res.status(201).json({ ...r.list, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
     })
 );
@@ -44,7 +46,9 @@ listsRouter.patch(
     '/:id',
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
-        res.json(await db.tasks.updateList(uid(req), id, parse(updateListBody, req.body)));
+        const updated = await db.tasks.updateList(uid(req), id, parse(updateListBody, req.body));
+        aiClient.reindex(uid(req), id);
+        res.json(updated);
     })
 );
 
@@ -53,6 +57,7 @@ listsRouter.delete(
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
         await db.tasks.deleteList(uid(req), id);
+        aiClient.forget(uid(req), id);
         res.json({ success: true });
     })
 );
@@ -62,6 +67,7 @@ listsRouter.post(
     asyncRoute(async (req, res) => {
         const { listId } = parse(listIdParam, req.params);
         const r = await db.tasks.addItem(uid(req), listId, parse(createItemBody, req.body));
+        aiClient.reindex(uid(req), listId);
         res.status(201).json({ ...r.item, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
     })
 );
@@ -70,7 +76,9 @@ itemsRouter.patch(
     '/:id',
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
-        res.json(await db.tasks.updateItem(uid(req), id, parse(updateItemBody, req.body)));
+        const item = await db.tasks.updateItem(uid(req), id, parse(updateItemBody, req.body));
+        if (item?.list_id) aiClient.reindex(uid(req), item.list_id);
+        res.json(item);
     })
 );
 
@@ -80,6 +88,7 @@ itemsRouter.patch(
         const { id } = parse(idParam, req.params);
         const body = parse(toggleItemBody, req.body && Object.keys(req.body).length ? req.body : undefined);
         const r = await db.tasks.setItemCompleted(uid(req), id, body?.completed);
+        if (r.item?.list_id) aiClient.reindex(uid(req), r.item.list_id);
         res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
     })
 );
@@ -88,7 +97,9 @@ itemsRouter.delete(
     '/:id',
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
+        const existing = await db.tasks.getItem(uid(req), id);
         await db.tasks.deleteItem(uid(req), id);
+        if (existing?.list_id) aiClient.reindex(uid(req), existing.list_id);
         res.json({ success: true });
     })
 );

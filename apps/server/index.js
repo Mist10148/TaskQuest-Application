@@ -10,7 +10,9 @@ import { createApp } from './app.js';
 async function main() {
     validateConfig();
     await db.ping();
-    await db.assertSchemaCurrent();
+    // Migrations are idempotent and lock-protected, so both apps may run them.
+    if (process.env.MIGRATE_ON_START !== 'false') await db.runMigrations();
+    else await db.assertSchemaCurrent();
 
     const app = createApp();
     const server = app.listen(config.port, () => {

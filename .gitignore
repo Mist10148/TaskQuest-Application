@@ -161,3 +161,10 @@ vite.config.ts.timestamp-*
 !.vscode/extensions.json
 .DS_Store
 Thumbs.db
+
+# Python (apps/ai)
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.db import pool
 from app.llm import AIUnavailable
-from app.routers import internal, v1
+from app.routers import chat, internal, v1
 from app.usage import QuotaExceeded
 
 log = logging.getLogger("taskquest.ai")
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=503, content={"error": "AI is not available.", "code": "AI_UNAVAILABLE"})
 
     app.include_router(v1.router)
+    app.include_router(chat.router)
     app.include_router(internal.router)
     return app
 

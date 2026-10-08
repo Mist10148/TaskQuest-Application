@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import date, datetime
 
 import numpy as np
@@ -14,33 +13,7 @@ from app.rag.embed import from_blob, to_blob
 from app.rag.retriever import TaskRetriever, format_context, keyword_overlap, urgency_boost
 from app.rag.store import EmbeddingRow, MySQLNumpyStore
 from tests.conftest import OTHER, UID
-
-DIM = 64
-
-
-class FakeEmbedder:
-    """Deterministic bag-of-words embedder: shared words => higher cosine. Counts calls."""
-
-    def __init__(self):
-        self.doc_calls = 0
-        self.texts: list[str] = []
-
-    @staticmethod
-    def _vec(t: str) -> list[float]:
-        v = np.zeros(DIM)
-        for w in t.lower().split():
-            w = w.strip(":-[]()\"'.,;")
-            if len(w) > 2:
-                v[int(hashlib.md5(w.encode()).hexdigest(), 16) % DIM] += 1
-        return v.tolist()
-
-    async def aembed_documents(self, texts, **kwargs):
-        self.doc_calls += 1
-        self.texts += texts
-        return [self._vec(t) for t in texts]
-
-    async def aembed_query(self, t, **kwargs):
-        return self._vec(t)
+from tests.fakes import FakeEmbedder
 
 
 def make_store() -> MySQLNumpyStore:

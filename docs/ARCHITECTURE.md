@@ -13,7 +13,8 @@ This document explains how TaskQuest is put together, how a request flows throug
 7. [Bot design](#7-bot-design)
 8. [Background jobs](#8-background-jobs)
 9. [Configuration and startup](#9-configuration-and-startup)
-10. [Testing strategy](#10-testing-strategy)
+10. [AI service](#10-ai-service)
+11. [Testing strategy](#11-testing-strategy)
 
 ---
 
@@ -59,6 +60,7 @@ flowchart TB
 | `apps/server` | Node 20, ESM, Express 4 | Discord OAuth2, sessions, HTTP security, request validation (zod), and mapping HTTP to shared services. Serves `apps/web/dist` in production. |
 | `apps/bot` | Node 20, CommonJS, discord.js 14 | Discord commands and components, rendering embeds, background jobs and a health endpoint. |
 | `packages/shared` | Node 20, CommonJS | Every rule, every SQL statement, migrations and the connection pool. |
+| `apps/ai` (optional) | Python 3.12, FastAPI | Private service for the summarizer, prioritizer and chat (Gemini, LangChain, LangGraph). Reads task data through scoped queries; changes tasks only by calling Express `/internal/*` after the user confirms. See [AI_INTEGRATION.md](AI_INTEGRATION.md). |
 | MySQL / MariaDB | — | The only state. There is no in-memory game or session state in either app. |
 
 ## 2. The shared package
@@ -211,7 +213,18 @@ All jobs run in the bot process. Each is wrapped so that a failure is logged and
 
 Migrations take a MySQL named lock (`GET_LOCK('taskquest_migrations')`), so the bot and server can start at the same moment safely.
 
-## 10. Testing strategy
+## 10. AI service
+
+The optional AI service keeps the same rules as everything else:
+
+- **Express is the only public entry.** It authenticates the session, rate-limits, validates with zod and forwards to the AI service with a shared secret (`X-AI-Token`) and the trusted Discord ID. The browser never talks to the AI service and never chooses whose data is read.
+- **One place for XP.** The AI never awards XP or edits task tables. Write tools call `POST/PATCH /internal/*` on Express, which runs the same `db.tasks.*` services as the public API, so XP, achievements and validation are identical.
+- **Confirmation before any change.** A write tool pauses the LangGraph run (`interrupt`); the UI shows a card; the change runs only when the user approves. Pending confirmations are checkpointed in MySQL, so they survive reloads and restarts.
+- **Scoped reads.** Every repository function takes `discord_id` (enforced by a unit test); `discord_id` is never a tool argument; extra tool arguments are rejected.
+- **Degrades gracefully.** The prioritizer falls back to a deterministic ranking when Gemini is unavailable or the quota is used. The app is healthy without the AI service.
+- **Schema stays in Node.** The AI tables come from migration `003_ai`; the Python service never runs DDL.
+
+## 11. Testing strategy
 
 | Layer | Tests | Needs DB |
 |---|---|---|
@@ -220,5 +233,7 @@ Migrations take a MySQL named lock (`GET_LOCK('taskquest_migrations')`), so the 
 | HTTP | `apps/server/test/api.integration.test.js`: headers, auth, CSRF, validation, IDOR, games, privacy | Yes |
 | Bot | `apps/bot/test/flows.integration.test.js`: every command flow with fake interactions | Yes |
 | Web | `tsc` + ESLint + `vite build` | No |
+| AI client, internal token, AI schemas | `apps/server/test/ai.test.js` against a stub AI service | No |
+| AI service | `apps/ai/tests`: chunking, vector store, indexer, summarizer, prioritizer paths, chat graph (routing, tools, confirmation, memory), checkpointer, red-team prompts. Offline, with fake models and in-memory SQLite. | No |
 
 Integration tests are skipped unless `TEST_DB_NAME` points at a throwaway database. CI provides a MySQL 8 service. See [CONTRIBUTING.md](../CONTRIBUTING.md#testing).

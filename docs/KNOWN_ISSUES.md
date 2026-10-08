@@ -17,6 +17,10 @@ This list covers what remains after the 4.0 merge. The 29 bot issues and 13 web 
 | 11 | Data | `xp_transactions` and `game_sessions` grow without bound. | Storage. | Archive periodically ([DATABASE.md](DATABASE.md#backups-and-maintenance)). |
 | 12 | Platform | Render background workers need a paid plan, and free web services sleep. | A free deployment of the bot disconnects when idle. | Use a paid worker, or another host. |
 | 13 | Skills | `users.skill_points` is legacy and unused (skills cost XP). | — | Kept for compatibility; may be dropped in a future migration. |
+| 14 | AI | The AI features have only been tested offline (fake models, in-memory SQLite). Nothing has run against real Gemini or MySQL yet, and the default Gemini model ids may need updating. | A first live run may need small fixes (model ids, structured-output quirks, MySQL-specific SQL). | Run it against a staging key and database before enabling for users. |
+| 15 | AI | The retrieval and quality evals described in [AI_INTEGRATION.md §15](AI_INTEGRATION.md#15-testing-and-evaluation) (recall@5, golden sets) are not built, so the success criteria are unmeasured. | Retrieval and summary quality is unverified. | Build the eval sets when real data is available. |
+| 16 | AI | The vector cache and the prioritizer result cache live in process memory. | With several AI instances each warms its own cache. | Fine on one instance; use a shared cache or vector store if scaled out. |
+| 17 | AI | The reconcile job detects edited subtasks but not list-only edits (lists have no `updated_at`); those rely on the re-index hook. | A missed hook for a list-only edit leaves a stale embedding until the next subtask change. Answers still re-read live data. | Add `lists.updated_at` in a future migration. |
 
 ## Roadmap
 

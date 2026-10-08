@@ -6,9 +6,11 @@ This document is the blueprint for adding three AI features to TaskQuest, all po
 2. **AI Prioritizer**: ranks open quests and explains what to do next.
 3. **AI Chat**: a conversational assistant that knows the user's tasks (via RAG), can answer "how do I…" questions about TaskQuest, and can create or complete tasks after the user confirms.
 
-> Status: **proposal / not yet built.** Paths marked *(new)* do not exist yet.
+> Status: **implemented, phases 0–5 and 7** (the optional Discord bot commands of phase 6 are not built). It has been verified offline only; see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The sections below are the original design; where the code differs, *As built* says so.
 
 ## Contents
+
+0. [As built](#as-built)
 
 1. [Goals and non-goals](#1-goals-and-non-goals)
 2. [Architecture](#2-architecture)
@@ -27,6 +29,32 @@ This document is the blueprint for adding three AI features to TaskQuest, all po
 15. [Testing and evaluation](#15-testing-and-evaluation)
 16. [Build phases](#16-build-phases)
 17. [Open questions](#17-open-questions)
+
+---
+
+## As built
+
+What differs from the plan below:
+
+| Area | Plan | As built |
+|---|---|---|
+| Phase 6 (bot commands) | Optional | Not built. |
+| Streaming | `astream_events` v2 | `graph.astream(stream_mode=["messages","updates"])`: tokens come from the `messages` stream, tool/source/confirm events from `updates`. Same SSE event names. |
+| Checkpointer | `metadata JSON` | `ai_checkpoints.metadata` is a typed binary blob and `type` columns were added (`ai_checkpoints`, `ai_checkpoint_writes`). Only the async API is implemented. |
+| Prioritizer cache | Keyed by task-set hash | In-process 5-minute cache keyed by user and the exact feature table (so any edit invalidates it). Never caches fallback results. |
+| Prioritizer quota | 429 | When the daily quota is used, the prioritizer falls back to the deterministic ranking (`usedFallback: true`) instead of failing. Summary and chat return `429 AI_QUOTA`. |
+| `merge_scores` guard | LLM cannot bury overdue HIGH | Overdue HIGH-priority quests are pinned above all others, then ordered by the blended score. |
+| Summarize/Prioritize tools | Prioritize "as a subgraph" | Chat tools call the summarizer and prioritizer directly rather than embedding the graph as a subgraph. |
+| Quest ids | `L42`, `I311` | Same. Tools also accept plain numbers. |
+| `/api/ai/ping` | Round-trips to Gemini | Round-trips to the AI service only (no model call, so it costs nothing). |
+| Title generation | Background cheap call | The thread title is the first message (truncated) immediately; a background call may replace it. |
+| Prioritize UI | Query invalidated by list mutations | Explicit "Prioritize my quests" click (every run costs quota); the result is cached for 5 minutes. |
+| Opt-out | `users.ai_enabled` column | Plus a Settings switch, an Express gate on `/api/ai/*`, and the AI service never embeds opted-out users (their vectors are deleted). |
+| CI | MySQL service + mypy | `ruff` and `pytest` over in-memory SQLite with fake models. No mypy. |
+| Evals | Retrieval, quality and injection suites | Only the injection red-team list and deterministic tests exist. Recall@5, golden-set and agreement metrics are not built, so the success criteria in §1 are not yet measured. |
+| Auth for `/internal` | Token + body `discordId` | Same. It returns `404` when AI is disabled so the route is not discoverable. |
+
+Code map: `apps/ai/app` (service), `apps/server/{lib/aiClient.js,routes/ai.js,routes/internal.js}`, `apps/web/src/{components/ai,pages/Chat.tsx,hooks/useChat.ts}`, `packages/shared/src/db/migrations/003_ai.js`.
 
 ---
 

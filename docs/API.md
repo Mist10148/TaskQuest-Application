@@ -17,10 +17,12 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | 404 | `NOT_FOUND` | Missing, **or not yours** (ownership never leaks) |
 | 409 | `CONFLICT` | Duplicate list name, already owned, game already finished |
 | 413 / 415 | `VALIDATION` / `UNSUPPORTED_MEDIA_TYPE` | Body too large / not JSON |
-| 429 | `COOLDOWN` / `RATE_LIMITED` | Free-game cooldown (with a `Retry-After` header); rate limit |
+| 403 | `AI_OPTED_OUT` | The user turned AI features off in Settings |
+| 429 | `COOLDOWN` / `RATE_LIMITED` / `AI_QUOTA` | Free-game cooldown (with a `Retry-After` header); rate limit; daily AI request limit reached |
+| 503 | `AI_DISABLED` / `AI_UNAVAILABLE` | AI is not enabled on this server; the AI service is down or timed out |
 | 500 | `INTERNAL` | Bug. Details are logged server-side only. |
 
-- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 per 15 min per IP. `/api/games/*`: 90 per minute.
+- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 per 15 min per IP. `/api/games/*`: 90 per minute. `/api/ai/*`: 20 per minute per user (plus a daily per-user request quota enforced by the AI service).
 - **Reward fields.** Actions that can grant XP return `xpResult` and `newAchievements`:
 
 ```jsonc
@@ -49,7 +51,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 |---|---|---|---|
 | GET | `/api/auth/discord` | — | Redirects to Discord (`scope=identify`, random `state`). |
 | GET | `/api/auth/callback` | — | OAuth callback. On success it regenerates the session and redirects to `PUBLIC_URL/dashboard`. On failure it redirects to `PUBLIC_URL/?error=<access_denied\|invalid_state\|token_failed\|profile_failed\|session_failed>`. |
-| GET | `/api/auth/me` | 🔒 | `{ discord:{discordId,username,globalName,avatar}, user, lists:{total}, items:{total,completed}, achievements:<count>, games:{played,won,lost,draws}, skills:[...], userAchievements:[{achievement_key,unlocked_at}] }` |
+| GET | `/api/auth/me` | 🔒 | `{ discord:{discordId,username,globalName,avatar}, user, lists:{total}, items:{total,completed}, achievements:<count>, games:{played,won,lost,draws}, skills:[...], userAchievements:[{achievement_key,unlocked_at}], features:{ai, aiAvailable} }`. `features.ai` is true when the server has AI on and the user has not opted out; `aiAvailable` is the server-wide flag. |
 | POST | `/api/auth/logout` | — | Destroys the session, clears the cookie. `{success:true}` |
 
 ## User
@@ -57,7 +59,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET 🔒 | `/api/user` | — | Same as `/me` without `discord`/`userAchievements` |
-| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?}` (booleans, ≥1 field) | Updated `users` row |
+| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?}` (booleans, ≥1 field) | Updated `users` row |
 | POST 🔒 | `/api/user/daily` | — | See below |
 | GET 🔒 | `/api/user/xp-history` (alias `/api/xp/history`) | — | Last 50 `xp_transactions` |
 | POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, achievements, skills, games and XP history, and resets stats. `{success, message}` |
@@ -138,6 +140,36 @@ All routes are 🔒. Outcomes, shuffles and payouts are decided on the server. C
 ```
 
 Hangman `view`: `{masked:["Z",null,...], length, guessed, wrong, lives, maxLives, potentialReward, finished, outcome, word}`. `word` is `null` until the game ends.
+
+## AI (optional)
+
+Only available when the server runs with `AI_ENABLED=true` (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). Otherwise every route returns `503 AI_DISABLED`. All routes are 🔒, count toward the AI rate limit, and are scoped to the logged-in user: the Discord ID is taken from the session, never from the request.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/ai/ping` | — | `{pong:true}` (checks the whole path to the AI service) |
+| POST | `/api/ai/summary` | `{mode:"list", listId}` · `{mode:"digest"}` · `{mode:"recap", range?:"day"\|"week"}` | `{mode, headline, highlights[], blockers[], next_steps[], referenced_ids[], cached}` |
+| POST | `/api/ai/prioritize` | `{limit?: 1–20}` | `{ranked:[{id, listId, name, rank, score, reason, priority, deadline, isOverdue, progress, suggestedPriority}], focusMessage, usedFallback, cached}` |
+| POST | `/api/ai/chat` | `{threadId?, message (1–2000 chars)}` | **SSE stream** (below). Creates a thread when `threadId` is omitted. |
+| POST | `/api/ai/chat/:threadId/resume` | `{approved: boolean}` | SSE stream. Only valid while the thread waits on a `confirm` event (else `409`). |
+| GET | `/api/ai/threads` | — | `{threads:[{id, title, created_at, updated_at}]}` |
+| GET | `/api/ai/threads/:threadId` | — | Thread plus `messages:[{role, text}]` and `pendingConfirm:[…]` (a confirmation still waiting) |
+| DELETE | `/api/ai/threads/:threadId` | — | `{success:true}` (also deletes its checkpoints) |
+
+`/api/ai/prioritize` never fails because Gemini is down or the quota is used up: it falls back to a deterministic ranking and sets `usedFallback: true`. Priority changes it suggests are *suggestions*; apply one with the normal `PATCH /api/lists/:id`.
+
+### Chat stream events
+
+```
+event: token    data: {"text": "You have "}
+event: sources  data: [{"id":"L42","title":"Math homework"}]
+event: tool     data: {"name":"complete_item","status":"done|declined|error","xpResult":{...},"newAchievements":[...]}
+event: confirm  data: {"id":"call-id","action":"complete_item","args":{"item_id":"I311"},"preview":"Mark \"Ch. 4 problems\" as done?"}
+event: error    data: {"message":"..."}
+event: done     data: {"threadId":"...","usage":{"input":123,"output":45}}
+```
+
+A `confirm` event pauses the turn. Nothing has been changed yet. Answer with `POST /api/ai/chat/:threadId/resume {approved}`; the changes run only on `true`, through the same services as the normal endpoints, so XP and achievements are awarded exactly as usual (they arrive in the `tool` event). A thread's pending confirmation survives a page reload (`pendingConfirm`).
 
 ## Removed in 4.0
 

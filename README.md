@@ -35,6 +35,7 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 | **Achievements** | 30 achievements for lists, tasks, XP, levels, streaks, classes and games. |
 | **Games** | Blackjack (bet XP, with double down), Rock Paper Scissors and Hangman on both platforms; Snake, Dino Runner and Space Invaders on the web. Every outcome is decided by the server. |
 | **Automation** | Deadline reminder DMs, and optional clean-up of old lists. |
+| **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
 | **Leaderboard** | Top players by XP. Discord IDs are never exposed. |
 
 ## Architecture
@@ -78,13 +79,14 @@ TaskQuest-Application/
 ├── apps/
 │   ├── bot/        Discord bot (CommonJS, discord.js 14)
 │   ├── server/     Express API + Discord OAuth, serves the built web app
-│   └── web/        React 18 + Vite + Tailwind + shadcn/ui single-page app
+│   ├── web/        React 18 + Vite + Tailwind + shadcn/ui single-page app
+│   └── ai/         Optional private AI service (Python, FastAPI, LangGraph)
 ├── packages/
 │   └── shared/     @taskquest/shared: rules, validation, DB services, migrations
 ├── db/legacy/      Historical SQL scripts (do not run; see its README)
 ├── docs/           Product, architecture, API, gameplay, deployment docs
 ├── scripts/        Repository tooling
-└── render.yaml     Render blueprint (web service + bot worker)
+└── render.yaml     Render blueprint (web service, bot worker, optional AI service)
 ```
 
 ## Quick start
@@ -153,6 +155,7 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 | [docs/API.md](docs/API.md) | Every REST endpoint with request and response shapes |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every Discord command and interaction |
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | XP, levels, classes, skills, achievements and game rules, with exact numbers |
+| [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | The AI features: design, what was built, and how it differs from the plan |
 | [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, and upgrading a legacy database |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render, environment variables, Discord setup, operations |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations and the roadmap |

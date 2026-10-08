@@ -15,6 +15,7 @@ import {
     achievementsApi,
     leaderboardApi,
     gamesApi,
+    aiApi,
     type AchievementUnlock,
     type CreateListData,
     type RewardFields,
@@ -233,4 +234,47 @@ export function useLeaderboard() {
 
 export function useGameHistory() {
     return useQuery({ queryKey: ['games', 'history'], queryFn: gamesApi.getHistory });
+}
+
+// ─── AI ──────────────────────────────────────────────────────────────────────
+
+export function useSummary() {
+    return useMutation({ mutationFn: aiApi.summary, onError: showError });
+}
+
+/**
+ * Prioritized quests. Not fetched automatically: every run costs AI quota, so the UI
+ * calls `refetch()` on an explicit click. The result stays cached for 5 minutes.
+ */
+export function usePrioritize(limit = 5) {
+    return useQuery({
+        queryKey: ['ai', 'prioritize', limit],
+        queryFn: () => aiApi.prioritize(limit),
+        enabled: false,
+        staleTime: 5 * 60_000,
+        retry: false,
+    });
+}
+
+export function useChatThreads(enabled = true) {
+    return useQuery({ queryKey: ['ai', 'threads'], queryFn: aiApi.threads, enabled, retry: false });
+}
+
+export function useThread(threadId: string | null) {
+    return useQuery({
+        queryKey: ['ai', 'threads', threadId],
+        queryFn: () => aiApi.thread(threadId as string),
+        enabled: Boolean(threadId),
+        staleTime: 0,
+        retry: false,
+    });
+}
+
+export function useDeleteThread() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: aiApi.deleteThread,
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['ai', 'threads'] }),
+        onError: showError,
+    });
 }

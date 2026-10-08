@@ -73,6 +73,68 @@ export const itemsApi = {
     delete: (id: number) => del<{ success: boolean }>(`/api/items/${id}`),
 };
 
+// ─── AI (optional feature; see docs/AI_INTEGRATION.md) ───────────────────────
+
+/** Streams an SSE response from a POST endpoint, calling onEvent for each event. */
+async function sseFetch(endpoint: string, json: unknown, onEvent: (event: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify(json),
+        signal,
+    });
+    if (!response.ok || !response.body) {
+        const body = await response.json().catch(() => ({}));
+        throw new ApiError(body.error || `Request failed (HTTP ${response.status})`, response.status, body.code, body.details);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split(/\r?\n\r?\n/);
+        buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+            const event = parseSseFrame(frame);
+            if (event) onEvent(event);
+        }
+    }
+    const tail = parseSseFrame(buffer);
+    if (tail) onEvent(tail);
+}
+
+/** Parse one SSE frame (event + data lines) into a typed event; ignores comments and bad JSON. */
+export function parseSseFrame(frame: string): ChatEvent | null {
+    let name = 'message';
+    const data: string[] = [];
+    for (const line of frame.split(/\r?\n/)) {
+        if (line.startsWith('event:')) name = line.slice(6).trim();
+        else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+    }
+    if (!data.length) return null;
+    try {
+        return { event: name, data: JSON.parse(data.join('\n')) } as ChatEvent;
+    } catch {
+        return null;
+    }
+}
+
+export const aiApi = {
+    summary: (body: { mode: 'list'; listId: number } | { mode: 'digest' } | { mode: 'recap'; range?: 'day' | 'week' }) =>
+        post<AiSummary>('/api/ai/summary', body),
+    prioritize: (limit?: number) => post<AiPriorityResult>('/api/ai/prioritize', limit ? { limit } : {}),
+    threads: () => apiFetch<{ threads: AiThread[] }>('/api/ai/threads'),
+    thread: (id: string) => apiFetch<AiThreadDetail>(`/api/ai/threads/${id}`),
+    deleteThread: (id: string) => del<{ success: boolean }>(`/api/ai/threads/${id}`),
+    chatStream: (body: { threadId?: string; message: string }, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) =>
+        sseFetch('/api/ai/chat', body, onEvent, signal),
+    resumeStream: (threadId: string, approved: boolean, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) =>
+        sseFetch(`/api/ai/chat/${threadId}/resume`, { approved }, onEvent, signal),
+};
+
 // ─── Progression ─────────────────────────────────────────────────────────────
 
 export const classesApi = {
@@ -169,6 +231,8 @@ export interface UserStats {
 export interface UserData extends UserStats {
     discord: DiscordUser;
     userAchievements: { achievement_key: string; unlocked_at: string }[];
+    /** Optional features enabled on this server for this user. */
+    features?: { ai: boolean };
 }
 
 export interface BonusInfo {
@@ -447,3 +511,75 @@ export interface DailyClaimResult {
     leveledUp?: boolean;
     newAchievements?: AchievementUnlock[];
 }
+
+// ─── AI types ────────────────────────────────────────────────────────────────
+
+export interface AiSummary {
+    mode: 'list' | 'digest' | 'recap';
+    headline: string;
+    highlights: string[];
+    blockers: string[];
+    next_steps: string[];
+    referenced_ids: string[];
+    cached: boolean;
+}
+
+export interface AiRankedTask {
+    id: string;
+    listId: number;
+    name: string;
+    rank: number;
+    score: number;
+    reason: string;
+    priority: Priority | null;
+    deadline: string | null;
+    isOverdue: boolean;
+    progress: number;
+    suggestedPriority: Priority | null;
+}
+
+export interface AiPriorityResult {
+    ranked: AiRankedTask[];
+    focusMessage: string;
+    usedFallback: boolean;
+    cached: boolean;
+}
+
+export interface AiThread {
+    id: string;
+    title: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AiSource {
+    id: string;
+    title: string;
+}
+
+export interface AiConfirmAction {
+    id: string;
+    action: string;
+    args: Record<string, unknown>;
+    preview: string;
+}
+
+export interface AiToolEvent {
+    name: string;
+    status: 'done' | 'declined' | 'error';
+    xpResult?: XPResult | null;
+    newAchievements?: AchievementUnlock[];
+}
+
+export interface AiThreadDetail extends AiThread {
+    messages: { role: 'user' | 'assistant'; text: string }[];
+    pendingConfirm: AiConfirmAction[];
+}
+
+export type ChatEvent =
+    | { event: 'token'; data: { text: string } }
+    | { event: 'sources'; data: AiSource[] }
+    | { event: 'tool'; data: AiToolEvent }
+    | { event: 'confirm'; data: AiConfirmAction }
+    | { event: 'error'; data: { message: string } }
+    | { event: 'done'; data: { threadId: string; usage: { input: number; output: number } } };

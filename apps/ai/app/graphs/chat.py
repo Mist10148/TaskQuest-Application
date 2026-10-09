@@ -137,7 +137,7 @@ def _json(data: Any) -> str:
 
 
 def build_chat_graph(deps: ChatDeps, checkpointer: Any):
-    chat_prompt, chat_version = load_prompt("chat_system")
+    chat_prompt, chat_version = load_prompt("chat_system", persona=True)
     router_prompt, _ = load_prompt("router_system")
     tools = langchain_tools()
     max_rounds = get_settings().max_tool_iterations

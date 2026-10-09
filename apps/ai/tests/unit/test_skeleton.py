@@ -74,3 +74,15 @@ async def test_get_list_with_items_loads_only_the_callers_list(seeded):
         assert [i["name"] for i in lst["items"]] == ["Problems 1-10", "Problems 11-20"]
         assert await repo.get_list_with_items(conn, UID, 4) is None  # another user's quest
         assert await repo.get_list_with_items(conn, UID, 999) is None
+
+
+def test_persona_is_layered_after_the_core_rules():
+    from app.prompts import CORE_RULES, load_prompt
+
+    plain, v1 = load_prompt("chat_system")
+    voiced, v2 = load_prompt("chat_system", persona=True)
+    assert "Persona" not in plain and v1 != v2
+    assert voiced.startswith(CORE_RULES) and voiced.index("Never invent ids") < voiced.index("Persona")
+    assert "Every other rule above wins" in voiced
+    assert "Never use emojis" in voiced and "*italics*" in voiced
+    assert "do not claim to be human" in voiced

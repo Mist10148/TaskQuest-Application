@@ -41,7 +41,7 @@ from app.rag.retriever import Retrieved, TaskRetriever  # noqa: E402
 from app.rag.store import MySQLNumpyStore  # noqa: E402
 from tests.evals.seed import Seeded, load_json, seed  # noqa: E402
 from tests.fakes import FakeEmbedder  # noqa: E402
-from tests.schema import create_engine  # noqa: E402
+from tests.schema import create_engine, drop_engine  # noqa: E402
 
 SUITES = ("retrieval", "summary", "prioritize")
 
@@ -281,7 +281,7 @@ async def run_suites(suites: list[str], *, live: bool = False) -> list[SuiteResu
             results.append(await RUNNERS[name](env))
         finally:
             pool.set_engine(None)
-            await env.engine.dispose()
+            await drop_engine(env.engine)
     return results
 
 

@@ -15,7 +15,7 @@ import pytest_asyncio  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 from app.db import pool  # noqa: E402
-from tests.schema import create_engine  # noqa: E402
+from tests.schema import create_engine, drop_engine  # noqa: E402
 
 TOKEN = "t" * 40
 UID = "111"
@@ -28,7 +28,7 @@ async def engine():
     pool.set_engine(eng)
     yield eng
     pool.set_engine(None)
-    await eng.dispose()
+    await drop_engine(eng)
 
 
 @pytest_asyncio.fixture

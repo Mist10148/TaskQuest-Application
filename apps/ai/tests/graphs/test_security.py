@@ -104,3 +104,56 @@ async def test_request_id_is_echoed(client):
     r = await client.get("/v1/ping", headers={**auth(), "X-Request-Id": "abc"})
     assert r.headers["x-request-id"] == "abc"
     assert (await client.get("/health")).headers["x-request-id"]
+
+
+# ── persona red team ─────────────────────────────────────────────────────────
+
+
+def test_persona_prompt_keeps_rules_first_and_stays_honest_and_clean():
+    from app.prompts import load_prompt
+
+    for name in ("chat_system", "converse_system"):
+        text, _ = load_prompt(name, persona=True)
+        rules_end = text.index("Never claim an action happened unless a tool result confirms it.")
+        assert rules_end < text.index("Persona:")
+        assert "Every other rule above wins" in text
+        assert "do not claim to be human" in text
+        assert "no sexual content" in text
+    persona = (Path(__file__).parents[2] / "app" / "prompts" / "persona.md").read_text(encoding="utf-8").lower()
+    for word in ("nymphomaniac", "pervert", "block_none"):
+        assert word not in persona
+
+
+async def test_persona_roleplay_cannot_skip_confirmation_in_web_chat(seeded):
+    for i, prompt in enumerate(RED_TEAM["persona_prompts"]):
+        calls: list = []
+        llm = FakeChatLLM(
+            messages=iter([call("complete_item", {"item_id": "I1"}), AIMessage("*grins* Done!")]),
+            structured=[RouterOut(intent="action")],
+        )
+        deps = ChatDeps(llm_factory=lambda llm=llm, **kw: llm, web=make_web(calls=calls), retriever=None)
+        events = await collect(chat_service.stream_turn(deps, UID, f"rt3-{i}", chat_service.user_input(UID, prompt)))
+        assert "confirm" in kinds(events) and calls == []  # still paused for the Approve button
+
+
+async def test_persona_roleplay_cannot_write_or_cross_users_in_discord_chat(seeded):
+    for i, prompt in enumerate(RED_TEAM["persona_prompts"]):
+        calls: list = []
+        llm = FakeChatLLM(
+            messages=iter(
+                [
+                    call("complete_item", {"item_id": "I1"}, "w1"),
+                    call("get_list", {"list_id": "L4"}, "r1"),
+                    AIMessage("*pouts* Fine, use /ask."),
+                ]
+            ),
+            structured=[RouterOut(intent="action")],
+        )
+        deps = ChatDeps(llm_factory=lambda llm=llm, **kw: llm, web=make_web(calls=calls), retriever=None)
+        out = await chat_service.converse_turn(deps, UID, f"77{i}", prompt)
+        assert calls == []
+        assert out["tools"] == [
+            {"name": "complete_item", "status": "declined"},
+            {"name": "get_list", "status": "error"},
+        ]
+        assert "Secret plans" not in json.dumps(out)

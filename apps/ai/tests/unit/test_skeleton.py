@@ -86,3 +86,18 @@ def test_persona_is_layered_after_the_core_rules():
     assert "Every other rule above wins" in voiced
     assert "Never use emojis" in voiced and "*italics*" in voiced
     assert "do not claim to be human" in voiced
+
+
+async def test_discord_threads_are_hidden_from_web_thread_endpoints(engine):
+    from app import threads
+
+    async with engine.begin() as conn:
+        web = await threads.create_thread(conn, UID, "hello from the web")
+        dc = await threads.create_thread(
+            conn, UID, "hi", thread_id="d0000000-0000-5000-8000-000000000000", source="discord"
+        )
+        assert [t["id"] for t in await threads.list_threads(conn, UID)] == [web]
+        assert await threads.get_thread(conn, UID, dc) is None
+        assert await threads.get_thread(conn, UID, dc, source=threads.DISCORD) is not None
+        assert not await threads.delete_thread(conn, UID, dc)  # web delete cannot reach it
+        assert await threads.delete_thread(conn, UID, dc, source=threads.DISCORD)

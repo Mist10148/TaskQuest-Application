@@ -24,7 +24,7 @@ SCHEMA = [
     "CREATE TABLE ai_embeddings (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT, source_type TEXT,"
     " source_id TEXT, list_id INT, content TEXT, content_hash TEXT, embedding BLOB, model TEXT,"
     " updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE (source_type, source_id, model))",
-    "CREATE TABLE ai_chat_threads (id TEXT PRIMARY KEY, discord_id TEXT, title TEXT DEFAULT 'New chat',"
+    "CREATE TABLE ai_chat_threads (id TEXT PRIMARY KEY, discord_id TEXT, title TEXT DEFAULT 'New chat', source TEXT DEFAULT 'web',"
     " created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE ai_checkpoints (thread_id TEXT, checkpoint_ns TEXT DEFAULT '', checkpoint_id TEXT, parent_id TEXT,"
     " type TEXT, checkpoint BLOB, metadata BLOB, created_at TEXT DEFAULT CURRENT_TIMESTAMP,"

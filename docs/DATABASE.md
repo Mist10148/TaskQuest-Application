@@ -133,7 +133,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | Table | Purpose |
 |---|---|
 | `ai_embeddings` | RAG vectors, one row per chunk: `discord_id` (NULL = global docs), `source_type` (`list`/`item`/`history`/`doc`), `source_id`, `list_id`, `content`, `content_hash` (SHA-256, skips unchanged text), `embedding` (float32 BLOB), `model`. Unique on `(source_type, source_id, model)`. |
-| `ai_chat_threads` | Chat conversations: `id` (UUID, also the LangGraph `thread_id`), `discord_id`, `title`. |
+| `ai_chat_threads` | Chat conversations: `id` (UUID, also the LangGraph `thread_id`), `discord_id`, `title`, `source` (`web` for web chat threads, `discord` for per-user, per-channel Discord memory; migration 005). |
 | `ai_checkpoints`, `ai_checkpoint_writes` | LangGraph state snapshots per thread. |
 | `ai_usage` | Daily per-user, per-feature request and token counts, used for quotas. |
 | `ai_summary_cache` | Cached summaries keyed by `(discord_id, scope_key)` with an input hash. |

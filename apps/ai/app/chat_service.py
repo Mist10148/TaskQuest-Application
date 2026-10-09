@@ -109,7 +109,9 @@ async def history(deps: ChatDeps, thread_id: str) -> dict[str, Any]:
     return {"messages": messages, "pendingConfirm": await pending_actions(graph, config)}
 
 
-async def converse_turn(deps: ChatDeps, discord_id: str, channel_id: str, message: str) -> dict[str, Any]:
+async def converse_turn(
+    deps: ChatDeps, discord_id: str, channel_id: str, message: str, image: str | None = None
+) -> dict[str, Any]:
     """Run one Discord conversation turn to completion (no streaming: Discord gets one message)."""
     from app.graphs.converse import build_converse_graph, thread_id_for
 
@@ -120,9 +122,10 @@ async def converse_turn(deps: ChatDeps, discord_id: str, channel_id: str, messag
                 conn, discord_id, f"Discord {channel_id}", thread_id=thread_id, source=threads.DISCORD
             )
     graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()))
-    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 40}
+    config = {"configurable": {"thread_id": thread_id, "image": image}, "recursion_limit": 40}
+    text = f"{message}\n[attached an image]" if image else message
     try:
-        state = await graph.ainvoke(user_input(discord_id, message), config)
+        state = await graph.ainvoke(user_input(discord_id, text), config)
     except Exception as err:
         log.exception("converse turn failed")
         raise AIUnavailable("conversation failed") from err

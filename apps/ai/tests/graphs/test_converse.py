@@ -103,3 +103,29 @@ async def test_http_converse_and_forget(http, monkeypatch):  # noqa: F811
         monkeypatch.setattr(get_settings(), "ai_daily_request_limit", 0)
         r = await c.post("/v1/converse", json={"channelId": CHANNEL, "message": "hi"}, headers=auth())
         assert r.status_code == 429
+
+
+async def test_http_converse_reads_discord_images_without_saving_them(http):  # noqa: F811
+    from sqlalchemy import text
+
+    from app.routers import converse as R
+    from tests.unit.test_images import transport
+
+    async with http(make_llm([AIMessage("Cute cat.")], [RouterOut(intent="chitchat")])) as c:
+        c._transport.app.dependency_overrides[R.get_image_transport] = lambda: transport()
+        bad = await c.post(
+            "/v1/converse",
+            json={"channelId": CHANNEL, "message": "look", "imageUrl": "https://evil.example/x.png"},
+            headers=auth(),
+        )
+        assert bad.status_code == 400
+        r = await c.post(
+            "/v1/converse",
+            json={"channelId": CHANNEL, "message": "look", "imageUrl": "https://cdn.discordapp.com/a/b/cat.png"},
+            headers=auth(),
+        )
+        assert r.status_code == 200 and r.json()["reply"] == "Cute cat."
+    async with pool.get_engine().connect() as conn:
+        blobs = (await conn.execute(text("SELECT checkpoint FROM ai_checkpoints"))).scalars().all()
+        writes = (await conn.execute(text("SELECT value FROM ai_checkpoint_writes"))).scalars().all()
+    assert blobs and not any(b"base64" in bytes(b or b"") for b in [*blobs, *writes])

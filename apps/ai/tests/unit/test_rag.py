@@ -283,3 +283,19 @@ async def test_history_chunks_carry_weekly_xp_and_reconcile_keeps_them_fresh(see
         await conn.execute(text("UPDATE users SET ai_enabled = 0 WHERE discord_id = :u"), {"u": UID})
         await conn.execute(text("DELETE FROM ai_embeddings"))
         assert await indexer.stale_history_users(conn, store) == []
+
+
+async def test_reconcile_purges_vectors_of_opted_out_users(seeded):
+    store, emb = make_store(), FakeEmbedder()
+    async with seeded.begin() as conn:
+        await indexer.reconcile(conn, store, emb)
+        await conn.execute(text("UPDATE users SET ai_enabled = 0 WHERE discord_id = :u"), {"u": OTHER})
+        await indexer.reconcile(conn, store, emb)
+        left = (
+            await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE discord_id = :u"), {"u": OTHER})
+        ).scalar()
+        assert left == 0
+        mine = (
+            await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE discord_id = :u"), {"u": UID})
+        ).scalar()
+        assert mine > 0

@@ -188,11 +188,20 @@ async def stale_history_users(conn: AsyncConnection, store: MySQLNumpyStore) -> 
     return out
 
 
+async def purge_opted_out(conn: AsyncConnection) -> int:
+    """Delete vectors of users who turned AI off (a missed /internal/index call must not keep them)."""
+    result = await conn.execute(
+        text("DELETE FROM ai_embeddings WHERE discord_id IN (SELECT discord_id FROM users WHERE ai_enabled = 0)")
+    )
+    return int(result.rowcount or 0)
+
+
 async def reconcile(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder) -> int:
     """Catch lists whose fire-and-forget re-index call was missed, and refresh weekly history.
 
     Returns the number of lists re-indexed.
     """
+    await purge_opted_out(conn)
     fixed = 0
     for discord_id, list_id in await stale_lists(conn, store):
         await index_list(conn, store, embedder, discord_id, list_id)

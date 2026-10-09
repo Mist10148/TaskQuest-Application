@@ -13,6 +13,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { tasks, users } = require('@taskquest/shared/db');
 const ui = require('../utils/ui');
+const aiSync = require('../utils/aiSync');
 const { EPHEMERAL, handleError, sendRewards, idFrom } = require('../utils/respond');
 
 /** Pending two-step reorder selections: `${userId}_${listId}` → first item id. */
@@ -192,6 +193,7 @@ async function routeButton(interaction) {
         const list = await tasks.getList(userId, idFrom(id, 'yes_'));
         if (!list) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
         await tasks.deleteList(userId, list.id);
+        aiSync.forget(userId, list.id);
         return interaction.update({ embeds: [ui.success('Deleted', `**${list.name}** deleted`)], components: [] });
     }
     if (id.startsWith('no_')) return interaction.update({ embeds: [ui.info('Cancelled', 'Delete cancelled')], components: [] });
@@ -231,6 +233,7 @@ async function routeSelect(interaction) {
         const listId = idFrom(id, isCat ? 'cat_' : 'pri_');
         const value = val === 'NONE' ? null : val;
         const list = await tasks.updateList(userId, listId, isCat ? { category: value } : { priority: value });
+        aiSync.reindex(userId, listId);
         return interaction.update({
             embeds: [
                 ui.info(
@@ -253,12 +256,14 @@ async function routeSelect(interaction) {
         const item = await tasks.getItem(userId, val);
         if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
         await tasks.deleteItem(userId, item.id);
+        aiSync.reindex(userId, item.list_id);
         return interaction.update({ embeds: [ui.success('Deleted', `**${item.name}** deleted`)], components: [] });
     }
 
     if (id.startsWith('sel_done_')) {
         await interaction.deferUpdate();
         const result = await tasks.setItemCompleted(userId, val);
+        aiSync.reindex(userId, result.item?.list_id);
         const note = result.completed && !result.firstCompletion ? '\n-# XP is only awarded the first time a task is completed.' : '';
         await interaction.editReply({
             embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${result.item.name}**${note}`)],
@@ -284,6 +289,7 @@ async function routeSelect(interaction) {
         swapState.delete(`${userId}_${listId}`);
         if (!firstId) return interaction.update({ embeds: [ui.error('Expired', 'Start the reorder again.')], components: [] });
         await tasks.swapItemPositions(userId, firstId, val);
+        aiSync.reindex(userId, listId);
         return interaction.update({ embeds: [ui.success('Swapped', 'Positions swapped')], components: [] });
     }
 }
@@ -316,6 +322,7 @@ async function routeModal(interaction) {
             description: field(interaction, 'desc'),
             deadline: field(interaction, 'deadline')
         });
+        aiSync.reindex(userId, result.list.id);
         await interaction.reply({
             embeds: [ui.success('Created!', `**${result.list.name}**\nPick a category and priority below (optional).`)],
             components: [ui.catSelect(`cat_${result.list.id}`), ui.priSelect(`pri_${result.list.id}`)],
@@ -330,24 +337,28 @@ async function routeModal(interaction) {
             description: field(interaction, 'desc'),
             deadline: field(interaction, 'deadline')
         });
+        aiSync.reindex(userId, list.id);
         return interaction.reply({ embeds: [ui.success('Updated', `**${list.name}**`)], ...EPHEMERAL });
     }
 
     if (id.startsWith('m_additem_')) {
         const listId = idFrom(id, 'm_additem_');
         const result = await tasks.addItem(userId, listId, { name: field(interaction, 'name'), description: field(interaction, 'desc') });
+        aiSync.reindex(userId, listId);
         await interaction.reply({ ...(await renderList(userId, listId, 'edit')), ...EPHEMERAL });
         return sendRewards(interaction, result);
     }
 
     if (id.startsWith('m_edititem_')) {
         const item = await tasks.updateItem(userId, idFrom(id, 'm_edititem_'), { name: field(interaction, 'name') });
+        aiSync.reindex(userId, item?.list_id);
         return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**`)], ...EPHEMERAL });
     }
 
     if (id.startsWith('m_desc_')) {
         const desc = field(interaction, 'desc');
-        await tasks.updateItem(userId, idFrom(id, 'm_desc_'), { description: desc || null });
+        const item = await tasks.updateItem(userId, idFrom(id, 'm_desc_'), { description: desc || null });
+        aiSync.reindex(userId, item?.list_id);
         return interaction.reply({ embeds: [ui.success('Updated', desc ? 'Description saved' : 'Description cleared')], ...EPHEMERAL });
     }
 

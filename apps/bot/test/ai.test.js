@@ -280,3 +280,48 @@ test('an unknown ai_ button is reported as expired', async () => {
     await aiCommands.handleButton(i);
     assert.match(i.sent[0].content, /expired/);
 });
+
+test('a quest whose name is all digits is matched by name before id', async () => {
+    const original = db.tasks.getLists;
+    db.tasks.getLists = async () => [
+        { id: 7, name: 'Math homework' },
+        { id: 9, name: '8' }
+    ];
+    const client = stubClient({ '/v1/summary': { mode: 'list', headline: 'h', bullets: [] } });
+    aiCommands._setClient(client);
+    try {
+        await aiCommands.summary(fake({ options: { mode: 'list', quest: '8' } }));
+        assert.equal(client.calls.at(-1).body.listId, 9);
+        await aiCommands.summary(fake({ options: { mode: 'list', quest: '7' } })); // autocomplete value
+        assert.equal(client.calls.at(-1).body.listId, 7);
+    } finally {
+        db.tasks.getLists = original;
+    }
+});
+
+test('autocomplete answers with no choices when the lookup fails', async () => {
+    const original = db.tasks.getLists;
+    db.tasks.getLists = async () => {
+        throw new Error('db down');
+    };
+    try {
+        const i = fake({ options: { quest: 'x' } });
+        await aiCommands.autocomplete(i);
+        assert.deepEqual(i.sent[0].choices, []);
+    } finally {
+        db.tasks.getLists = original;
+    }
+});
+
+test('aiSync forwards quest edits to the AI client and ignores missing ids', () => {
+    const aiSync = require('../utils/aiSync');
+    const calls = [];
+    aiSync._setClient({ reindex: (...a) => calls.push(['reindex', ...a]), forget: (...a) => calls.push(['forget', ...a]) });
+    aiSync.reindex('42', 7);
+    aiSync.forget('42', 8);
+    aiSync.reindex('42', undefined);
+    assert.deepEqual(calls, [
+        ['reindex', '42', 7],
+        ['forget', '42', 8]
+    ]);
+});

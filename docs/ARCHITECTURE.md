@@ -224,6 +224,8 @@ The optional AI service keeps the same rules as everything else:
 - **Degrades gracefully.** The prioritizer falls back to a deterministic ranking when Gemini is unavailable or the quota is used. The app is healthy without the AI service.
 - **Schema stays in Node.** The AI tables come from migration `003_ai`; the Python service never runs DDL.
 
+The LangChain/LangGraph internals (RAG pipeline, graphs, checkpointer, persona, Discord conversation) are documented in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md).
+
 ## 11. Testing strategy
 
 | Layer | Tests | Needs DB |

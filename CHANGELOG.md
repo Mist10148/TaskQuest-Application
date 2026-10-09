@@ -14,6 +14,13 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
   - New Settings switch to opt out of AI. Opted-out users are never sent to Gemini.
   - New API: `/api/ai/*` (see [docs/API.md](docs/API.md#ai-optional)) and the token-protected `/internal/*` used by chat tools.
   - New `ai` CI job, `taskquest-ai` private service in `render.yaml`.
+  - **Discord commands** `/summary`, `/prioritize` and `/ask`. `/ask` shows Approve/Cancel buttons before changing anything. The bot worker now gets the AI settings in `render.yaml`; re-register slash commands after upgrading.
+  - **Eval suites** for retrieval, the summarizer and the prioritizer (`python -m tests.evals.run [--live]`), and `mypy` in CI.
+  - `@taskquest/shared/ai`: a client for the AI service for non-Express callers.
+
+### Fixed
+
+- The AI reconcile job now notices edits to a quest itself (name, deadline, priority), not only to its subtasks. New migration `004_lists_updated_at` adds `lists.updated_at`.
 
 ## [4.0.0] - 2026-10-08
 

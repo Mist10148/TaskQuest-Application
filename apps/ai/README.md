@@ -26,10 +26,29 @@ python -m app.rag.backfill        # embed every quest; add --user <discord id> f
 
 ```bash
 ruff check .
-pytest tests/unit tests/graphs
+mypy
+pytest tests/unit tests/graphs tests/evals
 ```
 
 Tests are offline: fake chat models and embeddings, in-memory SQLite, and a mocked Express. Nothing calls Gemini. The Python code targets 3.12 (CI) and has also been run on 3.13.
+
+## Evals
+
+Golden sets for retrieval, the summarizer and the prioritizer live in `tests/evals` (fixture: `seed.json`, with dates relative to the day you run them).
+
+```bash
+python -m tests.evals.run                      # offline: fake models, checks the pipeline (also runs in CI)
+python -m tests.evals.run --live               # real Gemini: needs GEMINI_API_KEY, uses quota
+python -m tests.evals.run --suite retrieval --report evals.json
+```
+
+| Suite | Metrics | Live target |
+|---|---|---|
+| retrieval | recall@5, MRR, cross-user leaks | recall@5 ≥ 0.85, 0 leaks |
+| summary | faithful rate (no unknown ids), coverage of must-mention ids, forbidden ids | 100 %, ≥ 0.8, 0 |
+| prioritize | top-3 agreement with a human ordering, top-1 accuracy, valid ids | ≥ 0.8, —, 100 % |
+
+Offline numbers only show that the plumbing works: the fake embedder is bag-of-words, the fake summarizer reads the input heuristically (and invents an id once to exercise validation), and the prioritizer uses its deterministic fallback. Run `--live` before changing prompts, models or retrieval weights, and keep the report with the change. Everything runs on in-memory SQLite, so no database is needed.
 
 ## Layout
 

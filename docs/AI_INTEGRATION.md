@@ -6,7 +6,7 @@ This document is the blueprint for adding three AI features to TaskQuest, all po
 2. **AI Prioritizer**: ranks open quests and explains what to do next.
 3. **AI Chat**: a conversational assistant that knows the user's tasks (via RAG), can answer "how do I…" questions about TaskQuest, and can create or complete tasks after the user confirms.
 
-> Status: **implemented, phases 0–5 and 7** (the optional Discord bot commands of phase 6 are not built). It has been verified offline only; see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The sections below are the original design; where the code differs, *As built* says so.
+> Status: **implemented, phases 0–7**, including the Discord bot commands. It has been verified offline only (the live evals have not been run yet); see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The sections below are the original design; where the code differs, *As built* says so.
 
 ## Contents
 
@@ -38,7 +38,7 @@ What differs from the plan below:
 
 | Area | Plan | As built |
 |---|---|---|
-| Phase 6 (bot commands) | Optional | Not built. |
+| Phase 6 (bot commands) | Optional | Built: `/summary`, `/prioritize`, `/ask`. The bot calls the AI service directly through `@taskquest/shared/ai` (it does not go through Express), checks `AI_ENABLED` and `users.ai_enabled` itself, and replies ephemerally. `/ask` starts a new thread per question; write actions show Approve/Cancel buttons (`ai_ok:` / `ai_no:` + thread id) that resume the paused graph. The web rate limiter does not apply; the daily quota does. |
 | Streaming | `astream_events` v2 | `graph.astream(stream_mode=["messages","updates"])`: tokens come from the `messages` stream, tool/source/confirm events from `updates`. Same SSE event names. |
 | Checkpointer | `metadata JSON` | `ai_checkpoints.metadata` is a typed binary blob and `type` columns were added (`ai_checkpoints`, `ai_checkpoint_writes`). Only the async API is implemented. |
 | Prioritizer cache | Keyed by task-set hash | In-process 5-minute cache keyed by user and the exact feature table (so any edit invalidates it). Never caches fallback results. |
@@ -50,11 +50,12 @@ What differs from the plan below:
 | Title generation | Background cheap call | The thread title is the first message (truncated) immediately; a background call may replace it. |
 | Prioritize UI | Query invalidated by list mutations | Explicit "Prioritize my quests" click (every run costs quota); the result is cached for 5 minutes. |
 | Opt-out | `users.ai_enabled` column | Plus a Settings switch, an Express gate on `/api/ai/*`, and the AI service never embeds opted-out users (their vectors are deleted). |
-| CI | MySQL service + mypy | `ruff` and `pytest` over in-memory SQLite with fake models. No mypy. |
-| Evals | Retrieval, quality and injection suites | Only the injection red-team list and deterministic tests exist. Recall@5, golden-set and agreement metrics are not built, so the success criteria in §1 are not yet measured. |
+| CI | MySQL service + mypy | `ruff`, `mypy` (default strictness, `app/` only) and `pytest tests/unit tests/graphs tests/evals` over in-memory SQLite with fake models. No MySQL service. |
+| Evals | Retrieval, quality and injection suites | Built in `tests/evals`: a seeded fixture (`seed.json`), retrieval (30 queries; recall@5, MRR, cross-user leaks), summarizer (faithfulness, coverage of must-mention ids, forbidden ids) and prioritizer (top-3 agreement, valid ids) golden sets, plus the injection list. `python -m tests.evals.run` runs them offline with fake models (also in CI); `--live` uses Gemini and applies the §1 thresholds. Live results have not been recorded yet. There is no LLM-as-judge step. |
 | Auth for `/internal` | Token + body `discordId` | Same. It returns `404` when AI is disabled so the route is not discoverable. |
+| Reconcile job | `updated_at` of lists and items | Compares each list's embedding with `lists.updated_at` (migration `004_lists_updated_at`) and the newest subtask change. A list whose text did not change is marked as checked so it is not picked up again. |
 
-Code map: `apps/ai/app` (service), `apps/server/{lib/aiClient.js,routes/ai.js,routes/internal.js}`, `apps/web/src/{components/ai,pages/Chat.tsx,hooks/useChat.ts}`, `packages/shared/src/db/migrations/003_ai.js`.
+Code map: `apps/ai/app` (service), `apps/ai/tests/evals` (evals), `apps/server/{lib/aiClient.js,routes/ai.js,routes/internal.js}`, `apps/web/src/{components/ai,pages/Chat.tsx,hooks/useChat.ts}`, `apps/bot/{commands/ai.js,utils/aiFormat.js}`, `packages/shared/src/ai/client.js`, `packages/shared/src/db/migrations/{003_ai,004_lists_updated_at}.js`.
 
 ---
 

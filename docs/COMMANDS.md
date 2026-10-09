@@ -18,6 +18,9 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/help` | — | Public | Command overview |
 | `/app` | — | Ephemeral | Link to the web app (`WEB_APP_URL`). It says "not configured" when unset. |
 | `/ping` | — | Ephemeral | Bot and API latency |
+| `/summary` | `mode` (briefing / recap / one quest), `quest` (autocomplete), `range` (today / week) | Ephemeral | ✨ AI summary of your quests. Needs AI enabled. |
+| `/prioritize` | `limit` (1–10, default 5) | Ephemeral | 🎯 AI ranking of what to do next, with reasons |
+| `/ask` | `question` (required, ≤ 2000 characters) | Ephemeral | 💬 Ask the AI assistant about your quests or how TaskQuest works. It can also create or complete quests after you approve. |
 
 ## `/list` flow
 
@@ -71,6 +74,15 @@ The class browser shows each class's description, cost and skill tree:
 
 You can learn skills from the Default tree and from trees of classes you own. Every level costs the skill's listed price. Rules are in [GAMEPLAY.md](GAMEPLAY.md).
 
+## AI commands
+
+`/summary`, `/prioritize` and `/ask` appear in every deployment but only work when the AI service is running and `AI_ENABLED=true` is set for the bot (see [DEPLOYMENT.md](DEPLOYMENT.md#ai-service-appsai-optional)). Otherwise they answer "AI is off". Users who turned AI off in the web app's Settings get "AI is off for you", and nothing is sent to the AI service.
+
+- **`/summary`**: `mode` defaults to *Today's briefing*, or to *One quest* when you pick a `quest`. *Recap* summarises what you finished today or this week.
+- **`/prioritize`**: when the model is unavailable or your daily AI quota is used, the ranking falls back to deadlines and priority, and the reply says so.
+- **`/ask`**: each use starts a new conversation (continue it on the web Chat page). When the assistant wants to change something, the reply shows the change with **Approve** and **Cancel**. Nothing changes until you approve, and XP and achievements are awarded exactly as if you had done it yourself.
+- All three share the per-user daily AI quota (`AI_DAILY_REQUEST_LIMIT`) with the web app. Replies are marked as AI-generated.
+
 ## Background behaviour
 
 - **Deadline DMs:** checked hourly. You get one DM per list on its deadline day (UTC), if `/automation` is on.
@@ -86,3 +98,4 @@ You can learn skills from the Default tree and from trees of classes you own. Ev
 | `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_search` | `commands/list.js` modals |
 | `bj_`, `rps_`, `hm_`, `game_`, `game_select`, `hm_letter_select_a/n`, `bj_bet_modal` | `commands/game.js` |
 | `class_*`, `cbuy_`, `ceq_`, `skill_unlock_`, `skill_back`, `class_select`, `skill_select`, `ach_*` | `commands/gamification.js` |
+| `ai_ok:<thread id>`, `ai_no:<thread id>` | `commands/ai.js` (approve / cancel a paused `/ask` action) |

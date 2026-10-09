@@ -110,14 +110,14 @@ In production, set the variables in your host's dashboard instead. Because the b
 
 ### AI service (`apps/ai`, optional)
 
-Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design. The web service and the AI service both read these:
+Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design. The web service, the bot (for `/summary`, `/prioritize` and `/ask`) and the AI service read these:
 
 | Variable | Where | Description |
 |---|---|---|
-| `AI_ENABLED` | web | `true` turns the AI features on (default `false`). The UI hides every AI entry point while it is off. |
-| `AI_SERVICE_URL` | web | Base URL of the AI service (`http://localhost:8000` locally; the private service host on Render) |
-| `AI_INTERNAL_TOKEN` | web + ai | Shared secret, **at least 32 characters**, identical on both. The web server refuses to start with `AI_ENABLED=true` and a short token. |
-| `AI_TIMEOUT_MS` | web | Per-request timeout for non-streaming calls (default `20000`) |
+| `AI_ENABLED` | web, bot | `true` turns the AI features on (default `false`). The UI hides every AI entry point while it is off, and the bot's AI commands answer "AI is off". |
+| `AI_SERVICE_URL` | web, bot | Base URL of the AI service (`http://localhost:8000` locally; the private service host on Render) |
+| `AI_INTERNAL_TOKEN` | web, bot, ai | Shared secret, **at least 32 characters**, identical everywhere. The web server refuses to start with `AI_ENABLED=true` and a short token. |
+| `AI_TIMEOUT_MS` | web, bot | Per-request timeout for non-streaming calls (default `20000`) |
 | `WEB_INTERNAL_URL` | ai | Base URL of the web service, used by chat tools to make confirmed changes (`/internal/*`) |
 | `GEMINI_API_KEY` | ai | Google AI Studio key. Server-side only, never a `VITE_*` variable. |
 | `GEMINI_CHAT_MODEL`, `GEMINI_REASONING_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM` | ai | Model ids and embedding size (defaults: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-embedding-001`, `768`). **Check them against Google's current model list.** Changing the embedding model re-embeds everything automatically (vectors are stored with the model name). |
@@ -125,7 +125,7 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design. The w
 | `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate MySQL user for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables. It never writes tasks directly. |
 | `LANGSMITH_API_KEY` | ai | Optional tracing |
 
-The AI service reads the same root `.env` as the other apps, plus the database variables above. It needs migration `003_ai`, which the web service applies on startup.
+The AI service reads the same root `.env` as the other apps, plus the database variables above. It needs migrations `003_ai` and `004_lists_updated_at`, which the web service applies on startup.
 
 **Local run**
 
@@ -158,7 +158,7 @@ The repository includes [`render.yaml`](../render.yaml).
 
 - The web service builds with `npm ci --include=dev && npm run build`, because dev dependencies are needed to build the SPA.
 - Render background workers need a paid plan. The bot also exposes a health endpoint on `$PORT`, so it can run as a free **web** service, but free services sleep when idle, which disconnects the bot. Use a paid worker for reliability.
-- **AI service.** `render.yaml` also defines a private service `taskquest-ai` (a paid plan) and a `taskquest-ai` env group holding a generated `AI_INTERNAL_TOKEN`, shared with the web service. To enable AI: set `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`, set `AI_SERVICE_URL` (its internal host) on `taskquest-web`, then flip `AI_ENABLED` to `true` there. Its build command embeds the help docs; that step is skipped, not failed, if the database or key is unavailable at build time.
+- **AI service.** `render.yaml` also defines a private service `taskquest-ai` (a paid plan) and a `taskquest-ai` env group holding a generated `AI_INTERNAL_TOKEN`, shared with the web service and the bot. To enable AI: set `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`, set `AI_SERVICE_URL` (its internal host) on `taskquest-web` and `taskquest-bot`, then flip `AI_ENABLED` to `true` on both. Re-register slash commands (`npm run deploy:commands`) so `/summary`, `/prioritize` and `/ask` appear. Its build command embeds the help docs; that step is skipped, not failed, if the database or key is unavailable at build time.
 - The first AI request after a free web instance wakes can take 10 to 30 seconds. The UI shows a "waking up" message after 5 seconds.
 - Health checks: the web service uses `GET /api/health`. The bot's `GET /` returns 200 once it is connected to Discord.
 

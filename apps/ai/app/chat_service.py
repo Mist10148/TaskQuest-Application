@@ -124,8 +124,13 @@ async def converse_turn(
     graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()))
     config = {"configurable": {"thread_id": thread_id, "image": image}, "recursion_limit": 40}
     text = f"{message}\n[attached an image]" if image else message
+    tools: list[dict[str, Any]] = []  # every tool round of this turn (state keeps only the last one)
     try:
-        state = await graph.ainvoke(user_input(discord_id, text), config)
+        async for update in graph.astream(user_input(discord_id, text), config, stream_mode="updates"):
+            for node, data in update.items():
+                if node == "tools" and data:
+                    tools += [{"name": e["name"], "status": e["status"]} for e in data.get("tool_events", [])]
+        state = (await graph.aget_state(config)).values
     except Exception as err:
         log.exception("converse turn failed")
         raise AIUnavailable("conversation failed") from err
@@ -136,11 +141,12 @@ async def converse_turn(
 
     reply = ""
     for m in reversed(state["messages"]):
+        if isinstance(m, HumanMessage):
+            break  # only this turn's answer, never an older one
         if isinstance(m, AIMessage) and not m.tool_calls and text_of(m.content).strip():
             reply = text_of(m.content).strip()
             break
     sources = [{"id": r["id"], "title": r["title"]} for r in state.get("retrieved", []) if r["kind"] == "list"]
-    tools = [{"name": e["name"], "status": e["status"]} for e in state.get("tool_events", [])]
     return {
         "reply": reply or BLOCKED_REPLY,
         "sources": sources,

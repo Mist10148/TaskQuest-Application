@@ -25,6 +25,9 @@ from app.tools.web_client import WebClient
 log = logging.getLogger("taskquest.ai.chat")
 router = APIRouter(prefix="/v1")
 
+# Strong references so background title tasks are not garbage-collected mid-flight.
+_background: set[asyncio.Task] = set()
+
 
 def get_chat_deps() -> ChatDeps:
     """Per-request dependencies (overridden in tests)."""
@@ -63,8 +66,10 @@ async def _title_in_background(deps: ChatDeps, discord_id: str, thread_id: str, 
             ]
         )
         title = str(reply.content).strip().strip('"')[:80]
-        if title:
-            async with pool.connection() as conn:
+        i, o = usage.tokens_from(reply)
+        async with pool.connection() as conn:
+            await usage.record(conn, discord_id, "chat", input_tokens=i, output_tokens=o, requests=0)
+            if title:
                 await threads.rename_thread(conn, discord_id, thread_id, title)
     except Exception:  # noqa: BLE001 - the truncated title is already good enough
         log.debug("title generation skipped")
@@ -82,7 +87,9 @@ async def chat(body: ChatBody, caller: Caller = Depends(get_caller), deps: ChatD
             if await threads.get_thread(conn, caller.discord_id, thread_id) is None:
                 raise HTTPException(status_code=404, detail="Thread not found")
     if new_thread:
-        asyncio.create_task(_title_in_background(deps, caller.discord_id, thread_id, body.message))  # noqa: RUF006
+        task = asyncio.create_task(_title_in_background(deps, caller.discord_id, thread_id, body.message))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
     return EventSourceResponse(
         chat_service.stream_turn(
             deps, caller.discord_id, thread_id, chat_service.user_input(caller.discord_id, body.message)
@@ -98,6 +105,7 @@ async def resume(
     async with pool.connection() as conn:
         if await threads.get_thread(conn, caller.discord_id, thread_id) is None:
             raise HTTPException(status_code=404, detail="Thread not found")
+        await usage.check(conn, caller.discord_id)  # resuming runs the agent again
     graph = chat_service.make_graph(deps)
     if not await chat_service.pending_actions(graph, {"configurable": {"thread_id": thread_id}}):
         raise HTTPException(status_code=409, detail="Nothing is waiting for confirmation")

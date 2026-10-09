@@ -36,19 +36,28 @@ async def check(conn: AsyncConnection, discord_id: str) -> None:
 
 
 async def record(
-    conn: AsyncConnection, discord_id: str, feature: str, *, input_tokens: int = 0, output_tokens: int = 0
+    conn: AsyncConnection,
+    discord_id: str,
+    feature: str,
+    *,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    requests: int = 1,
 ) -> None:
+    """Add to today's usage. ``requests=0`` books tokens for a side call (e.g. a thread title) without
+    spending the user's quota."""
     assert feature in FEATURES
     params = {
         "uid": discord_id,
         "day": today_utc(),
         "f": feature,
+        "n": int(requests),
         "i": int(input_tokens),
         "o": int(output_tokens),
     }
     updated = await conn.execute(
         text(
-            "UPDATE ai_usage SET requests = requests + 1, input_tokens = input_tokens + :i, "
+            "UPDATE ai_usage SET requests = requests + :n, input_tokens = input_tokens + :i, "
             "output_tokens = output_tokens + :o WHERE discord_id = :uid AND day = :day AND feature = :f"
         ),
         params,
@@ -57,7 +66,7 @@ async def record(
         await conn.execute(
             text(
                 "INSERT INTO ai_usage (discord_id, day, feature, requests, input_tokens, output_tokens) "
-                "VALUES (:uid, :day, :f, 1, :i, :o)"
+                "VALUES (:uid, :day, :f, :n, :i, :o)"
             ),
             params,
         )

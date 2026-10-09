@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.js",
     "./db": "./src/db/index.js",
-    "./env": "./src/env.js"
+    "./env": "./src/env.js",
+    "./ai": "./src/ai/client.js"
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",

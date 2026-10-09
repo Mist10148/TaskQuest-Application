@@ -3,6 +3,7 @@
     python -m tests.evals.run                      # offline: fake embeddings/models, checks the pipeline
     python -m tests.evals.run --live               # real Gemini (needs GEMINI_API_KEY), §1 thresholds
     python -m tests.evals.run --suite retrieval --report evals.json
+    python -m tests.evals.run --live --judge       # also grade summary faithfulness with an LLM judge
 
 Offline mode uses a bag-of-words fake embedder, a heuristic fake summarizer (which also invents an id on its
 first answer, to exercise the validation retry) and the deterministic prioritizer fallback. Its numbers say the
@@ -23,11 +24,13 @@ import asyncio  # noqa: E402
 import json  # noqa: E402
 import re  # noqa: E402
 import sys  # noqa: E402
+import time  # noqa: E402
 from collections.abc import Callable  # noqa: E402
 from dataclasses import dataclass, field  # noqa: E402
 from typing import Any  # noqa: E402
 
-from langchain_core.messages import AIMessage  # noqa: E402
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncEngine  # noqa: E402
 
 from app.chains.summarize import Summarizer, Summary, render_input  # noqa: E402
@@ -35,6 +38,7 @@ from app.config import get_settings  # noqa: E402
 from app.db import pool  # noqa: E402
 from app.graphs import prioritize as prio  # noqa: E402
 from app.llm import AIUnavailable  # noqa: E402
+from app.llm_call import structured_call  # noqa: E402
 from app.rag import indexer  # noqa: E402
 from app.rag.embed import Embedder  # noqa: E402
 from app.rag.retriever import Retrieved, TaskRetriever  # noqa: E402
@@ -48,7 +52,7 @@ SUITES = ("retrieval", "summary", "prioritize")
 # Success criteria from docs/AI_INTEGRATION.md §1, applied in --live mode.
 LIVE_THRESHOLDS: dict[str, dict[str, float]] = {
     "retrieval": {"recall_at_k": 0.85, "leaks": 0},
-    "summary": {"faithful_rate": 1.0, "coverage": 0.8, "violations": 0},
+    "summary": {"faithful_rate": 1.0, "coverage": 0.8, "violations": 0, "p95_latency_s": 4.0},
     "prioritize": {"top3_agreement": 0.8, "valid_id_rate": 1.0},
 }
 # Offline the fakes are crude, so retrieval recall is held to a lower bar; the rest must still hold.
@@ -56,7 +60,9 @@ OFFLINE_THRESHOLDS: dict[str, dict[str, float]] = {
     **LIVE_THRESHOLDS,
     "retrieval": {"recall_at_k": 0.7, "leaks": 0},
 }
-MAX_IS_BETTER = {"leaks", "violations"}  # these must stay at or below the threshold
+# Only checked with --judge: share of summaries an LLM judge finds fully supported by the input.
+JUDGE_THRESHOLD = 0.9
+MAX_IS_BETTER = {"leaks", "violations", "p95_latency_s"}  # these must stay at or below the threshold
 
 
 @dataclass
@@ -82,6 +88,50 @@ class SuiteResult:
             "thresholds": self.thresholds,
             "failures": self.failures,
         }
+
+
+# ── LLM-as-judge (§15) ───────────────────────────────────────────────────────
+
+JUDGE_PROMPT = """You grade a summary of a user's task data. Answer only from the <input> block.
+faithful is true only if every statement in the summary is supported by the input (no invented tasks,
+deadlines, counts or progress). List each unsupported statement in unsupported."""
+
+
+class Verdict(BaseModel):
+    faithful: bool
+    unsupported: list[str] = Field(default_factory=list)
+
+
+class HeuristicJudge:
+    """Offline judge: a summary is unfaithful if it mentions an id that is not in the input."""
+
+    def with_structured_output(self, schema: Any, include_raw: bool = False, **_: Any) -> Any:
+        class _Runnable:
+            async def ainvoke(self, messages: list[Any], *a: Any, **kw: Any) -> Any:
+                prompt = str(messages[-1].content)
+                given, _, summary = prompt.partition("<summary>")
+                bad = [i for i in re.findall(r"\b[LI]\d+\b", summary) if i not in given]
+                parsed = Verdict(faithful=not bad, unsupported=list(dict.fromkeys(bad)))
+                raw = AIMessage(content="", usage_metadata={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
+                return {"parsed": parsed, "raw": raw, "parsing_error": None} if include_raw else parsed
+
+        return _Runnable()
+
+
+async def judge_summary(judge_llm: Any, rendered_text: str, summary: Summary) -> Verdict:
+    messages = [
+        SystemMessage(JUDGE_PROMPT),
+        HumanMessage(f"<input>\n{rendered_text}\n</input>\n<summary>\n{summary.model_dump_json()}\n</summary>"),
+    ]
+    verdict, _ = await structured_call(judge_llm, Verdict, messages)
+    return verdict
+
+
+def p95(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    return round(ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))], 3)
 
 
 # ── offline stand-ins ────────────────────────────────────────────────────────
@@ -154,9 +204,10 @@ class Env:
     embedder: Embedder
     store: MySQLNumpyStore
     llm_factory: Callable[..., Any]
+    judge: bool = False
 
 
-async def make_env(live: bool) -> Env:
+async def make_env(live: bool, judge: bool = False) -> Env:
     engine = await create_engine()
     pool.set_engine(engine)
     async with engine.begin() as conn:
@@ -168,9 +219,15 @@ async def make_env(live: bool) -> Env:
         if not settings.gemini_api_key:
             raise SystemExit("--live needs GEMINI_API_KEY")
         return Env(
-            engine, seeded, True, llm.embeddings_model(), MySQLNumpyStore(settings.gemini_embed_model), llm.chat_model
+            engine,
+            seeded,
+            True,
+            llm.embeddings_model(),
+            MySQLNumpyStore(settings.gemini_embed_model),
+            llm.chat_model,
+            judge,
         )
-    return Env(engine, seeded, False, FakeEmbedder(), MySQLNumpyStore("fake-embed"), _offline_prioritize_factory)
+    return Env(engine, seeded, False, FakeEmbedder(), MySQLNumpyStore("fake-embed"), _offline_prioritize_factory, judge)
 
 
 def _matches(ref: str, hit: Retrieved, seeded: Seeded) -> bool:
@@ -213,6 +270,8 @@ async def run_summary(env: Env) -> SuiteResult:
     spec = load_json("summary.json")
     uid = spec["user"]
     faithful, coverage, violations, failures = 0, [], 0, []
+    latencies: list[float] = []
+    judged: list[bool] = []
     async with env.engine.connect() as conn:
         for case in spec["cases"]:
             list_id = int(env.seeded.label(f"list:{case['list']}")[1:]) if case.get("list") else None
@@ -220,7 +279,15 @@ async def run_summary(env: Env) -> SuiteResult:
                 conn, uid, case["mode"], list_id=list_id, range_=case.get("range", "week"), today=env.seeded.today
             )
             llm = env.llm_factory() if env.live else HeuristicSummaryLLM()
+            started = time.perf_counter()
             summary, dropped = await Summarizer(llm).summarize_text(case["mode"], env.seeded.today, rendered)
+            latencies.append(time.perf_counter() - started)
+            if env.judge:
+                judge_llm = env.llm_factory(temperature=0) if env.live else HeuristicJudge()
+                verdict = await judge_summary(judge_llm, rendered.text, summary)
+                judged.append(verdict.faithful)
+                if not verdict.faithful:
+                    failures.append(f"{case['name']}: judge found unsupported {verdict.unsupported}")
             refs = set(summary.referenced_ids)
             if dropped == 0 and refs <= rendered.valid_ids:
                 faithful += 1
@@ -237,9 +304,18 @@ async def run_summary(env: Env) -> SuiteResult:
             violations += len(bad)
             if bad:
                 failures.append(f"{case['name']}: mentioned {[env.seeded.key_of(b) for b in bad]}")
-    thresholds = (LIVE_THRESHOLDS if env.live else OFFLINE_THRESHOLDS)["summary"]
+    thresholds = dict((LIVE_THRESHOLDS if env.live else OFFLINE_THRESHOLDS)["summary"])
     n = len(spec["cases"])
-    metrics = {"faithful_rate": faithful / n, "coverage": _mean(coverage), "violations": violations, "cases": n}
+    metrics = {
+        "faithful_rate": faithful / n,
+        "coverage": _mean(coverage),
+        "violations": violations,
+        "p95_latency_s": p95(latencies),
+        "cases": n,
+    }
+    if env.judge:
+        metrics["judge_faithful_rate"] = _mean([1.0 if ok else 0.0 for ok in judged])
+        thresholds["judge_faithful_rate"] = JUDGE_THRESHOLD
     return SuiteResult("summary", metrics, thresholds, failures)
 
 
@@ -273,10 +349,10 @@ async def run_prioritize(env: Env) -> SuiteResult:
 RUNNERS = {"retrieval": run_retrieval, "summary": run_summary, "prioritize": run_prioritize}
 
 
-async def run_suites(suites: list[str], *, live: bool = False) -> list[SuiteResult]:
+async def run_suites(suites: list[str], *, live: bool = False, judge: bool = False) -> list[SuiteResult]:
     results = []
     for name in suites:
-        env = await make_env(live)  # fresh database per suite, so usage and caches never interact
+        env = await make_env(live, judge)  # fresh database per suite, so usage and caches never interact
         try:
             results.append(await RUNNERS[name](env))
         finally:
@@ -307,10 +383,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--suite", choices=[*SUITES, "all"], default="all")
     parser.add_argument("--live", action="store_true", help="use real Gemini models (costs quota)")
     parser.add_argument("--report", help="also write the results as JSON to this path")
+    parser.add_argument("--judge", action="store_true", help="grade summary faithfulness with an LLM judge")
     args = parser.parse_args(argv)
 
     suites = list(SUITES) if args.suite == "all" else [args.suite]
-    results = asyncio.run(run_suites(suites, live=args.live))
+    results = asyncio.run(run_suites(suites, live=args.live, judge=args.judge))
     print_report(results, args.live)
     if args.report:
         payload = {"mode": "live" if args.live else "offline", "results": [r.to_dict() for r in results]}

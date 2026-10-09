@@ -18,8 +18,14 @@ Keep the tone encouraging and game-flavoured (quests, XP) and keep answers conci
 
 
 @lru_cache
-def load_prompt(name: str) -> tuple[str, str]:
-    """Return (text, version) for ``prompts/<name>.md``; the core rules are always prepended."""
+def load_prompt(name: str, *, persona: bool = False) -> tuple[str, str]:
+    """Return (text, version) for ``prompts/<name>.md``; the core rules are always prepended.
+
+    ``persona=True`` appends ``prompts/persona.md`` (the conversational voice). It comes after the
+    rules and says the rules win, so the character cannot talk its way past grounding or confirmations.
+    """
     body = (PROMPT_DIR / f"{name}.md").read_text(encoding="utf-8").strip()
     text = f"{CORE_RULES}\n{body}"
+    if persona:
+        text += "\n\n" + (PROMPT_DIR / "persona.md").read_text(encoding="utf-8").strip()
     return text, hashlib.sha256(text.encode()).hexdigest()[:8]

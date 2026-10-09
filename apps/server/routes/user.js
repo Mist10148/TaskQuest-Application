@@ -4,6 +4,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import { asyncRoute, parse, uid } from '../lib/http.js';
 import { settingsBody, resetBody } from '../lib/schemas.js';
+import aiClient from '../lib/aiClient.js';
 
 const router = Router();
 
@@ -18,7 +19,11 @@ router.get(
 router.patch(
     '/',
     asyncRoute(async (req, res) => {
-        res.json(await db.users.updateSettings(uid(req), parse(settingsBody, req.body)));
+        const body = parse(settingsBody, req.body);
+        const result = await db.users.updateSettings(uid(req), body);
+        // Opting out deletes the user's vectors now; opting back in rebuilds them.
+        if (body.ai_enabled !== undefined) aiClient.syncUser(uid(req));
+        res.json(result);
     })
 );
 

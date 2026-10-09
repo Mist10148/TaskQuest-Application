@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     db_name: str = "taskquest"
     db_ssl: bool = False
     db_ssl_reject_unauthorized: bool = True
+    db_ssl_ca: str | None = None
     ai_db_user: str = ""
     ai_db_password: str = ""
     db_pool_size: int = 5

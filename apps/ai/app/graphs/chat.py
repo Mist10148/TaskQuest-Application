@@ -28,6 +28,7 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field, ValidationError
@@ -126,6 +127,20 @@ def pending_tool_calls(messages: Sequence[BaseMessage]) -> list[ToolCall]:
     """Tool calls of the latest message (only AI messages carry them)."""
     last = messages[-1] if messages else None
     return list(last.tool_calls) if isinstance(last, AIMessage) else []
+
+
+def with_image(messages: list[BaseMessage], image: str | None) -> list[BaseMessage]:
+    """Attach ``image`` (a data URL) to the latest human message, for this model call only."""
+    if not image:
+        return messages
+    out = list(messages)
+    for i in range(len(out) - 1, -1, -1):
+        if isinstance(out[i], HumanMessage):
+            parts: list[Any] = [{"type": "text", "text": text_of(out[i].content) or "(image)"}]
+            parts.append({"type": "image_url", "image_url": {"url": image}})
+            out[i] = HumanMessage(content=parts, id=out[i].id)
+            break
+    return out
 
 
 def _json(data: Any) -> str:
@@ -252,7 +267,7 @@ def build_chat_graph(
             hits = []
         return {"retrieved": [asdict(h) for h in hits]}
 
-    async def agent(state: ChatState) -> dict:
+    async def agent(state: ChatState, config: RunnableConfig) -> dict:
         context = format_context([Retrieved(**r) for r in state.get("retrieved", [])])
         system = f"{chat_prompt}\n\nToday: {datetime.now(UTC).date().isoformat()}"
         if state.get("summary"):
@@ -264,7 +279,9 @@ def build_chat_graph(
         model = llm if exhausted else llm.bind_tools(tools)
         if exhausted:
             system += "\n\nTool budget for this turn is used up. Answer now with what you have."
-        reply = await model.ainvoke([SystemMessage(system), *window(state["messages"])])
+        # An attached image travels in the run config, so it is never saved in the checkpoint.
+        image = (config.get("configurable") or {}).get("image")
+        reply = await model.ainvoke([SystemMessage(system), *with_image(window(state["messages"]), image)])
         deps.add_tokens(reply)
         if is_blocked(reply) or (not reply.tool_calls and not text_of(reply.content).strip()):
             log.warning("chat agent reply blocked or empty: %s", reply.response_metadata.get("finish_reason"))

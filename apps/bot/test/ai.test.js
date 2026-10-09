@@ -325,3 +325,26 @@ test('aiSync forwards quest edits to the AI client and ignores missing ids', () 
         ['forget', '42', 8]
     ]);
 });
+
+test('/forget wipes this channel and /ai-format saves the style', async () => {
+    const calls = [];
+    const client = stubClient();
+    client.forgetConversation = async (id, channelId) => {
+        calls.push([id, channelId]);
+        return calls.length === 1;
+    };
+    aiCommands._setClient(client);
+    const i = fake();
+    i.channelId = '900';
+    await aiCommands.forget(i);
+    assert.deepEqual(calls, [['42', '900']]);
+    assert.match(lastEdit(i).embeds[0].description, /Forgotten/);
+    await aiCommands.forget(i);
+    assert.match(lastEdit(i).embeds[0].description, /Nothing to forget/);
+
+    const saved = [];
+    db.users.setAiChatFormat = async (id, format) => saved.push([id, format]);
+    const f = fake({ options: { format: 'embed' } });
+    await aiCommands.aiFormat(f);
+    assert.deepEqual(saved, [['42', 'embed']]);
+});

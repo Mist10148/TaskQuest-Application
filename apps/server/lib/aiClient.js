@@ -25,11 +25,14 @@ function headers(discordId, extra = {}) {
 /** Turn a non-2xx response from the AI service into a TaskQuestError. */
 async function toError(response) {
     const body = await response.json().catch(() => ({}));
+    const message = body.error || body.detail;
     if (response.status === 429) {
-        return new TaskQuestError('AI_QUOTA', body.error || 'Daily AI energy used up. It resets at midnight UTC.', 429);
+        return new TaskQuestError('AI_QUOTA', message || 'Daily AI energy used up. It resets at midnight UTC.', 429);
     }
-    if (response.status === 400 || response.status === 404) {
-        return new TaskQuestError(body.code || 'VALIDATION', body.error || body.detail || 'Request rejected by the AI service.', response.status);
+    if (response.status === 404) return new TaskQuestError(body.code || 'NOT_FOUND', message || 'Not found.', 404);
+    if (response.status === 409) return new TaskQuestError('CONFLICT', message || 'Nothing is waiting for confirmation.', 409);
+    if (response.status === 400) {
+        return new TaskQuestError(body.code || 'VALIDATION', message || 'Request rejected by the AI service.', 400);
     }
     return new TaskQuestError('AI_UNAVAILABLE', UNAVAILABLE, 503);
 }

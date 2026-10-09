@@ -11,9 +11,12 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "sse-starlette>=2.1",
-    "langchain-core>=0.3",
-    "langchain-google-genai>=2.1",
-    "langgraph>=0.4",
+    # The custom MySQL checkpointer (app/graphs/checkpointer.py) implements langgraph-checkpoint's
+    # BaseCheckpointSaver; keep these on the major versions the tests run against.
+    "langchain-core>=1.6,<2",
+    "langchain-google-genai>=4.4,<5",
+    "langgraph>=1.2,<2",
+    "langgraph-checkpoint>=4,<5",
     "sqlalchemy[asyncio]>=2.0",
     "aiomysql>=0.2",
     "numpy>=1.26",

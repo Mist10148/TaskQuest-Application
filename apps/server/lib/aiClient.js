@@ -106,6 +106,17 @@ export const aiClient = {
         );
     },
 
+    /**
+     * Fire-and-forget: re-index the user's whole library, or delete every vector if they
+     * opted out of AI (the AI service checks users.ai_enabled). Never throws.
+     */
+    syncUser(discordId) {
+        if (!config.ai.enabled) return;
+        request('POST', '/internal/index', discordId, { discordId: String(discordId) }, { timeoutMs: 5000 }).catch((err) =>
+            console.warn('[ai] user sync failed:', err.code || err.message)
+        );
+    },
+
     /** Fire-and-forget: drop a deleted list's embeddings. Never throws. */
     forget(discordId, listId) {
         if (!config.ai.enabled) return;

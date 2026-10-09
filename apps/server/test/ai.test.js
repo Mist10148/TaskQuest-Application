@@ -133,7 +133,7 @@ test('aiClient: a failing stream start surfaces as an error before any SSE heade
     }
 });
 
-test('aiClient: reindex and forget are fire-and-forget and never throw', async () => {
+test('aiClient: reindex, syncUser and forget are fire-and-forget and never throw', async () => {
     const ai = await listen((req, res) => {
         res.writeHead(204);
         res.end();
@@ -142,12 +142,14 @@ test('aiClient: reindex and forget are fire-and-forget and never throw', async (
     try {
         aiClient.reindex('7', 11);
         aiClient.forget('7', 11);
-        for (let i = 0; i < 50 && ai.requests.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+        aiClient.syncUser('7');
+        for (let i = 0; i < 50 && ai.requests.length < 3; i++) await new Promise((r) => setTimeout(r, 20));
         assert.deepEqual(
-            ai.requests.map((r) => [r.url, r.body]),
+            ai.requests.map((r) => [r.url, r.body]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
             [
+                ['/internal/forget', { discordId: '7', listId: 11 }],
                 ['/internal/index', { discordId: '7', listId: 11 }],
-                ['/internal/forget', { discordId: '7', listId: 11 }]
+                ['/internal/index', { discordId: '7' }]
             ]
         );
     } finally {

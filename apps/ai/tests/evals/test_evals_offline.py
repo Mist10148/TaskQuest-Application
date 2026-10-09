@@ -31,3 +31,20 @@ def test_golden_sets_only_reference_seeded_keys():
             refs.append(f"list:{case['list']}")
     refs += [r for case in load_json("prioritize.json")["cases"] for r in case["gold_top3"]]
     assert set(refs) <= keys, sorted(set(refs) - keys)
+
+
+async def test_summary_suite_reports_latency_and_runs_the_judge():
+    (result,) = await run_suites(["summary"], judge=True)
+    assert "p95_latency_s" in result.metrics and result.metrics["p95_latency_s"] < 4.0
+    assert result.metrics["judge_faithful_rate"] == 1.0, result.failures
+    assert result.passed
+
+
+async def test_heuristic_judge_flags_invented_ids():
+    from app.chains.summarize import Summary
+    from tests.evals.run import HeuristicJudge, judge_summary, p95
+
+    ok = await judge_summary(HeuristicJudge(), "[L1] math", Summary(headline="Do L1", referenced_ids=["L1"]))
+    bad = await judge_summary(HeuristicJudge(), "[L1] math", Summary(headline="Do L7", referenced_ids=["L7"]))
+    assert ok.faithful and not bad.faithful and bad.unsupported == ["L7"]
+    assert p95([0.1] * 19 + [5.0]) == 0.1 and p95([0.1] * 10 + [5.0]) == 5.0 and p95([]) == 0.0

@@ -23,6 +23,7 @@ from app import threads, usage
 from app.db import pool
 from app.graphs.chat import ChatDeps, build_chat_graph, text_of
 from app.graphs.checkpointer import MySQLCheckpointSaver
+from app.llm import BLOCKED_REPLY, AIUnavailable
 
 log = logging.getLogger("taskquest.ai.chat")
 
@@ -106,3 +107,51 @@ async def history(deps: ChatDeps, thread_id: str) -> dict[str, Any]:
         elif isinstance(m, AIMessage) and text_of(m.content).strip() and not m.tool_calls:
             messages.append({"role": "assistant", "text": text_of(m.content)})
     return {"messages": messages, "pendingConfirm": await pending_actions(graph, config)}
+
+
+async def converse_turn(deps: ChatDeps, discord_id: str, channel_id: str, message: str) -> dict[str, Any]:
+    """Run one Discord conversation turn to completion (no streaming: Discord gets one message)."""
+    from app.graphs.converse import build_converse_graph, thread_id_for
+
+    thread_id = thread_id_for(discord_id, channel_id)
+    async with pool.connection() as conn:
+        if await threads.get_thread(conn, discord_id, thread_id, source=threads.DISCORD) is None:
+            await threads.create_thread(
+                conn, discord_id, f"Discord {channel_id}", thread_id=thread_id, source=threads.DISCORD
+            )
+    graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()))
+    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 40}
+    try:
+        state = await graph.ainvoke(user_input(discord_id, message), config)
+    except Exception as err:
+        log.exception("converse turn failed")
+        raise AIUnavailable("conversation failed") from err
+    finally:
+        async with pool.connection() as conn:
+            await usage.record(conn, discord_id, "chat", input_tokens=deps.tokens[0], output_tokens=deps.tokens[1])
+            await threads.touch_thread(conn, discord_id, thread_id)
+
+    reply = ""
+    for m in reversed(state["messages"]):
+        if isinstance(m, AIMessage) and not m.tool_calls and text_of(m.content).strip():
+            reply = text_of(m.content).strip()
+            break
+    sources = [{"id": r["id"], "title": r["title"]} for r in state.get("retrieved", []) if r["kind"] == "list"]
+    tools = [{"name": e["name"], "status": e["status"]} for e in state.get("tool_events", [])]
+    return {
+        "reply": reply or BLOCKED_REPLY,
+        "sources": sources,
+        "tools": tools,
+        "usage": {"input": deps.tokens[0], "output": deps.tokens[1]},
+    }
+
+
+async def forget_conversation(discord_id: str, channel_id: str) -> bool:
+    """Wipe this user's memory in one channel. True if there was anything to forget."""
+    from app.graphs.converse import thread_id_for
+
+    thread_id = thread_id_for(discord_id, channel_id)
+    async with pool.connection() as conn:
+        existed = await threads.delete_thread(conn, discord_id, thread_id, source=threads.DISCORD)
+    await MySQLCheckpointSaver(pool.get_engine()).adelete_thread(thread_id)
+    return existed

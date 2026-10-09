@@ -136,10 +136,26 @@ def _json(data: Any) -> str:
 # ── graph ────────────────────────────────────────────────────────────────────
 
 
-def build_chat_graph(deps: ChatDeps, checkpointer: Any):
-    chat_prompt, chat_version = load_prompt("chat_system", persona=True)
+READ_ONLY_REFUSAL = (
+    "Changes are not possible in this conversation. Nothing was changed. "
+    "Tell the user to use /ask (it asks them to confirm) or the TaskQuest website."
+)
+
+
+def build_chat_graph(
+    deps: ChatDeps,
+    checkpointer: Any,
+    *,
+    prompt_name: str = "chat_system",
+    read_only: bool = False,
+    fold_at: int = FOLD_AT,
+    keep: int = KEEP,
+):
+    """The chat agent. ``read_only`` (Discord conversation) binds only read tools and never pauses
+    for confirmation; any write call the model invents is answered with READ_ONLY_REFUSAL."""
+    chat_prompt, chat_version = load_prompt(prompt_name, persona=True)
     router_prompt, _ = load_prompt("router_system")
-    tools = langchain_tools()
+    tools = [t for t in langchain_tools() if not (read_only and TOOLS[t.name].write)]
     max_rounds = get_settings().max_tool_iterations
 
     def ctx_for(state: ChatState) -> ToolContext:
@@ -153,9 +169,9 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
 
     async def fold_memory(state: ChatState) -> dict:
         messages = state["messages"]
-        if len(messages) <= FOLD_AT:
+        if len(messages) <= fold_at:
             return {}
-        humans = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage) and i >= len(messages) - KEEP]
+        humans = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage) and i >= len(messages) - keep]
         cut = humans[0] if humans else max(i for i, m in enumerate(messages) if isinstance(m, HumanMessage))
         old = messages[:cut]
         if not old:
@@ -262,7 +278,7 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
         calls = pending_tool_calls(state["messages"])
         if not calls:
             return "end"
-        if any(c["name"] in TOOLS and TOOLS[c["name"]].write for c in calls):
+        if not read_only and any(c["name"] in TOOLS and TOOLS[c["name"]].write for c in calls):
             return "confirm"
         return "tools"
 
@@ -305,6 +321,8 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
             event: dict[str, Any] = {"name": call["name"], "status": "done"}
             if spec is None:
                 content, event["status"] = f"Unknown tool {call['name']}.", "error"
+            elif spec.write and read_only:
+                content, event["status"] = READ_ONLY_REFUSAL, "declined"
             elif spec.write and approvals.get(call_id) is not True:
                 decision = approvals.get(call_id)
                 if isinstance(decision, str):  # validation/ownership problem found before asking

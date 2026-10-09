@@ -4,6 +4,7 @@
  *   /list → overview → view (read-only) → edit (all mutations)
  *   /game → blackjack · rock paper scissors · hangman
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
+ *   /summary /prioritize /ask → AI service (when AI_ENABLED)
  *
  * XP and achievements are always shown ephemerally. Background jobs send
  * deadline DMs, clean up old lists and expire abandoned game sessions.
@@ -18,6 +19,7 @@ const { version } = require('./package.json');
 const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
+const aiCommands = require('./commands/ai');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
 
@@ -126,12 +128,16 @@ const COMMANDS = {
     leaderboard: gamification.leaderboard,
     toggle: gamification.toggle,
     help: gamification.help,
-    app: gamification.app
+    app: gamification.app,
+    summary: aiCommands.summary,
+    prioritize: aiCommands.prioritize,
+    ask: aiCommands.ask
 };
 
 async function route(interaction) {
     if (interaction.isAutocomplete()) {
         if (interaction.commandName === 'list') return listCommand.autocomplete(interaction);
+        if (interaction.commandName === 'summary') return aiCommands.autocomplete(interaction);
         return interaction.respond([]);
     }
 
@@ -143,6 +149,7 @@ async function route(interaction) {
 
     if (interaction.isButton()) {
         const id = interaction.customId;
+        if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
         if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
             return gamification.handleClassButton(interaction);

@@ -15,6 +15,7 @@ const { REST, Routes } = require('discord.js');
 const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
+const aiCommands = require('./commands/ai');
 
 const commands = [
     listCommand.data,
@@ -28,7 +29,10 @@ const commands = [
     gamification.leaderboardData,
     gamification.toggleData,
     gamification.helpData,
-    gamification.appData
+    gamification.appData,
+    aiCommands.summaryData,
+    aiCommands.prioritizeData,
+    aiCommands.askData
 ].map((c) => c.toJSON());
 
 function argValue(name) {

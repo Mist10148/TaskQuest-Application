@@ -324,7 +324,8 @@ function helpEmbed() {
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },
             { name: 'Classes', value: '`/class` `/leaderboard`', inline: true },
             { name: 'Settings', value: '`/toggle` `/automation`', inline: true },
-            { name: 'Web App', value: '`/app` Open dashboard', inline: true }
+            { name: 'Web App', value: '`/app` Open dashboard', inline: true },
+            { name: 'AI', value: '`/summary` `/prioritize` `/ask`', inline: true }
         )
         .setFooter({ text: 'TaskQuest v4.0' });
 }
@@ -977,7 +978,7 @@ function skillActionButtons(skillId, skill, userSkillLevel, requirementMet, user
 }
 
 module.exports = {
-    COLORS, bar, smoothBar, fancyBar, xpBar,
+    COLORS, PRIORITY_DOT, bar, smoothBar, fancyBar, xpBar,
     // Embeds
     listViewEmbed, listsOverviewEmbed, profileEmbed, achievementsEmbed, achievementUnlockEmbed,
     classShopEmbed, leaderboardEmbed, xpEmbed, pingEmbed, helpEmbed,

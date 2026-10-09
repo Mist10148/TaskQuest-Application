@@ -45,7 +45,11 @@ function errorTitle(code) {
             INSUFFICIENT_XP: 'Not enough XP',
             FORBIDDEN: 'Locked',
             GAMIFICATION_DISABLED: 'XP is off',
-            COOLDOWN: 'Slow down'
+            COOLDOWN: 'Slow down',
+            AI_QUOTA: 'Out of AI energy',
+            AI_DISABLED: 'AI is off',
+            AI_OPTED_OUT: 'AI is off for you',
+            AI_UNAVAILABLE: 'AI unavailable'
         }[code] || 'Error'
     );
 }

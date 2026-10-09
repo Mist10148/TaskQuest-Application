@@ -74,7 +74,11 @@ test('aiClient: upstream errors map to TaskQuest error codes', async () => {
         status = 500;
         await assert.rejects(aiClient.post('/v1/prioritize', '1', {}), { code: 'AI_UNAVAILABLE', status: 503 });
         status = 404;
-        await assert.rejects(aiClient.get('/v1/threads/x', '1'), { status: 404 });
+        await assert.rejects(aiClient.get('/v1/threads/x', '1'), { code: 'NOT_FOUND', status: 404 });
+        status = 409;
+        await assert.rejects(aiClient.post('/v1/chat/x/resume', '1', {}), { code: 'CONFLICT', status: 409 });
+        status = 400;
+        await assert.rejects(aiClient.post('/v1/summary', '1', {}), { code: 'VALIDATION', status: 400 });
     } finally {
         await ai.close();
     }

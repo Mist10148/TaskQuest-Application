@@ -386,3 +386,23 @@ async def test_blocked_or_empty_reply_becomes_a_friendly_message(seeded):
     )
     assert text(events) == BLOCKED_REPLY
     assert kinds(events)[-1] == "done" and "error" not in kinds(events)
+
+
+async def test_resume_checks_the_quota_before_running_the_write(http, monkeypatch):
+    calls: list = []
+    llm = make_llm([call("complete_item", {"item_id": "I1"}), AIMessage("All done.")], [RouterOut(intent="action")])
+    async with http(llm, make_web(calls=calls)) as c:
+        events = parse_sse((await c.post("/v1/chat", json={"message": "complete problems 1-10"}, headers=auth())).text)
+        thread_id = events[-1][1]["threadId"]
+        monkeypatch.setattr(get_settings(), "ai_daily_request_limit", 0)
+        r = await c.post(f"/v1/chat/{thread_id}/resume", json={"approved": True}, headers=auth())
+        assert r.status_code == 429 and calls == []
+
+
+async def test_side_calls_book_tokens_without_spending_quota(seeded):
+    from app import usage
+
+    async with pool.connection() as conn:
+        await usage.record(conn, UID, "chat", input_tokens=5, output_tokens=2)
+        await usage.record(conn, UID, "chat", input_tokens=7, output_tokens=1, requests=0)
+        assert await usage.requests_today(conn, UID) == 1

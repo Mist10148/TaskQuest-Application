@@ -1,7 +1,10 @@
-"""Feature 1: summarizer (LCEL-style linear chain, no graph needed).
+"""Feature 1: summarizer (an LCEL chain, no graph needed).
 
 load data -> render compact text -> cache check -> (map-reduce if huge) -> LLM structured
 output -> validate ids (retry once, then drop unknown ids) -> cache.
+
+The model call is ``SUMMARY_PROMPT | structured step``; the step goes through ``structured_call``
+so token counts and safety-blocked replies are handled like every other feature.
 """
 
 from __future__ import annotations
@@ -13,7 +16,9 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompt_values import PromptValue
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -35,6 +40,15 @@ class Summary(BaseModel):
     blockers: list[str] = Field(default_factory=list, description="Overdue or stuck items")
     next_steps: list[str] = Field(default_factory=list, description="Up to 3 concrete actions")
     referenced_ids: list[str] = Field(default_factory=list, description='Every task id mentioned, e.g. ["L42", "I311"]')
+
+
+# Values are substituted as plain text, so braces in the system prompt or task data are safe.
+SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", "{system}"),
+        ("human", "Mode: {mode}\nToday: {today}\n<tasks>\n{body}\n</tasks>{extra}"),
+    ]
+)
 
 
 class NotFound(Exception):
@@ -157,17 +171,19 @@ class Summarizer:
         self.system, self.prompt_version = load_prompt("summarize_system")
         self.tokens = [0, 0]
         self.llm_calls = 0
+        self.chain: Runnable[dict[str, Any], Summary] = SUMMARY_PROMPT | RunnableLambda(self._structured)
 
-    async def _ask(self, mode: str, today: date, body: str, extra: str = "") -> Summary:
-        messages = [
-            SystemMessage(self.system),
-            HumanMessage(f"Mode: {mode}\nToday: {today.isoformat()}\n<tasks>\n{body}\n</tasks>{extra}"),
-        ]
-        parsed, (i, o) = await structured_call(self.llm, Summary, messages)
+    async def _structured(self, prompt: PromptValue) -> Summary:
+        parsed, (i, o) = await structured_call(self.llm, Summary, prompt.to_messages())
         self.tokens[0] += i
         self.tokens[1] += o
         self.llm_calls += 1
         return parsed
+
+    async def _ask(self, mode: str, today: date, body: str, extra: str = "") -> Summary:
+        return await self.chain.ainvoke(
+            {"system": self.system, "mode": mode, "today": today.isoformat(), "body": body, "extra": extra}
+        )
 
     async def summarize_text(self, mode: str, today: date, rendered: RenderedInput) -> tuple[Summary, int]:
         """Returns (validated summary, number of unknown ids dropped)."""

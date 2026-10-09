@@ -167,3 +167,15 @@ async def test_summary_endpoint_maps_quota_to_429(seeded, app_with_llm, monkeypa
     monkeypatch.setattr(get_settings(), "ai_daily_request_limit", 0)
     r = await _post(app_with_llm(ScriptedLLM([good()])), UID, {"mode": "list", "listId": 1})
     assert r.status_code == 429 and r.json()["code"] == "AI_QUOTA"
+
+
+async def test_chain_passes_braces_in_task_text_through_untouched():
+    from app.chains.summarize import Summarizer
+
+    llm = ScriptedLLM([Summary(headline="ok")])
+    s = Summarizer(llm)
+    out = await s._ask("list", date(2026, 1, 2), "- {weird} quest {L1}")
+    assert out.headline == "ok" and s.llm_calls == 1 and s.tokens == [10, 5]
+    system, human = llm.calls[0]
+    assert system.type == "system" and human.type == "human"
+    assert "- {weird} quest {L1}" in human.content and "Today: 2026-01-02" in human.content

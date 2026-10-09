@@ -73,9 +73,9 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: mypy
-      # Unit and graph tests run offline against in-memory SQLite and fake models.
-      # Evals that call Gemini are not part of CI (run them manually with a key).
-      - run: pytest tests/unit tests/graphs
+      # Unit, graph and offline eval tests run against in-memory SQLite and fake models.
+      # Live evals that call Gemini are not part of CI: python -m tests.evals.run --live
+      - run: pytest tests/unit tests/graphs tests/evals
 
   audit:
     name: Dependency audit

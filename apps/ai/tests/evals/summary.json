@@ -1,0 +1,42 @@
+{
+  "description": "Summarizer golden set for user 900 in seed.json. Every referenced id must exist in the input (faithfulness). must_mention lists quests or subtasks a good summary references; must_not_mention ones it must not (out of scope or another user's).",
+  "user": "900",
+  "cases": [
+    {
+      "name": "digest flags overdue and due-soon quests",
+      "mode": "digest",
+      "must_mention": ["list:physics", "list:math", "list:groceries"],
+      "must_not_mention": ["list:moving", "list:secret"]
+    },
+    {
+      "name": "single quest: math",
+      "mode": "list", "list": "math",
+      "must_mention": ["list:math"],
+      "must_not_mention": ["list:physics"]
+    },
+    {
+      "name": "single quest: overdue physics report",
+      "mode": "list", "list": "physics",
+      "must_mention": ["list:physics"],
+      "must_not_mention": ["list:math"]
+    },
+    {
+      "name": "single quest with a long subtask",
+      "mode": "list", "list": "portfolio",
+      "must_mention": ["list:portfolio"],
+      "must_not_mention": []
+    },
+    {
+      "name": "weekly recap covers this week's completions",
+      "mode": "recap", "range": "week",
+      "must_mention": ["list:math", "list:gym", "list:physics"],
+      "must_not_mention": ["list:moving"]
+    },
+    {
+      "name": "daily recap covers only today",
+      "mode": "recap", "range": "day",
+      "must_mention": ["list:groceries"],
+      "must_not_mention": ["list:novel", "list:moving"]
+    }
+  ]
+}

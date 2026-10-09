@@ -1,0 +1,198 @@
+{
+  "description": "Eval fixture. Dates are offsets in days from the day the eval runs, so results do not drift over time. 'key' values are referenced by the eval sets as list:<key> and item:<key>.",
+  "users": {
+    "900": {
+      "xp": [
+        { "amount": 25, "hours_ago": 0 },
+        { "amount": 25, "hours_ago": 30 },
+        { "amount": 25, "hours_ago": 54 },
+        { "amount": 25, "hours_ago": 80 },
+        { "amount": 25, "hours_ago": 100 },
+        { "amount": 25, "hours_ago": 125 }
+      ],
+      "lists": [
+        {
+          "key": "math", "name": "Math homework", "category": "School", "priority": "HIGH", "deadline": 1,
+          "description": "Chapter 4 problems on quadratic equations",
+          "items": [
+            { "key": "math_p1", "name": "Problems 1-10", "done_hours_ago": 30 },
+            { "key": "math_p2", "name": "Problems 11-20" },
+            { "key": "math_check", "name": "Check answers with Sam" }
+          ]
+        },
+        {
+          "key": "physics", "name": "Physics lab report", "category": "School", "priority": "HIGH", "deadline": -2,
+          "description": "Pendulum experiment write-up",
+          "items": [
+            { "key": "physics_methods", "name": "Write methods section", "done_hours_ago": 100 },
+            { "key": "physics_graphs", "name": "Make graphs of period vs length" },
+            { "key": "physics_proof", "name": "Proofread the report" }
+          ]
+        },
+        {
+          "key": "history", "name": "History essay", "category": "School", "priority": "MEDIUM", "deadline": 6,
+          "description": "1500 words on the industrial revolution",
+          "items": [
+            { "key": "history_outline", "name": "Outline" },
+            { "key": "history_sources", "name": "Find five sources" },
+            { "key": "history_intro", "name": "Draft the introduction" }
+          ]
+        },
+        {
+          "key": "garage", "name": "Clean garage", "category": "Home", "priority": "LOW", "deadline": 20,
+          "items": [
+            { "key": "garage_tools", "name": "Sort tools" },
+            { "key": "garage_bikes", "name": "Donate old bikes" }
+          ]
+        },
+        {
+          "key": "groceries", "name": "Weekly groceries", "category": "Home", "priority": "MEDIUM", "deadline": 0,
+          "items": [
+            { "key": "groceries_milk", "name": "Milk" },
+            { "key": "groceries_eggs", "name": "Eggs" },
+            { "key": "groceries_spinach", "name": "Spinach", "done_hours_ago": 0 }
+          ]
+        },
+        {
+          "key": "taxes", "name": "File tax return", "category": "Finance", "priority": "HIGH", "deadline": 10,
+          "description": "Gather W-2 forms and receipts before filing",
+          "items": [
+            { "key": "taxes_w2", "name": "Download W-2" },
+            { "key": "taxes_receipts", "name": "Sort receipts" },
+            { "key": "taxes_submit", "name": "Submit online" }
+          ]
+        },
+        {
+          "key": "budget", "name": "Monthly budget review", "category": "Finance", "priority": "LOW",
+          "items": [{ "key": "budget_csv", "name": "Export bank statement CSV" }]
+        },
+        {
+          "key": "gym", "name": "Gym routine", "category": "Health", "priority": "MEDIUM",
+          "description": "Three workouts a week",
+          "items": [
+            { "key": "gym_legs", "name": "Leg day", "done_hours_ago": 54 },
+            { "key": "gym_push", "name": "Push day" },
+            { "key": "gym_pull", "name": "Pull day" }
+          ]
+        },
+        {
+          "key": "dentist", "name": "Book dentist appointment", "category": "Health", "priority": "MEDIUM", "deadline": 3,
+          "items": []
+        },
+        {
+          "key": "novel", "name": "Read novel", "category": "Personal",
+          "description": "Finish The Hobbit for fun",
+          "items": [
+            { "key": "novel_1", "name": "Chapters 1-5", "done_hours_ago": 125 },
+            { "key": "novel_2", "name": "Chapters 6-10" }
+          ]
+        },
+        {
+          "key": "guitar", "name": "Learn guitar chords", "category": "Personal", "priority": "LOW",
+          "items": [
+            { "key": "guitar_g", "name": "G major chord" },
+            { "key": "guitar_c", "name": "C major chord", "done_hours_ago": 80 },
+            { "key": "guitar_switch", "name": "Practice switching between chords" }
+          ]
+        },
+        {
+          "key": "portfolio", "name": "Update portfolio website", "category": "Work", "priority": "HIGH", "deadline": 4,
+          "description": "Add the TaskQuest project and new screenshots",
+          "items": [
+            { "key": "portfolio_shots", "name": "Take screenshots" },
+            {
+              "key": "portfolio_case", "name": "Write case study",
+              "description": "Write a case study for the portfolio about building TaskQuest: the problem it solves for students who juggle many assignments, the gamified XP design, the Discord bot and web dashboard architecture, the AI summarizer and prioritizer, what went wrong during the database migration and how it was fixed, and the measurable results such as weekly active users and quests completed."
+            },
+            { "key": "portfolio_deploy", "name": "Deploy the site" }
+          ]
+        },
+        {
+          "key": "resume", "name": "Polish resume", "category": "Work", "priority": "MEDIUM", "deadline": 14,
+          "items": [
+            { "key": "resume_job", "name": "Add the new job" },
+            { "key": "resume_review", "name": "Ask Alex to review it" }
+          ]
+        },
+        {
+          "key": "birthday", "name": "Plan mom's birthday", "category": "Family", "priority": "HIGH", "deadline": 8,
+          "description": "Surprise dinner with the family",
+          "items": [
+            { "key": "birthday_restaurant", "name": "Book the restaurant" },
+            { "key": "birthday_gift", "name": "Buy a gift" },
+            { "key": "birthday_rosa", "name": "Invite aunt Rosa" }
+          ]
+        },
+        {
+          "key": "moving", "name": "Old move checklist", "category": "Home", "priority": "MEDIUM", "deadline": -30,
+          "items": [
+            { "key": "moving_kitchen", "name": "Pack the kitchen", "done_hours_ago": 840 },
+            { "key": "moving_keys", "name": "Return the keys", "done_hours_ago": 744 }
+          ]
+        }
+      ]
+    },
+    "901": {
+      "lists": [
+        {
+          "key": "secret", "name": "Secret launch plan", "category": "Work", "priority": "HIGH", "deadline": 1,
+          "description": "Confidential roadmap for the math and physics product launch",
+          "items": [{ "key": "secret_roadmap", "name": "Hidden roadmap for groceries and taxes" }]
+        }
+      ]
+    },
+    "910": {
+      "lists": [
+        { "key": "s1_chem", "name": "Study for chemistry exam", "priority": "HIGH", "deadline": 1,
+          "items": [{ "name": "Review chapter 7" }, { "name": "Practice test" }] },
+        { "key": "s1_laundry", "name": "Laundry", "priority": "LOW", "deadline": 2, "items": [{ "name": "Wash towels" }] },
+        { "key": "s1_vacation", "name": "Plan summer vacation", "priority": "LOW", "deadline": 60,
+          "items": [{ "name": "Compare flights" }] },
+        { "key": "s1_library", "name": "Return library books", "priority": "MEDIUM", "deadline": -1,
+          "items": [{ "name": "Find the books" }] }
+      ]
+    },
+    "911": {
+      "lists": [
+        { "key": "s2_spanish", "name": "Learn Spanish", "priority": "HIGH",
+          "items": [{ "name": "Lesson 1" }, { "name": "Lesson 2" }, { "name": "Lesson 3" }] },
+        { "key": "s2_photos", "name": "Organize photos", "priority": "LOW", "items": [{ "name": "Sort 2024 photos" }] },
+        { "key": "s2_blog", "name": "Write blog post", "priority": "MEDIUM",
+          "items": [{ "name": "Outline", "done_hours_ago": 20 }, { "name": "Draft", "done_hours_ago": 10 }, { "name": "Publish" }] },
+        { "key": "s2_bike", "name": "Fix bike", "priority": "MEDIUM", "items": [{ "name": "Buy inner tube" }] }
+      ]
+    },
+    "912": {
+      "lists": [
+        { "key": "s3_passport", "name": "Renew passport", "priority": "HIGH", "deadline": 2,
+          "items": [{ "name": "Fill in the form" }, { "name": "Get photos taken" }] },
+        { "key": "s3_plants", "name": "Water plants", "priority": "LOW", "deadline": -3, "items": [{ "name": "Balcony plants" }] },
+        { "key": "s3_grandma", "name": "Call grandma", "priority": "MEDIUM", "deadline": 1, "items": [] },
+        { "key": "s3_fence", "name": "Paint the fence", "priority": "LOW", "deadline": 30, "items": [{ "name": "Buy paint" }] }
+      ]
+    },
+    "913": {
+      "lists": [
+        { "key": "s4_power", "name": "Pay electricity bill", "priority": "HIGH", "deadline": -1, "items": [] },
+        { "key": "s4_timesheet", "name": "Submit timesheet", "priority": "MEDIUM", "deadline": -2, "items": [] },
+        { "key": "s4_emails", "name": "Reply to emails", "priority": "LOW", "deadline": -5,
+          "items": [{ "name": "Inbox zero" }] },
+        { "key": "s4_backup", "name": "Back up laptop", "priority": "LOW", "deadline": 7, "items": [{ "name": "Buy a drive" }] }
+      ]
+    },
+    "914": {
+      "lists": [
+        { "key": "s5_doctor", "name": "Doctor checkup", "priority": "HIGH", "deadline": 5, "items": [] },
+        { "key": "s5_car", "name": "Car service", "priority": "MEDIUM", "deadline": 6, "items": [{ "name": "Call the garage" }] },
+        { "key": "s5_shoes", "name": "Buy running shoes", "priority": "LOW", "items": [{ "name": "Measure feet" }] },
+        { "key": "s5_report", "name": "Quarterly report", "priority": "HIGH", "deadline": 3,
+          "items": [{ "name": "Collect numbers", "done_hours_ago": 5 }, { "name": "Write summary" }] },
+        { "key": "s5_closet", "name": "Clear out closet", "priority": "LOW", "deadline": 40, "items": [{ "name": "Bag old clothes" }] }
+      ]
+    }
+  },
+  "docs": {
+    "gameplay": "# Quests\nCreate quests and complete their subtasks to earn XP. Every completed subtask awards 25 XP.\n\n## Levels\nEvery 100 lifetime XP raises your level by one. Spending XP never lowers your level.\n\n# Games\n\n## Blackjack\nBet XP against the dealer. A natural blackjack pays 3:2 and a push returns your bet.\n\n## Daily reward\nClaim the daily reward once every 24 hours. Claiming on consecutive days builds a streak that increases the bonus.\n",
+    "commands": "# Commands\n\n## /list\nCreate, view and manage your quests and their subtasks.\n\n## /daily\nClaim the daily XP reward and keep your streak alive.\n\n## /automation\nToggle deadline reminder notifications. When it is on, the bot sends you a DM on the day a quest is due.\n\n## /leaderboard\nShows the players with the most XP.\n"
+  }
+}

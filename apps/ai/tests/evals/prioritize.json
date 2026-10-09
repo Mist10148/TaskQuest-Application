@@ -1,0 +1,11 @@
+{
+  "description": "Prioritizer golden set. gold_top3 is a human ordering of what to do first for that user in seed.json. Agreement is the overlap between the predicted and gold top 3 (order-insensitive); top-1 accuracy is reported too.",
+  "cases": [
+    { "name": "student with mixed quests", "user": "900", "gold_top3": ["list:physics", "list:math", "list:groceries"] },
+    { "name": "exam week", "user": "910", "gold_top3": ["list:s1_chem", "list:s1_library", "list:s1_laundry"] },
+    { "name": "no deadlines", "user": "911", "gold_top3": ["list:s2_spanish", "list:s2_blog", "list:s2_bike"] },
+    { "name": "overdue low priority vs urgent high priority", "user": "912", "gold_top3": ["list:s3_passport", "list:s3_grandma", "list:s3_plants"] },
+    { "name": "several overdue", "user": "913", "gold_top3": ["list:s4_power", "list:s4_timesheet", "list:s4_emails"] },
+    { "name": "work and health deadlines", "user": "914", "gold_top3": ["list:s5_report", "list:s5_doctor", "list:s5_car"] }
+  ]
+}

@@ -150,3 +150,24 @@ test('chat reads the whole SSE stream; a 429 before streaming is a quota error',
         await srv.close();
     }
 });
+
+test('reindex and forget are fire-and-forget and never throw', async () => {
+    const srv = await listen((req, res) => {
+        res.writeHead(req.url === '/internal/forget' ? 500 : 204);
+        res.end();
+    });
+    try {
+        const c = client(srv.url);
+        assert.equal(c.reindex('7', '11'), undefined);
+        assert.equal(c.forget('7', 11), undefined); // a 500 is logged, not thrown
+        for (let i = 0; i < 50 && srv.requests.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+        assert.deepEqual(srv.requests.map((r) => [r.url, r.body]).sort(), [
+            ['/internal/forget', { discordId: '7', listId: 11 }],
+            ['/internal/index', { discordId: '7', listId: 11 }]
+        ]);
+    } finally {
+        await srv.close();
+    }
+    const off = createAiClient({ enabled: false, serviceUrl: 'http://127.0.0.1:9' });
+    assert.doesNotThrow(() => off.reindex('7', 1));
+});

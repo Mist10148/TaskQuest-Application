@@ -91,7 +91,7 @@ TaskQuest-Application/
 
 ## Quick start
 
-**Requirements:** Node.js 20+ and npm 10+, and a MySQL 8 or MariaDB 10.4+ database. XAMPP works for local development. You also need a Discord application from the [developer portal](https://discord.com/developers/applications).
+**Requirements:** Node.js 22+ and npm 10+, and a MySQL 8 or MariaDB 10.4+ database. XAMPP works for local development. You also need a Discord application from the [developer portal](https://discord.com/developers/applications).
 
 ```bash
 git clone https://github.com/Mist10148/TaskQuest-Application.git

@@ -13,7 +13,7 @@ from app.config import get_settings
 from app.db import pool
 from app.llm import AIUnavailable
 from app.observability import add_request_logging, configure_logging, configure_tracing
-from app.routers import chat, internal, v1
+from app.routers import chat, converse, internal, v1
 from app.usage import QuotaExceeded
 
 log = logging.getLogger("taskquest.ai")
@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
 
     app.include_router(v1.router)
     app.include_router(chat.router)
+    app.include_router(converse.router)
     app.include_router(internal.router)
     return app
 

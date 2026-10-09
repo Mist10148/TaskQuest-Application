@@ -73,9 +73,50 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: mypy
-      # Unit, graph and offline eval tests run against in-memory SQLite and fake models.
+      # Unit, graph and offline eval tests run against temporary SQLite files and fake models.
       # Live evals that call Gemini are not part of CI: python -m tests.evals.run --live
       - run: pytest tests/unit tests/graphs tests/evals
+
+  ai-mysql:
+    name: AI service on MySQL 8 (migrated schema)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: taskquest_ai_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ci-root-password
+      DB_NAME: taskquest_ai_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The Node migrations own the schema; the AI service never runs DDL.
+      - run: npm run db:migrate
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/ai/pyproject.toml
+      - run: pip install -e ".[dev]"
+        working-directory: apps/ai
+      - run: pytest tests/mysql -v
+        working-directory: apps/ai
+        env:
+          AI_TEST_DB_URL: mysql://root:ci-root-password@127.0.0.1:3306/taskquest_ai_test
 
   audit:
     name: Dependency audit

@@ -68,8 +68,10 @@ async function assertAllowed(discordId) {
 /** The quest option is a list id (picked from autocomplete) or a typed name. */
 async function resolveListId(discordId, value) {
     if (!value) throw new TaskQuestError('VALIDATION', 'Pick a quest with the `quest` option.', 400);
-    if (/^\d+$/.test(value)) return Number(value);
-    const match = (await tasks.getLists(discordId)).find((l) => l.name.toLowerCase() === value.trim().toLowerCase());
+    const lists = await tasks.getLists(discordId);
+    const name = value.trim().toLowerCase();
+    // Autocomplete sends the id; a typed value is a name (which may itself be all digits, e.g. "2026").
+    const match = lists.find((l) => l.name.toLowerCase() === name) || lists.find((l) => String(l.id) === value.trim());
     if (!match) throw new TaskQuestError('NOT_FOUND', `No quest named "${value}".`, 404);
     return match.id;
 }
@@ -150,16 +152,22 @@ async function handleButton(interaction) {
 
 /** Autocomplete for /summary quest: the user's quests, matched by name. */
 async function autocomplete(interaction) {
-    const focused = interaction.options.getFocused(true);
-    if (focused.name !== 'quest') return interaction.respond([]);
-    const q = String(focused.value || '').toLowerCase();
-    const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
-    return interaction.respond(
-        lists
-            .filter((l) => l.name.toLowerCase().includes(q))
-            .slice(0, 25)
-            .map((l) => ({ name: l.name.slice(0, 100), value: String(l.id) }))
-    );
+    try {
+        const focused = interaction.options.getFocused(true);
+        if (focused.name !== 'quest') return await interaction.respond([]);
+        const q = String(focused.value || '').toLowerCase();
+        const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
+        return await interaction.respond(
+            lists
+                .filter((l) => l.name.toLowerCase().includes(q))
+                .slice(0, 25)
+                .map((l) => ({ name: l.name.slice(0, 100), value: String(l.id) }))
+        );
+    } catch (err) {
+        // A failed lookup (or an expired interaction) must not become an unhandled rejection.
+        console.warn('[ai] autocomplete failed:', err.code || err.message);
+        return interaction.respond([]).catch(() => {});
+    }
 }
 
 module.exports = {

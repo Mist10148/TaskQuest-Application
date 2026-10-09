@@ -177,6 +177,14 @@ function createAiClient(options = {}) {
         return collectChat(events);
     }
 
+    /** Fire-and-forget internal call; logs and swallows every error (also when AI is off). */
+    function background(path, discordId, body) {
+        if (!config.enabled) return;
+        request('POST', path, discordId, { discordId: String(discordId), ...body }, { timeoutMs: 5000 }).catch((err) =>
+            console.warn(`[ai] ${path} failed:`, err.code || err.message)
+        );
+    }
+
     return {
         get enabled() {
             return config.enabled;
@@ -185,7 +193,11 @@ function createAiClient(options = {}) {
         get: (path, discordId, opts) => request('GET', path, discordId, undefined, opts),
         post: (path, discordId, body, opts) => request('POST', path, discordId, body, opts),
         delete: (path, discordId, opts) => request('DELETE', path, discordId, undefined, opts),
-        chat
+        chat,
+        /** Refresh one quest's embeddings after a write. Never throws. */
+        reindex: (discordId, listId) => background('/internal/index', discordId, { listId: Number(listId) }),
+        /** Drop a deleted quest's embeddings. Never throws. */
+        forget: (discordId, listId) => background('/internal/forget', discordId, { listId: Number(listId) })
     };
 }
 

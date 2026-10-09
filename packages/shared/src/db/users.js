@@ -56,6 +56,16 @@ async function updateSettings(discordId, settings) {
     return getUser(discordId);
 }
 
+const AI_CHAT_FORMATS = ['text', 'embed'];
+
+/** How the bot formats conversation replies for this user ('text' or 'embed'). */
+async function setAiChatFormat(discordId, format) {
+    if (!AI_CHAT_FORMATS.includes(format)) throw new Error(`Unknown AI chat format ${format}`);
+    await ensureUser(discordId);
+    await run(null, 'UPDATE users SET ai_chat_format = ? WHERE discord_id = ?', [format, String(discordId)]);
+    return format;
+}
+
 /** Flip one boolean setting and return its new value. */
 async function toggleSetting(discordId, key) {
     if (!SETTINGS.includes(key)) throw new Error(`Unknown setting ${key}`);
@@ -176,6 +186,8 @@ async function getXPHistory(discordId, limit = 20) {
 
 module.exports = {
     SETTINGS,
+    AI_CHAT_FORMATS,
+    setAiChatFormat,
     getUser,
     ensureUser,
     lockUser,

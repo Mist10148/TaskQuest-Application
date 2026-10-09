@@ -64,6 +64,11 @@ async def stream_turn(
                     for intr in update:
                         for action in intr.value.get("actions", []):
                             yield sse("confirm", action)
+                elif node == "agent" and update:
+                    # A blocked/empty reply is swapped for a fixed message that never streamed as tokens.
+                    for m in update.get("messages", []):
+                        if isinstance(m, AIMessage) and m.response_metadata.get("taskquest_fallback"):
+                            yield sse("token", {"text": text_of(m.content)})
                 elif node == "retrieve" and update:
                     sources = [
                         {"id": r["id"], "title": r["title"]} for r in update.get("retrieved", []) if r["kind"] == "list"

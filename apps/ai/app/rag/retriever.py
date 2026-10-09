@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
@@ -74,7 +74,7 @@ class TaskRetriever:
         category: str | None = None,
         today: date | None = None,
     ) -> list[Retrieved]:
-        today = today or date.today()
+        today = today or datetime.now(UTC).date()
         qvec = await embed_query(self.embedder, query)
         hits = await self.store.search(conn, discord_id, qvec, k * 4, SearchFilters(source_types=source_types))
         if not hits:

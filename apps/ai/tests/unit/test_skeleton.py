@@ -50,3 +50,18 @@ async def test_open_only_and_counts(seeded):
         lists = await repo.lists_for_user(conn, UID, open_only=True)
         math = next(lst for lst in lists if lst["name"] == "Math homework")
         assert (math["items_total"], math["items_completed"]) == (2, 1)
+
+
+def test_app_code_uses_utc_dates():
+    """Express stores timestamps in UTC; local-time "today" shifts deadlines and history weeks."""
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[2] / "app"
+    offenders = [
+        f"{path.relative_to(root)}:{n}"
+        for path in root.rglob("*.py")
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"\bdate\.today\(\)|datetime\.now\(\)|datetime\.utcnow\(\)", line)
+    ]
+    assert offenders == []

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -79,7 +79,7 @@ async def index_list(
 
 
 async def index_history(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str) -> int:
-    since = datetime.combine(week_start(datetime.now().date()) - timedelta(weeks=HISTORY_WEEKS), datetime.min.time())
+    since = datetime.combine(week_start(datetime.now(UTC).date()) - timedelta(weeks=HISTORY_WEEKS), datetime.min.time())
     completions = await repo.completions_since(conn, discord_id, since)
     chunks = history_chunks(discord_id, completions)
     existing = await store.existing_hashes(conn, discord_id, source_type="history")

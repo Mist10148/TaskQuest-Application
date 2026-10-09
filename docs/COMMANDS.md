@@ -21,6 +21,8 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/summary` | `mode` (briefing / recap / one quest), `quest` (autocomplete), `range` (today / week) | Ephemeral | ✨ AI summary of your quests. Needs AI enabled. |
 | `/prioritize` | `limit` (1–10, default 5) | Ephemeral | 🎯 AI ranking of what to do next, with reasons |
 | `/ask` | `question` (required, ≤ 2000 characters) | Ephemeral | 💬 Ask the AI assistant about your quests or how TaskQuest works. It can also create or complete quests after you approve. |
+| `/forget` | none | Ephemeral | 🧹 Make the AI forget your conversation with it in this channel |
+| `/ai-format` | `format` (plain messages / embeds) | Ephemeral | 🎨 How the AI replies when you mention it |
 
 ## `/list` flow
 
@@ -82,6 +84,18 @@ You can learn skills from the Default tree and from trees of classes you own. Ev
 - **`/prioritize`**: when the model is unavailable or your daily AI quota is used, the ranking falls back to deadlines and priority, and the reply says so.
 - **`/ask`**: each use starts a new conversation (continue it on the web Chat page). When the assistant wants to change something, the reply shows the change with **Approve** and **Cancel**. Nothing changes until you approve, and XP and achievements are awarded exactly as if you had done it yourself.
 - All three share the per-user daily AI quota (`AI_DAILY_REQUEST_LIMIT`) with the web app. Replies are marked as AI-generated.
+
+### Talking to the bot (@mention, reply or DM)
+
+With AI enabled, the bot also chats like a person. **@mention it**, **reply to one of its messages**, or **DM it**. Its voice is calm, witty and kind. It teases back, gets snappy if you are rude, never uses emojis, and writes its own actions in *italics*.
+
+- It remembers the conversation **per user, per channel**, so other people in the channel never see your quests through it. `/forget` wipes its memory of you in that channel.
+- It can talk about anything and look up your quests, but it **cannot change** anything from a mention. Ask it to complete or add something and it points you to `/ask`, which asks you to approve.
+- Attach an image and it looks at it. Attach a `.txt` file and it reads the file as your message.
+- Long answers are split into several messages or sent as `response.txt`. `/ai-format` switches to embeds.
+- It ignores other bots, answers each user at most once every 3 seconds, and its replies never ping anyone.
+- It uses the same daily AI quota and the same opt-out as the other AI features.
+- A reply with the ping turned off only reaches the bot if the host enabled the Message Content intent (`AI_CHAT_MESSAGE_CONTENT=true`, see [DEPLOYMENT.md](DEPLOYMENT.md#ai-service-appsai-optional)).
 
 ## Background behaviour
 

@@ -110,7 +110,7 @@ In production, set the variables in your host's dashboard instead. Because the b
 
 ### AI service (`apps/ai`, optional)
 
-Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design. The web service, the bot (for `/summary`, `/prioritize` and `/ask`) and the AI service read these:
+Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) for how it is built. The web service, the bot (for `/summary`, `/prioritize`, `/ask`, `/forget`, `/ai-format` and @mention chat) and the AI service read these:
 
 | Variable | Where | Description |
 |---|---|---|
@@ -118,6 +118,7 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design. The w
 | `AI_SERVICE_URL` | web, bot | Base URL of the AI service (`http://localhost:8000` locally; the private service host on Render) |
 | `AI_INTERNAL_TOKEN` | web, bot, ai | Shared secret, **at least 32 characters**, identical everywhere. The web server refuses to start with `AI_ENABLED=true` and a short token. |
 | `AI_TIMEOUT_MS` | web, bot | Per-request timeout for non-streaming calls (default `20000`) |
+| `AI_CHAT_MESSAGE_CONTENT` | bot | `true` also answers replies to the bot that have the ping turned off. This needs the privileged **Message Content** intent in the Discord Developer Portal (Bot → Privileged Gateway Intents), otherwise the bot fails to log in. Mentions and DMs work without it (default `false`). |
 | `WEB_INTERNAL_URL` | ai | Base URL of the web service, used by chat tools to make confirmed changes (`/internal/*`) |
 | `GEMINI_API_KEY` | ai | Google AI Studio key. Server-side only, never a `VITE_*` variable. |
 | `GEMINI_CHAT_MODEL`, `GEMINI_REASONING_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM` | ai | Model ids and embedding size (defaults: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-embedding-001`, `768`). **Check them against Google's current model list.** Changing the embedding model re-embeds everything automatically (vectors are stored with the model name). |
@@ -125,7 +126,7 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design. The w
 | `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate MySQL user for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables. It never writes tasks directly. |
 | `LANGSMITH_API_KEY` | ai | Optional tracing |
 
-The AI service reads the same root `.env` as the other apps, plus the database variables above. It needs migrations `003_ai` and `004_lists_updated_at`, which the web service applies on startup.
+The AI service reads the same root `.env` as the other apps, plus the database variables above. It needs migrations `003_ai` to `006_ai_chat_format`, which the web service and the bot apply on startup.
 
 **Local run**
 

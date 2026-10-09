@@ -6,7 +6,7 @@ This document is the blueprint for adding three AI features to TaskQuest, all po
 2. **AI Prioritizer**: ranks open quests and explains what to do next.
 3. **AI Chat**: a conversational assistant that knows the user's tasks (via RAG), can answer "how do I…" questions about TaskQuest, and can create or complete tasks after the user confirms.
 
-> Status: **implemented, phases 0–7**, including the Discord bot commands. It has been verified offline only (the live evals have not been run yet); see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The architecture as it stands today is in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). The sections below are the original design; where the code differs, *As built* says so.
+> Status: **implemented, phases 0–7**, including the Discord bot commands, plus Discord @mention chat with a persona (see [AI_ARCHITECTURE.md §7](AI_ARCHITECTURE.md#7-discord-conversation-converse)). It has been verified offline only (the live evals have not been run yet); see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The architecture as it stands today is in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). The sections below are the original design; where the code differs, *As built* says so.
 
 ## Contents
 

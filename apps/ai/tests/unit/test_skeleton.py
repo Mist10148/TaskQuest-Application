@@ -65,3 +65,12 @@ def test_app_code_uses_utc_dates():
         if re.search(r"\bdate\.today\(\)|datetime\.now\(\)|datetime\.utcnow\(\)", line)
     ]
     assert offenders == []
+
+
+async def test_get_list_with_items_loads_only_the_callers_list(seeded):
+    async with seeded.connect() as conn:
+        lst = await repo.get_list_with_items(conn, UID, 1)
+        assert lst is not None and lst["name"] == "Math homework" and lst["items_total"] == 2
+        assert [i["name"] for i in lst["items"]] == ["Problems 1-10", "Problems 11-20"]
+        assert await repo.get_list_with_items(conn, UID, 4) is None  # another user's quest
+        assert await repo.get_list_with_items(conn, UID, 999) is None

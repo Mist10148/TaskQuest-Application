@@ -48,11 +48,12 @@ _LIST_COLUMNS = """
 """
 
 
-async def lists_for_user(conn: AsyncConnection, discord_id: str, *, open_only: bool = False) -> list[dict[str, Any]]:
-    """The user's lists with item counts. ``open_only`` keeps lists with no items or unfinished items."""
+async def _load_lists(conn: AsyncConnection, discord_id: str, list_id: int | None = None) -> list[dict[str, Any]]:
+    where = "l.discord_id = :uid" + (" AND l.id = :lid" if list_id is not None else "")
     rows = _rows(
         await conn.execute(
-            text(f"SELECT {_LIST_COLUMNS} FROM lists l WHERE l.discord_id = :uid ORDER BY l.id"), {"uid": discord_id}
+            text(f"SELECT {_LIST_COLUMNS} FROM lists l WHERE {where} ORDER BY l.id"),
+            {"uid": discord_id, "lid": list_id},
         )
     )
     for r in rows:
@@ -61,6 +62,12 @@ async def lists_for_user(conn: AsyncConnection, discord_id: str, *, open_only: b
         r["deadline"] = to_date(r["deadline"])
         r["created_at"] = to_datetime(r["created_at"])
         r["last_activity"] = to_datetime(r["last_activity"])
+    return rows
+
+
+async def lists_for_user(conn: AsyncConnection, discord_id: str, *, open_only: bool = False) -> list[dict[str, Any]]:
+    """The user's lists with item counts. ``open_only`` keeps lists with no items or unfinished items."""
+    rows = await _load_lists(conn, discord_id)
     if open_only:
         rows = [r for r in rows if r["items_total"] == 0 or r["items_completed"] < r["items_total"]]
     return rows
@@ -83,11 +90,13 @@ async def items_for_list(conn: AsyncConnection, discord_id: str, list_id: int) -
 
 
 async def get_list_with_items(conn: AsyncConnection, discord_id: str, list_id: int) -> dict[str, Any] | None:
-    for lst in await lists_for_user(conn, discord_id):
-        if lst["id"] == list_id:
-            lst["items"] = await items_for_list(conn, discord_id, list_id)
-            return lst
-    return None
+    """One of the user's lists with its items, or None (also when it belongs to someone else)."""
+    rows = await _load_lists(conn, discord_id, list_id)
+    if not rows:
+        return None
+    lst = rows[0]
+    lst["items"] = await items_for_list(conn, discord_id, list_id)
+    return lst
 
 
 async def all_items_for_user(conn: AsyncConnection, discord_id: str) -> list[dict[str, Any]]:

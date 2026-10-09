@@ -34,9 +34,16 @@ class WebClient:
                 )
         except httpx.HTTPError as err:
             raise ToolError("TaskQuest could not be reached right now.") from err
-        data = response.json() if response.content else {}
+        try:
+            data = response.json() if response.content else {}
+        except ValueError:
+            # A proxy error page (HTML 502 etc.) or a truncated body.
+            data = None
         if response.status_code >= 400:
-            raise ToolError(str(data.get("error") or f"request failed ({response.status_code})"))
+            error = data.get("error") if isinstance(data, dict) else None
+            raise ToolError(str(error or f"TaskQuest request failed ({response.status_code})."))
+        if not isinstance(data, dict):
+            raise ToolError("TaskQuest sent an unexpected response.")
         return data
 
     async def create_list(self, discord_id: str, fields: dict[str, Any]) -> dict[str, Any]:

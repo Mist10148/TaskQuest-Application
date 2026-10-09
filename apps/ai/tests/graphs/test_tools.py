@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 
 import httpx
@@ -126,3 +127,22 @@ def test_argument_validation():
         TOOLS["create_list"].args(name="x", deadline="tomorrow")
     with pytest.raises(ValidationError):
         TOOLS["create_list"].args(name="x", priority="URGENT")
+
+
+@pytest.mark.parametrize(
+    ("status", "content", "message"),
+    [
+        (502, b"<html>Bad gateway</html>", "failed (502)"),
+        (200, b"<html>not json</html>", "unexpected response"),
+        (200, b"[1, 2]", "unexpected response"),
+        (400, b'{"error": "Quest name is required."}', "Quest name is required."),
+    ],
+)
+async def test_web_client_turns_bad_responses_into_tool_errors(status, content, message):
+    web = WebClient(
+        base_url="http://web",
+        token="secret-token",
+        transport=httpx.MockTransport(lambda request: httpx.Response(status, content=content)),
+    )
+    with pytest.raises(ToolError, match=re.escape(message)):
+        await web.create_list(UID, {"name": "x"})

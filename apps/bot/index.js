@@ -5,6 +5,7 @@
  *   /game → blackjack · rock paper scissors · hangman
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
  *   /summary /prioritize /ask → AI service (when AI_ENABLED)
+ *   @mention / reply / DM → AI conversation (chat.js)
  *
  * XP and achievements are always shown ephemerally. Background jobs send
  * deadline DMs, clean up old lists and expire abandoned game sessions.
@@ -20,6 +21,7 @@ const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
+const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
 
@@ -33,11 +35,15 @@ const server = http.createServer((req, res) => {
 
 // ─── Discord client ──────────────────────────────────────────────────────────
 
-const client = new Client({
-    // No privileged intents: slash commands only need Guilds; DMs are sent, not read.
-    intents: [GatewayIntentBits.Guilds],
-    partials: [Partials.Channel]
-});
+const intents = [GatewayIntentBits.Guilds];
+if (process.env.AI_ENABLED === 'true') {
+    // Conversation chat. Without Message Content, Discord still sends the text of messages
+    // that mention the bot and of DMs; the privileged intent is opt-in for ping-less replies.
+    intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages);
+    if (process.env.AI_CHAT_MESSAGE_CONTENT === 'true') intents.push(GatewayIntentBits.MessageContent);
+}
+
+const client = new Client({ intents, partials: [Partials.Channel] });
 
 // ─── Background jobs ─────────────────────────────────────────────────────────
 
@@ -190,6 +196,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
     }
 });
+
+client.on(Events.MessageCreate, (message) => chat.handleMessage(message, { log: (scope, msg) => log('⚠️', 'AI-CHAT', `${scope} ${msg}`) }));
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
 

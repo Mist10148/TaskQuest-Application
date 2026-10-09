@@ -193,7 +193,8 @@ def build_graph(conn: AsyncConnection, llm_factory: Callable[..., Any]):
     system, version = load_prompt("prioritize_system")
 
     async def load_tasks(state: PrioritizeState) -> dict:
-        lists = await repo.lists_for_user(conn, state["discord_id"], open_only=True)
+        # prioritize() passes the lists it already loaded for the cache key.
+        lists = state.get("lists") or await repo.lists_for_user(conn, state["discord_id"], open_only=True)
         return {"lists": lists, "errors": [], "retries": 0, "llm_failed": False, "used_fallback": False}
 
     async def compute_features(state: PrioritizeState) -> dict:
@@ -324,7 +325,7 @@ async def prioritize(
     if key in _cache:
         return {**_cache[key], "cached": True}
 
-    state = await graph.ainvoke({"discord_id": discord_id, "today": today, "limit": limit})
+    state = await graph.ainvoke({"discord_id": discord_id, "today": today, "limit": limit, "lists": lists})
     out = {
         "ranked": state["result"],
         "focusMessage": state.get("focus_message", ""),

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
+import tempfile
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 
 SCHEMA = [
     "CREATE TABLE users (discord_id TEXT PRIMARY KEY, player_xp INT DEFAULT 0, lifetime_xp INT DEFAULT 0,"
@@ -36,9 +40,24 @@ SCHEMA = [
 
 
 async def create_engine() -> AsyncEngine:
-    """A fresh in-memory database with the schema applied."""
-    eng = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    """A fresh temporary SQLite database with the schema applied. Release it with ``drop_engine``.
+
+    A file (not ``:memory:`` + StaticPool) so every ``engine.begin()`` gets its own connection, like
+    MySQL in production. LangGraph saves checkpoints and writes from concurrent tasks; on one shared
+    connection their transactions interleave and writes (e.g. interrupts) can be lost.
+    """
+    fd, path = tempfile.mkstemp(prefix="taskquest-ai-", suffix=".db")
+    os.close(fd)
+    eng = create_async_engine(f"sqlite+aiosqlite:///{path}", poolclass=NullPool, connect_args={"timeout": 30})
     async with eng.begin() as conn:
         for stmt in SCHEMA:
             await conn.execute(text(stmt))
     return eng
+
+
+async def drop_engine(eng: AsyncEngine) -> None:
+    """Dispose the engine and delete its database file."""
+    await eng.dispose()
+    if eng.url.database:
+        with contextlib.suppress(OSError):
+            os.remove(eng.url.database)

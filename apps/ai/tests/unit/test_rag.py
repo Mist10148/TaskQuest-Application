@@ -161,7 +161,7 @@ async def test_reconcile_catches_list_only_edits(seeded):
         assert await indexer.stale_lists(conn, store) == [(UID, 1)]
         calls = emb.doc_calls
         assert await indexer.reconcile(conn, store, emb) == 1
-        assert emb.doc_calls == calls + 1
+        assert emb.doc_calls == calls + 2  # the list, and the history week that names the quest
         content = (await conn.execute(text("SELECT content FROM ai_embeddings WHERE source_id = 'L1'"))).scalar()
         assert "Algebra homework" in content
         assert await indexer.stale_lists(conn, store) == []
@@ -206,6 +206,7 @@ async def test_retrieval_is_fresh_scoped_and_filtered(seeded):
         # Fresh re-read: completion state comes from MySQL, not the stale chunk
         await conn.execute(text("UPDATE items SET completed = 1 WHERE list_id = 1"))
         done = await r.retrieve(conn, UID, "math homework", k=3, status="done")
+        done = [x for x in done if x.kind == "list"]  # weekly history chunks are "done" too
         assert [x.id for x in done] == ["L1"] and "- [x] Problems 1-10" in done[0].text
         open_ = await r.retrieve(conn, UID, "math homework", k=3, status="open")
         assert "L1" not in [x.id for x in open_]
@@ -259,3 +260,26 @@ async def test_opted_out_users_are_not_embedded_and_lose_their_vectors(seeded, m
         assert n == 0
     finally:
         runtime.set_runtime(None, None)
+
+
+async def test_history_chunks_carry_weekly_xp_and_reconcile_keeps_them_fresh(seeded):
+    store, emb = make_store(), FakeEmbedder()
+    async with seeded.begin() as conn:
+        assert UID in await indexer.stale_history_users(conn, store)
+        await indexer.reconcile(conn, store, emb)
+        content = (await conn.execute(text("SELECT content FROM ai_embeddings WHERE source_type = 'history'"))).scalar()
+        assert "Problems 11-20" in content and "earned 25 XP" in content
+        assert await indexer.stale_history_users(conn, store) == []
+
+        # New XP after the chunk was written makes the user stale again; reconcile re-embeds once.
+        await conn.execute(text("UPDATE ai_embeddings SET updated_at = '2000-01-01 00:00:00'"))
+        assert await indexer.stale_history_users(conn, store) == [UID]
+        calls = emb.doc_calls
+        await indexer.reconcile(conn, store, emb)
+        assert emb.doc_calls == calls  # same text: touched, not re-embedded
+        assert await indexer.stale_history_users(conn, store) == []
+
+        # Opted-out users are skipped
+        await conn.execute(text("UPDATE users SET ai_enabled = 0 WHERE discord_id = :u"), {"u": UID})
+        await conn.execute(text("DELETE FROM ai_embeddings"))
+        assert await indexer.stale_history_users(conn, store) == []

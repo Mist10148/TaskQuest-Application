@@ -8,7 +8,7 @@ os.environ.setdefault("AI_INTERNAL_TOKEN", "t" * 40)
 os.environ.setdefault("DB_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("GEMINI_API_KEY", "")
 
-from datetime import datetime, timedelta  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
 
 import httpx  # noqa: E402
 import pytest_asyncio  # noqa: E402
@@ -34,7 +34,7 @@ async def engine():
 @pytest_asyncio.fixture
 async def seeded(engine):
     """Two users. User 111 has three quests; user 222 has one (must never leak)."""
-    now = datetime.now().replace(microsecond=0)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)  # naive UTC, as Express stores it
     today = now.date()
     async with engine.begin() as conn:
         for uid in (UID, OTHER):

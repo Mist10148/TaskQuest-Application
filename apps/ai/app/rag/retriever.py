@@ -97,6 +97,9 @@ class TaskRetriever:
                     continue
                 urgency = urgency_boost(lst["deadline"], today, open_=is_open)
             else:
+                # Quest filters exclude docs and history; weekly history counts as finished work.
+                if category or status == "open" or (status == "done" and hit.source_type != "history"):
+                    continue
                 urgency = 0.0
             score = W_COSINE * hit.score + W_KEYWORD * keyword_overlap(query, hit.content) + W_URGENCY * urgency
             scored.append((score, Retrieved(**{**item.__dict__, "score": score})))

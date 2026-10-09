@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from collections import defaultdict
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -78,12 +79,24 @@ async def index_list(
     return n
 
 
+def history_since() -> datetime:
+    """Start of the history window (naive UTC, like the stored timestamps)."""
+    return datetime.combine(week_start(datetime.now(UTC).date()) - timedelta(weeks=HISTORY_WEEKS), datetime.min.time())
+
+
 async def index_history(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str) -> int:
-    since = datetime.combine(week_start(datetime.now(UTC).date()) - timedelta(weeks=HISTORY_WEEKS), datetime.min.time())
+    since = history_since()
     completions = await repo.completions_since(conn, discord_id, since)
-    chunks = history_chunks(discord_id, completions)
+    xp_by_week: dict[date, int] = defaultdict(int)
+    for at, amount in await repo.xp_events_since(conn, discord_id, since):
+        xp_by_week[week_start(at.date())] += amount
+    chunks = history_chunks(discord_id, completions, dict(xp_by_week))
     existing = await store.existing_hashes(conn, discord_id, source_type="history")
-    return await _sync(conn, store, embedder, discord_id, chunks, existing, stale_type="history")
+    n = await _sync(conn, store, embedder, discord_id, chunks, existing, stale_type="history")
+    unchanged = [c.source_id for c in chunks if existing.get(("history", c.source_id)) == c.content_hash]
+    if unchanged:
+        await store.touch(conn, "history", unchanged)
+    return n
 
 
 async def index_user(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str) -> int:
@@ -138,12 +151,54 @@ async def stale_lists(conn: AsyncConnection, store: MySQLNumpyStore) -> list[tup
     return out
 
 
+async def stale_history_users(conn: AsyncConnection, store: MySQLNumpyStore) -> list[str]:
+    """Users (who allow AI) with completions or XP in the history window newer than their history chunks."""
+    since = history_since()
+    activity = (
+        await conn.execute(
+            text(
+                "SELECT u.discord_id, "
+                "(SELECT MAX(i.completed_at) FROM items i JOIN lists l ON l.id = i.list_id "
+                " WHERE l.discord_id = u.discord_id AND i.completed = 1 AND i.completed_at >= :since), "
+                "(SELECT MAX(x.created_at) FROM xp_transactions x "
+                " WHERE x.discord_id = u.discord_id AND x.amount > 0 AND x.created_at >= :since) "
+                "FROM users u WHERE u.ai_enabled = 1"
+            ),
+            {"since": since},
+        )
+    ).all()
+    embedded = {
+        r[0]: repo.to_datetime(r[1])
+        for r in (
+            await conn.execute(
+                text(
+                    "SELECT discord_id, MAX(updated_at) FROM ai_embeddings "
+                    "WHERE source_type = 'history' AND model = :m GROUP BY discord_id"
+                ),
+                {"m": store.model},
+            )
+        ).all()
+    }
+    out = []
+    for discord_id, last_done, last_xp in activity:
+        changes = [d for d in (repo.to_datetime(last_done), repo.to_datetime(last_xp)) if d is not None]
+        at = embedded.get(discord_id)
+        if changes and (at is None or max(changes) > at):
+            out.append(discord_id)
+    return out
+
+
 async def reconcile(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder) -> int:
-    """Catch lists whose fire-and-forget re-index call was missed."""
+    """Catch lists whose fire-and-forget re-index call was missed, and refresh weekly history.
+
+    Returns the number of lists re-indexed.
+    """
     fixed = 0
     for discord_id, list_id in await stale_lists(conn, store):
         await index_list(conn, store, embedder, discord_id, list_id)
         fixed += 1
+    for discord_id in await stale_history_users(conn, store):
+        await index_history(conn, store, embedder, discord_id)
     return fixed
 
 

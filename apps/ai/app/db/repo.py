@@ -121,6 +121,23 @@ async def completions_since(conn: AsyncConnection, discord_id: str, since: datet
     return rows
 
 
+async def xp_events_since(conn: AsyncConnection, discord_id: str, since: datetime) -> list[tuple[datetime, int]]:
+    """Positive XP grants at or after ``since`` as (created_at, amount)."""
+    result = await conn.execute(
+        text(
+            "SELECT created_at, amount FROM xp_transactions "
+            "WHERE discord_id = :uid AND amount > 0 AND created_at >= :since ORDER BY created_at"
+        ),
+        {"uid": discord_id, "since": since},
+    )
+    out = []
+    for created_at, amount in result.all():
+        at = to_datetime(created_at)
+        if at is not None:
+            out.append((at, int(amount)))
+    return out
+
+
 async def xp_since(conn: AsyncConnection, discord_id: str, since: datetime) -> int:
     result = await conn.execute(
         text(

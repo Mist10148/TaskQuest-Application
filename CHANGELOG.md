@@ -18,8 +18,36 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
   - **Eval suites** for retrieval, the summarizer and the prioritizer (`python -m tests.evals.run [--live]`), and `mypy` in CI.
   - `@taskquest/shared/ai`: a client for the AI service for non-Express callers.
 
+- **Talk to the bot.** With AI enabled, the bot answers @mentions, replies and DMs in a persona modelled on the Zephyr bot: it sounds human, is witty, teases back, uses no emojis and writes its actions in *italics*. Zephyr's sexual lines were not carried over. Memory is kept per user per channel, it can read quests but not change them, and it can look at attached images.
+  - New `/forget` and `/ai-format` commands.
+  - Backed by the new `POST /v1/converse` LangGraph flow, which runs the chat graph in read-only mode.
+  - Migrations `005_ai_thread_source` and `006_ai_chat_format`. Re-register slash commands after upgrading.
+- Web chat and `/ask` use the same persona. It is layered after the core rules, so grounding and confirmations still take priority.
+- Weekly history chunks now include the XP earned that week, and the reconcile job keeps them fresh.
+- The summarizer's model call is now a LangChain LCEL chain.
+- Explicit Gemini safety settings, and a friendly reply when a response is blocked.
+- Evals: p95 summarizer latency, an optional LLM-as-judge (`--judge`), and 50 retrieval queries.
+- CI: the AI service's SQL runs against MySQL 8 with the migrations applied (`ai-mysql` job).
+- [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) explains how the LangChain/LangGraph service is built.
+
+### Changed
+
+- Node 22 is now required. Node 20 is end-of-life, and its test runner could not expand the test globs, which had broken CI since 8 October.
+- LangChain, LangGraph and `langgraph-checkpoint` are pinned to their tested major versions.
+
 ### Fixed
 
+- Through Express, resuming a chat with nothing waiting returned 503 instead of 409.
+- On MySQL, every embedding and LangGraph checkpoint write failed ("'str' object is not callable"), because PyMySQL 1.2 broke aiomysql's bytes escaping. PyMySQL is now pinned below 1.2. Found by the new `ai-mysql` CI job.
+- The AI service ignored `DB_SSL_CA`, so TLS to hosts with a custom CA failed.
+- Non-JSON error pages from Express crashed chat tools instead of producing a clear error.
+- Resuming a paused chat skipped the daily quota check, and title generation was never counted in usage.
+- Retrieval and history indexing used the host's local date instead of UTC.
+- Quest filters in search let help-doc and history chunks through.
+- Turning AI off kept a user's vectors until their next edit; they are now deleted immediately.
+- Edits made in Discord were not re-indexed until the next reconcile pass.
+- `/summary` read a quest whose name is only digits (e.g. "2026") as a list id, and a failed autocomplete lookup was unhandled.
+- A shared in-memory SQLite connection made the chat confirmation tests fail on Python 3.12.
 - The AI reconcile job now notices edits to a quest itself (name, deadline, priority), not only to its subtasks. New migration `004_lists_updated_at` adds `lists.updated_at`.
 
 ## [4.0.0] - 2026-10-08

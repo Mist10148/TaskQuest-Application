@@ -41,3 +41,10 @@ def test_reject_unauthorized_false_disables_checks():
     assert ctx is not None
     assert ctx.verify_mode == ssl.CERT_NONE
     assert not ctx.check_hostname
+
+
+def test_aiomysql_can_escape_blob_parameters():
+    """Guards the PyMySQL pin: embeddings and checkpoints are sent to MySQL as bytes."""
+    from aiomysql.connection import Connection
+
+    assert Connection.escape(None, b"\x00ab") == r"_binary'\0ab'"  # type: ignore[arg-type]

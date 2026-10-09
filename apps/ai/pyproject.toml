@@ -19,6 +19,9 @@ dependencies = [
     "langgraph-checkpoint>=4,<5",
     "sqlalchemy[asyncio]>=2.0",
     "aiomysql>=0.2",
+    # PyMySQL 1.2 replaced converters.escape_bytes_prefixed (which aiomysql imports) with a string, so
+    # every BLOB parameter (embeddings, checkpoints) fails with "'str' object is not callable".
+    "PyMySQL>=1.1,<1.2",
     "numpy>=1.26",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",

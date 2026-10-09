@@ -24,9 +24,9 @@ envVarGroups:
       - key: DB_SSL_CA         # optional: provider CA certificate (PEM contents)
         sync: false
 
-  # Optional AI features (docs/AI_INTEGRATION.md). Shared by web and ai so both
-  # get the same service-to-service token. Keep AI_ENABLED=false on web until the
-  # taskquest-ai service is deployed and GEMINI_API_KEY is set.
+  # Optional AI features (docs/AI_INTEGRATION.md). Shared by web, bot and ai so
+  # all three get the same service-to-service token. Keep AI_ENABLED=false on web
+  # and bot until the taskquest-ai service is deployed and GEMINI_API_KEY is set.
   - name: taskquest-ai
     envVars:
       - key: AI_INTERNAL_TOKEN
@@ -80,6 +80,12 @@ services:
       - key: CLIENT_ID
         sync: false
       - key: WEB_APP_URL
+        sync: false
+      # /summary, /prioritize and /ask call taskquest-ai directly
+      - fromGroup: taskquest-ai
+      - key: AI_ENABLED
+        value: "false"          # set to "true" once taskquest-ai is running
+      - key: AI_SERVICE_URL     # internal host of the private service, e.g. http://taskquest-ai:10000
         sync: false
 
   # Private AI service (Gemini + LangChain + LangGraph). Reachable only from the

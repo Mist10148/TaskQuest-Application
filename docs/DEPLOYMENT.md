@@ -164,7 +164,7 @@ The repository includes [`render.yaml`](../render.yaml).
 
 ## 5. Deploying elsewhere
 
-Any Node 20 host works, including Railway, Fly.io, a VPS with systemd or PM2, and Docker.
+Any Node 22 host works, including Railway, Fly.io, a VPS with systemd or PM2, and Docker.
 
 ```bash
 npm ci --include=dev

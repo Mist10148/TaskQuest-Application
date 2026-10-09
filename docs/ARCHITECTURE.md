@@ -57,9 +57,9 @@ flowchart TB
 | Component | Runtime | Responsibility |
 |---|---|---|
 | `apps/web` | Browser | UI only. It sends user decisions (create, toggle, bet, hit/stand, letter, arcade score) and renders server responses. |
-| `apps/server` | Node 20, ESM, Express 4 | Discord OAuth2, sessions, HTTP security, request validation (zod), and mapping HTTP to shared services. Serves `apps/web/dist` in production. |
-| `apps/bot` | Node 20, CommonJS, discord.js 14 | Discord commands and components, rendering embeds, background jobs and a health endpoint. |
-| `packages/shared` | Node 20, CommonJS | Every rule, every SQL statement, migrations and the connection pool. |
+| `apps/server` | Node 22, ESM, Express 4 | Discord OAuth2, sessions, HTTP security, request validation (zod), and mapping HTTP to shared services. Serves `apps/web/dist` in production. |
+| `apps/bot` | Node 22, CommonJS, discord.js 14 | Discord commands and components, rendering embeds, background jobs and a health endpoint. |
+| `packages/shared` | Node 22, CommonJS | Every rule, every SQL statement, migrations and the connection pool. |
 | `apps/ai` (optional) | Python 3.12, FastAPI | Private service for the summarizer, prioritizer and chat (Gemini, LangChain, LangGraph). Reads task data through scoped queries; changes tasks only by calling Express `/internal/*` after the user confirms. See [AI_INTEGRATION.md](AI_INTEGRATION.md). |
 | MySQL / MariaDB | — | The only state. There is no in-memory game or session state in either app. |
 

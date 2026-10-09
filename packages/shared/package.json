@@ -15,7 +15,7 @@
     "db:migrate": "node src/db/migrate.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "dotenv": "^16.6.1",

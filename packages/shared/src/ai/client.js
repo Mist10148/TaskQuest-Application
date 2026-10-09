@@ -194,6 +194,21 @@ function createAiClient(options = {}) {
         post: (path, discordId, body, opts) => request('POST', path, discordId, body, opts),
         delete: (path, discordId, opts) => request('DELETE', path, discordId, undefined, opts),
         chat,
+        /**
+         * One Discord conversation turn (mention, reply or DM). Memory is kept per user per
+         * channel by the AI service. Resolves to { reply, sources, tools, usage }.
+         */
+        converse: (discordId, { channelId, message, imageUrl }, opts = {}) =>
+            request(
+                'POST',
+                '/v1/converse',
+                discordId,
+                { channelId: String(channelId), message, ...(imageUrl ? { imageUrl } : {}) },
+                { timeoutMs: Math.max(config.timeoutMs, 60000), ...opts }
+            ),
+        /** Wipe the caller's conversation memory in one channel. Resolves to true if there was any. */
+        forgetConversation: async (discordId, channelId) =>
+            Boolean((await request('DELETE', `/v1/converse/${encodeURIComponent(String(channelId))}`, discordId)).forgotten),
         /** Refresh one quest's embeddings after a write. Never throws. */
         reindex: (discordId, listId) => background('/internal/index', discordId, { listId: Number(listId) }),
         /** Drop a deleted quest's embeddings. Never throws. */

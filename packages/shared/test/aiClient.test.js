@@ -171,3 +171,27 @@ test('reindex and forget are fire-and-forget and never throw', async () => {
     const off = createAiClient({ enabled: false, serviceUrl: 'http://127.0.0.1:9' });
     assert.doesNotThrow(() => off.reindex('7', 1));
 });
+
+test('converse and forgetConversation call the conversation endpoints', async () => {
+    const srv = await listen((req, res, body) => {
+        if (req.method === 'POST') return json(res, 200, { reply: `echo: ${body.message}`, sources: [], tools: [], usage: {} });
+        return json(res, 200, { success: true, forgotten: true });
+    });
+    try {
+        const c = client(srv.url);
+        const out = await c.converse('42', { channelId: 900, message: 'hi' });
+        assert.equal(out.reply, 'echo: hi');
+        await c.converse('42', { channelId: '900', message: 'look', imageUrl: 'https://cdn.discordapp.com/a.png' });
+        assert.equal(await c.forgetConversation('42', '900'), true);
+        assert.deepEqual(
+            srv.requests.map((r) => [r.method, r.url, r.body, r.headers['x-discord-id']]),
+            [
+                ['POST', '/v1/converse', { channelId: '900', message: 'hi' }, '42'],
+                ['POST', '/v1/converse', { channelId: '900', message: 'look', imageUrl: 'https://cdn.discordapp.com/a.png' }, '42'],
+                ['DELETE', '/v1/converse/900', undefined, '42']
+            ]
+        );
+    } finally {
+        await srv.close();
+    }
+});

@@ -14,11 +14,13 @@
 
 'use strict';
 
-const { AttachmentBuilder } = require('discord.js');
+const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const { createAiClient } = require('@taskquest/shared/ai');
 const { users } = require('@taskquest/shared/db');
 
 const MAX_MESSAGE = 2000;
+const MAX_EMBED = 4000;
+const EMBED_COLOR = 0x9b59b6;
 const FILE_THRESHOLD = 3 * MAX_MESSAGE; // longer replies go out as a .txt file
 const MAX_INPUT = 4000;
 const MAX_TEXT_ATTACHMENT = 100 * 1024;
@@ -103,7 +105,21 @@ async function readTextAttachment(url) {
     return (await response.text()).slice(0, MAX_INPUT);
 }
 
-async function sendReply(message, text) {
+/** Reply as embeds (the /ai-format "embed" style), 4000 characters each. */
+async function sendEmbeds(message, text) {
+    const parts = splitMessage(text, MAX_EMBED);
+    const embeds = parts.map((part, i) => {
+        const embed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(part);
+        if (i === parts.length - 1) {
+            embed.setFooter({ text: `Requested by ${message.author.username || 'you'}`, iconURL: message.author.displayAvatarURL?.() });
+        }
+        return embed;
+    });
+    await message.reply({ embeds: embeds.slice(0, 10), allowedMentions: NO_PINGS });
+}
+
+async function sendReply(message, text, format = 'text') {
+    if (format === 'embed' && text.length <= 10 * MAX_EMBED) return sendEmbeds(message, text);
     if (text.length > FILE_THRESHOLD) {
         const file = new AttachmentBuilder(Buffer.from(text, 'utf8'), { name: 'response.txt' });
         return message.reply({ content: 'That got long, so here it is as a file.', files: [file], allowedMentions: NO_PINGS });
@@ -148,7 +164,7 @@ async function handleMessage(message, { log = console.warn, now = Date.now } = {
         } finally {
             clearInterval(typing);
         }
-        await sendReply(message, result.reply || '...');
+        await sendReply(message, result.reply || '...', user?.ai_chat_format);
     } catch (err) {
         log('[ai-chat]', err.code || err.message);
         try {

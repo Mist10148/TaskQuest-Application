@@ -32,7 +32,9 @@ const commands = [
     gamification.appData,
     aiCommands.summaryData,
     aiCommands.prioritizeData,
-    aiCommands.askData
+    aiCommands.askData,
+    aiCommands.forgetData,
+    aiCommands.aiFormatData
 ].map((c) => c.toJSON());
 
 function argValue(name) {

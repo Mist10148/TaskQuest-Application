@@ -149,3 +149,19 @@ test('cooldown, disabled AI, opt-out and service errors', async () => {
     await chat.handleMessage(q, { log: () => {} });
     assert.match(replies(q)[0], /out of energy/);
 });
+
+test('users who picked /ai-format embed get embeds', async () => {
+    chat._setClient(stubAi('*nods* Embedded.'));
+    user = { discord_id: '42', ai_enabled: 1, ai_chat_format: 'embed' };
+    try {
+        const m = fakeMessage();
+        m.author.username = 'mist';
+        await chat.handleMessage(m);
+        const { embeds } = m.sent.at(-1).reply;
+        assert.equal(embeds.length, 1);
+        assert.equal(embeds[0].data.description, '*nods* Embedded.');
+        assert.match(embeds[0].data.footer.text, /mist/);
+    } finally {
+        user = { discord_id: '42', ai_enabled: 1 };
+    }
+});

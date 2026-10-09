@@ -4,7 +4,7 @@
  *   /list → overview → view (read-only) → edit (all mutations)
  *   /game → blackjack · rock paper scissors · hangman
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
- *   /summary /prioritize /ask → AI service (when AI_ENABLED)
+ *   /summary /prioritize /ask /forget /ai-format → AI service (when AI_ENABLED)
  *   @mention / reply / DM → AI conversation (chat.js)
  *
  * XP and achievements are always shown ephemerally. Background jobs send
@@ -137,7 +137,9 @@ const COMMANDS = {
     app: gamification.app,
     summary: aiCommands.summary,
     prioritize: aiCommands.prioritize,
-    ask: aiCommands.ask
+    ask: aiCommands.ask,
+    forget: aiCommands.forget,
+    'ai-format': aiCommands.aiFormat
 };
 
 async function route(interaction) {

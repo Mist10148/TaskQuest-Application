@@ -13,6 +13,7 @@ const { tasks, users } = require('@taskquest/shared/db');
 const { createAiClient } = require('@taskquest/shared/ai');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 const fmt = require('../utils/aiFormat');
+const ui = require('../utils/ui');
 
 const SLOW_CALL_MS = 45000; // summaries and rankings can take a while on a cold start
 
@@ -52,6 +53,21 @@ const askData = new SlashCommandBuilder()
     .setDescription('💬 Ask the AI assistant about your quests or TaskQuest')
     .addStringOption((o) =>
         o.setName('question').setDescription('e.g. "What is due this week?" or "Add milk to my groceries"').setRequired(true).setMaxLength(2000)
+    );
+
+const forgetData = new SlashCommandBuilder()
+    .setName('forget')
+    .setDescription('🧹 Make the AI forget your conversation with it in this channel');
+
+const aiFormatData = new SlashCommandBuilder()
+    .setName('ai-format')
+    .setDescription('🎨 How the AI replies when you mention it')
+    .addStringOption((o) =>
+        o
+            .setName('format')
+            .setDescription('Reply style')
+            .setRequired(true)
+            .addChoices({ name: 'Plain messages', value: 'text' }, { name: 'Embeds', value: 'embed' })
     );
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -151,6 +167,38 @@ async function handleButton(interaction) {
 }
 
 /** Autocomplete for /summary quest: the user's quests, matched by name. */
+async function forget(interaction) {
+    await interaction.deferReply(EPHEMERAL);
+    try {
+        const discordId = interaction.user.id;
+        await assertAllowed(discordId);
+        const forgotten = await ai().forgetConversation(discordId, interaction.channelId);
+        await interaction.editReply({
+            embeds: [
+                ui.success(
+                    forgotten ? 'Forgotten' : 'Nothing to forget',
+                    forgotten ? 'Our conversation in this channel is wiped. Fresh start.' : "We haven't talked in this channel yet."
+                )
+            ]
+        });
+    } catch (err) {
+        await handleError(interaction, err);
+    }
+}
+
+async function aiFormat(interaction) {
+    try {
+        const format = interaction.options.getString('format');
+        await users.setAiChatFormat(interaction.user.id, format);
+        await interaction.reply({
+            embeds: [ui.success('Saved', format === 'embed' ? 'I will reply with embeds.' : 'I will reply with plain messages.')],
+            ...EPHEMERAL
+        });
+    } catch (err) {
+        await handleError(interaction, err);
+    }
+}
+
 async function autocomplete(interaction) {
     try {
         const focused = interaction.options.getFocused(true);
@@ -174,9 +222,13 @@ module.exports = {
     summaryData,
     prioritizeData,
     askData,
+    forgetData,
+    aiFormatData,
     summary,
     prioritize,
     ask,
+    forget,
+    aiFormat,
     handleButton,
     autocomplete,
     // exported for tests

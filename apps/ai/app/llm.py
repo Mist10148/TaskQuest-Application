@@ -14,6 +14,32 @@ class AIUnavailable(RuntimeError):
     """Gemini is not configured or failed; callers degrade gracefully."""
 
 
+# Finish reasons that mean Gemini withheld the answer rather than finishing it.
+BLOCKED_FINISH_REASONS = frozenset({"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION", "IMAGE_SAFETY"})
+BLOCKED_REPLY = "I can't help with that one. Try asking about your quests in a different way."
+
+
+def is_blocked(message: Any) -> bool:
+    """True when a Gemini reply was stopped by a safety filter (or the prompt itself was blocked)."""
+    meta = getattr(message, "response_metadata", None) or {}
+    if str(meta.get("finish_reason") or "").upper() in BLOCKED_FINISH_REASONS:
+        return True
+    feedback = meta.get("prompt_feedback") or {}
+    return bool(isinstance(feedback, dict) and feedback.get("block_reason"))
+
+
+def safety_settings() -> dict[Any, Any]:
+    """Moderate filters. Harassment only blocks high-probability content so a snappy persona still works."""
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    return {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    }
+
+
 def chat_model(*, reasoning: bool = False, temperature: float = 0.2, max_output_tokens: int = 800) -> Any:
     s = get_settings()
     if not s.gemini_api_key:
@@ -25,6 +51,7 @@ def chat_model(*, reasoning: bool = False, temperature: float = 0.2, max_output_
         google_api_key=s.gemini_api_key,
         temperature=temperature,
         max_output_tokens=max_output_tokens,
+        safety_settings=safety_settings(),
     )
 
 

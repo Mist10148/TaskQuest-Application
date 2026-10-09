@@ -375,3 +375,14 @@ async def test_title_generation_renames_the_thread(seeded):
     await _title_in_background(deps_for(make_llm([AIMessage('"Getting started with quests"')])), UID, tid, "x")
     async with pool.get_engine().connect() as conn:
         assert (await threads.get_thread(conn, UID, tid))["title"] == "Getting started with quests"
+
+
+async def test_blocked_or_empty_reply_becomes_a_friendly_message(seeded):
+    from app.llm import BLOCKED_REPLY
+
+    llm = make_llm([AIMessage("")])
+    events = await collect(
+        chat_service.stream_turn(deps_for(llm), UID, "t-blocked", chat_service.user_input(UID, "hm"))
+    )
+    assert text(events) == BLOCKED_REPLY
+    assert kinds(events)[-1] == "done" and "error" not in kinds(events)

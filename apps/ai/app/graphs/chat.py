@@ -33,6 +33,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, Field, ValidationError
 
 from app.config import get_settings
+from app.llm import BLOCKED_REPLY, is_blocked
 from app.llm_call import structured_call
 from app.prompts import load_prompt
 from app.rag.retriever import Retrieved, TaskRetriever, format_context
@@ -249,6 +250,9 @@ def build_chat_graph(deps: ChatDeps, checkpointer: Any):
             system += "\n\nTool budget for this turn is used up. Answer now with what you have."
         reply = await model.ainvoke([SystemMessage(system), *window(state["messages"])])
         deps.add_tokens(reply)
+        if is_blocked(reply) or (not reply.tool_calls and not text_of(reply.content).strip()):
+            log.warning("chat agent reply blocked or empty: %s", reply.response_metadata.get("finish_reason"))
+            reply = AIMessage(content=BLOCKED_REPLY, id=reply.id, response_metadata={"taskquest_fallback": True})
         log.info(
             "chat agent prompt=%s intent=%s tool_calls=%d", chat_version, state.get("intent"), len(reply.tool_calls)
         )

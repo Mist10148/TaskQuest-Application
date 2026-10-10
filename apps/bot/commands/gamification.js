@@ -702,17 +702,37 @@ async function handleSkillSelect(interaction) {
 //  📊 /leaderboard - Single Organized Embed
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const BOARD_LABELS = {
+    lifetime: { title: 'Top players by lifetime XP', unit: 'XP' },
+    xp: { title: 'Top players by current XP balance', unit: 'XP' },
+    weekly: { title: 'Most XP earned this week', unit: 'XP this week' },
+    streak: { title: 'Longest daily streaks', unit: 'day streak' }
+};
+
 const leaderboardData = new SlashCommandBuilder()
     .setName('leaderboard')
-    .setDescription('📊 View top players');
+    .setDescription('📊 View top players')
+    .addStringOption((o) =>
+        o
+            .setName('by')
+            .setDescription('What to rank by (default: lifetime XP)')
+            .addChoices(
+                { name: 'Lifetime XP', value: 'lifetime' },
+                { name: 'Earned this week', value: 'weekly' },
+                { name: 'Daily streak', value: 'streak' },
+                { name: 'Current XP balance', value: 'xp' }
+            )
+    );
 
 async function leaderboard(interaction) {
     await interaction.deferReply();
-    const rows = await users.getLeaderboard(10);
+    const by = interaction.options.getString('by') || 'lifetime';
+    const label = BOARD_LABELS[by];
+    const rows = await users.getLeaderboard(10, { by });
 
     if (!rows.length) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder().setColor(0x2C2F33).setTitle('🏆 Leaderboard').setDescription('*No players yet! Be the first to earn XP!*')]
+            embeds: [new EmbedBuilder().setColor(0x2C2F33).setTitle('🏆 Leaderboard').setDescription(by === 'weekly' || by === 'streak' ? '*Nobody here yet this week. Be the first!*' : '*No players yet! Be the first to earn XP!*')]
         });
     }
 
@@ -735,15 +755,14 @@ async function leaderboard(interaction) {
         })
     );
 
-    const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 Leaderboard').setDescription('Top players by XP');
+    const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 Leaderboard').setDescription(label.title);
     if (entries[0]?.avatarURL) embed.setThumbnail(entries[0].avatarURL);
 
     const medals = ['🥇', '🥈', '🥉'];
     const boardText = entries
         .map((e, i) => {
-            const stats = [`${Number(e.player_xp).toLocaleString()} XP`, `Lv.${e.player_level}`];
-            if (e.games_played > 0) stats.push(`${e.games_played} games`);
-            if (e.streak_count > 0) stats.push(`🔥${e.streak_count}`);
+            const stats = [`${Number(e.score).toLocaleString()} ${label.unit}`, `Lv.${e.player_level}`];
+            if (by !== 'streak' && e.streak_count > 0) stats.push(`🔥${e.streak_count}`);
             return `${i < 3 ? medals[i] : `\`${e.rank}.\``} **${e.name}** ${CLASS_INFO[e.player_class]?.emoji || '⚪'}\n-# ${stats.join(' · ')}`;
         })
         .join('\n\n');

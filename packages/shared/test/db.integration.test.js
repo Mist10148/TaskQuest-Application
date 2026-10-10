@@ -384,9 +384,19 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('leaderboard, history, cleanup and reset', async () => {
+        const lifetime = await db.users.getLeaderboard(10, { by: 'lifetime' });
+        assert.ok(lifetime.every((r, i) => i === 0 || lifetime[i - 1].score >= r.score));
+        assert.equal(lifetime[0].score, Number(lifetime[0].lifetime_xp));
+        const weekly = await db.users.getLeaderboard(10, { by: 'weekly' });
+        assert.ok(weekly.length >= 1 && weekly.every((r) => r.score > 0), 'weekly only lists players who earned XP');
+        const heroes = await db.users.getLeaderboard(10, { by: 'lifetime', playerClass: 'hero' });
+        assert.ok(heroes.every((r) => r.player_class === 'HERO'));
+        const top = lifetime[0];
+        assert.equal(await db.users.getRank(top.discord_id, 'lifetime'), 1);
+        assert.equal(await db.users.getRank('999999999999999999', 'lifetime'), null);
         const board = await db.users.getLeaderboard(10);
         assert.ok(board.length >= 2);
-        assert.ok(board[0].player_xp >= board[1].player_xp);
+        assert.ok(board[0].lifetime_xp >= board[1].lifetime_xp, "default board ranks by lifetime XP");
         const history = await db.games.getGameHistory(BOB, 5);
         assert.ok(history.length > 0);
 

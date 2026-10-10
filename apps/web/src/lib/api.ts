@@ -158,8 +158,14 @@ export const achievementsApi = {
     getAll: () => apiFetch<AchievementsData>('/api/achievements'),
 };
 
+export type LeaderboardBoard = 'lifetime' | 'weekly' | 'streak' | 'xp';
+
 export const leaderboardApi = {
-    get: () => apiFetch<LeaderboardEntry[]>('/api/leaderboard'),
+    get: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
+        const params = new URLSearchParams({ by });
+        if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
+        return apiFetch<LeaderboardEntry[]>(`/api/leaderboard?${params}`);
+    },
 };
 
 // ─── Games (server-authoritative) ────────────────────────────────────────────
@@ -400,6 +406,9 @@ export interface LeaderboardEntry {
     username: string;
     avatarUrl: string | null;
     xp: number;
+    lifetimeXp: number;
+    /** The value this board ranks by (XP, XP earned this week, or streak days). */
+    score: number;
     level: number;
     playerClass: PlayerClass;
     streak: number;

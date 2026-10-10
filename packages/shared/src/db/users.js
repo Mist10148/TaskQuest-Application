@@ -3,6 +3,8 @@
 'use strict';
 
 const { getPool, withTransaction } = require('./pool');
+const { LEADERBOARDS, WEEKLY_XP_SOURCES } = require('../constants');
+const { questPeriod } = require('../quests');
 
 const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled'];
 
@@ -121,33 +123,79 @@ async function getUserStats(discordId) {
 }
 
 /**
- * Top players by current XP balance, in a single query.
- * Includes discord_id; callers decide what to expose.
+ * SQL for a leaderboard score, for the user row aliased `u`.
+ *   lifetime  total XP ever earned (never drops when XP is spent)
+ *   xp        current spendable balance
+ *   streak    daily streak
+ *   weekly    XP earned since Monday 00:00 UTC (earning sources only)
  */
-async function getLeaderboard(limit = 10) {
+function scoreSql(by, now = new Date()) {
+    switch (by) {
+        case 'xp':
+            return { sql: 'u.player_xp', params: [] };
+        case 'streak':
+            return { sql: 'u.streak_count', params: [] };
+        case 'weekly': {
+            const monday = questPeriod('weekly', now).startsAt;
+            const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
+            return {
+                sql: `(SELECT COALESCE(SUM(t.amount), 0) FROM xp_transactions t
+                       WHERE t.discord_id = u.discord_id AND t.amount > 0 AND t.created_at >= ? AND t.source IN (${marks}))`,
+                params: [monday, ...WEEKLY_XP_SOURCES]
+            };
+        }
+        case 'lifetime':
+        default:
+            return { sql: 'u.lifetime_xp', params: [] };
+    }
+}
+
+/**
+ * Top players for one leaderboard tab, optionally limited to one class.
+ * Includes discord_id; callers decide what to expose. `score` is the tab's value.
+ * @param {number} limit
+ * @param {{ by?: 'lifetime'|'xp'|'streak'|'weekly', playerClass?: string }} [opts]
+ */
+async function getLeaderboard(limit = 10, { by = 'lifetime', playerClass, now } = {}) {
     const n = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
+    const board = LEADERBOARDS.includes(by) ? by : 'lifetime';
+    const score = scoreSql(board, now);
+    const where = ['u.gamification_enabled = TRUE'];
+    const params = [...score.params];
+    if (playerClass) {
+        where.push('u.player_class = ?');
+        params.push(String(playerClass).toUpperCase());
+    }
     const rows = await run(
         null,
         `SELECT u.discord_id, u.discord_username, u.discord_avatar, u.player_xp, u.lifetime_xp, u.player_level,
                 u.player_class, u.streak_count, u.total_items_completed,
+                ${score.sql} AS score,
                 (SELECT COUNT(*) FROM game_sessions g
                   WHERE g.discord_id = u.discord_id AND g.state IN ('won','blackjack','lost','push')) AS games_played
          FROM users u
-         WHERE u.gamification_enabled = TRUE
-         ORDER BY u.player_xp DESC, u.discord_id
-         LIMIT ${n}`
+         WHERE ${where.join(' AND ')}
+         ${board === 'weekly' || board === 'streak' ? 'HAVING score > 0' : ''}
+         ORDER BY score DESC, u.lifetime_xp DESC, u.discord_id
+         LIMIT ${n}`,
+        params
     );
-    return rows.map((r, i) => ({ rank: i + 1, ...r, games_played: Number(r.games_played) }));
+    return rows.map((r, i) => ({ rank: i + 1, ...r, score: Number(r.score), games_played: Number(r.games_played) }));
 }
 
-/** 1-based leaderboard rank for a user (by current XP), or null. */
-async function getRank(discordId) {
+/** 1-based leaderboard rank for a user on one tab, or null (XP off, or no score on weekly/streak). */
+async function getRank(discordId, by = 'lifetime', now) {
     const user = await getUser(discordId);
     if (!user || !user.gamification_enabled) return null;
+    const mine = scoreSql(by, now);
+    const [own] = await run(null, `SELECT ${mine.sql} AS score FROM users u WHERE u.discord_id = ?`, [...mine.params, String(discordId)]);
+    const score = Number(own.score);
+    if ((by === 'weekly' || by === 'streak') && score <= 0) return null;
+    const other = scoreSql(by, now);
     const [row] = await run(
         null,
-        'SELECT COUNT(*) + 1 AS user_rank FROM users WHERE gamification_enabled = TRUE AND player_xp > ?',
-        [user.player_xp]
+        `SELECT COUNT(*) + 1 AS user_rank FROM users u WHERE u.gamification_enabled = TRUE AND ${other.sql} > ?`,
+        [...other.params, score]
     );
     return Number(row.user_rank);
 }

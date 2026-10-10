@@ -20,6 +20,7 @@ import {
     type AchievementUnlock,
     type CreateListData,
     type ItemInput,
+    type LeaderboardBoard,
     type RewardFields,
     type User,
 } from '@/lib/api';
@@ -260,8 +261,8 @@ export function useAchievements() {
     return useQuery({ queryKey: ['achievements'], queryFn: achievementsApi.getAll });
 }
 
-export function useLeaderboard() {
-    return useQuery({ queryKey: ['leaderboard'], queryFn: leaderboardApi.get });
+export function useLeaderboard(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
+    return useQuery({ queryKey: ['leaderboard', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.get(by, playerClass) });
 }
 
 export function useGameHistory() {

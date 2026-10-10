@@ -247,6 +247,10 @@ const QUESTS = {
     WEEKLY_DAILY_5: { name: 'Regular', emoji: '📆', description: 'Claim your daily reward on 5 days this week', period: 'weekly', metric: 'daily_claims', target: 5, reward: 80 }
 };
 
+/** Leaderboard tabs. `weekly` counts XP earned since Monday from these sources (not bets or refunds). */
+const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
+const WEEKLY_XP_SOURCES = ['list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward'];
+
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
 const STREAK_FREEZE = { COST: 150, MAX: 3 };
 
@@ -337,6 +341,8 @@ module.exports = {
     STREAK_FREEZE,
     SPEND_SOURCES,
     QUESTS,
+    LEADERBOARDS,
+    WEEKLY_XP_SOURCES,
     LIMITS,
     DAILY,
     TEXT_LIMITS,

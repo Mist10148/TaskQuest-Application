@@ -4,7 +4,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, requireAuth, uid, avatarUrl } from '../lib/http.js';
-import { keyParam, skillParam } from '../lib/schemas.js';
+import { keyParam, skillParam, leaderboardQuery } from '../lib/schemas.js';
 
 const { CLASSES, SKILL_TREES, ACHIEVEMENTS, classOwnershipColumn } = shared;
 
@@ -95,7 +95,8 @@ achievementsRouter.get(
 leaderboardRouter.get(
     '/',
     asyncRoute(async (req, res) => {
-        const rows = await db.users.getLeaderboard(10);
+        const { by, class: playerClass } = parse(leaderboardQuery, req.query);
+        const rows = await db.users.getLeaderboard(10, { by, playerClass });
         const me = req.session?.user?.discordId;
         res.json(
             rows.map((r) => ({
@@ -103,6 +104,8 @@ leaderboardRouter.get(
                 username: r.discord_username || 'Adventurer',
                 avatarUrl: avatarUrl(r.discord_id, r.discord_avatar),
                 xp: Number(r.player_xp),
+                lifetimeXp: Number(r.lifetime_xp),
+                score: r.score,
                 level: Number(r.player_level),
                 playerClass: r.player_class,
                 streak: Number(r.streak_count),
@@ -118,6 +121,7 @@ leaderboardRouter.get(
     '/me',
     requireAuth,
     asyncRoute(async (req, res) => {
-        res.json({ rank: await db.users.getRank(uid(req)) });
+        const { by } = parse(leaderboardQuery, req.query);
+        res.json({ rank: await db.users.getRank(uid(req), by) });
     })
 );

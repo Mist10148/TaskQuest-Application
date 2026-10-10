@@ -1,3 +1,4 @@
+import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Check, Calendar, GripVertical, Pencil, Trash2 } from "lucide-react";
@@ -133,7 +134,7 @@ export const TaskListCard = ({ name, description, category, priority, deadline, 
   const progress = itemsTotal > 0 ? (itemsCompleted / itemsTotal) * 100 : 0;
   const priorityStyles = priority && priorityConfig[priority as keyof typeof priorityConfig] ? priorityConfig[priority as keyof typeof priorityConfig] : null;
   const categoryEmoji = category ? categoryEmojis[category] || "📋" : "📋";
-  const isOverdue = deadline && new Date(deadline) < new Date() && progress < 100;
+  const isOverdue = isPastDeadline(deadline) && progress < 100;
 
   return (
     <motion.div
@@ -165,7 +166,7 @@ export const TaskListCard = ({ name, description, category, priority, deadline, 
       {deadline && (
         <div className={cn("flex items-center gap-1.5 text-sm", isOverdue ? "text-destructive" : "text-foreground-muted")}>
           <Calendar className="h-3.5 w-3.5" />
-          <span>{isOverdue ? "Overdue: " : ""}{new Date(deadline).toLocaleDateString()}</span>
+          <span>{isOverdue ? "Overdue: " : ""}{formatDeadline(deadline)}</span>
         </div>
       )}
     </motion.div>

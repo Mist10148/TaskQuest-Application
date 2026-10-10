@@ -8,7 +8,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
-const { TEXT_LIMITS, validation, levelProgress } = require('@taskquest/shared');
+const { TEXT_LIMITS, validation, levelProgress, isPastDeadline, formatDeadline } = require('@taskquest/shared');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🎨 COLOR SYSTEM
@@ -142,11 +142,8 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     const footerParts = [];
     if (list.priority) footerParts.push(`${PRIORITY_LABEL[list.priority]} Priority`);
     if (list.deadline) {
-        const d = new Date(list.deadline);
-        const now = new Date();
-        const isOverdue = d < now;
-        const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        footerParts.push(isOverdue ? `⚠️ Overdue: ${dateStr}` : `Due: ${dateStr}`);
+        const dateStr = formatDeadline(list.deadline);
+        footerParts.push(isPastDeadline(list.deadline) ? `⚠️ Overdue: ${dateStr}` : `Due: ${dateStr}`);
     }
     footerParts.push(mode === 'edit' ? '✏️ Edit Mode' : '👁️ View Mode');
     
@@ -192,20 +189,8 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
         
         // Deadline - properly formatted
         if (l.deadline) {
-            try {
-                const deadline = new Date(l.deadline);
-                const now = new Date();
-                const isOverdue = deadline < now;
-                // Format: "Dec 26" or "Jan 15, 2026" if different year
-                const options = { month: 'short', day: 'numeric' };
-                if (deadline.getFullYear() !== now.getFullYear()) {
-                    options.year = 'numeric';
-                }
-                const dateStr = deadline.toLocaleDateString('en-US', options);
-                metaParts.push(isOverdue ? `⚠️ ${dateStr}` : `📅 ${dateStr}`);
-            } catch (e) {
-                // If date parsing fails, skip the deadline
-            }
+            const dateStr = formatDeadline(l.deadline);
+            if (dateStr) metaParts.push(isPastDeadline(l.deadline) ? `⚠️ ${dateStr}` : `📅 ${dateStr}`);
         }
         
         if (metaParts.length > 0) {
@@ -475,12 +460,7 @@ function listSelect(lists, id = 'sel_list') {
                 // Build clean description
                 const descParts = [];
                 if (l.category) descParts.push(l.category);
-                if (l.deadline) {
-                    try {
-                        const d = new Date(l.deadline);
-                        descParts.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-                    } catch (e) {}
-                }
+                if (l.deadline) descParts.push(formatDeadline(l.deadline));
                 
                 return {
                     label: l.name.substring(0, 100),

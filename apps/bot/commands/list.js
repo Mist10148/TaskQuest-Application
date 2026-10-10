@@ -12,6 +12,7 @@
 
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { tasks, users } = require('@taskquest/shared/db');
+const { isPastDeadline } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const aiSync = require('../utils/aiSync');
 const { EPHEMERAL, handleError, sendRewards, idFrom } = require('../utils/respond');
@@ -53,7 +54,7 @@ function metaEditComponents(listId, done = false) {
     return [ui.catSelect(`cat_${listId}`), ui.priSelect(`pri_${listId}`), new ActionRowBuilder().addComponents(...buttons)];
 }
 
-const isExpired = (list) => Boolean(list.deadline) && list.deadline < new Date().toISOString().slice(0, 10);
+const isExpired = (list) => isPastDeadline(list.deadline);
 
 // ─── Slash command ───────────────────────────────────────────────────────────
 

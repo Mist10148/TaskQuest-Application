@@ -4,6 +4,7 @@ import { TaskListCard, TaskItem } from "@/components/game/TaskComponents";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { compareDeadlines, dateOnly, formatDeadline, isPastDeadline } from "@/lib/dates";
 import { Plus, Search, Filter, SortAsc, ArrowLeft, Loader2, AlertCircle, X, Check, Calendar, Trash2, Pencil, Scroll, Clock, CheckCircle2, ListTodo } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -124,8 +125,7 @@ const Tasks = () => {
       if (activeTab === 'all') return true;
 
       const isComplete = list.itemsTotal > 0 && list.itemsCompleted === list.itemsTotal;
-      const now = new Date();
-      const isExpired = list.deadline && new Date(list.deadline) < now && !isComplete;
+      const isExpired = isPastDeadline(list.deadline) && !isComplete;
 
       if (activeTab === 'completed') return isComplete;
       if (activeTab === 'expired') return isExpired;
@@ -140,10 +140,7 @@ const Tasks = () => {
         case 'name_desc': return b.name.localeCompare(a.name);
         case 'priority': return (PRIORITY_ORDER[a.priority || ''] ?? 3) - (PRIORITY_ORDER[b.priority || ''] ?? 3);
         case 'deadline':
-          if (!a.deadline && !b.deadline) return 0;
-          if (!a.deadline) return 1;
-          if (!b.deadline) return -1;
-          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+          return compareDeadlines(a.deadline, b.deadline);
         default: return 0;
       }
     });
@@ -171,7 +168,7 @@ const Tasks = () => {
       setEditListDesc(selectedListData.description || "");
       setEditListCategory(selectedListData.category || "none");
       setEditListPriority(selectedListData.priority || "none");
-      setEditListDeadline(selectedListData.deadline ? selectedListData.deadline.split('T')[0] : "");
+      setEditListDeadline(selectedListData.deadline ? dateOnly(selectedListData.deadline) : "");
       setShowEditList(true);
     }
   };
@@ -367,7 +364,7 @@ const Tasks = () => {
                 {selectedListData.description && <p className="text-foreground-muted mt-1 text-sm sm:text-base">{selectedListData.description}</p>}
                 <div className="flex gap-4 mt-2 text-sm text-foreground-muted flex-wrap">
                   {selectedListData.category && <span className="flex items-center gap-1">{CATEGORIES.find(c => c.value === selectedListData.category)?.emoji} {selectedListData.category}</span>}
-                  {selectedListData.deadline && <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due: {new Date(selectedListData.deadline).toLocaleDateString()}</span>}
+                  {selectedListData.deadline && <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due: {formatDeadline(selectedListData.deadline)}</span>}
                 </div>
               </div>
               <div className="flex gap-2">

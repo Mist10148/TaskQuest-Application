@@ -296,7 +296,7 @@ async function startArcade(discordId, gameType) {
 async function finishArcade(discordId, sessionId, score) {
     const id = Number(sessionId);
     if (!Number.isSafeInteger(id) || id <= 0) throw errors.validation('Invalid session.');
-    return withTransaction(async (conn) => {
+    const outcome = await withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         const [[session]] = await conn.query(
             `SELECT *, TIMESTAMPDIFF(MICROSECOND, created_at, CURRENT_TIMESTAMP(3)) DIV 1000 AS elapsed_ms
@@ -307,8 +307,10 @@ async function finishArcade(discordId, sessionId, score) {
 
         const scored = arcade.scoreRun(session.game_type, Number(score), Number(session.elapsed_ms));
         if (!scored.ok) {
+            // Cancel the run and commit; the error is thrown after the commit, because
+            // throwing here would roll the cancellation back and let the run be retried.
             await conn.query("UPDATE game_sessions SET state = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
-            throw errors.validation(scored.error);
+            return { rejected: scored.error };
         }
 
         const xp = await rewardFreeGame(conn, user, scored.baseXP, id);
@@ -326,6 +328,16 @@ async function finishArcade(discordId, sessionId, score) {
             achievements
         };
     });
+    if (outcome.rejected) throw errors.validation(outcome.rejected);
+    return outcome;
+}
+
+/** How much free-game XP (RPS, hangman, arcade) the user can still earn today, and when it resets. */
+async function getFreeGameAllowance(discordId, now = new Date()) {
+    const remaining = await remainingFreeGameXP(getPool(), String(discordId));
+    const cap = LIMITS.FREE_GAME_XP_PER_DAY;
+    const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    return { cap, remainingXP: remaining, usedXP: Math.max(0, cap - remaining), resetsAt: resetsAt.toISOString() };
 }
 
 // ─── Housekeeping & history ──────────────────────────────────────────────────
@@ -386,5 +398,6 @@ module.exports = {
     startArcade,
     finishArcade,
     expireStaleSessions,
-    getGameHistory
+    getGameHistory,
+    getFreeGameAllowance
 };

@@ -21,6 +21,13 @@ const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
+const questCommands = require('./commands/quests');
+const aiSync = require('./utils/aiSync');
+const reminders = require('./utils/reminders');
+const timezoneCommand = require('./commands/timezone');
+const digest = require('./utils/digest');
+const weeklyCommand = require('./commands/weekly');
+const quickCommand = require('./commands/quick');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -58,40 +65,14 @@ function job(name, fn) {
     };
 }
 
-const checkDeadlines = job('DEADLINE', async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    for (const list of await db.tasks.getListsDueOn(today)) {
-        try {
-            const user = await client.users.fetch(list.discord_id);
-            const items = (await db.tasks.getItems(list.discord_id, list.id)) || [];
-            const done = items.filter((i) => i.completed).length;
-            await user.send({
-                embeds: [
-                    {
-                        color: 0xff6b6b,
-                        title: '⏰ Deadline Today!',
-                        description: `Your list **${list.name}** is due today!`,
-                        fields: [
-                            { name: '📊 Progress', value: `${done}/${items.length} tasks`, inline: true },
-                            { name: '📁 Category', value: list.category || 'None', inline: true }
-                        ],
-                        footer: { text: 'TaskQuest • /automation to turn reminders off' }
-                    }
-                ]
-            });
-            log('📬', 'DEADLINE', `Reminded ${list.discord_id} about list ${list.id}`);
-        } catch (err) {
-            // 50007 = cannot DM this user (DMs closed). Anything else is worth logging.
-            if (err.code !== 50007) log('⚠️', 'DEADLINE', `list ${list.id}: ${err.message}`);
-        }
-        // Mark even when the DM fails so a closed inbox isn't retried every hour.
-        await db.tasks.markDeadlineNotified(list.id);
-    }
-});
+const checkDeadlines = job('DEADLINE', () => reminders.sendDeadlineReminders({ db, client, log }));
+
+const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));
 
 const cleanupLists = job('AUTO-DELETE', async () => {
     const deleted = await db.tasks.cleanupOldLists();
-    if (deleted > 0) log('🗑️', 'AUTO-DELETE', `Removed ${deleted} old lists`);
+    for (const list of deleted) aiSync.forget(list.discord_id, list.id); // drop their vectors too
+    if (deleted.length > 0) log('🗑️', 'AUTO-DELETE', `Removed ${deleted.length} old lists`);
 });
 
 const expireGames = job('GAMES', async () => {
@@ -107,8 +88,10 @@ client.once(Events.ClientReady, (c) => {
 
     setTimeout(checkDeadlines, 5_000);
     setTimeout(cleanupLists, 10_000);
+    setTimeout(weeklyDigests, 15_000);
     expireGames();
     timers.push(setInterval(checkDeadlines, 60 * 60 * 1000));
+    timers.push(setInterval(weeklyDigests, 60 * 60 * 1000));
     timers.push(setInterval(cleanupLists, 24 * 60 * 60 * 1000));
     timers.push(setInterval(expireGames, 5 * 60 * 1000));
 });
@@ -127,6 +110,11 @@ const COMMANDS = {
     game: gameCommand.execute,
     ping: gamification.ping,
     daily: gamification.daily,
+    freeze: gamification.freeze,
+    quests: questCommands.execute,
+    timezone: timezoneCommand.execute,
+    weekly: weeklyCommand.execute,
+    quick: quickCommand.execute,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,
@@ -146,6 +134,8 @@ async function route(interaction) {
     if (interaction.isAutocomplete()) {
         if (interaction.commandName === 'list') return listCommand.autocomplete(interaction);
         if (interaction.commandName === 'summary') return aiCommands.autocomplete(interaction);
+        if (interaction.commandName === 'timezone') return timezoneCommand.autocomplete(interaction);
+        if (interaction.commandName === 'quick') return quickCommand.autocomplete(interaction);
         return interaction.respond([]);
     }
 
@@ -158,6 +148,8 @@ async function route(interaction) {
     if (interaction.isButton()) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
+        if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
+        if (id === 'remind_off' || id.startsWith('remind_snooze_')) return reminders.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
         if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
             return gamification.handleClassButton(interaction);

@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, uid, xpResult } from '../lib/http.js';
-import { idParam, listIdParam, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody } from '../lib/schemas.js';
+import { idParam, listIdParam, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody } from '../lib/schemas.js';
 
 export const listsRouter = Router();
 export const itemsRouter = Router();
@@ -62,6 +62,16 @@ listsRouter.delete(
     })
 );
 
+listsRouter.patch(
+    '/:id/reorder',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { itemIds } = parse(reorderBody, req.body);
+        await db.tasks.reorderItems(uid(req), id, itemIds);
+        res.json(await db.tasks.getItems(uid(req), id));
+    })
+);
+
 listsRouter.post(
     '/:listId/items',
     asyncRoute(async (req, res) => {
@@ -89,7 +99,7 @@ itemsRouter.patch(
         const body = parse(toggleItemBody, req.body && Object.keys(req.body).length ? req.body : undefined);
         const r = await db.tasks.setItemCompleted(uid(req), id, body?.completed);
         if (r.item?.list_id) aiClient.reindex(uid(req), r.item.list_id);
-        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
+        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), nextItem: r.nextItem });
     })
 );
 

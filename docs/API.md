@@ -59,17 +59,23 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET 🔒 | `/api/user` | — | Same as `/me` without `discord`/`userAchievements` |
-| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?}` (booleans, ≥1 field) | Updated `users` row |
+| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?, weekly_digest?}` (booleans), `{timezone?: IANA name\|null, reminder_hour?: 0–23}`; ≥1 field. An unknown zone is `400`. | Updated `users` row |
 | POST 🔒 | `/api/user/daily` | — | See below |
 | GET 🔒 | `/api/user/xp-history` (alias `/api/xp/history`) | — | Last 50 `xp_transactions` |
-| POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, achievements, skills, games and XP history, and resets stats. `{success, message}` |
+| POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, achievements, skills, games and XP history, and resets stats (including `xp_spent` and streak freezes). Also asks the AI service to forget the user's vectors, chat threads and cached summaries. `{success, message}` |
+| POST 🔒 | `/api/user/streak-freeze` | — | Buys one streak freeze for 150 XP (max 3 held). `{success, freezes, cost, newBalance, newAchievements}`. `409` at the cap, `400 INSUFFICIENT_XP`. |
+| GET 🔒 | `/api/user/export` | — | Download of everything you own as JSON (`{app, version, exportedAt, lists:[{name, description, category, priority, deadline, items:[{id, parent_id, name, description, completed, due_date, priority, tags, recurrence}]}]}`). |
+| GET 🔒 | `/api/user/export.csv` | — | One row per task (`list, task, subtask_of, done, due_date, priority, tags, repeat, list_deadline, list_category`). Cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets don't run them as formulas. |
+| POST 🔒 | `/api/user/import` | An export document (body limit **1 MB** on this route only; max 100 lists, 500 tasks per list, 1000 in total) | `201 {success, lists, items}`. All or nothing. Name clashes get an `(imported)` suffix, existing lists are never touched, and **no XP, counters or achievements are granted**; completed tasks arrive already paid, so they cannot be re-earned. |
+| POST 🔒 | `/api/user/calendar-token` | — | Creates or rotates the secret calendar feed token. `{token}` |
+| DELETE 🔒 | `/api/user/calendar-token` | — | Turns the feed off. `{success:true}` |
 
 Daily reward response (`200` in both cases):
 
 ```jsonc
-// claimed
+// claimed (freezeUsed: a bought streak freeze saved a streak that would have broken)
 { "success": true, "baseXP": 100, "classBonus": 25, "streakBonus": 10, "skillDailyBonus": 0,
-  "totalXP": 135, "bonusInfo": {...}, "streak": 3, "streakBroken": false, "streakPreserved": false,
+  "totalXP": 135, "bonusInfo": {...}, "streak": 3, "streakBroken": false, "streakPreserved": false, "freezeUsed": false,
   "newBalance": 1435, "newLevel": 15, "leveledUp": false, "newAchievements": [] }
 // on cooldown
 { "success": false, "error": "Already claimed", "remaining": 51234567, "streak": 3 }
@@ -86,12 +92,17 @@ All routes are 🔒 and owner-scoped. Another user's IDs return `404`.
 | GET | `/api/lists/:id` | — | `{...list, items:[...]}` (items by position) |
 | PATCH | `/api/lists/:id` | Any subset of the create fields (≥1). Changing `deadline` re-arms the reminder. | Updated list |
 | DELETE | `/api/lists/:id` | — | `{success:true}` (items cascade) |
-| POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000)}` | `201 {...item, xpResult, newAchievements}` |
-| PATCH | `/api/items/:id` | `{name?, description?, position? (int ≥0)}` (≥1) | Updated item (with `list_name`, `list_priority`) |
-| PATCH | `/api/items/:id/toggle` | optional `{completed: boolean}` (no body toggles) | `{...item, completed, xpResult, newAchievements}`. XP only on the **first** completion. |
+| PATCH | `/api/lists/:id/reorder` | `{itemIds: [int]}`: every task id of the list, exactly once, in the new order | The list's items in the new order. Positions become 0..n-1. `400` if the ids are not exactly the list's tasks. |
+| POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000), due_date?: "YYYY-MM-DD"\|null, priority?, tags?: string\|string[], recurrence?: "daily"\|"weekly"\|"monthly"\|null, parent_id?: int\|null}` | `201 {...item, xpResult, newAchievements}` |
+| PATCH | `/api/items/:id` | Any subset of the create fields, plus `position? (int ≥0)`; ≥1. A position moves the task there and closes the gaps. | Updated item (with `list_name`, `list_priority`) |
+| PATCH | `/api/items/:id/toggle` | optional `{completed: boolean}` (no body toggles) | `{...item, completed, xpResult, newAchievements, nextItem}`. XP only on the **first** completion. `nextItem` is the newly created copy when a repeating task is completed (else `null`). |
 | DELETE | `/api/items/:id` | — | `{success:true}` |
 
-Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadlines must be real calendar dates between 2000 and 2100.
+Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadlines and task due dates must be real calendar dates between 2000 and 2100.
+
+**Task details.** A task can have its own `due_date`, `priority` (used for class and skill effects instead of the list's) and up to 5 `tags` (letters, numbers, `-` and `_`, ≤ 20 characters, stored lower-case as `"work,home"`). `recurrence` repeats it: completing a repeating task for the first time creates the next copy in the same transaction (monthly repeats clamp to short months, and a late completion never creates an already-overdue copy). A repeat grants no creation XP and is not counted as an added task. `parent_id` makes a task a **subtask**: the parent must be a top-level task of the same list, nesting is one level deep, and a task that has subtasks cannot become a subtask. Deleting a parent deletes its subtasks.
+
+Completing tasks pays XP for the first **50 completions per UTC day** (like list and task creation, so an add / complete / delete loop cannot farm XP). A capped completion is still recorded and cannot be re-earned by un-checking and re-checking.
 
 ## Classes, skills, achievements, leaderboard
 
@@ -103,8 +114,23 @@ Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadline
 | GET | `/api/skills` | 🔒 | `{skillTrees:[{classKey,name,emoji,description,classOwned,skills:[{id,name,emoji,description,maxLevel,cost,requires,currentLevel}]}], skillPoints, userXP, playerClass}` |
 | POST | `/api/skills/:skillId/unlock` | 🔒 | Unlocks or levels up one skill (cost per level). The tree is derived on the server; any `classKey` in the body is ignored. `{success, skill:{skill_id, skill_level}, balance}` |
 | GET | `/api/achievements` | 🔒 | `{achievements:[{key,name,emoji,description,category,unlocked,unlockedAt}], unlockedCount, totalCount}` |
-| GET | `/api/leaderboard` | — | Top 10: `[{rank, username, avatarUrl, xp, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]`. No Discord IDs. |
-| GET | `/api/leaderboard/me` | 🔒 | `{rank}` (null when XP is off) |
+| GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]`. `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs. |
+| GET | `/api/leaderboard/me?by=` | 🔒 | `{rank}` on that board (null when XP is off, or no score on `weekly`/`streak`) |
+
+## Quests
+
+Daily and weekly quests (periods are UTC: the day, and Monday 00:00 to Monday 00:00). Progress is computed from your real activity; a claim pays flat XP (no class or skill modifiers) once per period.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET 🔒 | `/api/quests` | — | `{quests:[{key, name, emoji, description, period: "daily"\|"weekly", target, reward, progress, claimed, claimable, periodStart, resetsAt}]}` |
+| POST 🔒 | `/api/quests/:key/claim` | — | `{success, key, name, reward, balance, level, leveledUp, newAchievements}`. `400` if unfinished, `409` if already claimed this period, `404` for an unknown key, `403` when XP is off. |
+
+## Calendar feed
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/calendar/<token>.ics` | the token | An RFC 5545 feed of list deadlines and task due dates (all-day events, completed ones marked ✓). Calendar apps cannot send cookies, so the 32-character secret in the URL is the credential. Unknown and revoked tokens both return `404`. Create, rotate or revoke it with `/api/user/calendar-token`. |
 
 ## Games (server-authoritative)
 
@@ -113,6 +139,7 @@ All routes are 🔒. Outcomes, shuffles and payouts are decided on the server. C
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/games/config` | — | Bet limits, rewards, arcade caps, cooldown |
+| GET | `/api/games/allowance` | — | `{cap, usedXP, remainingXP, resetsAt}`: today's shared free-game XP allowance |
 | GET | `/api/games/history` | — | Last 20 finished: `[{id, game_type, bet_amount, payout, net, state, created_at, ended_at}]` |
 | GET | `/api/games/active` | — | `{blackjack: {sessionId, view}\|null, hangman: {sessionId, view}\|null}` |
 | POST | `/api/games/blackjack/start` | `{bet: int}` | `BlackjackResult`. If a hand is already in progress, it is returned with `resumed:true` and no new bet is taken. |
@@ -170,6 +197,19 @@ event: done     data: {"threadId":"...","usage":{"input":123,"output":45}}
 ```
 
 A `confirm` event pauses the turn. Nothing has been changed yet. Answer with `POST /api/ai/chat/:threadId/resume {approved}`; the changes run only on `true`, through the same services as the normal endpoints, so XP and achievements are awarded exactly as usual (they arrive in the `tool` event). A thread's pending confirmation survives a page reload (`pendingConfirm`).
+
+## Internal API (service to service)
+
+`/internal/*` is **not** for browsers: it has no session or CSRF layer and is only mounted when `AI_ENABLED=true`. Every request must carry the shared `X-AI-Token` (checked in constant time; a wrong or missing token returns `404`, so the routes do not reveal themselves). The AI service calls these after the user confirmed an action in chat; they run through the same services as the public API, so XP, caps and achievements behave identically. The acting Discord ID comes from the trusted caller in the body.
+
+| Method | Path | Body | Description |
+|---|---|---|---|
+| POST | `/internal/lists` | `{discordId, name, description?, category?, priority?, deadline?, items?: string[] (≤20)}` | Create a list (and optional tasks) |
+| POST | `/internal/lists/:id/items` | `{discordId, name, description?, ...task detail fields}` | Add a task |
+| PATCH | `/internal/items/:id/toggle` | `{discordId, completed?}` | Complete or reopen a task |
+| PATCH | `/internal/lists/:id` | `{discordId, priority?, deadline?}` | Change a list's priority or deadline |
+
+The reverse direction (Express and the bot to the AI service: `POST /internal/index`, `POST /internal/forget`) is documented in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). `POST /internal/forget` with only a `discordId` removes everything stored about the user: vectors, chat threads with their checkpoints, and cached summaries (the daily usage counter is kept, so a reset cannot refill the AI quota).
 
 ## Removed in 4.0
 

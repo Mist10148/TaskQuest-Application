@@ -123,6 +123,14 @@ export const aiClient = {
         request('POST', '/internal/forget', discordId, { discordId: String(discordId), listId }, { timeoutMs: 5000 }).catch((err) =>
             console.warn('[ai] forget failed:', err.code || err.message)
         );
+    },
+
+    /** Fire-and-forget: drop everything the AI service stored about a user (reset progress). Never throws. */
+    forgetUser(discordId) {
+        if (!config.ai.enabled) return;
+        request('POST', '/internal/forget', discordId, { discordId: String(discordId) }, { timeoutMs: 5000 }).catch((err) =>
+            console.warn('[ai] forget user failed:', err.code || err.message)
+        );
     }
 };
 

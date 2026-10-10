@@ -6,6 +6,18 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Tasks grow up.** Each task can have its own due date, priority, up to five tags, one level of subtasks and a repeat rule (daily / weekly / monthly: completing a repeating task creates the next copy, with no creation XP). Migration `007_item_fields`.
+  - **Quick add** from one line of text ("Finish report fri !high #work every week"): a quick-add bar with a live preview on the web, and `/quick` on Discord. The web can also hand the sentence to the AI chat (pre-filled, never auto-sent).
+  - Up/down buttons that work on touch, a real reorder API (`PATCH /api/lists/:id/reorder`), bulk select (complete or delete several tasks), **undo** for task deletion, and keyboard shortcuts (`n`, `/`, `s`, `?`, `Esc`).
+- **Daily and weekly quests** with progress computed from real activity and one atomic claim per period (`/quests`, `GET /api/quests`, a dashboard card). Migration `009_quest_claims`.
+- **Streak freezes** (150 XP, max 3): saves a streak that a missed day would break (`/freeze`, Profile page). New **spending achievements** (1k, 5k, 10k XP spent; 33 achievements in total) backed by `users.xp_spent`.
+- **Leaderboard boards**: lifetime XP (the new default), XP earned this week, streaks and balance, with a class filter, your own rank and a highlighted row (`GET /api/leaderboard?by=&class=`, `/leaderboard by:`).
+- **Reminders that follow you.** A per-user time zone and reminder hour (`/timezone`, Settings), one overdue notice the day after a deadline, and Snooze / Stop buttons on every reminder DM. Migration `008_user_prefs`.
+- **Weekly digest DM** (opt-in, `/weekly`): your week's numbers on Monday morning, with the AI recap when AI is on.
+- **Your data**: JSON and CSV export, a reward-free all-or-nothing JSON import, and a secret **calendar feed** (`/api/calendar/<token>.ics`) of list deadlines and task due dates that can be rotated or turned off.
+- **Free-game allowance** endpoint and a Games-page panel showing today's remaining XP, plus a sound switch, on-screen touch controls and fixed-timestep game loops for the arcade games.
+- **Web app**: light and dark themes with a system option, a mobile top bar and accessible drawer, skip link and global focus ring, a reduce-motion setting, a getting-started checklist, confetti for level-ups, error cards with retry, and a rebuilt Settings page. A test checks WCAG contrast of both themes.
+- Docs: [OPERATIONS.md](docs/OPERATIONS.md) (backup and restore, troubleshooting, the first live Gemini run), design notes for [shared lists](docs/design/shared-lists.md), [Tailwind 4](docs/design/tailwind-4-migration.md) and [arcade anti-cheat](docs/design/arcade-anti-cheat.md), the `/internal` API, and complete database and contributor guides.
 - **AI features (optional, off by default).** Set `AI_ENABLED=true` and run the new `apps/ai` service. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md).
   - **Summarizer** for a quest, a daily briefing or a weekly recap, with caching and id validation.
   - **Prioritizer** ("What should I do next?") that blends a deterministic score with Gemini and falls back to the score alone when the model is unavailable. Suggested priority changes are Accept/Reject.
@@ -32,11 +44,25 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **The leaderboard defaults to lifetime XP** instead of the spendable balance, so buying a class or skill no longer lowers your rank.
+- **Auto-delete only removes finished lists.** It used to also delete unfinished lists five days after their deadline; overdue lists now stay visible.
+- **Reminders** are sent at the user's reminder hour in their time zone (UTC and 09:00 until set), and a reminder missed during an outage is sent late (up to 3 days) instead of never.
+- **Web bundle**: each page is a lazy-loaded chunk with stable vendor chunks, and 36 unused UI primitives and 30 packages were removed. The Tasks page is split into focused components.
+- Dark-theme colours that failed contrast (the Assassin badge was 1.5:1, destructive button text 3.8:1) were fixed.
 - Node 22 is now required. Node 20 is end-of-life, and its test runner could not expand the test globs, which had broken CI since 8 October.
 - LangChain, LangGraph and `langgraph-checkpoint` are pinned to their tested major versions.
 
 ### Fixed
 
+- **Task completion XP could be farmed.** Only creation had a daily cap, so add / complete / delete loops paid unlimited XP. Completions now share a 50-per-day reward cap.
+- **A rejected arcade score did not cancel the run**: the error rolled the cancellation back, so the same run could be resubmitted with a higher score.
+- **Due dates were shifted by the time zone.** Lists showed as overdue on their own due date and as the previous day west of UTC, in the web app and in bot embeds; dates are now compared and formatted as dates.
+- **Reset progress and auto-delete left AI data behind** (embeddings, chat threads, cached summaries). They are now purged.
+- **Reordering produced duplicate positions** (the web sent a 1-based index and the API accepted any number), which made the bot's swap do nothing. Positions are now unique and contiguous.
+- **A missed or failed deadline DM was never retried**: reminders only matched the exact due day and a list was marked as notified even when the DM failed for a temporary reason.
+- **Half of the achievements were never shown** on the Achievements page (it listed the wrong category names).
+- The Profile stat tiles lost their colours (Tailwind cannot see dynamically built class names), the Assassin class was unreadable on dark cards, and Settings had a dead "Add Bot to Server" link and used `window.confirm` for logout.
+- The daily-claim button forgot it had been claimed after a page reload.
 - Through Express, resuming a chat with nothing waiting returned 503 instead of 409.
 - On MySQL, every embedding and LangGraph checkpoint write failed ("'str' object is not callable"), because PyMySQL 1.2 broke aiomysql's bytes escaping. PyMySQL is now pinned below 1.2. Found by the new `ai-mysql` CI job.
 - The AI service ignored `DB_SSL_CA`, so TLS to hosts with a custom CA failed.

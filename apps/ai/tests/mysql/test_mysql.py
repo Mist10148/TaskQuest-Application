@@ -153,3 +153,46 @@ async def test_discord_conversation_threads_on_mysql(mysql):
     async with pool.get_engine().connect() as conn:
         assert await threads.list_threads(conn, UID) == []  # source='discord' stays out of the web list
     assert await chat_service.forget_conversation(UID, channel) is True
+
+
+async def test_forgetting_a_user_removes_threads_checkpoints_and_summaries_but_keeps_usage(mysql):
+    engine, _ = mysql
+    async with engine.begin() as conn:
+        mine = await threads.create_thread(conn, UID, "my chat")
+        theirs = await threads.create_thread(conn, OTHER, "their chat")
+        for tid in (mine, theirs):
+            await conn.execute(
+                text(
+                    "INSERT INTO ai_checkpoints (thread_id, checkpoint_ns, checkpoint_id, type, checkpoint) "
+                    "VALUES (:t, '', 'c1', 'msgpack', :blob)"
+                ),
+                {"t": tid, "blob": b"\x00\x01"},
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO ai_checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value) "
+                    "VALUES (:t, '', 'c1', 'task', 0, 'messages', :blob)"
+                ),
+                {"t": tid, "blob": b"\x02"},
+            )
+        for uid in (UID, OTHER):
+            await conn.execute(
+                text("INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) VALUES (:u, 'digest', 'h', '{}')"),
+                {"u": uid},
+            )
+        await usage.record(conn, UID, "chat", input_tokens=1, output_tokens=1)
+
+    async with engine.begin() as conn:
+        await repo.delete_user_ai_data(conn, UID)
+
+    async with engine.connect() as conn:
+        count = lambda sql, **p: conn.execute(text(sql), p)  # noqa: E731
+        assert (await count("SELECT COUNT(*) FROM ai_chat_threads WHERE discord_id = :u", u=UID)).scalar() == 0
+        assert (await count("SELECT COUNT(*) FROM ai_checkpoints WHERE thread_id = :t", t=mine)).scalar() == 0
+        assert (await count("SELECT COUNT(*) FROM ai_checkpoint_writes WHERE thread_id = :t", t=mine)).scalar() == 0
+        assert (await count("SELECT COUNT(*) FROM ai_summary_cache WHERE discord_id = :u", u=UID)).scalar() == 0
+        # another user's data is untouched, and the daily quota counter is not refunded
+        assert (await count("SELECT COUNT(*) FROM ai_chat_threads WHERE discord_id = :u", u=OTHER)).scalar() == 1
+        assert (await count("SELECT COUNT(*) FROM ai_checkpoints WHERE thread_id = :t", t=theirs)).scalar() == 1
+        assert (await count("SELECT COUNT(*) FROM ai_summary_cache WHERE discord_id = :u", u=OTHER)).scalar() == 1
+        assert await usage.requests_today(conn, UID) == 1

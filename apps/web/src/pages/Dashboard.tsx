@@ -14,12 +14,16 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { BriefingCard } from "@/components/ai/BriefingCard";
+import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { QuestsCard } from "@/components/dashboard/QuestsCard";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { data: apiLists } = useLists();
+  const listsQuery = useLists();
+  const apiLists = listsQuery.data;
   const claimDaily = useClaimDaily();
-  const [dailyClaimed, setDailyClaimed] = useState(false);
+  const [claimedNow, setClaimedNow] = useState(false);
 
   const lists = apiLists || [];
   const discord = user?.discord || { username: 'Adventurer', globalName: 'Adventurer' };
@@ -36,6 +40,10 @@ const Dashboard = () => {
   
   const gamesPlayed = user?.games?.played || 0;
   const achievementCount = user?.achievements || 0;
+
+  // Claimed within the last 24 hours (from the server), so the button is right after a reload too.
+  const lastClaim = dbUser.last_daily_claim ? new Date(dbUser.last_daily_claim).getTime() : 0;
+  const dailyClaimed = claimedNow || (lastClaim > 0 && Date.now() - lastClaim < 24 * 3600 * 1000);
 
   const handleClaimDaily = async () => {
     try {
@@ -54,11 +62,11 @@ const Dashboard = () => {
           description: description || undefined,
           duration: 4000,
         });
-        setDailyClaimed(true);
+        setClaimedNow(true);
       } else {
         const hours = Math.ceil((result.remaining ?? 0) / 3_600_000);
         toast.error('Already claimed today', { description: hours ? `Come back in about ${hours}h.` : undefined });
-        setDailyClaimed(true);
+        setClaimedNow(true);
       }
     } catch {
       /* error toast shown by the mutation */
@@ -84,6 +92,14 @@ const Dashboard = () => {
             {dailyClaimed ? 'Claimed!' : 'Claim Daily Reward'}
           </Button>
         </motion.div>
+
+        <OnboardingChecklist
+          hasQuest={(user?.lists?.total ?? lists.length) > 0}
+          hasTask={totalTasks > 0}
+          claimedDaily={lastClaim > 0 || claimedNow}
+          onClaimDaily={handleClaimDaily}
+          claiming={claimDaily.isPending}
+        />
 
         {/* XP Progress with neon effects */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="rounded-2xl bg-card border border-border p-4 sm:p-6 relative overflow-hidden">
@@ -125,6 +141,8 @@ const Dashboard = () => {
           </motion.div>
         </div>
 
+        <QuestsCard />
+
         <BriefingCard />
 
         {/* Recent Quests */}
@@ -136,7 +154,9 @@ const Dashboard = () => {
             <Link to="/tasks"><Button variant="ghost" size="sm" className="text-xs sm:text-sm hover:text-primary">View All</Button></Link>
           </div>
 
-          {lists.length === 0 ? (
+          {listsQuery.isError ? (
+            <ErrorCard what="your quests" error={listsQuery.error} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} />
+          ) : lists.length === 0 ? (
             <div className="rounded-xl border-2 border-dashed border-border p-8 sm:p-12 text-center">
               <ListTodo className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-foreground-muted mb-4" />
               <h3 className="font-heading font-semibold mb-2 text-sm sm:text-base">No quests yet</h3>

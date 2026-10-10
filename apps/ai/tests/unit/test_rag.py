@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import numpy as np
 from sqlalchemy import text
@@ -199,7 +199,7 @@ async def test_retrieval_is_fresh_scoped_and_filtered(seeded):
     async with seeded.begin() as conn:
         await indexer.reconcile(conn, store, emb)
         r = TaskRetriever(store, emb)
-        results = await r.retrieve(conn, UID, "math homework problems", k=3, today=date.today())
+        results = await r.retrieve(conn, UID, "math homework problems", k=3, today=datetime.now(UTC).date())
         ids = [x.id for x in results]
         assert ids[0] == "L1"
         assert "L4" not in ids  # other user's quest ("Secret plans")
@@ -299,3 +299,52 @@ async def test_reconcile_purges_vectors_of_opted_out_users(seeded):
             await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE discord_id = :u"), {"u": UID})
         ).scalar()
         assert mine > 0
+
+
+async def test_forget_without_list_wipes_vectors_threads_and_summaries_but_keeps_usage(seeded):
+    from app.rag import runtime
+
+    store, emb = make_store(), FakeEmbedder()
+    runtime.set_runtime(store, emb)
+    try:
+        async with seeded.begin() as conn:
+            await indexer.index_list(conn, store, emb, UID, 1)
+            for uid, tid in ((UID, "t-mine"), (OTHER, "t-other")):
+                await conn.execute(
+                    text("INSERT INTO ai_chat_threads (id, discord_id) VALUES (:t, :u)"), {"t": tid, "u": uid}
+                )
+                await conn.execute(
+                    text("INSERT INTO ai_checkpoints (thread_id, checkpoint_id, checkpoint) VALUES (:t, 'c1', x'00')"),
+                    {"t": tid},
+                )
+                await conn.execute(
+                    text("INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) VALUES (:u, 'd', 'h', '{}')"),
+                    {"u": uid},
+                )
+            await conn.execute(
+                text("INSERT INTO ai_usage (discord_id, day, feature, requests) VALUES (:u, '2030-01-01', 'chat', 3)"), {"u": UID}
+            )
+        import httpx
+
+        from app.main import create_app
+
+        ok = {"X-AI-Token": "t" * 40}
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://ai") as c:
+            r = await c.post("/internal/forget", json={"discordId": UID}, headers=ok)
+        assert r.status_code == 204
+
+        async def count(table: str, uid: str) -> int:
+            async with seeded.connect() as conn:
+                return (
+                    await conn.execute(text(f"SELECT COUNT(*) FROM {table} WHERE discord_id = :u"), {"u": uid})
+                ).scalar()
+
+        for table in ("ai_embeddings", "ai_chat_threads", "ai_summary_cache"):
+            assert await count(table, UID) == 0, table
+        async with seeded.connect() as conn:
+            leftover = (await conn.execute(text("SELECT COUNT(*) FROM ai_checkpoints WHERE thread_id = 't-mine'"))).scalar()
+        assert leftover == 0
+        assert await count("ai_chat_threads", OTHER) == 1 and await count("ai_summary_cache", OTHER) == 1
+        assert await count("ai_usage", UID) == 1  # the daily quota is not refunded by a reset
+    finally:
+        runtime.set_runtime(None, None)

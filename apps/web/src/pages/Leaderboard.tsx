@@ -3,7 +3,9 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Trophy, Sparkles, Flame, Target, Crown, Medal, Zap } from "lucide-react";
-import { useLeaderboard } from "@/hooks/useApi";
+import { useLeaderboard, useMyRank } from "@/hooks/useApi";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
+import type { LeaderboardBoard } from "@/lib/api";
 import { useState } from "react";
 
 const CLASS_EMOJIS: Record<string, string> = {
@@ -62,9 +64,24 @@ const PlayerAvatar = ({ avatarUrl, username, size = 'md', rank }: {
   );
 };
 
+const BOARDS: Array<{ value: LeaderboardBoard; label: string; blurb: string; unit: string }> = [
+  { value: "lifetime", label: "Lifetime XP", blurb: "Everyone's total XP ever earned. Spending never lowers it.", unit: "XP" },
+  { value: "weekly", label: "This week", blurb: "XP earned since Monday 00:00 UTC.", unit: "XP this week" },
+  { value: "streak", label: "Streaks", blurb: "Longest daily-reward streaks right now.", unit: "days" },
+  { value: "xp", label: "Balance", blurb: "Current spendable XP.", unit: "XP" },
+];
+
+const CLASS_FILTERS = ["ALL", "DEFAULT", "HERO", "GAMBLER", "ASSASSIN", "WIZARD", "ARCHER", "TANK"];
+
 const Leaderboard = () => {
-  const { data: leaderboard, isLoading } = useLeaderboard();
+  const [by, setBy] = useState<LeaderboardBoard>("lifetime");
+  const [classFilter, setClassFilter] = useState("ALL");
+  const board = BOARDS.find((b) => b.value === by) ?? BOARDS[0];
+  const { data: leaderboard, isLoading, isError, error, refetch, isFetching } = useLeaderboard(by, classFilter);
+  const { data: mine } = useMyRank(by);
   const entries = leaderboard || [];
+  const scoreText = (entry: LeaderboardEntry | undefined) => (entry ? entry.score.toLocaleString() : "");
+  const youInList = entries.some((e) => e.isYou);
 
   const getDisplayName = (entry: LeaderboardEntry | undefined, isCurrentUser: boolean) => {
     if (isCurrentUser) return 'You';
@@ -82,9 +99,48 @@ const Leaderboard = () => {
             </div>
             Leaderboard
           </h1>
-          <p className="text-foreground-muted text-sm sm:text-base">Top adventurers ranked by XP</p>
+          <p className="text-foreground-muted text-sm sm:text-base">{board.blurb}</p>
         </motion.div>
       </div>
+
+      <div className="mb-6 flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-0">
+        <div role="tablist" aria-label="Leaderboard" className="flex flex-wrap gap-1 rounded-lg bg-background-secondary p-1 w-fit max-w-full">
+          {BOARDS.map((b) => (
+            <button
+              key={b.value}
+              role="tab"
+              aria-selected={by === b.value}
+              onClick={() => setBy(b.value)}
+              className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", by === b.value ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground")}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <label htmlFor="class-filter" className="text-sm text-foreground-muted">Class</label>
+          <select
+            id="class-filter"
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {CLASS_FILTERS.map((c) => (
+              <option key={c} value={c}>{c === "ALL" ? "All classes" : `${CLASS_EMOJIS[c] ?? ""} ${c.charAt(0)}${c.slice(1).toLowerCase()}`}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {mine && (
+        <p className="mb-4 px-4 text-sm text-foreground-muted sm:px-0" aria-live="polite">
+          {mine.rank
+            ? <>Your rank: <span className="font-heading font-bold text-primary">#{mine.rank}</span>{!youInList && classFilter === "ALL" ? " (outside the top 10)" : ""}</>
+            : by === "weekly" || by === "streak"
+              ? "You're not on this board yet. Earn some XP or claim your daily reward!"
+              : "Turn on gamification to appear on the leaderboard."}
+        </p>
+      )}
 
       {/* Top 3 Podium */}
       {entries.length >= 3 && (
@@ -99,7 +155,7 @@ const Leaderboard = () => {
                   <PlayerAvatar avatarUrl={entries[1]?.avatarUrl ?? null} username={entries[1]?.username} size="lg" rank={2} />
                 </div>
                 <p className="font-heading font-semibold truncate">{getDisplayName(entries[1], Boolean(entries[1]?.isYou))}</p>
-                <p className="text-xp font-bold text-lg">{entries[1]?.xp?.toLocaleString()} XP</p>
+                <p className="text-xp font-bold text-lg">{scoreText(entries[1])} {board.unit}</p>
                 <p className="text-xs text-foreground-muted">Level {entries[1]?.level} • {CLASS_EMOJIS[entries[1]?.playerClass] || '⚪'}</p>
               </div>
             </motion.div>
@@ -116,7 +172,7 @@ const Leaderboard = () => {
                   <PlayerAvatar avatarUrl={entries[0]?.avatarUrl ?? null} username={entries[0]?.username} size="xl" rank={1} />
                 </div>
                 <p className="font-heading font-bold text-lg truncate">{getDisplayName(entries[0], Boolean(entries[0]?.isYou))}</p>
-                <p className="text-xp font-bold text-2xl">{entries[0]?.xp?.toLocaleString()} XP</p>
+                <p className="text-xp font-bold text-2xl">{scoreText(entries[0])} {board.unit}</p>
                 <p className="text-sm text-foreground-muted">Level {entries[0]?.level} • {CLASS_EMOJIS[entries[0]?.playerClass] || '⚪'}</p>
               </div>
             </motion.div>
@@ -132,7 +188,7 @@ const Leaderboard = () => {
                   <PlayerAvatar avatarUrl={entries[2]?.avatarUrl ?? null} username={entries[2]?.username} size="lg" rank={3} />
                 </div>
                 <p className="font-heading font-semibold truncate">{getDisplayName(entries[2], Boolean(entries[2]?.isYou))}</p>
-                <p className="text-xp font-bold text-lg">{entries[2]?.xp?.toLocaleString()} XP</p>
+                <p className="text-xp font-bold text-lg">{scoreText(entries[2])} {board.unit}</p>
                 <p className="text-xs text-foreground-muted">Level {entries[2]?.level} • {CLASS_EMOJIS[entries[2]?.playerClass] || '⚪'}</p>
               </div>
             </motion.div>
@@ -146,17 +202,19 @@ const Leaderboard = () => {
           <div className="col-span-1">Rank</div>
           <div className="col-span-4">Player</div>
           <div className="col-span-2 text-center">Level</div>
-          <div className="col-span-2 text-center">XP</div>
+          <div className="col-span-2 text-center">{board.unit}</div>
           <div className="col-span-1 text-center">Streak</div>
           <div className="col-span-2 text-center">Tasks</div>
         </div>
 
-        {isLoading ? (
+        {isError ? (
+          <div className="p-4"><ErrorCard what="the leaderboard" error={error} onRetry={() => void refetch()} retrying={isFetching} /></div>
+        ) : isLoading ? (
           [...Array(5)].map((_, i) => <div key={i} className="h-16 border-b border-border animate-pulse bg-card/50" />)
         ) : entries.length === 0 ? (
           <div className="p-8 sm:p-12 text-center text-foreground-muted">
             <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No rankings yet. Be the first!</p>
+            <p>{classFilter === "ALL" ? "No rankings yet. Be the first!" : "Nobody in this class has a score on this board yet."}</p>
           </div>
         ) : (
           entries.map((entry: LeaderboardEntry, index: number) => {
@@ -165,7 +223,8 @@ const Leaderboard = () => {
 
             return (
               <motion.div
-                key={entry.rank}
+                key={`${by}-${classFilter}-${entry.rank}`}
+                aria-current={isCurrentUser ? "true" : undefined}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.25 + index * 0.05 }}
@@ -191,9 +250,9 @@ const Leaderboard = () => {
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="text-xp font-bold text-sm flex items-center gap-1"><Sparkles className="h-3 w-3" />{entry.xp?.toLocaleString()}</span>
+                      <span className="text-xp font-bold text-sm flex items-center gap-1"><Sparkles className="h-3 w-3" />{scoreText(entry)}</span>
                       <div className="flex items-center gap-2 text-xs text-foreground-muted mt-1">
-                        <span className="flex items-center gap-1 text-orange-400"><Flame className="h-3 w-3" />{entry.streak}</span>
+                        <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400"><Flame className="h-3 w-3" />{entry.streak}</span>
                         <span className="flex items-center gap-1"><Target className="h-3 w-3" />{entry.tasksCompleted}</span>
                       </div>
                     </div>
@@ -225,11 +284,11 @@ const Leaderboard = () => {
                   </div>
                   <div className="col-span-2 text-center">
                     <span className="text-xp font-bold flex items-center justify-center gap-1">
-                      <Sparkles className="h-4 w-4" />{entry.xp?.toLocaleString()}
+                      <Sparkles className="h-4 w-4" />{scoreText(entry)}
                     </span>
                   </div>
                   <div className="col-span-1 text-center">
-                    <span className="flex items-center justify-center gap-1 text-orange-400">
+                    <span className="flex items-center justify-center gap-1 text-orange-700 dark:text-orange-400">
                       <Flame className="h-4 w-4" />{entry.streak}
                     </span>
                   </div>

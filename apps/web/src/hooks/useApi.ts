@@ -6,6 +6,8 @@
 
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { formatDeadline } from '@/lib/dates';
+import { celebrate } from '@/lib/celebrate';
 import {
     userApi,
     listsApi,
@@ -15,9 +17,12 @@ import {
     achievementsApi,
     leaderboardApi,
     gamesApi,
+    questsApi,
     aiApi,
     type AchievementUnlock,
     type CreateListData,
+    type ItemInput,
+    type LeaderboardBoard,
     type RewardFields,
     type User,
 } from '@/lib/api';
@@ -27,6 +32,7 @@ import {
 export function showXPNotification(result: Partial<RewardFields> | null | undefined, action: string, emoji = '✨') {
     const xp = result?.xpResult;
     if (!xp || xp.finalXP <= 0) return;
+    if (xp.leveledUp) celebrate('level');
     toast.success(`${emoji} ${action} +${xp.finalXP} XP!`, {
         description: xp.leveledUp ? `🎉 Level up! You are now level ${xp.newLevel}.` : xp.bonusInfo?.details || undefined,
         duration: 3500,
@@ -35,6 +41,7 @@ export function showXPNotification(result: Partial<RewardFields> | null | undefi
 
 export function showAchievementNotifications(achievements: AchievementUnlock[] | undefined, qc: QueryClient) {
     if (!achievements?.length) return;
+    celebrate('achievement');
     for (const ach of achievements) {
         toast.success(`🏆 Achievement Unlocked: ${ach.name}!`, { description: ach.description, duration: 5000 });
     }
@@ -66,6 +73,7 @@ export function useClaimDaily() {
         mutationFn: userApi.claimDaily,
         onSuccess: (result) => {
             invalidateProgress(qc);
+            if (result.leveledUp) celebrate('level');
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,
@@ -75,7 +83,7 @@ export function useClaimDaily() {
 export function useUpdateSettings() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled'>>) =>
+        mutationFn: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'weekly_digest' | 'timezone' | 'reminder_hour'>>) =>
             userApi.updateSettings(settings),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['user'] }),
         onError: showError,
@@ -87,6 +95,38 @@ export function useResetProgress() {
     return useMutation({
         mutationFn: userApi.resetProgress,
         onSuccess: () => qc.invalidateQueries(),
+        onError: showError,
+    });
+}
+
+/** Create/rotate or turn off the secret calendar feed address. */
+export function useCalendarToken() {
+    const qc = useQueryClient();
+    const refresh = () => qc.invalidateQueries({ queryKey: ['auth'] });
+    return {
+        create: useMutation({ mutationFn: userApi.createCalendarToken, onSuccess: refresh, onError: showError }),
+        revoke: useMutation({ mutationFn: userApi.revokeCalendarToken, onSuccess: refresh, onError: showError }),
+    };
+}
+
+export function useImportData() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (data: unknown) => userApi.importData(data),
+        onSuccess: () => qc.invalidateQueries(),
+        onError: showError,
+    });
+}
+
+export function useBuyStreakFreeze() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: userApi.buyStreakFreeze,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            toast.success(`🧊 Streak freeze bought (${result.freezes}/3)`, { description: 'It saves your streak automatically if you miss a day.' });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
         onError: showError,
     });
 }
@@ -136,8 +176,7 @@ export function useDeleteList() {
 export function useCreateItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ listId, name, description }: { listId: number; name: string; description?: string }) =>
-            itemsApi.create(listId, { name, description }),
+        mutationFn: ({ listId, ...data }: { listId: number } & ItemInput) => itemsApi.create(listId, data),
         onSuccess: (result) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);
@@ -151,7 +190,7 @@ export function useCreateItem() {
 export function useUpdateItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ itemId, data }: { itemId: number; data: Partial<{ name: string; description: string | null; position: number }> }) =>
+        mutationFn: ({ itemId, data }: { itemId: number; data: Partial<ItemInput> & { position?: number } }) =>
             itemsApi.update(itemId, data),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['lists'] }),
         onError: showError,
@@ -167,6 +206,15 @@ export function useDeleteItem() {
     });
 }
 
+export function useReorderItems() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ listId, itemIds }: { listId: number; itemIds: number[] }) => listsApi.reorder(listId, itemIds),
+        onSuccess: (_items, { listId }) => qc.invalidateQueries({ queryKey: ['lists', listId] }),
+        onError: showError,
+    });
+}
+
 export function useToggleItem() {
     const qc = useQueryClient();
     return useMutation({
@@ -175,6 +223,9 @@ export function useToggleItem() {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);
             if (result.completed) showXPNotification(result, 'Task done!', '✨');
+            if (result.nextItem) {
+                toast('🔁 Next one is ready', { description: result.nextItem.due_date ? `Due ${formatDeadline(result.nextItem.due_date)}` : undefined });
+            }
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,
@@ -222,14 +273,46 @@ export function useUnlockSkill() {
     });
 }
 
+// ─── Quests ──────────────────────────────────────────────────────────────────
+
+export function useQuests() {
+    return useQuery({ queryKey: ['quests'], queryFn: questsApi.getAll });
+}
+
+export function useClaimQuest() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (key: string) => questsApi.claim(key),
+        onSuccess: (result) => {
+            qc.invalidateQueries({ queryKey: ['quests'] });
+            invalidateProgress(qc);
+            celebrate(result.leveledUp ? 'level' : 'quest');
+            toast.success(`🎁 ${result.name} claimed +${result.reward} XP!`, {
+                description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
+            });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
 // ─── Other ───────────────────────────────────────────────────────────────────
 
 export function useAchievements() {
     return useQuery({ queryKey: ['achievements'], queryFn: achievementsApi.getAll });
 }
 
-export function useLeaderboard() {
-    return useQuery({ queryKey: ['leaderboard'], queryFn: leaderboardApi.get });
+export function useLeaderboard(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
+    return useQuery({ queryKey: ['leaderboard', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.get(by, playerClass) });
+}
+
+export function useGameAllowance() {
+    return useQuery({ queryKey: ['games', 'allowance'], queryFn: gamesApi.getAllowance });
+}
+
+/** The signed-in player's own rank on a board (null when they have no score there yet). */
+export function useMyRank(by: LeaderboardBoard = 'lifetime') {
+    return useQuery({ queryKey: ['leaderboard', 'me', by], queryFn: () => leaderboardApi.me(by) });
 }
 
 export function useGameHistory() {

@@ -10,6 +10,10 @@ const xp = require('./xp');
 const achievements = require('./achievements');
 const validation = require('./validation');
 const random = require('./random');
+const dates = require('./dates');
+const { questPeriod } = require('./quests');
+const { buildIcs } = require('./ics');
+const { parseQuickAdd } = require('./quickAdd');
 const blackjack = require('./games/blackjack');
 const rps = require('./games/rps');
 const hangman = require('./games/hangman');
@@ -24,5 +28,9 @@ module.exports = {
     errors,
     validation,
     random,
+    ...dates,
+    questPeriod,
+    buildIcs,
+    parseQuickAdd,
     games: { blackjack, rps, hangman, arcade }
 };

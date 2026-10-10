@@ -50,10 +50,14 @@ export const authApi = {
 
 export const userApi = {
     getProfile: () => apiFetch<UserStats>('/api/user'),
-    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled'>>) =>
+    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'weekly_digest' | 'timezone' | 'reminder_hour'>>) =>
         patch<User>('/api/user', settings),
     claimDaily: () => post<DailyClaimResult>('/api/user/daily'),
     resetProgress: () => post<{ success: boolean; message: string }>('/api/user/reset', { confirm: 'RESET' }),
+    createCalendarToken: () => post<{ token: string }>('/api/user/calendar-token'),
+    revokeCalendarToken: () => del<{ success: boolean }>('/api/user/calendar-token'),
+    importData: (data: unknown) => post<{ success: boolean; lists: number; items: number }>('/api/user/import', data),
+    buyStreakFreeze: () => post<{ success: boolean; freezes: number; cost: number; newBalance: number; newAchievements: AchievementUnlock[] }>('/api/user/streak-freeze'),
 };
 
 // ─── Lists & items ───────────────────────────────────────────────────────────
@@ -64,12 +68,18 @@ export const listsApi = {
     create: (data: CreateListData) => post<List & RewardFields>('/api/lists', data),
     update: (id: number, data: Partial<CreateListData>) => patch<List>(`/api/lists/${id}`, data),
     delete: (id: number) => del<{ success: boolean }>(`/api/lists/${id}`),
+    reorder: (id: number, itemIds: number[]) => patch<Item[]>(`/api/lists/${id}/reorder`, { itemIds }),
+};
+
+export const questsApi = {
+    getAll: () => apiFetch<{ quests: Quest[] }>('/api/quests'),
+    claim: (key: string) => post<QuestClaimResult>(`/api/quests/${key}/claim`),
 };
 
 export const itemsApi = {
-    create: (listId: number, data: { name: string; description?: string }) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
-    update: (id: number, data: Partial<{ name: string; description: string | null; position: number }>) => patch<Item>(`/api/items/${id}`, data),
-    toggle: (id: number) => patch<Item & RewardFields>(`/api/items/${id}/toggle`),
+    create: (listId: number, data: ItemInput) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
+    update: (id: number, data: Partial<ItemInput> & { position?: number }) => patch<Item>(`/api/items/${id}`, data),
+    toggle: (id: number) => patch<Item & RewardFields & { nextItem?: Item | null }>(`/api/items/${id}/toggle`),
     delete: (id: number) => del<{ success: boolean }>(`/api/items/${id}`),
 };
 
@@ -152,14 +162,22 @@ export const achievementsApi = {
     getAll: () => apiFetch<AchievementsData>('/api/achievements'),
 };
 
+export type LeaderboardBoard = 'lifetime' | 'weekly' | 'streak' | 'xp';
+
 export const leaderboardApi = {
-    get: () => apiFetch<LeaderboardEntry[]>('/api/leaderboard'),
+    me: (by: LeaderboardBoard = 'lifetime') => apiFetch<{ rank: number | null }>(`/api/leaderboard/me?by=${by}`),
+    get: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
+        const params = new URLSearchParams({ by });
+        if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
+        return apiFetch<LeaderboardEntry[]>(`/api/leaderboard?${params}`);
+    },
 };
 
 // ─── Games (server-authoritative) ────────────────────────────────────────────
 
 export const gamesApi = {
     getHistory: () => apiFetch<GameSession[]>('/api/games/history'),
+    getAllowance: () => apiFetch<GameAllowance>('/api/games/allowance'),
     getActive: () => apiFetch<{ blackjack: BlackjackActive | null; hangman: HangmanActive | null }>('/api/games/active'),
     blackjackStart: (bet: number) => post<BlackjackResult>('/api/games/blackjack/start', { bet }),
     blackjackAction: (action: 'hit' | 'stand' | 'double') => post<BlackjackResult>('/api/games/blackjack/action', { action }),
@@ -204,6 +222,12 @@ export interface User {
     total_items_added: number;
     total_items_completed: number;
     total_lists_created: number;
+    streak_freezes?: number;
+    xp_spent?: number;
+    timezone?: string | null;
+    reminder_hour?: number;
+    weekly_digest?: boolean | number;
+    calendar_token?: string | null;
 }
 
 export interface DiscordUser {
@@ -294,6 +318,24 @@ export interface Item {
     completed: boolean | number;
     position: number;
     created_at: string;
+    /** Own due date (YYYY-MM-DD), priority, comma-separated lowercase tags, parent task and repeat rule. */
+    due_date?: string | null;
+    priority?: Priority | null;
+    tags?: string | null;
+    parent_id?: number | null;
+    recurrence?: Recurrence | null;
+}
+
+export type Recurrence = 'daily' | 'weekly' | 'monthly';
+
+export interface ItemInput {
+    name: string;
+    description?: string | null;
+    due_date?: string | null;
+    priority?: Priority | null;
+    tags?: string[] | string | null;
+    recurrence?: Recurrence | null;
+    parent_id?: number | null;
 }
 
 export interface ListWithItems extends List {
@@ -374,12 +416,22 @@ export interface LeaderboardEntry {
     username: string;
     avatarUrl: string | null;
     xp: number;
+    lifetimeXp: number;
+    /** The value this board ranks by (XP, XP earned this week, or streak days). */
+    score: number;
     level: number;
     playerClass: PlayerClass;
     streak: number;
     gamesPlayed: number;
     tasksCompleted: number;
     isYou: boolean;
+}
+
+export interface GameAllowance {
+    cap: number;
+    remainingXP: number;
+    usedXP: number;
+    resetsAt: string;
 }
 
 export interface GameSession {
@@ -507,10 +559,37 @@ export interface DailyClaimResult {
     bonusInfo?: BonusInfo;
     streakBroken?: boolean;
     streakPreserved?: boolean;
+    freezeUsed?: boolean;
     newBalance?: number;
     newLevel?: number;
     leveledUp?: boolean;
     newAchievements?: AchievementUnlock[];
+}
+
+export interface Quest {
+    key: string;
+    name: string;
+    emoji: string;
+    description: string;
+    period: 'daily' | 'weekly';
+    target: number;
+    reward: number;
+    progress: number;
+    claimed: boolean;
+    claimable: boolean;
+    periodStart: string;
+    resetsAt: string;
+}
+
+export interface QuestClaimResult {
+    success: boolean;
+    key: string;
+    name: string;
+    reward: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
 }
 
 // ─── AI types ────────────────────────────────────────────────────────────────

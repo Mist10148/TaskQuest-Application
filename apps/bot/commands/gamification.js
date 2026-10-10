@@ -18,7 +18,7 @@
 
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { users, progression } = require('@taskquest/shared/db');
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, levelProgress } = require('@taskquest/shared');
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, levelProgress } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -47,6 +47,23 @@ async function ping(interaction) {
 const dailyData = new SlashCommandBuilder()
     .setName('daily')
     .setDescription('🎁 Claim your daily 100 XP reward');
+
+const freezeData = new SlashCommandBuilder()
+    .setName('freeze')
+    .setDescription(`🧊 Buy a streak freeze (${STREAK_FREEZE.COST} XP) that saves your daily streak once`);
+
+async function freeze(interaction) {
+    await interaction.deferReply(EPHEMERAL);
+    try {
+        const r = await progression.buyStreakFreeze(interaction.user.id);
+        await interaction.editReply({
+            embeds: [ui.success('Streak freeze bought', `You now hold **${r.freezes}/${STREAK_FREEZE.MAX}**. It is used automatically if you miss a day. Balance: ${Number(r.balance).toLocaleString()} XP.`)]
+        });
+        await sendRewards(interaction, { achievements: r.achievements });
+    } catch (err) {
+        await handleError(interaction, err);
+    }
+}
 
 function formatTimeRemaining(ms) {
     const hours = Math.floor(ms / (1000 * 60 * 60));
@@ -102,7 +119,8 @@ async function daily(interaction) {
 
     if (r.leveledUp) embed.addFields({ name: '🎉 Level Up!', value: `You reached **Level ${r.level}**!`, inline: false });
     if (r.streakBroken) embed.addFields({ name: '💔 Streak Lost', value: `Your ${r.previousStreak}-day streak was reset. Start again!`, inline: false });
-    if (r.streakPreserved) embed.addFields({ name: '🚀 Unstoppable', value: 'You missed a day, but your streak was kept!', inline: false });
+    if (r.freezeUsed) embed.addFields({ name: '🧊 Streak Freeze Used', value: 'You missed a day, but a streak freeze saved your streak!', inline: false });
+    else if (r.streakPreserved) embed.addFields({ name: '🚀 Unstoppable', value: 'You missed a day, but your streak was kept!', inline: false });
     if (r.streak === 7) embed.addFields({ name: '🎊 Week Streak!', value: 'Amazing! 7 days in a row!', inline: false });
     else if (r.streak === 30) embed.addFields({ name: '🏆 Month Streak!', value: 'Incredible! 30 days in a row!', inline: false });
 
@@ -684,17 +702,37 @@ async function handleSkillSelect(interaction) {
 //  📊 /leaderboard - Single Organized Embed
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const BOARD_LABELS = {
+    lifetime: { title: 'Top players by lifetime XP', unit: 'XP' },
+    xp: { title: 'Top players by current XP balance', unit: 'XP' },
+    weekly: { title: 'Most XP earned this week', unit: 'XP this week' },
+    streak: { title: 'Longest daily streaks', unit: 'day streak' }
+};
+
 const leaderboardData = new SlashCommandBuilder()
     .setName('leaderboard')
-    .setDescription('📊 View top players');
+    .setDescription('📊 View top players')
+    .addStringOption((o) =>
+        o
+            .setName('by')
+            .setDescription('What to rank by (default: lifetime XP)')
+            .addChoices(
+                { name: 'Lifetime XP', value: 'lifetime' },
+                { name: 'Earned this week', value: 'weekly' },
+                { name: 'Daily streak', value: 'streak' },
+                { name: 'Current XP balance', value: 'xp' }
+            )
+    );
 
 async function leaderboard(interaction) {
     await interaction.deferReply();
-    const rows = await users.getLeaderboard(10);
+    const by = interaction.options.getString('by') || 'lifetime';
+    const label = BOARD_LABELS[by];
+    const rows = await users.getLeaderboard(10, { by });
 
     if (!rows.length) {
         return interaction.editReply({
-            embeds: [new EmbedBuilder().setColor(0x2C2F33).setTitle('🏆 Leaderboard').setDescription('*No players yet! Be the first to earn XP!*')]
+            embeds: [new EmbedBuilder().setColor(0x2C2F33).setTitle('🏆 Leaderboard').setDescription(by === 'weekly' || by === 'streak' ? '*Nobody here yet this week. Be the first!*' : '*No players yet! Be the first to earn XP!*')]
         });
     }
 
@@ -717,15 +755,14 @@ async function leaderboard(interaction) {
         })
     );
 
-    const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 Leaderboard').setDescription('Top players by XP');
+    const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 Leaderboard').setDescription(label.title);
     if (entries[0]?.avatarURL) embed.setThumbnail(entries[0].avatarURL);
 
     const medals = ['🥇', '🥈', '🥉'];
     const boardText = entries
         .map((e, i) => {
-            const stats = [`${Number(e.player_xp).toLocaleString()} XP`, `Lv.${e.player_level}`];
-            if (e.games_played > 0) stats.push(`${e.games_played} games`);
-            if (e.streak_count > 0) stats.push(`🔥${e.streak_count}`);
+            const stats = [`${Number(e.score).toLocaleString()} ${label.unit}`, `Lv.${e.player_level}`];
+            if (by !== 'streak' && e.streak_count > 0) stats.push(`🔥${e.streak_count}`);
             return `${i < 3 ? medals[i] : `\`${e.rank}.\``} **${e.name}** ${CLASS_INFO[e.player_class]?.emoji || '⚪'}\n-# ${stats.join(' · ')}`;
         })
         .join('\n\n');
@@ -812,10 +849,10 @@ async function app(interaction) {
 
 module.exports = {
     // Command data
-    pingData, dailyData, automationData, profileData, achievementsData,
+    pingData, dailyData, freezeData, automationData, profileData, achievementsData,
     classData, leaderboardData, toggleData, helpData, appData,
     // Command handlers
-    ping, daily, automation, profile, achievements, classShop, leaderboard, toggle, help, app,
+    ping, daily, freeze, automation, profile, achievements, classShop, leaderboard, toggle, help, app,
     // Button handlers
     handleClassButton, handleAchievementPagination,
     // Select menu handlers

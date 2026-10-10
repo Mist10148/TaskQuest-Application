@@ -209,7 +209,11 @@ const ACHIEVEMENTS = {
     FIRST_GAME: { name: 'Player One', emoji: '🎮', description: 'Finish your first game', category: 'games' },
     GAME_WIN_10: { name: 'Winner', emoji: '🥇', description: 'Win 10 games', category: 'games' },
     BLACKJACK: { name: 'Blackjack!', emoji: '🃏', description: 'Get a natural blackjack', category: 'games' },
-    HIGH_ROLLER: { name: 'High Roller', emoji: '💰', description: 'Win 500+ XP in one game', category: 'games' }
+    HIGH_ROLLER: { name: 'High Roller', emoji: '💰', description: 'Win 500+ XP in one game', category: 'games' },
+    // Spending (classes, skills and streak freezes)
+    SPEND_1000: { name: 'Big Spender', emoji: '🛍️', description: 'Spend 1,000 XP on classes, skills and upgrades', category: 'economy' },
+    SPEND_5000: { name: 'Investor', emoji: '📈', description: 'Spend 5,000 XP on classes, skills and upgrades', category: 'economy' },
+    SPEND_10000: { name: 'Tycoon', emoji: '🏦', description: 'Spend 10,000 XP on classes, skills and upgrades', category: 'economy' }
 };
 
 // ─── Leveling ────────────────────────────────────────────────────────────────
@@ -231,12 +235,36 @@ const REWARDS = {
     HANGMAN_MIN: 10
 };
 
+/**
+ * Daily and weekly quests. `metric` names a progress query in db/quests.js; rewards are flat XP
+ * (no class or skill modifiers) and each quest can be claimed once per period.
+ */
+const QUESTS = {
+    DAILY_COMPLETE_3: { name: 'Daily Grind', emoji: '⚒️', description: 'Complete 3 tasks today', period: 'daily', metric: 'completions', target: 3, reward: 30 },
+    DAILY_HIGH_1: { name: 'Heavy Lifter', emoji: '🏋️', description: 'Complete a high-priority task today', period: 'daily', metric: 'high_completions', target: 1, reward: 25 },
+    DAILY_ADD_3: { name: 'Planner', emoji: '🗒️', description: 'Add 3 tasks today', period: 'daily', metric: 'adds', target: 3, reward: 15 },
+    WEEKLY_COMPLETE_15: { name: 'Weekly Warrior', emoji: '🛡️', description: 'Complete 15 tasks this week', period: 'weekly', metric: 'completions', target: 15, reward: 120 },
+    WEEKLY_DAILY_5: { name: 'Regular', emoji: '📆', description: 'Claim your daily reward on 5 days this week', period: 'weekly', metric: 'daily_claims', target: 5, reward: 80 }
+};
+
+/** Leaderboard tabs. `weekly` counts XP earned since Monday from these sources (not bets or refunds). */
+const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
+const WEEKLY_XP_SOURCES = ['list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward'];
+
+/** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
+const STREAK_FREEZE = { COST: 150, MAX: 3 };
+
+/** xp_transactions sources that count as "spending" for xp_spent and the spending achievements. */
+const SPEND_SOURCES = ['class_purchase', 'skill_purchase', 'streak_freeze'];
+
 /** Anti-farming limits (per user, per UTC day unless noted). */
 const LIMITS = {
     /** Only the first N list creations per day award XP. */
     LIST_CREATE_REWARDS_PER_DAY: 10,
     /** Only the first N item additions per day award XP. */
     ITEM_ADD_REWARDS_PER_DAY: 50,
+    /** Only the first N task completions per day award XP (stops add/complete/delete loops). */
+    ITEM_COMPLETE_REWARDS_PER_DAY: 50,
     /** Total XP that free games (RPS, Hangman, arcade) may award per day. */
     FREE_GAME_XP_PER_DAY: 500,
     /** Minimum time between two free-game rounds. */
@@ -310,6 +338,11 @@ module.exports = {
     ACHIEVEMENTS,
     XP_PER_LEVEL,
     REWARDS,
+    STREAK_FREEZE,
+    SPEND_SOURCES,
+    QUESTS,
+    LEADERBOARDS,
+    WEEKLY_XP_SOURCES,
     LIMITS,
     DAILY,
     TEXT_LIMITS,

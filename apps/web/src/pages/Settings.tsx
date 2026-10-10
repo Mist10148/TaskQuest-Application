@@ -1,75 +1,66 @@
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { AlertTriangle, Bot, CalendarDays, ExternalLink, Loader2, LogOut, Palette, Settings as SettingsIcon, Sparkles, Zap, Database } from "lucide-react";
 import type { User } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { SettingRow, SettingsSection, SwitchRow } from "@/components/settings/SettingsSection";
+import { ReminderSettings } from "@/components/settings/ReminderSettings";
+import { CalendarFeed, DataSettings } from "@/components/settings/DataSettings";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { motion } from "framer-motion";
-import { Settings as SettingsIcon, Sparkles, Zap, LogOut, ExternalLink, AlertTriangle, Loader2, Trash2, Bot } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUpdateSettings, useResetProgress } from "@/hooks/useApi";
-import { toast } from "sonner";
-import { useState } from "react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePreferences } from "@/contexts/PreferencesContext";
+import { useUpdateSettings, useResetProgress } from "@/hooks/useApi";
+
+// Optional: set VITE_BOT_INVITE_URL at build time to show an "Add the bot" button.
+const BOT_INVITE_URL = /^https:\/\//.test(import.meta.env.VITE_BOT_INVITE_URL || "") ? (import.meta.env.VITE_BOT_INVITE_URL as string) : "";
+
+const SWITCH_FIELDS = {
+  gamification: "gamification_enabled",
+  automation: "automation_enabled",
+  autoDelete: "auto_delete_old_lists",
+  ai: "ai_enabled",
+  weekly: "weekly_digest",
+} as const;
+
+type SwitchKey = keyof typeof SWITCH_FIELDS;
 
 const Settings = () => {
   const { user, logout, refresh } = useAuth();
   const updateSettings = useUpdateSettings();
   const resetProgress = useResetProgress();
-  
-  const dbUser: Partial<User> = user?.user ?? {};
-  const [gamification, setGamification] = useState(Boolean(dbUser.gamification_enabled ?? true));
-  const [automation, setAutomation] = useState(Boolean(dbUser.automation_enabled ?? true));
-  const [autoDelete, setAutoDelete] = useState(Boolean(dbUser.auto_delete_old_lists ?? true));
-  const [aiEnabled, setAiEnabled] = useState(Boolean(dbUser.ai_enabled ?? true));
+  const { reduceMotion, setReduceMotion, sound, setSound } = usePreferences();
   const [confirmText, setConfirmText] = useState("");
 
-  const handleToggle = async (key: string, value: boolean) => {
-    if (key === 'gamification') setGamification(value);
-    else if (key === 'automation') setAutomation(value);
-    else if (key === 'autoDelete') setAutoDelete(value);
-    else if (key === 'ai') setAiEnabled(value);
+  const dbUser: Partial<User> = user?.user ?? {};
+  // The server row is the source of truth; switches follow it after each save.
+  const on = (value: boolean | number | undefined, fallback: boolean) => Boolean(value ?? fallback);
 
+  const save = async (patch: Parameters<typeof updateSettings.mutateAsync>[0]) => {
     try {
-      const fieldName = key === 'gamification' ? 'gamification_enabled' :
-                        key === 'automation' ? 'automation_enabled' :
-                        key === 'ai' ? 'ai_enabled' :
-                        'auto_delete_old_lists';
-      await updateSettings.mutateAsync({ [fieldName]: value });
-      toast.success('Settings updated!');
-      refresh();
+      await updateSettings.mutateAsync(patch);
+      toast.success("Settings updated!");
+      await refresh();
     } catch {
-      toast.error('Failed to update settings');
+      /* error toast shown by the mutation hook; the switches fall back to the saved value */
     }
   };
+  const toggle = (key: SwitchKey, value: boolean) => save({ [SWITCH_FIELDS[key]]: value });
 
   const handleReset = async () => {
-    if (confirmText !== "RESET") {
-      toast.error('Please type RESET to confirm');
-      return;
-    }
-    
+    if (confirmText !== "RESET") return void toast.error("Please type RESET to confirm");
     try {
       await resetProgress.mutateAsync();
-      toast.success('All progress has been reset!');
+      toast.success("All progress has been reset!");
       setConfirmText("");
-      refresh();
+      await refresh();
     } catch {
-      toast.error('Failed to reset progress');
-    }
-  };
-
-  const handleLogout = async () => {
-    if (confirm('Are you sure you want to log out?')) {
-      await logout();
+      /* error toast shown by the mutation hook */
     }
   };
 
@@ -83,184 +74,125 @@ const Settings = () => {
           </motion.div>
         </div>
 
-        {/* Gamification Settings */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="rounded-xl bg-card border border-border p-4 sm:p-6 mb-4 sm:mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-xp/20 flex items-center justify-center flex-shrink-0">
-              <Sparkles className="h-5 w-5 text-xp" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-heading font-semibold">Gamification</h2>
-              <p className="text-sm text-foreground-muted truncate">XP rewards and leveling</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-3 border-t border-border gap-4">
-            <div className="min-w-0">
-              <p className="font-medium text-sm sm:text-base">Enable Gamification</p>
-              <p className="text-xs sm:text-sm text-foreground-muted">Earn XP for tasks</p>
-            </div>
-            <Switch checked={gamification} onCheckedChange={(v) => handleToggle('gamification', v)} />
-          </div>
-        </motion.div>
+        <SettingsSection icon={<Palette className="h-5 w-5 text-primary" />} title="Appearance" description="This device only" delay={0.05}>
+          <SettingRow label="Theme" description="Follow your system, or pick one.">
+            <ThemeToggle />
+          </SettingRow>
+          <SwitchRow label="Reduce motion" description="Turn off animations and the confetti. Your system setting is respected too." checked={reduceMotion} onChange={setReduceMotion} />
+          <SwitchRow label="Game sounds" description="Short sound effects in the arcade games." checked={sound} onChange={setSound} />
+        </SettingsSection>
 
-        {/* Automation Settings */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="rounded-xl bg-card border border-border p-4 sm:p-6 mb-4 sm:mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-              <Zap className="h-5 w-5 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-heading font-semibold">Automation</h2>
-              <p className="text-sm text-foreground-muted truncate">Reminders and actions</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-3 border-t border-border gap-4">
-            <div className="min-w-0">
-              <p className="font-medium text-sm sm:text-base">Enable Automation</p>
-              <p className="text-xs sm:text-sm text-foreground-muted">Get deadline reminders</p>
-            </div>
-            <Switch checked={automation} onCheckedChange={(v) => handleToggle('automation', v)} />
-          </div>
-        </motion.div>
+        <SettingsSection icon={<Sparkles className="h-5 w-5 text-xp" />} title="Gamification" description="XP rewards and leveling" tint="bg-xp/20" delay={0.1}>
+          <SwitchRow label="Enable gamification" description="Earn XP for tasks" checked={on(dbUser.gamification_enabled, true)} onChange={(v) => void toggle("gamification", v)} />
+        </SettingsSection>
 
-        {/* Auto-Delete Settings */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.17 }} className="rounded-xl bg-card border border-border p-4 sm:p-6 mb-4 sm:mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-orange-500/20 flex items-center justify-center flex-shrink-0">
-              <Trash2 className="h-5 w-5 text-orange-500" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-heading font-semibold">Auto-Delete</h2>
-              <p className="text-sm text-foreground-muted truncate">Automatically clean up old lists</p>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-3 border-t border-border gap-4">
-            <div className="min-w-0">
-              <p className="font-medium text-sm sm:text-base">Auto-Delete Old Lists</p>
-              <p className="text-xs sm:text-sm text-foreground-muted">Delete expired/completed lists after 5 days</p>
-            </div>
-            <Switch checked={autoDelete} onCheckedChange={(v) => handleToggle('autoDelete', v)} />
-          </div>
-        </motion.div>
+        <SettingsSection icon={<Zap className="h-5 w-5 text-primary" />} title="Reminders & automation" description="When and how TaskQuest nudges you on Discord" delay={0.15}>
+          <ReminderSettings
+            user={dbUser}
+            automation={on(dbUser.automation_enabled, true)}
+            weeklyDigest={on(dbUser.weekly_digest, false)}
+            autoDelete={on(dbUser.auto_delete_old_lists, true)}
+            onToggle={(key, value) => void toggle(key, value)}
+            onSave={(patch) => void save(patch)}
+          />
+        </SettingsSection>
 
-        {/* AI assistant (only when the server offers it) */}
+        <SettingsSection icon={<CalendarDays className="h-5 w-5 text-primary" />} title="Calendar feed" description="Deadlines in Google, Apple or Outlook Calendar" delay={0.17}>
+          <CalendarFeed token={dbUser.calendar_token} />
+        </SettingsSection>
+
+        <SettingsSection icon={<Database className="h-5 w-5 text-primary" />} title="Your data" description="Export and import" delay={0.18}>
+          <DataSettings />
+        </SettingsSection>
+
         {user?.features?.aiAvailable && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }} className="rounded-xl bg-card border border-border p-4 sm:p-6 mb-4 sm:mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <Bot className="h-5 w-5 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="font-heading font-semibold">AI Assistant</h2>
-                <p className="text-sm text-foreground-muted truncate">Summaries, priorities and chat</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between py-3 border-t border-border gap-4">
-              <div className="min-w-0">
-                <p className="font-medium text-sm sm:text-base">Enable AI features</p>
-                <p className="text-xs sm:text-sm text-foreground-muted">Your quests are sent to Google Gemini only when you use an AI feature.</p>
-              </div>
-              <Switch checked={aiEnabled} onCheckedChange={(v) => handleToggle('ai', v)} />
-            </div>
-          </motion.div>
+          <SettingsSection icon={<Bot className="h-5 w-5 text-primary" />} title="AI Assistant" description="Summaries, priorities and chat" delay={0.19}>
+            <SwitchRow
+              label="Enable AI features"
+              description="Your quests are sent to Google Gemini only when you use an AI feature."
+              checked={on(dbUser.ai_enabled, true)}
+              onChange={(v) => void toggle("ai", v)}
+            />
+          </SettingsSection>
         )}
 
-        {/* Discord Bot */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-xl bg-card border border-border p-4 sm:p-6 mb-4 sm:mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-[#5865F2]/20 flex items-center justify-center flex-shrink-0">
-              <svg className="h-5 w-5 text-[#5865F2]" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
-              </svg>
+        {BOT_INVITE_URL && (
+          <SettingsSection icon={<ExternalLink className="h-5 w-5 text-[#5865F2]" />} title="Discord Bot" description="Manage from Discord" tint="bg-[#5865F2]/20" delay={0.2}>
+            <div className="py-3">
+              <p className="text-xs sm:text-sm text-foreground-muted mb-4">Use the TaskQuest Discord bot to manage tasks, play games, and track progress directly from Discord.</p>
+              <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
+                <a href={BOT_INVITE_URL} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Add Bot to Server</a>
+              </Button>
             </div>
-            <div className="min-w-0">
-              <h2 className="font-heading font-semibold">Discord Bot</h2>
-              <p className="text-sm text-foreground-muted truncate">Manage from Discord</p>
-            </div>
-          </div>
-          <p className="text-xs sm:text-sm text-foreground-muted mb-4">Use the TaskQuest Discord bot to manage tasks, play games, and track progress directly from Discord.</p>
-          <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
-            <a href="#" target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Add Bot to Server</a>
-          </Button>
-        </motion.div>
+          </SettingsSection>
+        )}
 
-        {/* Danger Zone */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="rounded-xl bg-card border border-destructive/30 p-4 sm:p-6 mb-4 sm:mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-destructive/20 flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-heading font-semibold text-destructive">Danger Zone</h2>
-              <p className="text-sm text-foreground-muted truncate">Irreversible actions</p>
-            </div>
-          </div>
-          
-          <div className="space-y-4 border-t border-border pt-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-medium text-sm sm:text-base">Reset All Progress</p>
-                <p className="text-xs sm:text-sm text-foreground-muted">Delete all data and start fresh</p>
-              </div>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm" className="w-full sm:w-auto">Reset Progress</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="max-w-md mx-4">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="text-destructive">⚠️ Reset All Progress?</AlertDialogTitle>
-                    <AlertDialogDescription className="space-y-2">
+        <SettingsSection icon={<AlertTriangle className="h-5 w-5 text-destructive" />} title="Danger Zone" description="Irreversible actions" danger delay={0.25}>
+          <SettingRow label="Reset all progress" description="Delete all data, including AI chats and summaries, and start fresh.">
+            <AlertDialog onOpenChange={(open) => !open && setConfirmText("")}>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" className="w-full sm:w-auto">Reset Progress</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="max-w-md mx-4">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-destructive">⚠️ Reset all progress?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2">
                       <p>This will permanently delete:</p>
                       <ul className="list-disc list-inside text-sm space-y-1">
                         <li>All your quests and tasks</li>
-                        <li>All achievements</li>
-                        <li>All XP and levels</li>
-                        <li>All purchased classes</li>
-                        <li>All unlocked skills</li>
+                        <li>All achievements, XP and levels</li>
+                        <li>All purchased classes and unlocked skills</li>
                         <li>All game history</li>
+                        <li>All AI chats, summaries and search data</li>
                       </ul>
                       <p className="font-semibold pt-2">Type <span className="text-destructive">RESET</span> to confirm:</p>
-                      <input 
-                        type="text" 
-                        value={confirmText} 
+                      <input
+                        type="text"
+                        value={confirmText}
                         onChange={(e) => setConfirmText(e.target.value)}
+                        aria-label="Type RESET to confirm"
                         className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm"
                         placeholder="Type RESET"
                       />
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-                    <AlertDialogCancel className="w-full sm:w-auto" onClick={() => setConfirmText("")}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={handleReset} 
-                      disabled={confirmText !== "RESET" || resetProgress.isPending}
-                      className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      {resetProgress.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Reset Everything
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </div>
-        </motion.div>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                  <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void handleReset()}
+                    disabled={confirmText !== "RESET" || resetProgress.isPending}
+                    className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {resetProgress.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Reset Everything
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </SettingRow>
+        </SettingsSection>
 
-        {/* Account */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="rounded-xl bg-card border border-border p-4 sm:p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-foreground/10 flex items-center justify-center flex-shrink-0">
-              <SettingsIcon className="h-5 w-5 text-foreground-muted" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-heading font-semibold">Account</h2>
-              <p className="text-sm text-foreground-muted truncate">Manage your account</p>
-            </div>
+        <SettingsSection icon={<SettingsIcon className="h-5 w-5 text-foreground-muted" />} title="Account" description="Manage your account" tint="bg-foreground/10" delay={0.3}>
+          <div className="py-3">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto"><LogOut className="h-4 w-4 mr-2" />Log Out</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="max-w-sm mx-4">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Log out?</AlertDialogTitle>
+                  <AlertDialogDescription>You'll need to sign in with Discord again to come back.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Stay</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => void logout()}>Log out</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
-          <Button variant="outline" className="w-full sm:w-auto" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />Log Out
-          </Button>
-        </motion.div>
+        </SettingsSection>
       </div>
     </DashboardLayout>
   );

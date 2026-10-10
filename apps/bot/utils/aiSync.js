@@ -19,6 +19,9 @@ module.exports = {
     forget(discordId, listId) {
         if (listId) ai().forget(discordId, listId);
     },
+    forgetUser(discordId) {
+        ai().forgetUser(discordId);
+    },
     // exported for tests
     _setClient: (c) => {
         client = c;

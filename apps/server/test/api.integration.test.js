@@ -151,6 +151,15 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.ok(history.length >= 1);
     });
 
+    await t.test('free-game allowance', async () => {
+        const res = await call('GET', '/api/games/allowance', { cookie: alice });
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.cap, 500);
+        assert.equal(body.remainingXP + body.usedXP, 500);
+        assert.equal((await call('GET', '/api/games/allowance')).status, 401);
+    });
+
     await t.test('leaderboard hides Discord IDs', async () => {
         const board = await (await call('GET', '/api/leaderboard')).json();
         assert.ok(board.length >= 1);
@@ -180,6 +189,78 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         // /api/auth/me reports the feature flag
         const me = await (await call('GET', '/api/auth/me', { cookie: alice })).json();
         assert.equal(me.features.ai, false);
+    });
+
+    await t.test('new endpoints: details, reorder, quests, leaderboard tabs, freeze', async () => {
+        const list = await (await call('POST', '/api/lists', { cookie: alice, body: { name: 'Details' } })).json();
+        const mk = async (body) => (await call('POST', `/api/lists/${list.id}/items`, { cookie: alice, body })).json();
+        const a = await mk({ name: 'a', due_date: '2030-05-05', priority: 'HIGH', tags: ['x', 'y'] });
+        const b = await mk({ name: 'b', parent_id: a.id });
+        const c = await mk({ name: 'c', recurrence: 'weekly', due_date: '2099-01-01' });
+        assert.equal(a.tags, 'x,y');
+        assert.equal(b.parent_id, a.id);
+        assert.equal((await call('POST', `/api/lists/${list.id}/items`, { cookie: alice, body: { name: 'bad', due_date: '5 May' } })).status, 400);
+        assert.equal((await call('POST', `/api/lists/${list.id}/items`, { cookie: alice, body: { name: 'deep', parent_id: b.id } })).status, 400);
+
+        const reordered = await call('PATCH', `/api/lists/${list.id}/reorder`, { cookie: alice, body: { itemIds: [c.id, a.id, b.id] } });
+        assert.equal(reordered.status, 200);
+        assert.deepEqual((await reordered.json()).map((i) => i.name), ['c', 'a', 'b']);
+        assert.equal((await call('PATCH', `/api/lists/${list.id}/reorder`, { cookie: alice, body: { itemIds: [c.id] } })).status, 400);
+        assert.equal((await call('PATCH', `/api/lists/${list.id}/reorder`, { cookie: mallory, body: { itemIds: [c.id, a.id, b.id] } })).status, 404);
+
+        const done = await (await call('PATCH', `/api/items/${c.id}/toggle`, { cookie: alice })).json();
+        assert.ok(done.nextItem && done.nextItem.name === 'c', 'repeating task spawns its next copy');
+
+        const quests = await (await call('GET', '/api/quests', { cookie: alice })).json();
+        assert.equal(quests.quests.length, 5);
+        assert.equal((await call('POST', '/api/quests/NOPE/claim', { cookie: alice })).status, 404);
+        assert.equal((await call('POST', '/api/quests/WEEKLY_COMPLETE_15/claim', { cookie: alice })).status, 400, 'not finished');
+
+        for (const by of ['lifetime', 'weekly', 'streak', 'xp']) assert.equal((await call('GET', `/api/leaderboard?by=${by}`)).status, 200, by);
+        assert.equal((await call('GET', '/api/leaderboard?by=bogus')).status, 400);
+        assert.equal((await call('GET', '/api/leaderboard?class=hero')).status, 200);
+        assert.equal((await call('GET', '/api/leaderboard?class=wizzard')).status, 400);
+        assert.equal((await call('GET', '/api/leaderboard/me?by=weekly', { cookie: alice })).status, 200);
+
+        await db.query('UPDATE users SET player_xp = 1000 WHERE discord_id = ?', ['200000000000000001']);
+        const frozen = await (await call('POST', '/api/user/streak-freeze', { cookie: alice })).json();
+        assert.equal(frozen.freezes, 1);
+        assert.equal(frozen.newBalance, 850);
+
+        const settings = await call('PATCH', '/api/user', { cookie: alice, body: { timezone: 'Asia/Manila', reminder_hour: 7, weekly_digest: true } });
+        assert.equal(settings.status, 200);
+        assert.equal((await settings.json()).timezone, 'Asia/Manila');
+        assert.equal((await call('PATCH', '/api/user', { cookie: alice, body: { timezone: 'Nowhere/Land' } })).status, 400);
+        assert.equal((await call('PATCH', '/api/user', { cookie: alice, body: { reminder_hour: 30 } })).status, 400);
+    });
+
+    await t.test('export, import and calendar feed', async () => {
+        const exp = await call('GET', '/api/user/export', { cookie: alice });
+        assert.equal(exp.status, 200);
+        assert.match(exp.headers.get('content-disposition'), /attachment/);
+        const data = await exp.json();
+        assert.ok(data.lists.length >= 1);
+        assert.equal((await call('GET', '/api/user/export')).status, 401);
+        const csv = await call('GET', '/api/user/export.csv', { cookie: alice });
+        assert.match(csv.headers.get('content-type'), /text\/csv/);
+
+        const imp = await call('POST', '/api/user/import', { cookie: alice, body: data });
+        assert.equal(imp.status, 201);
+        assert.ok((await imp.json()).lists >= 1);
+        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: { lists: [{ name: 'x', deadline: 'soon' }] } })).status, 400);
+        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: data, origin: 'https://evil.example' })).status, 403);
+
+        assert.equal((await call('GET', `/api/calendar/${'a'.repeat(32)}.ics`)).status, 404);
+        assert.equal((await call('GET', '/api/calendar/whatever.ics')).status, 404);
+        const { token } = await (await call('POST', '/api/user/calendar-token', { cookie: alice })).json();
+        const feed = await call('GET', `/api/calendar/${token}.ics`);
+        assert.equal(feed.status, 200);
+        assert.match(feed.headers.get('content-type'), /text\/calendar/);
+        const text = await feed.text();
+        assert.ok(text.startsWith('BEGIN:VCALENDAR'));
+        assert.match(text, /SUMMARY:(✓ )?Due: Chores/);
+        await call('DELETE', '/api/user/calendar-token', { cookie: alice });
+        assert.equal((await call('GET', `/api/calendar/${token}.ics`)).status, 404, 'revoked feeds stop working');
     });
 
     await t.test('logout destroys the session', async () => {

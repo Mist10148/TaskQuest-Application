@@ -45,11 +45,67 @@ router.post(
             streak: r.streak,
             streakBroken: r.streakBroken,
             streakPreserved: r.streakPreserved,
+            freezeUsed: r.freezeUsed,
             newBalance: r.balance,
             newLevel: r.level,
             leveledUp: r.leveledUp,
             newAchievements: r.achievements
         });
+    })
+);
+
+router.post(
+    '/streak-freeze',
+    asyncRoute(async (req, res) => {
+        const r = await db.progression.buyStreakFreeze(uid(req));
+        res.json({ success: true, freezes: r.freezes, cost: r.cost, newBalance: r.balance, newAchievements: r.achievements });
+    })
+);
+
+// ── Data portability ────────────────────────────────────────────────────────
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+router.get(
+    '/export',
+    asyncRoute(async (req, res) => {
+        const data = await db.transfer.exportAll(uid(req));
+        res.set('Content-Disposition', `attachment; filename="taskquest-export-${today()}.json"`);
+        res.json(data);
+    })
+);
+
+router.get(
+    '/export.csv',
+    asyncRoute(async (req, res) => {
+        const csv = db.transfer.toCsv(await db.transfer.exportAll(uid(req)));
+        res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="taskquest-tasks-${today()}.csv"` });
+        res.send(csv);
+    })
+);
+
+// Imports are reward-free (no XP, counters or achievements) and all-or-nothing.
+router.post(
+    '/import',
+    asyncRoute(async (req, res) => {
+        const result = await db.transfer.importAll(uid(req), req.body);
+        aiClient.syncUser(uid(req));
+        res.status(201).json({ success: true, ...result });
+    })
+);
+
+router.post(
+    '/calendar-token',
+    asyncRoute(async (req, res) => {
+        res.json({ token: await db.transfer.regenerateCalendarToken(uid(req)) });
+    })
+);
+
+router.delete(
+    '/calendar-token',
+    asyncRoute(async (req, res) => {
+        await db.transfer.clearCalendarToken(uid(req));
+        res.json({ success: true });
     })
 );
 
@@ -66,6 +122,8 @@ router.post(
     asyncRoute(async (req, res) => {
         parse(resetBody, req.body);
         await db.users.resetProgress(uid(req));
+        // Deleted quests must not stay searchable: purge vectors, chat threads and summaries too.
+        aiClient.forgetUser(uid(req));
         res.json({ success: true, message: 'All progress has been reset' });
     })
 );

@@ -33,6 +33,13 @@ router.get(
 );
 
 router.get(
+    '/allowance',
+    asyncRoute(async (req, res) => {
+        res.json(await db.games.getFreeGameAllowance(uid(req)));
+    })
+);
+
+router.get(
     '/history',
     asyncRoute(async (req, res) => {
         res.json(await db.games.getGameHistory(uid(req), 20));

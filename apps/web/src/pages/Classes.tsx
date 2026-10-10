@@ -7,15 +7,12 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClasses, useBuyClass, useEquipClass } from "@/hooks/useApi";
 import { toast } from "sonner";
-
-const CLASS_COLORS: Record<string, string> = {
-  DEFAULT: '#95A5A6', HERO: '#FFD700', GAMBLER: '#9B59B6',
-  ASSASSIN: '#2C3E50', WIZARD: '#3498DB', ARCHER: '#27AE60', TANK: '#E74C3C',
-};
+import { classColor } from "@/lib/classColors";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
 
 const Classes = () => {
   const { refresh } = useAuth();
-  const { data, isLoading } = useClasses();
+  const { data, isLoading, isError, error, refetch, isFetching } = useClasses();
   const buyClass = useBuyClass();
   const equipClass = useEquipClass();
 
@@ -59,14 +56,16 @@ const Classes = () => {
       </motion.div>
 
       <div className="px-4 sm:px-0">
-        {isLoading ? (
+        {isError ? (
+          <ErrorCard what="the class shop" error={error} onRetry={() => void refetch()} retrying={isFetching} />
+        ) : isLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {[...Array(7)].map((_, i) => <div key={i} className="h-64 sm:h-72 rounded-2xl bg-card/50 animate-pulse" />)}
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {classes.map((classInfo: ClassInfo, index: number) => {
-              const color = CLASS_COLORS[classInfo.key] || '#888';
+              const color = classColor(classInfo.key);
               const canAfford = playerXP >= classInfo.cost;
 
               return (
@@ -84,7 +83,7 @@ const Classes = () => {
                         ? "border-border bg-card hover:border-primary/50"
                         : "border-border bg-card/50 opacity-80 hover:opacity-100"
                   )}
-                  style={{ borderColor: classInfo.equipped ? undefined : classInfo.owned ? `${color}80` : undefined }}
+                  style={{ borderColor: classInfo.equipped ? undefined : classInfo.owned ? classColor(classInfo.key, 0.5) : undefined }}
                 >
                   {classInfo.equipped && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-1 bg-primary text-primary-foreground rounded-full text-[10px] sm:text-xs font-semibold flex items-center gap-1">

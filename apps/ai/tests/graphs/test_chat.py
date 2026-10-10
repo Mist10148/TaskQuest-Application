@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -24,7 +24,7 @@ from tests.conftest import OTHER, UID, auth
 from tests.fakes import FakeChatLLM, FakeEmbedder
 from tests.graphs.test_tools import make_web
 
-TODAY = date.today()
+TODAY = datetime.now(UTC).date()  # the service works in UTC; date.today() is the machine's local date
 
 
 def call(name, args, id_="c1"):

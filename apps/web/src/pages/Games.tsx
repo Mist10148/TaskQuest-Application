@@ -2,11 +2,15 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Spade, Hand, Type, Sparkles, ArrowLeft, RotateCcw, Loader2, Gamepad2, Trophy, Zap, Minus, Plus, HelpCircle, Bug, Rocket, Skull, Target } from "lucide-react";
+import { Spade, Hand, Type, Sparkles, ArrowLeft, RotateCcw, Loader2, Gamepad2, Trophy, Zap, Minus, Plus, HelpCircle, Bug, Rocket, Skull, Target, Volume2, VolumeX } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGameHistory, invalidateProgress, showAchievementNotifications, showError } from "@/hooks/useApi";
+import { useGameHistory, useGameAllowance, invalidateProgress, showAchievementNotifications, showError } from "@/hooks/useApi";
+import { usePreferences } from "@/contexts/PreferencesContext";
+import { startFixedLoop } from "@/lib/gameLoop";
+import { playSound, setSoundEnabled } from "@/lib/sound";
+import { TouchPad } from "@/components/game/TouchPad";
 import {
   gamesApi,
   type AchievementUnlock,
@@ -598,6 +602,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
     // Report pellets eaten; the server converts points to XP and caps it.
+    playSound("lose");
     onResult("won", finalScore);
   }, [highScore, onResult]);
 
@@ -646,7 +651,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
     canvas.addEventListener("touchstart", handleTouchStart);
     canvas.addEventListener("touchend", handleTouchEnd);
 
-    const gameLoop = setInterval(() => {
+    const stopLoop = startFixedLoop(() => {
       const g = gameRef.current;
       if (g.gameOver) return;
 
@@ -667,6 +672,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
       // Check food
       if (head.x === g.food.x && head.y === g.food.y) {
         g.score++;
+        playSound("eat");
         setScore(g.score);
         g.food = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
       } else {
@@ -722,7 +728,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
     }, 100);
 
     return () => {
-      clearInterval(gameLoop);
+      stopLoop();
       window.removeEventListener("keydown", handleKeyDown);
       canvas.removeEventListener("touchstart", handleTouchStart);
       canvas.removeEventListener("touchend", handleTouchEnd);
@@ -766,12 +772,12 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
           )}
           
           {gameState === "playing" && (
-            <canvas 
+            <><canvas 
               ref={canvasRef} 
               width={GRID_SIZE * CELL_SIZE} 
               height={GRID_SIZE * CELL_SIZE}
               className="rounded-lg border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]"
-            />
+            /><TouchPad layout="dpad" /></>
           )}
           
           {gameState === "ended" && (
@@ -797,6 +803,13 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
 //  🦖 DINO RUNNER (Web Exclusive) - Improved Design
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Dino Runner physics and canvas size (module scope: stable identities for the hooks below).
+const GROUND_Y = 160;
+const GRAVITY = 0.9;
+const JUMP_FORCE = -16;
+const CANVAS_WIDTH = 600;
+const CANVAS_HEIGHT = 200;
+
 const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
@@ -812,12 +825,6 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     frameCount: 0,
     groundOffset: 0
   });
-
-  const GROUND_Y = 160;
-  const GRAVITY = 0.9;
-  const JUMP_FORCE = -16;
-  const CANVAS_WIDTH = 600;
-  const CANVAS_HEIGHT = 200;
 
   const startGame = () => {
     gameRef.current = {
@@ -838,6 +845,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     setGameState("ended");
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
+    playSound("lose");
     onResult("won", finalScore);
   }, [highScore, onResult]);
 
@@ -845,6 +853,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     const g = gameRef.current;
     if (!g.dino.jumping && gameState === "playing") {
       g.dino.vy = JUMP_FORCE;
+      playSound("jump");
       g.dino.jumping = true;
     }
   }, [gameState]);
@@ -992,7 +1001,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     window.addEventListener("keydown", handleKeyDown);
     canvas.addEventListener("touchstart", handleTouchStart);
 
-    const gameLoop = setInterval(() => {
+    const stopLoop = startFixedLoop(() => {
       const g = gameRef.current;
       if (g.gameOver) return;
 
@@ -1111,7 +1120,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     }, 1000 / 60);
 
     return () => {
-      clearInterval(gameLoop);
+      stopLoop();
       window.removeEventListener("keydown", handleKeyDown);
       canvas.removeEventListener("touchstart", handleTouchStart);
     };
@@ -1155,13 +1164,13 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
           
           {gameState === "playing" && (
             <div>
-              <canvas 
+              <><canvas 
                 ref={canvasRef} 
                 width={CANVAS_WIDTH} 
                 height={CANVAS_HEIGHT}
                 onClick={jump}
                 className="rounded-lg border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.2)] cursor-pointer"
-              />
+              /><TouchPad layout="jump" /></>
               <p className="text-center text-xs text-foreground-muted mt-2">Tap screen or press SPACE to jump</p>
             </div>
           )}
@@ -1244,6 +1253,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
     // Report aliens destroyed; the server converts points to XP and caps it.
+    playSound("lose");
     onResult("won", kills);
   }, [highScore, onResult]);
 
@@ -1264,6 +1274,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
         const now = Date.now();
         if (now - g.lastShot > 250) {
           g.bullets.push({ x: g.player.x + 15, y: g.player.y });
+          playSound("shoot");
           g.lastShot = now;
         }
       }
@@ -1285,6 +1296,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
       const now = Date.now();
       if (now - g.lastShot > 250) {
         g.bullets.push({ x: g.player.x + 15, y: g.player.y });
+          playSound("shoot");
         g.lastShot = now;
       }
 
@@ -1309,7 +1321,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     canvas.addEventListener("touchstart", handleTouchStart);
     canvas.addEventListener("touchend", handleTouchEnd);
 
-    const gameLoop = setInterval(() => {
+    const stopLoop = startFixedLoop(() => {
       const g = gameRef.current;
       if (g.gameOver) return;
 
@@ -1415,7 +1427,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     }, 1000 / 60);
 
     return () => {
-      clearInterval(gameLoop);
+      stopLoop();
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       canvas.removeEventListener("touchstart", handleTouchStart);
@@ -1461,12 +1473,12 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
           
           {gameState === "playing" && (
             <div>
-              <canvas 
+              <><canvas 
                 ref={canvasRef} 
                 width={500} 
                 height={400}
                 className="rounded-lg border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
-              />
+              /><TouchPad layout="shooter" /></>
               <p className="text-center text-xs text-foreground-muted mt-2">Tap left/right to move & shoot • Arrow keys/WASD + SPACE on desktop</p>
             </div>
           )}
@@ -1517,6 +1529,9 @@ const Games = () => {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: history, isLoading } = useGameHistory();
+  const { data: allowance } = useGameAllowance();
+  const { sound, setSound } = usePreferences();
+  useEffect(() => setSoundEnabled(sound), [sound]);
   const [game, setGame] = useState<GameType>("menu");
   const [bet, setBet] = useState(BLACKJACK_CONFIG.MIN_BET);
   const arcadeRun = useRef<number | null>(null);
@@ -1583,7 +1598,45 @@ const Games = () => {
             </div>
             <span className="bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">Game Center</span>
           </h1>
-          <p className="text-foreground-muted text-sm sm:text-base">Test your luck and skills to win XP! Free games share a daily cap of {FREE_GAME_DAILY_CAP} XP.</p>
+          <p className="text-foreground-muted text-sm sm:text-base">Test your luck and skills to win XP! Free games share a daily cap of {allowance?.cap ?? FREE_GAME_DAILY_CAP} XP.</p>
+        </div>
+
+        {/* Today's free-game allowance and the sound switch */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex-1 rounded-xl border border-border bg-card p-4">
+            <div className="mb-2 flex items-center justify-between text-sm">
+              <span className="font-medium">Free-game XP today</span>
+              <span className="font-heading font-bold text-xp">
+                {allowance ? `${allowance.usedXP} / ${allowance.cap}` : "…"}
+              </span>
+            </div>
+            <div
+              className="h-2 overflow-hidden rounded-full bg-background-tertiary"
+              role="progressbar"
+              aria-label="Free-game XP earned today"
+              aria-valuemin={0}
+              aria-valuemax={allowance?.cap ?? FREE_GAME_DAILY_CAP}
+              aria-valuenow={allowance?.usedXP ?? 0}
+            >
+              <div className="h-full rounded-full bg-xp transition-all" style={{ width: `${allowance ? Math.min(100, (allowance.usedXP / allowance.cap) * 100) : 0}%` }} />
+            </div>
+            <p className="mt-2 text-xs text-foreground-muted">
+              {allowance && allowance.remainingXP === 0
+                ? "You've reached today's cap: wins pay nothing until 00:00 UTC."
+                : allowance
+                  ? `${allowance.remainingXP} XP left to earn. Resets at 00:00 UTC.`
+                  : "Resets at 00:00 UTC."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSound(!sound)}
+            aria-pressed={sound}
+            className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium hover:border-primary/40"
+          >
+            {sound ? <Volume2 className="h-4 w-4 text-primary" aria-hidden /> : <VolumeX className="h-4 w-4 text-foreground-muted" aria-hidden />}
+            Sound {sound ? "on" : "off"}
+          </button>
         </div>
 
         {/* Balance & Bet Section */}
@@ -1622,7 +1675,7 @@ const Games = () => {
         {/* Games Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {gamesList.map((g, i) => (
-            <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className={cn("group p-4 rounded-xl bg-card border border-border transition-all duration-300 cursor-pointer hover:scale-[1.02]", g.glow, g.border, g.requiresBet && !canBet && "opacity-50")} onClick={() => start(g.id)}>
+            <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className={cn("group p-4 rounded-xl bg-card border border-border transition-all duration-300 cursor-pointer hover:scale-[1.02]", g.glow, g.border, g.requiresBet && !canBet && "opacity-50")} onClick={() => start(g.id)} role="button" tabIndex={0} aria-label={`Play ${g.name}`} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(g.id); } }}>
               <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center bg-gradient-to-br mb-3 shadow-lg", g.color)}>
                 <g.icon className="h-6 w-6 text-white drop-shadow-lg" />
               </div>

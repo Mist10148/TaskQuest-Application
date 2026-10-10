@@ -12,6 +12,7 @@ const { rewardAction, unlockAchievements } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS } = require('../constants');
 const v = require('../validation');
+const { nextDueOnOrAfter, todayInZone } = require('../dates');
 
 const run = async (sql, params = []) => (await getPool().query(sql, params))[0];
 
@@ -114,8 +115,9 @@ async function updateList(discordId, listId, input) {
     const keys = Object.keys(fields);
     if (!keys.length) throw errors.validation('Nothing to update.');
     if (keys.includes('deadline')) {
-        fields.deadline_notified = 0;
-        keys.push('deadline_notified');
+        // A new deadline re-arms every reminder (due, overdue and any snooze).
+        Object.assign(fields, { deadline_notified: 0, overdue_notified: 0, remind_at: null });
+        keys.push('deadline_notified', 'overdue_notified', 'remind_at');
     }
     try {
         const [res] = await getPool().query(
@@ -171,23 +173,56 @@ async function getItem(discordId, itemId) {
     return row || null;
 }
 
+/** Validate the optional per-task fields (due date, priority, tags, repeat). */
+function parseItemExtras(input, { partial = false } = {}) {
+    const out = {};
+    if (!partial || input.due_date !== undefined) out.due_date = unwrap(v.dueDate(input.due_date));
+    if (!partial || input.priority !== undefined) out.priority = unwrap(v.priority(input.priority));
+    if (!partial || input.tags !== undefined) out.tags = unwrap(v.tags(input.tags));
+    if (!partial || input.recurrence !== undefined) out.recurrence = unwrap(v.recurrence(input.recurrence));
+    return out;
+}
+
+/**
+ * A subtask's parent must be a top-level task of the same list (one level only),
+ * and a task that already has subtasks cannot itself become a subtask.
+ */
+async function assertValidParent(conn, listId, parentId, itemId = null) {
+    if (parentId === null) return;
+    if (itemId !== null && parentId === itemId) throw errors.validation('A task cannot be its own subtask.');
+    const [[parent]] = await conn.query('SELECT id, parent_id FROM items WHERE id = ? AND list_id = ?', [parentId, listId]);
+    if (!parent) throw errors.validation('The parent task must be in the same list.');
+    if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
+    if (itemId !== null) {
+        const [[kids]] = await conn.query('SELECT COUNT(*) AS n FROM items WHERE parent_id = ?', [itemId]);
+        if (Number(kids.n) > 0) throw errors.validation('A task with subtasks cannot become a subtask.');
+    }
+}
+
+function parseParentId(value) {
+    if (value === undefined || value === null || value === '') return null;
+    return unwrap(v.id(value));
+}
+
 async function addItem(discordId, listId, input) {
     const lid = unwrap(v.id(listId));
     const name = unwrap(v.itemName(input.name));
     const description = unwrap(v.description(input.description));
+    const extras = parseItemExtras(input);
+    const parentId = parseParentId(input.parent_id);
 
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, user.discord_id]);
         if (!list) throw errors.notFound('List not found.');
+        await assertValidParent(conn, lid, parentId);
 
         const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
-        const [res] = await conn.query('INSERT INTO items (list_id, name, description, position) VALUES (?, ?, ?, ?)', [
-            lid,
-            name,
-            description,
-            Number(pos.next)
-        ]);
+        const [res] = await conn.query(
+            `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [lid, name, description, Number(pos.next), extras.due_date, extras.priority, extras.tags, extras.recurrence, parentId]
+        );
         await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
         user.total_items_added = Number(user.total_items_added) + 1;
 
@@ -206,21 +241,80 @@ async function updateItem(discordId, itemId, input) {
     const fields = {};
     if (input.name !== undefined) fields.name = unwrap(v.itemName(input.name));
     if (input.description !== undefined) fields.description = unwrap(v.description(input.description));
+    Object.assign(fields, parseItemExtras(input, { partial: true }));
+    const parentGiven = input.parent_id !== undefined;
+    if (parentGiven) fields.parent_id = parseParentId(input.parent_id);
+    let position;
     if (input.position !== undefined) {
         if (!Number.isSafeInteger(input.position) || input.position < 0) throw errors.validation('Position must be a non-negative integer.');
-        fields.position = input.position;
+        position = input.position;
     }
     const keys = Object.keys(fields);
-    if (!keys.length) throw errors.validation('Nothing to update.');
+    if (!keys.length && position === undefined) throw errors.validation('Nothing to update.');
 
-    const [res] = await getPool().query(
-        `UPDATE items i JOIN lists l ON l.id = i.list_id
-         SET ${keys.map((k) => `i.${k} = ?`).join(', ')}
-         WHERE i.id = ? AND l.discord_id = ?`,
-        [...keys.map((k) => fields[k]), id, String(discordId)]
-    );
-    if (!res.affectedRows) throw errors.notFound('Task not found.');
-    return getItem(discordId, id);
+    if (keys.length) {
+        await withTransaction(async (conn) => {
+            const [[item]] = await conn.query(
+                `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
+                 WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
+                [id, String(discordId)]
+            );
+            if (!item) throw errors.notFound('Task not found.');
+            if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
+            await conn.query(`UPDATE items SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map((k) => fields[k]), id]);
+        });
+    }
+    if (position !== undefined) await moveItem(discordId, id, position);
+    const item = await getItem(discordId, id);
+    if (!item) throw errors.notFound('Task not found.');
+    return item;
+}
+
+/** Rewrite a list's positions as 0..n-1 in the given item-id order (inside a transaction). */
+async function writePositions(conn, orderedIds) {
+    for (let i = 0; i < orderedIds.length; i++) {
+        await conn.query('UPDATE items SET position = ? WHERE id = ?', [i, orderedIds[i]]);
+    }
+}
+
+/**
+ * Move one item to a 0-based position (clamped to the list) and close the gaps,
+ * so positions stay unique and contiguous.
+ */
+async function moveItem(discordId, itemId, position) {
+    const id = unwrap(v.id(itemId));
+    if (!Number.isSafeInteger(position) || position < 0) throw errors.validation('Position must be a non-negative integer.');
+    return withTransaction(async (conn) => {
+        const [[item]] = await conn.query(
+            `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
+             WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
+            [id, String(discordId)]
+        );
+        if (!item) throw errors.notFound('Task not found.');
+        const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
+        const ids = rows.map((r) => r.id).filter((x) => x !== id);
+        ids.splice(Math.min(position, ids.length), 0, id);
+        await writePositions(conn, ids);
+        return ids;
+    });
+}
+
+/** Apply a full new order to an owned list. `orderedIds` must be exactly the list's item ids. */
+async function reorderItems(discordId, listId, orderedIds) {
+    const lid = unwrap(v.id(listId));
+    if (!Array.isArray(orderedIds) || orderedIds.length > 5000) throw errors.validation('Provide the task ids in their new order.');
+    const wanted = orderedIds.map((x) => unwrap(v.id(x)));
+    return withTransaction(async (conn) => {
+        const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, String(discordId)]);
+        if (!list) throw errors.notFound('List not found.');
+        const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? FOR UPDATE', [lid]);
+        const have = new Set(rows.map((r) => r.id));
+        if (wanted.length !== have.size || new Set(wanted).size !== wanted.length || !wanted.every((x) => have.has(x))) {
+            throw errors.validation('The order must list every task in this list exactly once.');
+        }
+        await writePositions(conn, wanted);
+        return wanted;
+    });
 }
 
 async function deleteItem(discordId, itemId) {
@@ -231,6 +325,26 @@ async function deleteItem(discordId, itemId) {
     );
     if (!res.affectedRows) throw errors.notFound('Task not found.');
     return true;
+}
+
+/**
+ * Create the next copy of a repeating task. It runs only on the first completion
+ * (the xp_awarded guard), so un-checking and re-checking cannot duplicate it, and it
+ * grants no creation XP or counters, so repeating tasks cannot be used to farm.
+ */
+async function spawnNextOccurrence(conn, item, user) {
+    const today = todayInZone(user.timezone);
+    const base = item.due_date ? String(item.due_date).slice(0, 10) : today;
+    const due = nextDueOnOrAfter(base, item.recurrence, today);
+    if (!due) return null;
+    const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
+    const [res] = await conn.query(
+        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id]
+    );
+    const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
+    return created;
 }
 
 /**
@@ -254,34 +368,40 @@ async function setItemCompleted(discordId, itemId, completed) {
 
         let xp = null;
         let achievements = [];
+        let nextItem = null;
         if (target && !item.xp_awarded) {
             await conn.query('UPDATE items SET xp_awarded = TRUE WHERE id = ?', [id]);
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
             xp = await rewardAction(conn, user, 'item_complete', REWARDS.ITEM_COMPLETE, {
-                context: { priority: item.list_priority },
+                context: { priority: item.priority || item.list_priority },
+                dailyLimit: LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY,
                 referenceId: id
             });
             achievements = await unlockAchievements(conn, user);
+            if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
-        return { item: updated, completed: target, xp, achievements, firstCompletion: Boolean(target && !item.xp_awarded) };
+        return { item: updated, completed: target, xp, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }
 
-/** Swap the positions of two items in the same owned list. */
+/** Swap two items of the same owned list (works even on legacy lists with duplicate positions). */
 async function swapItemPositions(discordId, itemIdA, itemIdB) {
     const a = unwrap(v.id(itemIdA));
     const b = unwrap(v.id(itemIdB));
     return withTransaction(async (conn) => {
         const [rows] = await conn.query(
-            `SELECT i.id, i.position, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
+            `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
              WHERE i.id IN (?, ?) AND l.discord_id = ? FOR UPDATE`,
             [a, b, String(discordId)]
         );
         if (rows.length !== 2 || rows[0].list_id !== rows[1].list_id) throw errors.notFound('Tasks not found.');
-        await conn.query('UPDATE items SET position = ? WHERE id = ?', [rows[1].position, rows[0].id]);
-        await conn.query('UPDATE items SET position = ? WHERE id = ?', [rows[0].position, rows[1].id]);
+        const [all] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [rows[0].list_id]);
+        const ids = all.map((r) => r.id);
+        const [ia, ib] = [ids.indexOf(a), ids.indexOf(b)];
+        [ids[ia], ids[ib]] = [ids[ib], ids[ia]];
+        await writePositions(conn, ids);
         return true;
     });
 }
@@ -297,33 +417,80 @@ async function getListsDueOn(date) {
     );
 }
 
+/**
+ * Lists that might need a reminder right now, with their owner's time zone and
+ * reminder hour. This is a deliberately wide net (a day either side covers every
+ * time zone); the bot decides per user, in their own local time, what to send.
+ *   - snoozed lists whose snooze has ended
+ *   - lists due in the next day or the last 14 days that still owe a due or overdue notice
+ */
+async function getReminderCandidates(now = new Date()) {
+    const day = (offset) => {
+        const d = new Date(now.getTime() + offset * 86400e3);
+        return d.toISOString().slice(0, 10);
+    };
+    return run(
+        `SELECT l.*, u.timezone, u.reminder_hour,
+                (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id) AS items_total,
+                (SELECT COALESCE(SUM(i.completed), 0) FROM items i WHERE i.list_id = l.id) AS items_done
+         FROM lists l JOIN users u ON u.discord_id = l.discord_id
+         WHERE u.automation_enabled = TRUE AND (
+             (l.remind_at IS NOT NULL AND l.remind_at <= ?)
+             OR (l.deadline IS NOT NULL AND l.deadline >= ? AND l.deadline <= ?
+                 AND (l.deadline_notified = FALSE OR l.overdue_notified = FALSE))
+         )`,
+        [now, day(-14), day(1)]
+    ).then((rows) => rows.map((r) => ({ ...r, items_total: Number(r.items_total), items_done: Number(r.items_done) })));
+}
+
+/** Record that a reminder went out. `kind`: 'due' | 'overdue' | 'snooze'. Keeps updated_at: it is not an edit. */
+async function markReminderSent(listId, kind, { late = false } = {}) {
+    const sets = {
+        due: late ? 'deadline_notified = TRUE, overdue_notified = TRUE' : 'deadline_notified = TRUE',
+        overdue: 'deadline_notified = TRUE, overdue_notified = TRUE',
+        snooze: 'remind_at = NULL'
+    }[kind];
+    if (!sets) throw new Error(`Unknown reminder kind ${kind}`);
+    await run(`UPDATE lists SET ${sets}, updated_at = updated_at WHERE id = ?`, [listId]);
+}
+
+/** Remind the owner about a list again at `until`. */
+async function snoozeList(discordId, listId, until) {
+    const id = unwrap(v.id(listId));
+    const [res] = await getPool().query('UPDATE lists SET remind_at = ?, updated_at = updated_at WHERE id = ? AND discord_id = ?', [
+        until,
+        id,
+        String(discordId)
+    ]);
+    if (!res.affectedRows) throw errors.notFound('List not found.');
+    return true;
+}
+
 async function markDeadlineNotified(listId) {
     // Keep updated_at: a reminder being sent is not an edit of the list.
     await run('UPDATE lists SET deadline_notified = TRUE, updated_at = updated_at WHERE id = ?', [listId]);
 }
 
 /**
- * Delete lists for users with auto_delete_old_lists on when either
- *   - every item is completed and the last change was 5+ days ago, or
- *   - the deadline passed 5+ days ago and work is still unfinished.
- * @returns {Promise<number>} number of deleted lists
+ * Delete lists for users with auto_delete_old_lists on once every item is completed
+ * and the last change was 5+ days ago. Unfinished lists are never deleted, even when
+ * their deadline is long gone: they stay visible as overdue.
+ * @returns {Promise<Array<{ id: number, discord_id: string }>>} the lists that were deleted
  */
 async function cleanupOldLists(days = 5) {
-    const [res] = await getPool().query(
-        `DELETE l FROM lists l
+    const where = `u.auto_delete_old_lists = TRUE
+         AND s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY)`;
+    const from = `FROM lists l
          JOIN users u ON u.discord_id = l.discord_id
          LEFT JOIN (
              SELECT list_id, COUNT(*) AS total, SUM(completed) AS done, MAX(updated_at) AS last_change
              FROM items GROUP BY list_id
          ) s ON s.list_id = l.id
-         WHERE u.auto_delete_old_lists = TRUE AND (
-             (s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY))
-             OR (l.deadline IS NOT NULL AND l.deadline <= (UTC_DATE() - INTERVAL ? DAY)
-                 AND (s.total IS NULL OR s.done < s.total))
-         )`,
-        [days, days]
-    );
-    return res.affectedRows;
+         WHERE ${where}`;
+    const [doomed] = await getPool().query(`SELECT l.id, l.discord_id ${from}`, [days]);
+    if (!doomed.length) return [];
+    await getPool().query('DELETE FROM lists WHERE id IN (?)', [doomed.map((l) => l.id)]);
+    return doomed.map((l) => ({ id: Number(l.id), discord_id: String(l.discord_id) }));
 }
 
 module.exports = {
@@ -341,7 +508,12 @@ module.exports = {
     deleteItem,
     setItemCompleted,
     swapItemPositions,
+    moveItem,
+    reorderItems,
     getListsDueOn,
+    getReminderCandidates,
+    markReminderSent,
+    snoozeList,
     markDeadlineNotified,
     cleanupOldLists
 };

@@ -12,6 +12,13 @@ const { TEXT_LIMITS, PRIORITIES, GAME_TYPES } = shared;
 export const idParam = z.object({ id: z.coerce.number().int().positive() });
 export const listIdParam = z.object({ listId: z.coerce.number().int().positive() });
 export const keyParam = z.object({ key: z.string().regex(/^[A-Za-z]{1,20}$/) });
+export const leaderboardQuery = z
+    .object({
+        by: z.enum(shared.LEADERBOARDS).default('lifetime'),
+        class: z.string().toUpperCase().pipe(z.enum(shared.CLASS_KEYS)).optional()
+    })
+    .strip();
+export const questParam = z.object({ key: z.string().regex(/^[A-Za-z0-9_]{1,40}$/) });
 export const skillParam = z.object({ skillId: z.string().regex(/^[a-z_]{1,50}$/) });
 
 const optionalText = (max) => z.string().max(max).nullable().optional();
@@ -22,7 +29,10 @@ export const settingsBody = z
         gamification_enabled: z.boolean().optional(),
         automation_enabled: z.boolean().optional(),
         auto_delete_old_lists: z.boolean().optional(),
-        ai_enabled: z.boolean().optional()
+        ai_enabled: z.boolean().optional(),
+        weekly_digest: z.boolean().optional(),
+        timezone: z.string().min(1).max(64).nullable().optional(),
+        reminder_hour: z.number().int().min(0).max(23).optional()
     })
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
@@ -44,10 +54,20 @@ export const updateListBody = z
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
+const tagsField = z.union([z.string().max(200), z.array(z.string().max(30)).max(10)]).nullable().optional();
+const itemExtras = {
+    due_date: nullableEmpty(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional()),
+    priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),
+    tags: tagsField,
+    recurrence: nullableEmpty(z.enum(['daily', 'weekly', 'monthly']).nullable().optional()),
+    parent_id: z.number().int().positive().nullable().optional()
+};
+
 export const createItemBody = z
     .object({
         name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
-        description: optionalText(TEXT_LIMITS.DESCRIPTION)
+        description: optionalText(TEXT_LIMITS.DESCRIPTION),
+        ...itemExtras
     })
     .strict();
 
@@ -55,11 +75,14 @@ export const updateItemBody = z
     .object({
         name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
         description: optionalText(TEXT_LIMITS.DESCRIPTION),
-        position: z.number().int().min(0).max(100000)
+        position: z.number().int().min(0).max(100000),
+        ...itemExtras
     })
     .partial()
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
+
+export const reorderBody = z.object({ itemIds: z.array(z.number().int().positive()).max(5000) }).strict();
 
 export const toggleItemBody = z.object({ completed: z.boolean().optional() }).strict().optional();
 

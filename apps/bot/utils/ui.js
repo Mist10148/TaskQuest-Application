@@ -303,7 +303,7 @@ function helpEmbed() {
         .setTitle('TaskQuest Commands')
         .setDescription('A gamified task manager with RPG elements')
         .addFields(
-            { name: 'Tasks', value: '`/list` Manage lists', inline: true },
+            { name: 'Tasks', value: '`/list` `/quick`', inline: true },
             { name: 'Games', value: '`/game` Mini-games', inline: true },
             { name: 'Daily', value: '`/daily` `/freeze` `/quests`', inline: true },
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },

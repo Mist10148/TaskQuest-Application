@@ -27,6 +27,7 @@ const reminders = require('./utils/reminders');
 const timezoneCommand = require('./commands/timezone');
 const digest = require('./utils/digest');
 const weeklyCommand = require('./commands/weekly');
+const quickCommand = require('./commands/quick');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -113,6 +114,7 @@ const COMMANDS = {
     quests: questCommands.execute,
     timezone: timezoneCommand.execute,
     weekly: weeklyCommand.execute,
+    quick: quickCommand.execute,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,
@@ -133,6 +135,7 @@ async function route(interaction) {
         if (interaction.commandName === 'list') return listCommand.autocomplete(interaction);
         if (interaction.commandName === 'summary') return aiCommands.autocomplete(interaction);
         if (interaction.commandName === 'timezone') return timezoneCommand.autocomplete(interaction);
+        if (interaction.commandName === 'quick') return quickCommand.autocomplete(interaction);
         return interaction.respond([]);
     }
 

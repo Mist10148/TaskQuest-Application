@@ -50,7 +50,8 @@ function fake({ userId = USER, customId, commandName, values, fields = {}, optio
         options: {
             getString: (k) => options[k] ?? null,
             getUser: (k) => options[k] ?? null,
-            getFocused: () => ({ name: 'name', value: options.focused ?? '' })
+            getInteger: (k) => options[k] ?? null,
+            getFocused: () => ({ name: options.focusedName ?? 'name', value: options.focused ?? '' })
         },
         reply: record('reply'),
         update: record('update'),
@@ -206,6 +207,74 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
             assert.deepEqual(errors(g), []);
             if (!(await db.games.getActiveHangman(USER))) break;
         }
+    });
+
+    await t.test('/quick, /quests, /freeze, /timezone and /weekly', async () => {
+        const quick = require('../commands/quick');
+        const quests = require('../commands/quests');
+        const timezone = require('../commands/timezone');
+        const weekly = require('../commands/weekly');
+
+        const { list: target } = await db.tasks.createList(USER, { name: 'Quick list' });
+        const q = fake({ commandName: 'quick', options: { text: 'Send invoice fri !high #work every week', list: 'Quick list' } });
+        await quick.execute(q);
+        assert.deepEqual(errors(q), []);
+        const [added] = (await db.tasks.getItems(USER, target.id)).filter((i) => i.name === 'Send invoice');
+        assert.ok(added, 'the name had its tokens stripped');
+        assert.equal(added.priority, 'HIGH');
+        assert.equal(added.tags, 'work');
+        assert.equal(added.recurrence, 'weekly');
+        assert.ok(added.due_date);
+
+        const missing = fake({ commandName: 'quick', options: { text: 'x', list: 'Nope' } });
+        await quick.execute(missing);
+        assert.match(text(missing.calls.at(-1)), /List not found/);
+        const empty = fake({ commandName: 'quick', options: { text: '!high tomorrow', list: 'Quick list' } });
+        await quick.execute(empty);
+        assert.match(text(empty.calls.at(-1)), /Nothing to add/);
+        const ac = fake({ commandName: 'quick', options: { focusedName: 'list', focused: 'quick' } });
+        await quick.autocomplete(ac);
+        assert.deepEqual(ac.calls.at(-1).payload, [{ name: 'Quick list', value: 'Quick list' }]);
+
+        const view = fake({ commandName: 'quests' });
+        await quests.execute(view);
+        assert.deepEqual(errors(view), []);
+        assert.match(text(view.calls.at(-1)), /Daily Grind/);
+        const noClaim = fake({ customId: 'quest_claim_WEEKLY_COMPLETE_15' });
+        await quests.handleButton(noClaim);
+        assert.match(text(noClaim.calls.at(-1)), /isn't finished/);
+
+        const poor = fake({ commandName: 'freeze' });
+        await pool.query('UPDATE users SET player_xp = 0 WHERE discord_id = ?', [USER]);
+        await gam.freeze(poor);
+        assert.match(text(poor.calls.at(-1)), /Not enough XP|INSUFFICIENT|need/i);
+        await pool.query('UPDATE users SET player_xp = 500 WHERE discord_id = ?', [USER]);
+        const buy = fake({ commandName: 'freeze' });
+        await gam.freeze(buy);
+        assert.deepEqual(errors(buy), []);
+        assert.equal(Number((await db.users.getUser(USER)).streak_freezes), 1);
+
+        const tz = fake({ commandName: 'timezone', options: { zone: 'Asia/Manila', hour: 7 } });
+        await timezone.execute(tz);
+        assert.deepEqual(errors(tz), []);
+        const saved = await db.users.getUser(USER);
+        assert.equal(saved.timezone, 'Asia/Manila');
+        assert.equal(saved.reminder_hour, 7);
+        const badTz = fake({ commandName: 'timezone', options: { zone: 'Mars/Base' } });
+        await timezone.execute(badTz);
+        assert.match(text(badTz.calls.at(-1)), /Unknown time zone/);
+        assert.equal((await db.users.getUser(USER)).timezone, 'Asia/Manila', 'a bad zone changes nothing');
+
+        const on = fake({ commandName: 'weekly' });
+        await weekly.execute(on);
+        assert.match(text(on.calls.at(-1)), /Weekly digest on/);
+        const off = fake({ commandName: 'weekly' });
+        await weekly.execute(off);
+        assert.match(text(off.calls.at(-1)), /Weekly digest off/);
+
+        const board = fake({ commandName: 'leaderboard', options: { by: 'weekly' } });
+        await gam.leaderboard(board);
+        assert.deepEqual(errors(board), []);
     });
 
     await db.closePool();

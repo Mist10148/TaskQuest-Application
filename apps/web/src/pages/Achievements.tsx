@@ -8,13 +8,16 @@ import { useAchievements } from "@/hooks/useApi";
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
   lists: { label: 'Lists', emoji: '📋', color: 'from-blue-500/20 to-blue-500/5' },
   productivity: { label: 'Productivity', emoji: '📝', color: 'from-purple-500/20 to-purple-500/5' },
-  completion: { label: 'Completion', emoji: '✅', color: 'from-emerald-500/20 to-emerald-500/5' },
+  completions: { label: 'Completion', emoji: '✅', color: 'from-emerald-500/20 to-emerald-500/5' },
+  xp: { label: 'Experience', emoji: '✨', color: 'from-yellow-500/20 to-yellow-500/5' },
   streaks: { label: 'Streaks', emoji: '🔥', color: 'from-orange-500/20 to-orange-500/5' },
   levels: { label: 'Levels', emoji: '⬆️', color: 'from-violet-500/20 to-violet-500/5' },
   classes: { label: 'Classes', emoji: '⚔️', color: 'from-red-500/20 to-red-500/5' },
+  games: { label: 'Games', emoji: '🎮', color: 'from-pink-500/20 to-pink-500/5' },
+  economy: { label: 'Economy', emoji: '🛍️', color: 'from-cyan-500/20 to-cyan-500/5' },
 };
 
-const CATEGORY_ORDER = ['lists', 'productivity', 'completion', 'streaks', 'levels', 'classes'];
+const CATEGORY_ORDER = ['lists', 'productivity', 'completions', 'xp', 'streaks', 'levels', 'classes', 'games', 'economy'];
 
 const Achievements = () => {
   const { data, isLoading } = useAchievements();
@@ -30,7 +33,8 @@ const Achievements = () => {
     return acc;
   }, {} as Record<string, Achievement[]>);
 
-  const sortedCategories = CATEGORY_ORDER.filter(cat => grouped[cat]);
+  // Known categories first, then any the server adds later, so no achievement is ever hidden.
+  const sortedCategories = [...CATEGORY_ORDER.filter(cat => grouped[cat]), ...Object.keys(grouped).filter(cat => !CATEGORY_ORDER.includes(cat))];
   const progressPercent = totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
 
   return (

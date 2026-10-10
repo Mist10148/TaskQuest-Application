@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Lock, Trophy, Sparkles, Star, Medal } from "lucide-react";
 import { useAchievements } from "@/hooks/useApi";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
 
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
   lists: { label: 'Lists', emoji: '📋', color: 'from-blue-500/20 to-blue-500/5' },
@@ -20,7 +21,7 @@ const CATEGORY_LABELS: Record<string, { label: string; emoji: string; color: str
 const CATEGORY_ORDER = ['lists', 'productivity', 'completions', 'xp', 'streaks', 'levels', 'classes', 'games', 'economy'];
 
 const Achievements = () => {
-  const { data, isLoading } = useAchievements();
+  const { data, isLoading, isError, error, refetch, isFetching } = useAchievements();
 
   const achievements = data?.achievements || [];
   const unlockedCount = data?.unlockedCount || 0;
@@ -92,7 +93,9 @@ const Achievements = () => {
       </motion.div>
 
       <div className="px-4 sm:px-0">
-        {isLoading ? (
+        {isError ? (
+          <ErrorCard what="your achievements" error={error} onRetry={() => void refetch()} retrying={isFetching} />
+        ) : isLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {[...Array(9)].map((_, i) => <div key={i} className="h-24 sm:h-32 rounded-xl bg-card/50 animate-pulse" />)}
           </div>

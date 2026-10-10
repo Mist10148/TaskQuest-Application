@@ -4,15 +4,16 @@ import { XPProgressBar } from "@/components/game/XPProgressBar";
 import { motion } from "framer-motion";
 import { Sparkles, Flame, Target, ListTodo, Trophy, Gamepad2, TrendingUp } from "lucide-react";
 import { useAuth, getAvatarUrl } from "@/contexts/AuthContext";
+import { classColor } from "@/lib/classColors";
 
-const CLASS_INFO: Record<string, { name: string; emoji: string; color: string }> = {
-  DEFAULT: { name: 'Default', emoji: '⚪', color: '#95A5A6' },
-  HERO: { name: 'Hero', emoji: '⚔️', color: '#FFD700' },
-  GAMBLER: { name: 'Gambler', emoji: '🎲', color: '#9B59B6' },
-  ASSASSIN: { name: 'Assassin', emoji: '🗡️', color: '#2C3E50' },
-  WIZARD: { name: 'Wizard', emoji: '🔮', color: '#3498DB' },
-  ARCHER: { name: 'Archer', emoji: '🏹', color: '#27AE60' },
-  TANK: { name: 'Tank', emoji: '🛡️', color: '#E74C3C' },
+const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
+  DEFAULT: { name: 'Default', emoji: '⚪' },
+  HERO: { name: 'Hero', emoji: '⚔️' },
+  GAMBLER: { name: 'Gambler', emoji: '🎲' },
+  ASSASSIN: { name: 'Assassin', emoji: '🗡️' },
+  WIZARD: { name: 'Wizard', emoji: '🔮' },
+  ARCHER: { name: 'Archer', emoji: '🏹' },
+  TANK: { name: 'Tank', emoji: '🛡️' },
 };
 
 const Profile = () => {
@@ -22,7 +23,8 @@ const Profile = () => {
   const dbUser: Partial<User> = user?.user ?? {};
   const stats: Partial<UserData> = user ?? {};
 
-  const playerClass = CLASS_INFO[dbUser.player_class || 'DEFAULT'] || CLASS_INFO.DEFAULT;
+  const classKey = CLASS_INFO[dbUser.player_class || 'DEFAULT'] ? dbUser.player_class || 'DEFAULT' : 'DEFAULT';
+  const playerClass = CLASS_INFO[classKey];
   const level = dbUser.player_level || 1;
   const totalXP = Number(dbUser.player_xp) || 0;
   const currentXP = (Number(dbUser.lifetime_xp ?? totalXP) || 0) % 100;
@@ -50,7 +52,7 @@ const Profile = () => {
           {/* Banner */}
           <div 
             className="h-24 sm:h-32 relative"
-            style={{ background: `linear-gradient(135deg, ${playerClass.color}40, ${playerClass.color}20)` }}
+            style={{ background: `linear-gradient(135deg, ${classColor(classKey, 0.25)}, ${classColor(classKey, 0.12)})` }}
           >
             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-card" />
           </div>
@@ -62,7 +64,7 @@ const Profile = () => {
                 <img src={avatarUrl} alt="Avatar" className="h-20 w-20 sm:h-24 sm:w-24 rounded-full border-4 border-card" />
                 <div 
                   className="absolute -bottom-1 -right-1 h-7 w-7 sm:h-8 sm:w-8 rounded-full flex items-center justify-center text-base sm:text-lg border-2 border-card"
-                  style={{ backgroundColor: playerClass.color }}
+                  style={{ backgroundColor: classColor(classKey) }}
                 >
                   {playerClass.emoji}
                 </div>
@@ -73,7 +75,7 @@ const Profile = () => {
                 <h1 className="text-xl sm:text-2xl font-heading font-bold">{discord.globalName || discord.username}</h1>
                 <p className="text-foreground-muted text-sm">@{discord.username}</p>
                 <div className="flex items-center gap-2 mt-1 justify-center sm:justify-start">
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: `${playerClass.color}30`, color: playerClass.color }}>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: classColor(classKey, 0.19), color: classColor(classKey) }}>
                     {playerClass.emoji} {playerClass.name}
                   </span>
                   <span className="text-xs text-foreground-muted">Level {level}</span>

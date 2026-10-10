@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TaskListCard } from "@/components/game/TaskComponents";
 import { PriorityPanel } from "@/components/ai/PriorityPanel";
 import { ListFilters } from "./ListFilters";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import type { useListFilters } from "./useListFilters";
@@ -13,13 +14,16 @@ import type { useListFilters } from "./useListFilters";
 interface Props {
   lists: ListWithCounts[];
   loading: boolean;
+  error?: unknown;
+  onRetry?: () => void;
+  retrying?: boolean;
   filters: ReturnType<typeof useListFilters>;
   onOpen: (listId: number) => void;
   onCreate: () => void;
 }
 
 /** The quest log: header, AI priorities, filters and the grid of quest cards. */
-export const ListOverview = ({ lists, loading, filters, onOpen, onCreate }: Props) => {
+export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters, onOpen, onCreate }: Props) => {
   const [showHelp, setShowHelp] = useState(false);
   useHotkeys({
     n: (e) => { e.preventDefault(); onCreate(); },
@@ -44,7 +48,9 @@ export const ListOverview = ({ lists, loading, filters, onOpen, onCreate }: Prop
     <PriorityPanel onOpen={onOpen} />
     <ListFilters filters={filters} />
 
-    {loading ? (
+    {error ? (
+      <ErrorCard what="your quests" error={error} onRetry={onRetry} retrying={retrying} />
+    ) : loading ? (
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy="true">
         {[...Array(6)].map((_, i) => <div key={i} className="h-48 rounded-xl bg-card/50 animate-pulse" />)}
       </div>

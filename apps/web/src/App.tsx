@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { MotionConfig } from "framer-motion";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PreferencesProvider, usePreferences } from "@/contexts/PreferencesContext";
+import { CelebrationHost } from "@/components/feedback/CelebrationHost";
 import { AuthGate } from "@/components/AuthGate";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
@@ -44,6 +45,7 @@ const App = () => (
     <AuthProvider>
       <TooltipProvider>
         <Toaster />
+        <CelebrationHost />
         <Sonner />
         <BrowserRouter>
           <AuthGate>

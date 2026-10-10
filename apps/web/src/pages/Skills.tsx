@@ -8,15 +8,14 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSkills, useUnlockSkill } from "@/hooks/useApi";
 import { toast } from "sonner";
+import { classColor } from "@/lib/classColors";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
 
-const CLASS_COLORS: Record<string, string> = {
-  DEFAULT: '#95A5A6', HERO: '#FFD700', GAMBLER: '#9B59B6',
-  ASSASSIN: '#2C3E50', WIZARD: '#3498DB', ARCHER: '#27AE60', TANK: '#E74C3C',
-};
+
 
 const Skills = () => {
   const { refresh } = useAuth();
-  const { data, isLoading } = useSkills();
+  const { data, isLoading, isError, error, refetch, isFetching } = useSkills();
   const unlockSkill = useUnlockSkill();
   const [selectedTreeKey, setSelectedTreeKey] = useState<string>('DEFAULT');
 
@@ -54,7 +53,7 @@ const Skills = () => {
     }
   };
 
-  const color = CLASS_COLORS[selectedTreeKey] || '#888';
+  const color = classColor(selectedTreeKey);
 
   return (
     <DashboardLayout>
@@ -112,7 +111,9 @@ const Skills = () => {
       )}
 
       {/* Skill Tree */}
-      {isLoading ? (
+      {isError ? (
+        <ErrorCard what="the skill trees" error={error} onRetry={() => void refetch()} retrying={isFetching} />
+      ) : isLoading ? (
         <div className="h-[400px] sm:h-[500px] rounded-2xl bg-card/50 animate-pulse" />
       ) : selectedTree && (
         <motion.div key={selectedTreeKey} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl bg-card border border-border p-4 sm:p-8">

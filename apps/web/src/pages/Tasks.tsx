@@ -20,7 +20,8 @@ import { ConfirmDeleteDialog } from "@/components/tasks/ConfirmDeleteDialog";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 
 const Tasks = () => {
-  const { data: lists = [], isLoading: listsLoading } = useLists();
+  const listsQuery = useLists();
+  const lists = useMemo(() => listsQuery.data ?? [], [listsQuery.data]);
   const createList = useCreateList();
   const updateList = useUpdateList();
   const deleteList = useDeleteList();
@@ -181,7 +182,7 @@ const Tasks = () => {
           }}
         />
       ) : (
-        <ListOverview lists={lists} loading={listsLoading} filters={filters} onOpen={setSelectedListId} onCreate={() => setListDialog("create")} />
+        <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={setSelectedListId} onCreate={() => setListDialog("create")} />
       )}
 
       <ListFormDialog

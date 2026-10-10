@@ -7,6 +7,7 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
+import { celebrate } from '@/lib/celebrate';
 import {
     userApi,
     listsApi,
@@ -31,6 +32,7 @@ import {
 export function showXPNotification(result: Partial<RewardFields> | null | undefined, action: string, emoji = '✨') {
     const xp = result?.xpResult;
     if (!xp || xp.finalXP <= 0) return;
+    if (xp.leveledUp) celebrate('level');
     toast.success(`${emoji} ${action} +${xp.finalXP} XP!`, {
         description: xp.leveledUp ? `🎉 Level up! You are now level ${xp.newLevel}.` : xp.bonusInfo?.details || undefined,
         duration: 3500,
@@ -39,6 +41,7 @@ export function showXPNotification(result: Partial<RewardFields> | null | undefi
 
 export function showAchievementNotifications(achievements: AchievementUnlock[] | undefined, qc: QueryClient) {
     if (!achievements?.length) return;
+    celebrate('achievement');
     for (const ach of achievements) {
         toast.success(`🏆 Achievement Unlocked: ${ach.name}!`, { description: ach.description, duration: 5000 });
     }
@@ -70,6 +73,7 @@ export function useClaimDaily() {
         mutationFn: userApi.claimDaily,
         onSuccess: (result) => {
             invalidateProgress(qc);
+            if (result.leveledUp) celebrate('level');
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,
@@ -250,6 +254,7 @@ export function useClaimQuest() {
         onSuccess: (result) => {
             qc.invalidateQueries({ queryKey: ['quests'] });
             invalidateProgress(qc);
+            celebrate(result.leveledUp ? 'level' : 'quest');
             toast.success(`🎁 ${result.name} claimed +${result.reward} XP!`, {
                 description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
             });

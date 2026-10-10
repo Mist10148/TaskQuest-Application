@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Bot, Loader2, MessageSquarePlus, PanelLeft, Send, Square, Trash2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,9 @@ const Chat = () => {
   const { data: threadData } = useChatThreads(enabled);
   const deleteThread = useDeleteThread();
   const chat = useChat(routeThreadId ?? null);
-  const [input, setInput] = useState("");
+  // /chat?q=... pre-fills the box (used by the quick-add "Ask AI" button); it is never sent automatically.
+  const [searchParams] = useSearchParams();
+  const [input, setInput] = useState(() => (routeThreadId ? "" : (searchParams.get("q") ?? "").slice(0, 2000)));
   const [showThreads, setShowThreads] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const waiting = chat.isStreaming && !chat.messages[chat.messages.length - 1]?.text;

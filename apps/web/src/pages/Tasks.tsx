@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import type { Item, ListWithItems } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { dateOnly } from "@/lib/dates";
+import { useAuth } from "@/contexts/AuthContext";
+import type { QuickAddResult } from "@/lib/quickAdd";
 import {
   useLists, useList, useCreateList, useUpdateList, useDeleteList,
   useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems,
@@ -13,7 +15,7 @@ import { ListDetail } from "@/components/tasks/ListDetail";
 import { useListFilters } from "@/components/tasks/useListFilters";
 import { ListFormDialog } from "@/components/tasks/ListFormDialog";
 import { ItemFormDialog } from "@/components/tasks/ItemFormDialog";
-import { EMPTY_ITEM_FORM, EMPTY_LIST_FORM, listPayload, type ItemFormValues, type ListFormValues } from "@/components/tasks/forms";
+import { EMPTY_ITEM_FORM, EMPTY_LIST_FORM, itemPayload, listPayload, type ItemFormValues, type ListFormValues } from "@/components/tasks/forms";
 import { ConfirmDeleteDialog } from "@/components/tasks/ConfirmDeleteDialog";
 
 const Tasks = () => {
@@ -34,7 +36,8 @@ const Tasks = () => {
   const filters = useListFilters(lists);
 
   const [listDialog, setListDialog] = useState<"create" | "edit" | null>(null);
-  const [itemDialog, setItemDialog] = useState<{ mode: "create" } | { mode: "edit"; item: Item } | null>(null);
+  const [itemDialog, setItemDialog] = useState<{ mode: "create"; parentId?: number } | { mode: "edit"; item: Item } | null>(null);
+  const { user } = useAuth();
   const [listToDelete, setListToDelete] = useState<number | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
@@ -51,10 +54,29 @@ const Tasks = () => {
         : EMPTY_LIST_FORM,
     [selectedList]
   );
-  const itemInitial = useMemo<ItemFormValues>(
-    () => (itemDialog?.mode === "edit" ? { name: itemDialog.item.name, description: itemDialog.item.description || "" } : EMPTY_ITEM_FORM),
-    [itemDialog]
-  );
+  const itemInitial = useMemo<ItemFormValues>(() => {
+    if (itemDialog?.mode === "edit") {
+      const i = itemDialog.item;
+      return {
+        name: i.name,
+        description: i.description || "",
+        due_date: dateOnly(i.due_date),
+        priority: i.priority || "none",
+        tags: i.tags ? i.tags.split(",").join(", ") : "",
+        recurrence: i.recurrence || "none",
+        parent_id: i.parent_id ? String(i.parent_id) : "none",
+      };
+    }
+    return { ...EMPTY_ITEM_FORM, parent_id: itemDialog?.mode === "create" && itemDialog.parentId ? String(itemDialog.parentId) : "none" };
+  }, [itemDialog]);
+
+  // A task can become a subtask of any other top-level task, unless it has subtasks itself.
+  const parentOptions = useMemo(() => {
+    const items = selectedList?.items ?? [];
+    const editingId = itemDialog?.mode === "edit" ? itemDialog.item.id : null;
+    if (editingId !== null && items.some((i: Item) => i.parent_id === editingId)) return [];
+    return items.filter((i: Item) => !i.parent_id && i.id !== editingId).map((i: Item) => ({ id: i.id, name: i.name }));
+  }, [selectedList, itemDialog]);
 
   const handleCreateList = async (values: ListFormValues) => {
     if (!values.name.trim()) return void toast.error("Enter a name");
@@ -77,7 +99,7 @@ const Tasks = () => {
 
   const handleSaveItem = async (values: ItemFormValues) => {
     if (!values.name.trim() || !selectedListId || !itemDialog) return;
-    const data = { name: values.name.trim(), description: values.description.trim() || null };
+    const data = itemPayload(values);
     try {
       if (itemDialog.mode === "create") {
         await createItem.mutateAsync({ listId: selectedListId, ...data });
@@ -86,6 +108,14 @@ const Tasks = () => {
         toast.success("✏️ Task updated");
       }
       setItemDialog(null);
+      refetchList();
+    } catch { /* error toast shown by the mutation hook */ }
+  };
+
+  const handleQuickAdd = async (parsed: QuickAddResult) => {
+    if (!selectedListId) return;
+    try {
+      await createItem.mutateAsync({ listId: selectedListId, name: parsed.name, due_date: parsed.due_date, priority: parsed.priority, tags: parsed.tags, recurrence: parsed.recurrence });
       refetchList();
     } catch { /* error toast shown by the mutation hook */ }
   };
@@ -123,7 +153,10 @@ const Tasks = () => {
         <ListDetail
           list={detail}
           onBack={() => setSelectedListId(null)}
-          onAddItem={() => setItemDialog({ mode: "create" })}
+          aiEnabled={Boolean(user?.features?.ai)}
+          quickAddPending={createItem.isPending}
+          onAddItem={(parentId) => setItemDialog({ mode: "create", parentId })}
+          onQuickAdd={handleQuickAdd}
           onEditList={() => setListDialog("edit")}
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={(id) => toggleItem.mutate(id)}
@@ -151,6 +184,7 @@ const Tasks = () => {
         onOpenChange={(open) => !open && setItemDialog(null)}
         mode={itemDialog?.mode ?? "create"}
         initial={itemInitial}
+        parentOptions={parentOptions}
         pending={createItem.isPending || updateItem.isPending}
         onSubmit={handleSaveItem}
       />

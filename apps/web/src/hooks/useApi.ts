@@ -6,6 +6,7 @@
 
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { formatDeadline } from '@/lib/dates';
 import {
     userApi,
     listsApi,
@@ -186,6 +187,9 @@ export function useToggleItem() {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);
             if (result.completed) showXPNotification(result, 'Task done!', '✨');
+            if (result.nextItem) {
+                toast('🔁 Next one is ready', { description: result.nextItem.due_date ? `Due ${formatDeadline(result.nextItem.due_date)}` : undefined });
+            }
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,

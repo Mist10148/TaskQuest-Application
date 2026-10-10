@@ -18,6 +18,7 @@ const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
 const questCommands = require('./commands/quests');
 const timezoneCommand = require('./commands/timezone');
+const weeklyCommand = require('./commands/weekly');
 
 const commands = [
     listCommand.data,
@@ -27,6 +28,7 @@ const commands = [
     gamification.freezeData,
     questCommands.data,
     timezoneCommand.data,
+    weeklyCommand.data,
     gamification.automationData,
     gamification.profileData,
     gamification.achievementsData,

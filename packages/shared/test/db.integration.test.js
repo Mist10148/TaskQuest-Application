@@ -197,6 +197,29 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await ids()).includes(today.id));
     });
 
+    await t.test('weekly digest: opt-in, once a week, real numbers', async () => {
+        const GINA = '100000000000000007';
+        await db.users.ensureUser(GINA);
+        const now = new Date();
+        assert.ok(!(await db.users.getDigestCandidates(now)).some((u) => u.discord_id === GINA), 'off by default');
+        assert.equal(await db.users.toggleSetting(GINA, 'weekly_digest'), true);
+        assert.ok((await db.users.getDigestCandidates(now)).some((u) => u.discord_id === GINA));
+
+        const { list } = await db.tasks.createList(GINA, { name: 'Week', deadline: '2000-01-01' });
+        const { item } = await db.tasks.addItem(GINA, list.id, { name: 'done' });
+        await db.tasks.addItem(GINA, list.id, { name: 'open' });
+        await db.tasks.setItemCompleted(GINA, item.id, true);
+        const stats = await db.users.getWeeklyStats(GINA, now);
+        assert.equal(stats.completed, 1);
+        assert.ok(stats.xpEarned >= 10, 'list, task and completion XP');
+        assert.equal(stats.listsOpen, 1);
+        assert.equal(stats.listsOverdue, 1);
+
+        await db.users.markDigestSent(GINA, now);
+        assert.ok(!(await db.users.getDigestCandidates(now)).some((u) => u.discord_id === GINA), 'not again this week');
+        assert.ok((await db.users.getDigestCandidates(new Date(now.getTime() + 7 * 86400e3))).some((u) => u.discord_id === GINA), 'due again next week');
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

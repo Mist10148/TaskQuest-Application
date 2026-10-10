@@ -35,9 +35,9 @@ test('due reminders wait for the reminder hour in the user\'s time zone', () => 
 });
 
 test('west of UTC the due day starts later, not earlier', () => {
-    const l = list({ timezone: 'America/New_York' }); // UTC-5 in March (before DST)
-    assert.equal(decideReminder(l, at('2030-03-10T12:00:00Z')), null, '07:00 in New York');
-    assert.equal(decideReminder(l, at('2030-03-10T14:00:00Z')), 'due', '09:00 in New York');
+    const l = list({ timezone: 'America/New_York' }); // DST began that morning, so New York is UTC-4
+    assert.equal(decideReminder(l, at('2030-03-10T12:00:00Z')), null, '08:00 in New York');
+    assert.equal(decideReminder(l, at('2030-03-10T14:00:00Z')), 'due', '10:00 in New York');
     assert.equal(decideReminder(list({ deadline: '2030-03-11', timezone: 'America/New_York' }), at('2030-03-10T23:00:00Z')), null, 'not due yet');
 });
 

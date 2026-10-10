@@ -308,7 +308,7 @@ function helpEmbed() {
             { name: 'Daily', value: '`/daily` `/freeze` `/quests`', inline: true },
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },
             { name: 'Classes', value: '`/class` `/leaderboard`', inline: true },
-            { name: 'Settings', value: '`/toggle` `/automation` `/timezone`', inline: true },
+            { name: 'Settings', value: '`/toggle` `/automation` `/timezone` `/weekly`', inline: true },
             { name: 'Web App', value: '`/app` Open dashboard', inline: true },
             { name: 'AI', value: '`/summary` `/prioritize` `/ask`', inline: true }
         )

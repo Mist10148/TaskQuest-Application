@@ -44,3 +44,14 @@ test('nextOccurrence: daily, weekly and monthly with month-end clamping', () => 
     assert.equal(nextDueOnOrAfter('2030-01-01', 'weekly', '2030-01-22'), '2030-01-22');
     assert.equal(nextDueOnOrAfter('2030-01-01', 'daily', '2030-01-01'), '2030-01-02');
 });
+
+test('hourInZone and weekdayInZone follow the zone', () => {
+    const { hourInZone, weekdayInZone } = require('../src/dates');
+    const instant = new Date('2030-01-13T21:30:00Z'); // Sunday 21:30 UTC (no DST in January)
+    assert.equal(hourInZone(undefined, instant), 21);
+    assert.equal(hourInZone('Asia/Manila', instant), 5);
+    assert.equal(hourInZone('America/New_York', instant), 16);
+    assert.equal(weekdayInZone(undefined, instant), 7, 'Sunday');
+    assert.equal(weekdayInZone('Asia/Manila', instant), 1, 'already Monday in Manila');
+    assert.equal(hourInZone('Pacific/Auckland', new Date('2030-03-10T11:00:00Z')), 0, 'midnight reads as 0, not 24');
+});

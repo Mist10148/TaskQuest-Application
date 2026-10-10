@@ -78,7 +78,7 @@ export function useClaimDaily() {
 export function useUpdateSettings() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'timezone' | 'reminder_hour'>>) =>
+        mutationFn: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'weekly_digest' | 'timezone' | 'reminder_hour'>>) =>
             userApi.updateSettings(settings),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['user'] }),
         onError: showError,

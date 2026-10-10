@@ -8,7 +8,7 @@ const { errors } = require('../errors');
 const { isValidTimeZone } = require('../dates');
 const { questPeriod } = require('../quests');
 
-const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled'];
+const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled', 'weekly_digest'];
 
 const run = async (conn, sql, params = []) => (await (conn || getPool()).query(sql, params))[0];
 
@@ -213,6 +213,61 @@ async function getRank(discordId, by = 'lifetime', now) {
     return Number(row.user_rank);
 }
 
+// ─── Weekly digest ───────────────────────────────────────────────────────────
+
+/** Users who opted in to the weekly digest and haven't had one in the last 6 days. */
+async function getDigestCandidates(now = new Date()) {
+    return run(
+        null,
+        `SELECT discord_id, timezone, reminder_hour, last_digest_at, ai_enabled FROM users
+         WHERE weekly_digest = TRUE AND (last_digest_at IS NULL OR last_digest_at < ?)`,
+        [new Date(now.getTime() - 6 * 86400e3)]
+    );
+}
+
+async function markDigestSent(discordId, now = new Date()) {
+    await run(null, 'UPDATE users SET last_digest_at = ? WHERE discord_id = ?', [now, String(discordId)]);
+}
+
+/** Numbers for the digest: the 7 days up to `now`, plus what is open right now. */
+async function getWeeklyStats(discordId, now = new Date()) {
+    const id = String(discordId);
+    const since = new Date(now.getTime() - 7 * 86400e3);
+    const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
+    const today = now.toISOString().slice(0, 10);
+    const [[done], [xp], [open], user] = await Promise.all([
+        run(
+            null,
+            `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
+             WHERE l.discord_id = ? AND i.completed = 1 AND i.completed_at >= ?`,
+            [id, since]
+        ),
+        run(
+            null,
+            `SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions
+             WHERE discord_id = ? AND amount > 0 AND created_at >= ? AND source IN (${marks})`,
+            [id, since, ...WEEKLY_XP_SOURCES]
+        ),
+        run(
+            null,
+            `SELECT COUNT(DISTINCT l.id) AS lists_open,
+                    COUNT(DISTINCT CASE WHEN l.deadline < ? THEN l.id END) AS lists_overdue
+             FROM lists l JOIN items i ON i.list_id = l.id AND i.completed = 0
+             WHERE l.discord_id = ?`,
+            [today, id]
+        ),
+        getUser(id)
+    ]);
+    return {
+        completed: Number(done.n),
+        xpEarned: Number(xp.n),
+        listsOpen: Number(open.lists_open),
+        listsOverdue: Number(open.lists_overdue),
+        streak: user ? Number(user.streak_count) : 0,
+        level: user ? Number(user.player_level) : 1
+    };
+}
+
 /** Delete all of a user's progress and content (lists, items, games, XP). */
 async function resetProgress(discordId) {
     const id = String(discordId);
@@ -261,5 +316,8 @@ module.exports = {
     getLeaderboard,
     getRank,
     resetProgress,
-    getXPHistory
+    getXPHistory,
+    getDigestCandidates,
+    markDigestSent,
+    getWeeklyStats
 };

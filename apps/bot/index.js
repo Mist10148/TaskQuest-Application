@@ -25,6 +25,8 @@ const questCommands = require('./commands/quests');
 const aiSync = require('./utils/aiSync');
 const reminders = require('./utils/reminders');
 const timezoneCommand = require('./commands/timezone');
+const digest = require('./utils/digest');
+const weeklyCommand = require('./commands/weekly');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -64,6 +66,8 @@ function job(name, fn) {
 
 const checkDeadlines = job('DEADLINE', () => reminders.sendDeadlineReminders({ db, client, log }));
 
+const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));
+
 const cleanupLists = job('AUTO-DELETE', async () => {
     const deleted = await db.tasks.cleanupOldLists();
     for (const list of deleted) aiSync.forget(list.discord_id, list.id); // drop their vectors too
@@ -83,8 +87,10 @@ client.once(Events.ClientReady, (c) => {
 
     setTimeout(checkDeadlines, 5_000);
     setTimeout(cleanupLists, 10_000);
+    setTimeout(weeklyDigests, 15_000);
     expireGames();
     timers.push(setInterval(checkDeadlines, 60 * 60 * 1000));
+    timers.push(setInterval(weeklyDigests, 60 * 60 * 1000));
     timers.push(setInterval(cleanupLists, 24 * 60 * 60 * 1000));
     timers.push(setInterval(expireGames, 5 * 60 * 1000));
 });
@@ -106,6 +112,7 @@ const COMMANDS = {
     freeze: gamification.freeze,
     quests: questCommands.execute,
     timezone: timezoneCommand.execute,
+    weekly: weeklyCommand.execute,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,

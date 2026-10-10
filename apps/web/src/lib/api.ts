@@ -220,6 +220,7 @@ export interface User {
     xp_spent?: number;
     timezone?: string | null;
     reminder_hour?: number;
+    weekly_digest?: boolean | number;
 }
 
 export interface DiscordUser {

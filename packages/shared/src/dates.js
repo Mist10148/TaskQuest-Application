@@ -50,6 +50,14 @@ function hourInZone(tz, now = new Date()) {
     return Number(h.value) % 24;
 }
 
+const WEEKDAYS = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+
+/** ISO weekday (1 = Monday ... 7 = Sunday) it is right now in `tz` (UTC when omitted or unknown). */
+function weekdayInZone(tz, now = new Date()) {
+    const options = isValidTimeZone(tz) ? { timeZone: tz, weekday: 'short' } : { timeZone: 'UTC', weekday: 'short' };
+    return WEEKDAYS[new Intl.DateTimeFormat('en-US', options).format(now)];
+}
+
 const pad = (n) => String(n).padStart(2, '0');
 
 /**
@@ -81,4 +89,4 @@ function nextDueOnOrAfter(date, rule, today) {
     return next;
 }
 
-module.exports = { isValidTimeZone, hourInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };
+module.exports = { isValidTimeZone, hourInZone, weekdayInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };

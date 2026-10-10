@@ -797,6 +797,13 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
 //  🦖 DINO RUNNER (Web Exclusive) - Improved Design
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Dino Runner physics and canvas size (module scope: stable identities for the hooks below).
+const GROUND_Y = 160;
+const GRAVITY = 0.9;
+const JUMP_FORCE = -16;
+const CANVAS_WIDTH = 600;
+const CANVAS_HEIGHT = 200;
+
 const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
@@ -812,12 +819,6 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     frameCount: 0,
     groundOffset: 0
   });
-
-  const GROUND_Y = 160;
-  const GRAVITY = 0.9;
-  const JUMP_FORCE = -16;
-  const CANVAS_WIDTH = 600;
-  const CANVAS_HEIGHT = 200;
 
   const startGame = () => {
     gameRef.current = {

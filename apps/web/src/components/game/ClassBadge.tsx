@@ -92,7 +92,6 @@ const classConfig: Record<PlayerClass, {
   },
 };
 
-export const getClassConfig = (playerClass: PlayerClass) => classConfig[playerClass];
 
 export const ClassBadge = ({
   playerClass,

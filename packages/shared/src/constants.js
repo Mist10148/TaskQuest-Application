@@ -237,6 +237,8 @@ const LIMITS = {
     LIST_CREATE_REWARDS_PER_DAY: 10,
     /** Only the first N item additions per day award XP. */
     ITEM_ADD_REWARDS_PER_DAY: 50,
+    /** Only the first N task completions per day award XP (stops add/complete/delete loops). */
+    ITEM_COMPLETE_REWARDS_PER_DAY: 50,
     /** Total XP that free games (RPS, Hangman, arcade) may award per day. */
     FREE_GAME_XP_PER_DAY: 500,
     /** Minimum time between two free-game rounds. */

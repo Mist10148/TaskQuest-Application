@@ -260,6 +260,7 @@ async function setItemCompleted(discordId, itemId, completed) {
             user.total_items_completed = Number(user.total_items_completed) + 1;
             xp = await rewardAction(conn, user, 'item_complete', REWARDS.ITEM_COMPLETE, {
                 context: { priority: item.list_priority },
+                dailyLimit: LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY,
                 referenceId: id
             });
             achievements = await unlockAchievements(conn, user);

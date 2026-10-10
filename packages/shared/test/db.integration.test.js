@@ -26,6 +26,7 @@ const db = enabled ? require('../src/db') : null;
 
 const ALICE = '100000000000000001';
 const BOB = '100000000000000002';
+const CAROL = '100000000000000003';
 
 async function setXP(id, xp) {
     await db.query('UPDATE users SET player_xp = ?, lifetime_xp = GREATEST(lifetime_xp, ?) WHERE discord_id = ?', [xp, xp, id]);
@@ -74,6 +75,36 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(found.length, 0, 'LIKE wildcards are escaped');
         const lists = await db.tasks.getLists(ALICE, { sortBy: 'priority', order: 'DESC' });
         assert.equal(lists[0].items_total, 1);
+    });
+
+    await t.test('completion XP is capped per day', async () => {
+        await db.users.ensureUser(CAROL);
+        const { list } = await db.tasks.createList(CAROL, { name: 'Farm' });
+        const cap = 3;
+        // Pretend the cap was nearly reached by seeding today's completion payouts.
+        await pool.query(
+            `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after)
+             SELECT ?, 10, 'item_complete', 0, 0 FROM (SELECT 1 FROM information_schema.TABLES LIMIT ${cap}) t`,
+            [CAROL]
+        );
+        const limit = require('../src/constants').LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY;
+        await pool.query(
+            `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after)
+             SELECT ?, 10, 'item_complete', 0, 0 FROM information_schema.COLUMNS LIMIT ${limit - cap}`,
+            [CAROL]
+        );
+        const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete'", [CAROL]);
+        assert.equal(Number(n), limit);
+
+        const { item } = await db.tasks.addItem(CAROL, list.id, { name: 'one more' });
+        const done = await db.tasks.setItemCompleted(CAROL, item.id);
+        assert.equal(done.completed, true);
+        assert.equal(done.xp.capped, true);
+        assert.equal(done.xp.finalXP, 0);
+        const redo = await db.tasks.setItemCompleted(CAROL, item.id, false);
+        const again = await db.tasks.setItemCompleted(CAROL, item.id, true);
+        assert.equal(redo.completed, false);
+        assert.equal(again.xp, null, 'a capped completion cannot be re-earned later');
     });
 
     await t.test('class purchase is atomic under concurrency', async () => {

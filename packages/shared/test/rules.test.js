@@ -186,3 +186,21 @@ test('validation', () => {
     assert.equal(v.id('-1').ok, false);
     assert.equal(v.cleanText('a\u0000b '), 'ab');
 });
+
+test('task detail validation: tags, repeat and due date', () => {
+    const v = shared.validation;
+    assert.deepEqual(v.tags('#Work, home  Work'), { ok: true, value: 'work,home' });
+    assert.deepEqual(v.tags(['Errands', '#errands', 'x_y']), { ok: true, value: 'errands,x_y' });
+    assert.deepEqual(v.tags(''), { ok: true, value: null });
+    assert.deepEqual(v.tags(null), { ok: true, value: null });
+    assert.equal(v.tags('a b c d e f').ok, false, 'more than 5 tags');
+    assert.equal(v.tags('x'.repeat(21)).ok, false, 'tag too long');
+    assert.equal(v.tags('semi;colon').ok, false, 'unsafe characters');
+    assert.equal(v.tags(42).ok, false);
+    assert.equal(v.recurrence('Weekly').value, 'weekly');
+    assert.equal(v.recurrence(null).value, null);
+    assert.equal(v.recurrence('hourly').ok, false);
+    assert.equal(v.dueDate('2030-02-30').ok, false);
+    assert.match(v.dueDate('nope').error, /Due date/);
+    assert.equal(v.dueDate('2030-02-28').value, '2030-02-28');
+});

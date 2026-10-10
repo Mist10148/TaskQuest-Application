@@ -68,8 +68,8 @@ export const listsApi = {
 };
 
 export const itemsApi = {
-    create: (listId: number, data: { name: string; description?: string }) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
-    update: (id: number, data: Partial<{ name: string; description: string | null; position: number }>) => patch<Item>(`/api/items/${id}`, data),
+    create: (listId: number, data: ItemInput) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
+    update: (id: number, data: Partial<ItemInput> & { position?: number }) => patch<Item>(`/api/items/${id}`, data),
     toggle: (id: number) => patch<Item & RewardFields>(`/api/items/${id}/toggle`),
     delete: (id: number) => del<{ success: boolean }>(`/api/items/${id}`),
 };
@@ -295,6 +295,24 @@ export interface Item {
     completed: boolean | number;
     position: number;
     created_at: string;
+    /** Own due date (YYYY-MM-DD), priority, comma-separated lowercase tags, parent task and repeat rule. */
+    due_date?: string | null;
+    priority?: Priority | null;
+    tags?: string | null;
+    parent_id?: number | null;
+    recurrence?: Recurrence | null;
+}
+
+export type Recurrence = 'daily' | 'weekly' | 'monthly';
+
+export interface ItemInput {
+    name: string;
+    description?: string | null;
+    due_date?: string | null;
+    priority?: Priority | null;
+    tags?: string[] | string | null;
+    recurrence?: Recurrence | null;
+    parent_id?: number | null;
 }
 
 export interface ListWithItems extends List {

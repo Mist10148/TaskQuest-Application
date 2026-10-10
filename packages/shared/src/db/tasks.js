@@ -171,23 +171,56 @@ async function getItem(discordId, itemId) {
     return row || null;
 }
 
+/** Validate the optional per-task fields (due date, priority, tags, repeat). */
+function parseItemExtras(input, { partial = false } = {}) {
+    const out = {};
+    if (!partial || input.due_date !== undefined) out.due_date = unwrap(v.dueDate(input.due_date));
+    if (!partial || input.priority !== undefined) out.priority = unwrap(v.priority(input.priority));
+    if (!partial || input.tags !== undefined) out.tags = unwrap(v.tags(input.tags));
+    if (!partial || input.recurrence !== undefined) out.recurrence = unwrap(v.recurrence(input.recurrence));
+    return out;
+}
+
+/**
+ * A subtask's parent must be a top-level task of the same list (one level only),
+ * and a task that already has subtasks cannot itself become a subtask.
+ */
+async function assertValidParent(conn, listId, parentId, itemId = null) {
+    if (parentId === null) return;
+    if (itemId !== null && parentId === itemId) throw errors.validation('A task cannot be its own subtask.');
+    const [[parent]] = await conn.query('SELECT id, parent_id FROM items WHERE id = ? AND list_id = ?', [parentId, listId]);
+    if (!parent) throw errors.validation('The parent task must be in the same list.');
+    if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
+    if (itemId !== null) {
+        const [[kids]] = await conn.query('SELECT COUNT(*) AS n FROM items WHERE parent_id = ?', [itemId]);
+        if (Number(kids.n) > 0) throw errors.validation('A task with subtasks cannot become a subtask.');
+    }
+}
+
+function parseParentId(value) {
+    if (value === undefined || value === null || value === '') return null;
+    return unwrap(v.id(value));
+}
+
 async function addItem(discordId, listId, input) {
     const lid = unwrap(v.id(listId));
     const name = unwrap(v.itemName(input.name));
     const description = unwrap(v.description(input.description));
+    const extras = parseItemExtras(input);
+    const parentId = parseParentId(input.parent_id);
 
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, user.discord_id]);
         if (!list) throw errors.notFound('List not found.');
+        await assertValidParent(conn, lid, parentId);
 
         const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
-        const [res] = await conn.query('INSERT INTO items (list_id, name, description, position) VALUES (?, ?, ?, ?)', [
-            lid,
-            name,
-            description,
-            Number(pos.next)
-        ]);
+        const [res] = await conn.query(
+            `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [lid, name, description, Number(pos.next), extras.due_date, extras.priority, extras.tags, extras.recurrence, parentId]
+        );
         await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
         user.total_items_added = Number(user.total_items_added) + 1;
 
@@ -206,6 +239,9 @@ async function updateItem(discordId, itemId, input) {
     const fields = {};
     if (input.name !== undefined) fields.name = unwrap(v.itemName(input.name));
     if (input.description !== undefined) fields.description = unwrap(v.description(input.description));
+    Object.assign(fields, parseItemExtras(input, { partial: true }));
+    const parentGiven = input.parent_id !== undefined;
+    if (parentGiven) fields.parent_id = parseParentId(input.parent_id);
     let position;
     if (input.position !== undefined) {
         if (!Number.isSafeInteger(input.position) || input.position < 0) throw errors.validation('Position must be a non-negative integer.');
@@ -215,13 +251,16 @@ async function updateItem(discordId, itemId, input) {
     if (!keys.length && position === undefined) throw errors.validation('Nothing to update.');
 
     if (keys.length) {
-        const [res] = await getPool().query(
-            `UPDATE items i JOIN lists l ON l.id = i.list_id
-             SET ${keys.map((k) => `i.${k} = ?`).join(', ')}
-             WHERE i.id = ? AND l.discord_id = ?`,
-            [...keys.map((k) => fields[k]), id, String(discordId)]
-        );
-        if (!res.affectedRows) throw errors.notFound('Task not found.');
+        await withTransaction(async (conn) => {
+            const [[item]] = await conn.query(
+                `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
+                 WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
+                [id, String(discordId)]
+            );
+            if (!item) throw errors.notFound('Task not found.');
+            if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
+            await conn.query(`UPDATE items SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map((k) => fields[k]), id]);
+        });
     }
     if (position !== undefined) await moveItem(discordId, id, position);
     const item = await getItem(discordId, id);
@@ -312,7 +351,7 @@ async function setItemCompleted(discordId, itemId, completed) {
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
             xp = await rewardAction(conn, user, 'item_complete', REWARDS.ITEM_COMPLETE, {
-                context: { priority: item.list_priority },
+                context: { priority: item.priority || item.list_priority },
                 dailyLimit: LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY,
                 referenceId: id
             });

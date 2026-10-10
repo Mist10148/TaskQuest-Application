@@ -44,10 +44,20 @@ export const updateListBody = z
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
+const tagsField = z.union([z.string().max(200), z.array(z.string().max(30)).max(10)]).nullable().optional();
+const itemExtras = {
+    due_date: nullableEmpty(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional()),
+    priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),
+    tags: tagsField,
+    recurrence: nullableEmpty(z.enum(['daily', 'weekly', 'monthly']).nullable().optional()),
+    parent_id: z.number().int().positive().nullable().optional()
+};
+
 export const createItemBody = z
     .object({
         name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
-        description: optionalText(TEXT_LIMITS.DESCRIPTION)
+        description: optionalText(TEXT_LIMITS.DESCRIPTION),
+        ...itemExtras
     })
     .strict();
 
@@ -55,7 +65,8 @@ export const updateItemBody = z
     .object({
         name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
         description: optionalText(TEXT_LIMITS.DESCRIPTION),
-        position: z.number().int().min(0).max(100000)
+        position: z.number().int().min(0).max(100000),
+        ...itemExtras
     })
     .partial()
     .strict()

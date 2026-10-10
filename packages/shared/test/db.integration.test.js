@@ -163,6 +163,37 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(!(await db.tasks.getListsDueBy('2030-06-10')).some((l) => l.id === today.id));
     });
 
+    await t.test('tasks carry their own due date, priority, tags and subtasks', async () => {
+        const { list } = await db.tasks.createList(CAROL, { name: 'Detailed', priority: 'LOW' });
+        const { item: parent } = await db.tasks.addItem(CAROL, list.id, {
+            name: 'Write report', due_date: '2030-07-01', priority: 'high', tags: '#Work, urgent', recurrence: 'weekly'
+        });
+        assert.equal(parent.priority, 'HIGH');
+        assert.equal(parent.tags, 'work,urgent');
+        assert.equal(parent.recurrence, 'weekly');
+        assert.equal(String(parent.due_date), '2030-07-01');
+
+        const { item: child } = await db.tasks.addItem(CAROL, list.id, { name: 'Outline', parent_id: parent.id });
+        assert.equal(child.parent_id, parent.id);
+        await assert.rejects(db.tasks.addItem(CAROL, list.id, { name: 'Too deep', parent_id: child.id }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.updateItem(CAROL, parent.id, { parent_id: child.id }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.updateItem(CAROL, child.id, { parent_id: child.id }), { code: 'VALIDATION' });
+        const { list: other } = await db.tasks.createList(CAROL, { name: 'Elsewhere' });
+        await assert.rejects(db.tasks.addItem(CAROL, other.id, { name: 'x', parent_id: parent.id }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.addItem(CAROL, list.id, { name: 'x', tags: 'a b c d e f' }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.addItem(CAROL, list.id, { name: 'x', due_date: '2030-13-01' }), { code: 'VALIDATION' });
+
+        const edited = await db.tasks.updateItem(CAROL, child.id, { priority: null, tags: ['one'], due_date: '2030-07-02', recurrence: null });
+        assert.equal(edited.tags, 'one');
+        assert.equal(edited.priority, null);
+        const detached = await db.tasks.updateItem(CAROL, child.id, { parent_id: null });
+        assert.equal(detached.parent_id, null);
+
+        await db.tasks.updateItem(CAROL, child.id, { parent_id: parent.id });
+        await db.tasks.deleteItem(CAROL, parent.id);
+        assert.equal(await db.tasks.getItem(CAROL, child.id), null, 'subtasks go with their parent');
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

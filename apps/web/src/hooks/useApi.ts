@@ -18,6 +18,7 @@ import {
     aiApi,
     type AchievementUnlock,
     type CreateListData,
+    type ItemInput,
     type RewardFields,
     type User,
 } from '@/lib/api';
@@ -136,8 +137,7 @@ export function useDeleteList() {
 export function useCreateItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ listId, name, description }: { listId: number; name: string; description?: string }) =>
-            itemsApi.create(listId, { name, description }),
+        mutationFn: ({ listId, ...data }: { listId: number } & ItemInput) => itemsApi.create(listId, data),
         onSuccess: (result) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);
@@ -151,7 +151,7 @@ export function useCreateItem() {
 export function useUpdateItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ itemId, data }: { itemId: number; data: Partial<{ name: string; description: string | null; position: number }> }) =>
+        mutationFn: ({ itemId, data }: { itemId: number; data: Partial<ItemInput> & { position?: number } }) =>
             itemsApi.update(itemId, data),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['lists'] }),
         onError: showError,

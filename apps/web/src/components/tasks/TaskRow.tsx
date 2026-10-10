@@ -91,7 +91,15 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       </button>
 
       <div className="flex-1 min-w-0">
-        <p className={cn("font-medium text-sm sm:text-base break-words", completed && "line-through text-foreground-muted")}>{item.name}</p>
+        <p className={cn("font-medium text-sm sm:text-base break-words", completed && "line-through text-foreground-muted")}>
+          {priority && (
+            <>
+              <span className={cn("inline-block h-2 w-2 rounded-full mr-2 align-middle", DOT[priority])} aria-hidden />
+              <span className="sr-only">{priority.toLowerCase()} priority: </span>
+            </>
+          )}
+          {item.name}
+        </p>
         {item.description && <p className="text-xs sm:text-sm mt-1 line-clamp-2 text-foreground-muted">{item.description}</p>}
         {(item.due_date || item.recurrence || tags.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
@@ -112,13 +120,6 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           </div>
         )}
       </div>
-
-      {priority && (
-        <>
-          <span className={cn("flex-shrink-0 h-2 w-2 rounded-full mt-2", DOT[priority])} aria-hidden />
-          <span className="sr-only">{priority.toLowerCase()} priority</span>
-        </>
-      )}
 
       <div className="flex-shrink-0 flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (

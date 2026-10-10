@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { ArrowLeft, Calendar, Pencil, Plus, Scroll, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Keyboard, Pencil, Plus, Scroll, Trash2, X } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,15 @@ import { CATEGORIES } from "./constants";
 import { QuickAddBar } from "./QuickAddBar";
 import { TaskRow } from "./TaskRow";
 import { useItemDragReorder } from "./useItemDragReorder";
+import { useHotkeys } from "@/hooks/useHotkeys";
+import { ShortcutsDialog } from "./ShortcutsDialog";
 
 interface Props {
   list: ListWithItems;
   aiEnabled: boolean;
   quickAddPending: boolean;
+  /** Tasks hidden while their delete can still be undone. */
+  hiddenIds: Set<number>;
   onBack: () => void;
   onAddItem: (parentId?: number) => void;
   onQuickAdd: (parsed: QuickAddResult) => Promise<void>;
@@ -24,6 +28,8 @@ interface Props {
   onToggleItem: (itemId: number) => void;
   onEditItem: (itemId: number) => void;
   onDeleteItem: (itemId: number) => void;
+  onBulkComplete: (itemIds: number[]) => Promise<unknown>;
+  onBulkDelete: (itemIds: number[]) => void;
   /** Saves the full new order of every task id in the list. */
   onReorder: (itemIds: number[]) => Promise<unknown>;
 }
@@ -35,8 +41,11 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, onBack, onAddItem, onQuickAdd, onEditList, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onReorder }: Props) => {
-  const items = useMemo(() => list.items || [], [list.items]);
+export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onAddItem, onQuickAdd, onEditList, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onReorder }: Props) => {
+  const items = useMemo(
+    () => (list.items || []).filter((i: Item) => !hiddenIds.has(i.id) && !(i.parent_id && hiddenIds.has(i.parent_id))),
+    [list.items, hiddenIds]
+  );
   const completed = items.filter((i: Item) => i.completed).length;
   const progress = items.length > 0 ? (completed / items.length) * 100 : 0;
 
@@ -54,6 +63,33 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, onBack, onAddItem
   const saveTopLevelOrder = (topIds: number[]) =>
     onReorder(topIds.flatMap((id) => [id, ...(childrenOf.get(id) || []).map((c) => c.id)]));
   const drag = useItemDragReorder(topLevel, saveTopLevelOrder);
+
+  // Select several tasks to complete or delete them together.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [showHelp, setShowHelp] = useState(false);
+  const quickAddRef = useRef<HTMLInputElement>(null);
+  const toggleSelected = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const leaveSelectMode = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
+  const selectedIds = items.filter((i) => selected.has(i.id)).map((i) => i.id);
+  const openIds = items.filter((i) => selected.has(i.id) && !i.completed).map((i) => i.id);
+
+  useHotkeys({
+    n: (e) => { e.preventDefault(); onAddItem(); },
+    "/": (e) => { e.preventDefault(); quickAddRef.current?.focus(); },
+    s: () => (selectMode ? leaveSelectMode() : setSelectMode(true)),
+    "?": () => setShowHelp(true),
+    Escape: () => (selectMode ? leaveSelectMode() : onBack()),
+  });
 
   const move = (id: number, direction: -1 | 1, siblings: Item[]) => {
     const from = siblings.findIndex((s) => s.id === id);
@@ -76,9 +112,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, onBack, onAddItem
         item={item}
         listPriority={list.priority}
         isSubtask={isSubtask}
-        selectMode={false}
-        selected={false}
-        onSelect={() => undefined}
+        selectMode={selectMode}
+        selected={selected.has(item.id)}
+        onSelect={toggleSelected}
         onToggle={onToggleItem}
         onEdit={onEditItem}
         onDelete={onDeleteItem}
@@ -118,6 +154,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, onBack, onAddItem
             <Button variant="outline" size="sm" onClick={() => onAddItem()} className="gap-1">
               <Plus className="h-4 w-4" /> Add Task
             </Button>
+            <Button variant={selectMode ? "default" : "outline"} size="sm" onClick={() => (selectMode ? leaveSelectMode() : setSelectMode(true))} className="gap-1" aria-pressed={selectMode} title="Select tasks (s)">
+              <CheckSquare className="h-4 w-4" /><span className="hidden sm:inline">Select</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={onEditList} className="gap-1">
               <Pencil className="h-4 w-4" /><span className="hidden sm:inline">Edit</span>
             </Button>
@@ -147,7 +186,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, onBack, onAddItem
         </div>
       </div>
 
-      <QuickAddBar pending={quickAddPending} aiEnabled={aiEnabled} onAdd={onQuickAdd} />
+      <QuickAddBar ref={quickAddRef} pending={quickAddPending} aiEnabled={aiEnabled} onAdd={onQuickAdd} />
 
       {items.length === 0 ? (
         <div className="text-center py-12 text-foreground-muted">
@@ -168,6 +207,29 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, onBack, onAddItem
           ))}
         </div>
       )}
+
+      {selectMode && (
+        <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur" role="toolbar" aria-label="Bulk actions">
+          <span className="text-sm font-medium mr-auto" aria-live="polite">{selectedIds.length} selected</span>
+          <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === items.length} onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
+            Select all
+          </Button>
+          <Button size="sm" className="gap-1" disabled={openIds.length === 0} onClick={async () => { await onBulkComplete(openIds); leaveSelectMode(); }}>
+            <CheckCheck className="h-4 w-4" /> Complete{openIds.length ? ` (${openIds.length})` : ""}
+          </Button>
+          <Button size="sm" variant="destructive" className="gap-1" disabled={selectedIds.length === 0} onClick={() => { onBulkDelete(selectedIds); leaveSelectMode(); }}>
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+          <Button size="sm" variant="ghost" aria-label="Leave select mode" onClick={leaveSelectMode}><X className="h-4 w-4" /></Button>
+        </div>
+      )}
+
+      <p className="mt-4 text-center text-xs text-foreground-muted">
+        <button type="button" onClick={() => setShowHelp(true)} className="inline-flex items-center gap-1 hover:text-foreground">
+          <Keyboard className="h-3.5 w-3.5" aria-hidden /> Keyboard shortcuts (?)
+        </button>
+      </p>
+      <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
 
       <button onClick={() => onAddItem()} className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 text-foreground-muted text-sm transition-all group">
         <Plus className="h-5 w-5 group-hover:scale-110 transition-transform" /> Add New Task

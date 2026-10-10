@@ -17,6 +17,7 @@ import { ListFormDialog } from "@/components/tasks/ListFormDialog";
 import { ItemFormDialog } from "@/components/tasks/ItemFormDialog";
 import { EMPTY_ITEM_FORM, EMPTY_LIST_FORM, itemPayload, listPayload, type ItemFormValues, type ListFormValues } from "@/components/tasks/forms";
 import { ConfirmDeleteDialog } from "@/components/tasks/ConfirmDeleteDialog";
+import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 
 const Tasks = () => {
   const { data: lists = [], isLoading: listsLoading } = useLists();
@@ -39,7 +40,10 @@ const Tasks = () => {
   const [itemDialog, setItemDialog] = useState<{ mode: "create"; parentId?: number } | { mode: "edit"; item: Item } | null>(null);
   const { user } = useAuth();
   const [listToDelete, setListToDelete] = useState<number | null>(null);
-  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const itemDeletes = useUndoableDelete(async (id) => {
+    await deleteItem.mutateAsync(id);
+    refetchList();
+  });
 
   const editListInitial = useMemo<ListFormValues>(
     () =>
@@ -130,14 +134,20 @@ const Tasks = () => {
     } catch { /* error toast shown by the mutation hook */ }
   };
 
-  const confirmDeleteItem = async () => {
-    if (!itemToDelete) return;
-    try {
-      await deleteItem.mutateAsync(itemToDelete);
-      toast.success("🗑️ Task deleted");
-      setItemToDelete(null);
-      refetchList();
-    } catch { /* error toast shown by the mutation hook */ }
+  const nameOf = (id: number) => selectedList?.items.find((i: Item) => i.id === id)?.name ?? "task";
+  const deleteItems = (ids: number[]) =>
+    itemDeletes.request(ids, ids.length === 1 ? `Deleted "${nameOf(ids[0])}"` : `Deleted ${ids.length} tasks`);
+
+  // Complete one after another so each task pays its own XP and achievements.
+  const completeItems = async (ids: number[]) => {
+    for (const id of ids) {
+      try {
+        await toggleItem.mutateAsync(id);
+      } catch {
+        break; // error toast shown by the mutation hook
+      }
+    }
+    refetchList();
   };
 
   const openItemEditor = (itemId: number) => {
@@ -161,7 +171,10 @@ const Tasks = () => {
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={(id) => toggleItem.mutate(id)}
           onEditItem={openItemEditor}
-          onDeleteItem={setItemToDelete}
+          hiddenIds={itemDeletes.hidden}
+          onDeleteItem={(id) => deleteItems([id])}
+          onBulkComplete={completeItems}
+          onBulkDelete={deleteItems}
           onReorder={async (itemIds) => {
             await reorderItems.mutateAsync({ listId: detail.id, itemIds });
             toast.success("Task reordered");
@@ -187,15 +200,6 @@ const Tasks = () => {
         parentOptions={parentOptions}
         pending={createItem.isPending || updateItem.isPending}
         onSubmit={handleSaveItem}
-      />
-      <ConfirmDeleteDialog
-        open={itemToDelete !== null}
-        onOpenChange={(open) => !open && setItemToDelete(null)}
-        title="Delete Task"
-        description="Are you sure you want to delete this task? This action cannot be undone."
-        confirmLabel="Delete Task"
-        pending={deleteItem.isPending}
-        onConfirm={confirmDeleteItem}
       />
       <ConfirmDeleteDialog
         open={listToDelete !== null}

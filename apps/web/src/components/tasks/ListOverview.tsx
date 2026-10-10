@@ -1,10 +1,13 @@
-import { AlertCircle, Plus, Scroll } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, Keyboard, Plus, Scroll } from "lucide-react";
 import { motion } from "framer-motion";
 import type { ListWithCounts } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { TaskListCard } from "@/components/game/TaskComponents";
 import { PriorityPanel } from "@/components/ai/PriorityPanel";
 import { ListFilters } from "./ListFilters";
+import { ShortcutsDialog } from "./ShortcutsDialog";
+import { useHotkeys } from "@/hooks/useHotkeys";
 import type { useListFilters } from "./useListFilters";
 
 interface Props {
@@ -16,7 +19,14 @@ interface Props {
 }
 
 /** The quest log: header, AI priorities, filters and the grid of quest cards. */
-export const ListOverview = ({ lists, loading, filters, onOpen, onCreate }: Props) => (
+export const ListOverview = ({ lists, loading, filters, onOpen, onCreate }: Props) => {
+  const [showHelp, setShowHelp] = useState(false);
+  useHotkeys({
+    n: (e) => { e.preventDefault(); onCreate(); },
+    "/": (e) => { e.preventDefault(); document.getElementById("quest-search")?.focus(); },
+    "?": () => setShowHelp(true),
+  });
+  return (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-4 sm:px-0">
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
       <div>
@@ -78,5 +88,12 @@ export const ListOverview = ({ lists, loading, filters, onOpen, onCreate }: Prop
         </motion.button>
       </div>
     )}
+    <p className="mt-6 text-center text-xs text-foreground-muted">
+      <button type="button" onClick={() => setShowHelp(true)} className="inline-flex items-center gap-1 hover:text-foreground">
+        <Keyboard className="h-3.5 w-3.5" aria-hidden /> Keyboard shortcuts (?)
+      </button>
+    </p>
+    <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
   </motion.div>
-);
+  );
+};

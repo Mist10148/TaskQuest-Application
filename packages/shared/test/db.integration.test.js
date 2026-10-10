@@ -202,6 +202,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('arcade scores must be plausible', async () => {
         const run = await db.games.startArcade(BOB, 'snake');
         await assert.rejects(db.games.finishArcade(BOB, run.sessionId, 10_000), { code: 'VALIDATION' });
+        const [[{ state }]] = await pool.query('SELECT state FROM game_sessions WHERE id = ?', [run.sessionId]);
+        assert.equal(state, 'cancelled', 'an implausible score cancels the run for good');
+        await assert.rejects(db.games.finishArcade(BOB, run.sessionId, 0), { code: 'NOT_FOUND' });
         await assert.rejects(db.games.finishArcade(ALICE, run.sessionId, 0), { code: 'NOT_FOUND' });
         const run2 = await db.games.startArcade(BOB, 'dino');
         const done = await db.games.finishArcade(BOB, run2.sessionId, 0);

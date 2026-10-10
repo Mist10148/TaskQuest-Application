@@ -332,6 +332,14 @@ async function finishArcade(discordId, sessionId, score) {
     return outcome;
 }
 
+/** How much free-game XP (RPS, hangman, arcade) the user can still earn today, and when it resets. */
+async function getFreeGameAllowance(discordId, now = new Date()) {
+    const remaining = await remainingFreeGameXP(getPool(), String(discordId));
+    const cap = LIMITS.FREE_GAME_XP_PER_DAY;
+    const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    return { cap, remainingXP: remaining, usedXP: Math.max(0, cap - remaining), resetsAt: resetsAt.toISOString() };
+}
+
 // ─── Housekeeping & history ──────────────────────────────────────────────────
 
 /**
@@ -390,5 +398,6 @@ module.exports = {
     startArcade,
     finishArcade,
     expireStaleSessions,
-    getGameHistory
+    getGameHistory,
+    getFreeGameAllowance
 };

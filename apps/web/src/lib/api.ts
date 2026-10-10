@@ -172,6 +172,7 @@ export const leaderboardApi = {
 
 export const gamesApi = {
     getHistory: () => apiFetch<GameSession[]>('/api/games/history'),
+    getAllowance: () => apiFetch<GameAllowance>('/api/games/allowance'),
     getActive: () => apiFetch<{ blackjack: BlackjackActive | null; hangman: HangmanActive | null }>('/api/games/active'),
     blackjackStart: (bet: number) => post<BlackjackResult>('/api/games/blackjack/start', { bet }),
     blackjackAction: (action: 'hit' | 'stand' | 'double') => post<BlackjackResult>('/api/games/blackjack/action', { action }),
@@ -418,6 +419,13 @@ export interface LeaderboardEntry {
     gamesPlayed: number;
     tasksCompleted: number;
     isYou: boolean;
+}
+
+export interface GameAllowance {
+    cap: number;
+    remainingXP: number;
+    usedXP: number;
+    resetsAt: string;
 }
 
 export interface GameSession {

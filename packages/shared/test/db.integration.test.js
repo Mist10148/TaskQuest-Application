@@ -378,6 +378,16 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(res.xpGained, 0);
     });
 
+    await t.test('free-game allowance reflects what was earned today', async () => {
+        const open = await db.games.getFreeGameAllowance(BOB);
+        assert.equal(open.cap, 500);
+        assert.ok(open.remainingXP < 500, 'the hangman test above already used the whole allowance');
+        assert.equal(open.remainingXP + open.usedXP, 500);
+        assert.ok(new Date(open.resetsAt) > new Date());
+        const fresh = await db.games.getFreeGameAllowance('100000000000000099');
+        assert.deepEqual([fresh.remainingXP, fresh.usedXP], [500, 0]);
+    });
+
     await t.test('arcade scores must be plausible', async () => {
         const run = await db.games.startArcade(BOB, 'snake');
         await assert.rejects(db.games.finishArcade(BOB, run.sessionId, 10_000), { code: 'VALIDATION' });

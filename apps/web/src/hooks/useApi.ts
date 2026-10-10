@@ -265,6 +265,10 @@ export function useLeaderboard(by: LeaderboardBoard = 'lifetime', playerClass?: 
     return useQuery({ queryKey: ['leaderboard', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.get(by, playerClass) });
 }
 
+export function useGameAllowance() {
+    return useQuery({ queryKey: ['games', 'allowance'], queryFn: gamesApi.getAllowance });
+}
+
 export function useGameHistory() {
     return useQuery({ queryKey: ['games', 'history'], queryFn: gamesApi.getHistory });
 }

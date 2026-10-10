@@ -151,6 +151,15 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.ok(history.length >= 1);
     });
 
+    await t.test('free-game allowance', async () => {
+        const res = await call('GET', '/api/games/allowance', { cookie: alice });
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.cap, 500);
+        assert.equal(body.remainingXP + body.usedXP, 500);
+        assert.equal((await call('GET', '/api/games/allowance')).status, 401);
+    });
+
     await t.test('leaderboard hides Discord IDs', async () => {
         const board = await (await call('GET', '/api/leaderboard')).json();
         assert.ok(board.length >= 1);

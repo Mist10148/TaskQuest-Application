@@ -99,8 +99,8 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 
 ## Background behaviour
 
-- **Deadline DMs:** checked hourly. You get one DM per list on its deadline day (UTC), if `/automation` is on.
-- **Old-list clean-up:** daily. It applies to lists that have been completed for 5+ days, or are 5+ days past their deadline and unfinished, if auto-delete is on (web Settings).
+- **Deadline DMs:** checked hourly. You get one DM per list on its deadline day (UTC), if `/automation` is on. If the bot was offline that day, the reminder is sent late (up to 3 days), and temporary Discord errors are retried on the next run.
+- **Old-list clean-up:** daily. It deletes lists whose tasks have all been completed for 5+ days, if auto-delete is on (web Settings). Unfinished lists are never deleted, even when overdue.
 - **Abandoned games:** expired every 5 minutes, with Blackjack bets refunded.
 
 ## Interaction IDs (for developers)

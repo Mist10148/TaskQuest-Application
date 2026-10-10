@@ -260,11 +260,16 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const history = await db.games.getGameHistory(BOB, 5);
         assert.ok(history.length > 0);
 
-        const { list } = await db.tasks.createList(BOB, { name: 'Old', deadline: '2020-01-01' });
-        await db.tasks.addItem(BOB, list.id, { name: 'never done' });
+        const { list: unfinished } = await db.tasks.createList(BOB, { name: 'Overdue forever', deadline: '2020-01-01' });
+        await db.tasks.addItem(BOB, unfinished.id, { name: 'never done' });
+        const { list } = await db.tasks.createList(BOB, { name: 'Old' });
+        const { item: doneItem } = await db.tasks.addItem(BOB, list.id, { name: 'finished long ago' });
+        await db.tasks.setItemCompleted(BOB, doneItem.id, true);
+        await db.getPool().query('UPDATE items SET updated_at = updated_at - INTERVAL 10 DAY WHERE id = ?', [doneItem.id]);
         const removed = await db.tasks.cleanupOldLists();
         assert.ok(removed.some((l) => l.id === list.id && l.discord_id === BOB), 'reports which lists were deleted');
         assert.equal(await db.tasks.getList(BOB, list.id), null);
+        assert.ok(await db.tasks.getList(BOB, unfinished.id), 'unfinished lists survive, even when overdue');
 
         await db.users.resetProgress(BOB);
         const bob = await db.users.getUser(BOB);

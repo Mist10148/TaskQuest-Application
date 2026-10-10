@@ -163,12 +163,9 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 
 ## Automation queries
 
-**Deadline reminders** (`tasks.getListsDueOn`): lists with `deadline = today (UTC)`, `deadline_notified = FALSE`, and an owner with `automation_enabled`.
+**Deadline reminders** (`tasks.getListsDueBy`): lists with a deadline today (UTC) or up to 3 days earlier, `deadline_notified = FALSE`, and an owner with `automation_enabled`. A list is marked notified only after the DM was sent or can never be sent.
 
-**Old-list clean-up** (`tasks.cleanupOldLists`, 5 days by default). This is a single statement that deletes lists of users with `auto_delete_old_lists = TRUE` when either:
-
-- the list has items, all completed, and the latest item change is more than 5 days old, or
-- the deadline passed more than 5 days ago and the list has no items or unfinished items.
+**Old-list clean-up** (`tasks.cleanupOldLists`, 5 days by default). It deletes lists of users with `auto_delete_old_lists = TRUE` when the list has items, all completed, and the latest item change is more than 5 days old. Unfinished lists are never deleted, whatever their deadline. The function returns the deleted `{id, discord_id}` rows so the bot can drop their AI vectors.
 
 ## Connection settings
 

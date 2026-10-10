@@ -374,17 +374,14 @@ async function markDeadlineNotified(listId) {
 }
 
 /**
- * Delete lists for users with auto_delete_old_lists on when either
- *   - every item is completed and the last change was 5+ days ago, or
- *   - the deadline passed 5+ days ago and work is still unfinished.
+ * Delete lists for users with auto_delete_old_lists on once every item is completed
+ * and the last change was 5+ days ago. Unfinished lists are never deleted, even when
+ * their deadline is long gone: they stay visible as overdue.
  * @returns {Promise<Array<{ id: number, discord_id: string }>>} the lists that were deleted
  */
 async function cleanupOldLists(days = 5) {
-    const where = `u.auto_delete_old_lists = TRUE AND (
-             (s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY))
-             OR (l.deadline IS NOT NULL AND l.deadline <= (UTC_DATE() - INTERVAL ? DAY)
-                 AND (s.total IS NULL OR s.done < s.total))
-         )`;
+    const where = `u.auto_delete_old_lists = TRUE
+         AND s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY)`;
     const from = `FROM lists l
          JOIN users u ON u.discord_id = l.discord_id
          LEFT JOIN (
@@ -392,7 +389,7 @@ async function cleanupOldLists(days = 5) {
              FROM items GROUP BY list_id
          ) s ON s.list_id = l.id
          WHERE ${where}`;
-    const [doomed] = await getPool().query(`SELECT l.id, l.discord_id ${from}`, [days, days]);
+    const [doomed] = await getPool().query(`SELECT l.id, l.discord_id ${from}`, [days]);
     if (!doomed.length) return [];
     await getPool().query('DELETE FROM lists WHERE id IN (?)', [doomed.map((l) => l.id)]);
     return doomed.map((l) => ({ id: Number(l.id), discord_id: String(l.discord_id) }));

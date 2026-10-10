@@ -131,12 +131,12 @@ const Settings = () => {
             </div>
             <div className="min-w-0">
               <h2 className="font-heading font-semibold">Auto-Delete</h2>
-              <p className="text-sm text-foreground-muted truncate">Automatically clean up old lists</p>
+              <p className="text-sm text-foreground-muted truncate">Delete finished lists 5 days after you complete them</p>
             </div>
           </div>
           <div className="flex items-center justify-between py-3 border-t border-border gap-4">
             <div className="min-w-0">
-              <p className="font-medium text-sm sm:text-base">Auto-Delete Old Lists</p>
+              <p className="font-medium text-sm sm:text-base">Auto-Delete Finished Lists</p>
               <p className="text-xs sm:text-sm text-foreground-muted">Delete expired/completed lists after 5 days</p>
             </div>
             <Switch checked={autoDelete} onCheckedChange={(v) => handleToggle('autoDelete', v)} />

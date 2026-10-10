@@ -1,12 +1,24 @@
-# AI Integration — Design & Build Plan
+# AI Integration — Design record
 
-This document is the blueprint for adding three AI features to TaskQuest, all powered by **Google Gemini** and orchestrated with **LangChain** and **LangGraph**:
+This document records the design for adding three AI features to TaskQuest, all powered by **Google Gemini** and orchestrated with **LangChain** and **LangGraph**:
 
 1. **AI Summarizer**: turns a quest (list), a day, or a week of activity into a short, useful summary.
 2. **AI Prioritizer**: ranks open quests and explains what to do next.
 3. **AI Chat**: a conversational assistant that knows the user's tasks (via RAG), can answer "how do I…" questions about TaskQuest, and can create or complete tasks after the user confirms.
 
 > Status: **implemented, phases 0–7**, including the Discord bot commands, plus Discord @mention chat with a persona (see [AI_ARCHITECTURE.md §7](AI_ARCHITECTURE.md#7-discord-conversation-converse)). It has been verified offline only (the live evals have not been run yet); see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The architecture as it stands today is in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). The sections below are the original design; where the code differs, *As built* says so.
+
+> **Where to look.** This is the *design record*: goals, decisions and the reasoning behind them, written before and during the build.
+>
+> | You want | Read |
+> |---|---|
+> | How the service works today (graphs, retrieval, tools, guardrails, lifecycles) | [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) |
+> | The HTTP endpoints and SSE events | [API.md](API.md#ai-optional) |
+> | Environment variables and deployment | [DEPLOYMENT.md](DEPLOYMENT.md#ai-service-appsai-optional) and [`.env.example`](../.env.example) |
+> | Running, testing and the evals | [apps/ai/README.md](../apps/ai/README.md) |
+> | Enabling it for real users (live Gemini run) | [OPERATIONS.md](OPERATIONS.md#first-live-gemini-run) |
+>
+> Sections 10 to 13 originally held code sketches, a file tree and an environment block. They were replaced with pointers because the code and the documents above are now authoritative, and the sketches had drifted from them.
 
 ## Contents
 
@@ -545,192 +557,34 @@ Prompts live as versioned files in `apps/ai/app/prompts/` (`summarize_system.md`
 
 ## 10. Express integration
 
-### New files
+The Express side is built and documented where it lives:
 
-- *(new)* `apps/server/lib/aiClient.js`: a small wrapper over `fetch`:
-  - `aiClient.post(path, discordId, body, { timeoutMs })` → JSON, with `AbortController` timeout (default 20 s) and the `X-AI-Token` header.
-  - `aiClient.stream(path, discordId, body, res)`: pipes an SSE response to the Express `res`.
-  - `aiClient.reindex(discordId, listId)`: fire-and-forget, catches and logs errors.
-  - Maps AI-service errors to `TaskQuestError` codes (`AI_UNAVAILABLE` 503, `AI_QUOTA` 429).
-- *(new)* `apps/server/routes/ai.js`: public `/api/ai/*` routes. Each one: `parse(zodSchema, req.body)` → `aiClient.*(…, uid(req), …)`.
-- *(new)* `apps/server/routes/internal.js`: `/internal/*` write endpoints for chat tools. They are protected by a `requireInternalToken` middleware (constant-time compare), take `discordId` from the body (trusted caller), and call the same `db.tasks.*` functions as `routes/tasks.js`.
+- `apps/server/lib/aiClient.js`: the only code that talks to the AI service (shared token, trusted `X-Discord-Id`, timeouts, error mapping, SSE piping, and the fire-and-forget `reindex` / `forget` / `forgetUser` / `syncUser` hooks that never throw).
+- `apps/server/routes/ai.js`: the browser-facing `/api/ai/*` routes (see [API.md](API.md#ai-optional)).
+- `apps/server/routes/internal.js`: the token-protected `/internal/*` write API the AI tools call after a user confirms (see [API.md](API.md#internal-api-service-to-service)).
+- The re-index hooks live in `apps/server/routes/tasks.js` and `routes/user.js`; the bot has its own in `apps/bot/utils/aiSync.js`.
 
-### Mounting (`apps/server/app.js`)
-
-```js
-import aiRouter from './routes/ai.js';
-import internalRouter from './routes/internal.js';
-import { aiLimiter } from './lib/security.js';
-
-// Authenticated endpoints
-app.use('/api/ai', requireAuth, aiLimiter, aiRouter);
-
-// Service-to-service (not under /api, so no CSRF/session; token-protected)
-app.use('/internal', express.json({ limit: '16kb' }), requireInternalToken, internalRouter);
-```
-
-`aiLimiter` (in `lib/security.js`, next to `gameLimiter`) allows about 20 requests/min per session. The daily quota is enforced in the AI service.
-
-### SSE proxy sketch
-
-```js
-aiRouter.post('/chat', asyncRoute(async (req, res) => {
-    const body = parse(chatBody, req.body);
-    res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' });
-    res.flushHeaders();
-    await aiClient.stream('/v1/chat', uid(req), body, res);   // pipes upstream → res, ends on close
-}));
-```
-
-Make sure `compression` (if added later) skips `text/event-stream`, and abort the upstream request when the client disconnects (`req.on('close')`).
-
-### Re-index hooks (`apps/server/routes/tasks.js`)
-
-After each successful write, add `aiClient.reindex(uid(req), listId);` without `await`. For `DELETE /api/lists/:id`, call `aiClient.forget(uid(req), id)`.
-
-### Config (`apps/server/config.js` and `.env.example`)
-
-```js
-ai: {
-    enabled: env.AI_ENABLED === 'true',
-    serviceUrl: stripSlash(env.AI_SERVICE_URL || 'http://localhost:8000'),
-    internalToken: env.AI_INTERNAL_TOKEN,   // required when enabled; ≥ 32 chars
-    timeoutMs: parseInt(env.AI_TIMEOUT_MS, 10) || 20000
-}
-```
-
-When `AI_ENABLED` is false, `/api/ai/*` returns `503 AI_DISABLED` and the UI hides the AI entry points (exposed through `GET /api/user` → `features.ai`).
+The design rules that mattered, and still hold: Express is the only caller of the AI service from a browser session; the Discord ID always comes from the session (or the interaction), never from the request; and every write goes back through Express so XP, caps and achievements are awarded in one place.
 
 ---
 
 ## 11. Frontend integration
 
-Follows the existing pattern `lib/api.ts` → `hooks/useApi.ts` → `pages/*` → route in `App.tsx`.
+Built following the existing pattern `lib/api.ts` → `hooks/useApi.ts` → `pages/*` → route in `App.tsx`: a Summarize button per quest and a "Prioritize my quests" panel on the Tasks page, a "Today's briefing" card on the Dashboard, and a `/chat` page with a thread sidebar, streaming messages, source chips and confirmation cards, shown only when `features.ai` is true. The components live in `apps/web/src/components/ai/` and the page in `apps/web/src/pages/Chat.tsx`.
 
-| File | Change |
-|---|---|
-| `apps/web/src/lib/api.ts` | `aiApi.summary(body)`, `aiApi.prioritize(body)`, `aiApi.threads()`, `aiApi.thread(id)`, `aiApi.deleteThread(id)`, plus `aiApi.chatStream(body, onEvent, signal)` (fetch + `ReadableStream` SSE parser, `credentials: 'include'`). |
-| `apps/web/src/hooks/useApi.ts` | `useSummary` (mutation), `usePrioritize` (query, `staleTime` 5 min, invalidated by list mutations), `useChatThreads`, `useThread`, and a custom `useChat(threadId)` hook that manages streaming state, pending confirmations and abort. After a confirmed write, it invalidates `lists` queries so the task pages refresh. |
-| `apps/web/src/pages/Tasks.tsx` | A "✨ Summarize" button per list (opens a dialog with the summary), and a "Prioritize my quests" panel at the top showing the ranked list with reasons and Accept/Reject on suggested priority changes. |
-| `apps/web/src/pages/Dashboard.tsx` | A "Today's briefing" card (`digest` summary). |
-| *(new)* `apps/web/src/pages/Chat.tsx` | Thread sidebar, message list (markdown rendering, task-id chips linking to the list), input box, streaming cursor, a confirmation card for `confirm` events (Approve / Cancel), and XP toasts from tool results. |
-| *(new)* `apps/web/src/components/ai/*` | `SummaryCard`, `PriorityList`, `ChatMessage`, `ConfirmActionCard`, `SourceChips`. |
-| `apps/web/src/App.tsx` + `components/layout/DashboardLayout.tsx` | `/chat` route and a nav entry, shown only when `features.ai` is true. |
-
-UX rules: always show that content is AI-generated, show sources, and never apply anything without a click.
+UX rules, unchanged: always show that content is AI-generated, show sources, and never apply anything without a click.
 
 ---
 
 ## 12. Python service layout
 
-```
-apps/ai/                         (new)
-├── pyproject.toml               # deps pinned; ruff + mypy config
-├── README.md
-├── app/
-│   ├── main.py                  # FastAPI app, lifespan (DB pool, doc vectors, reconcile task)
-│   ├── config.py                # pydantic-settings: GEMINI_*, DB_*, AI_INTERNAL_TOKEN, quotas
-│   ├── deps.py                  # verify_internal_token, get_db, get_llm
-│   ├── db/
-│   │   ├── pool.py              # async SQLAlchemy engine (reuses DB_URL / DB_SSL* vars)
-│   │   └── repo.py              # scoped queries: lists_for_user, list_with_items, history...
-│   ├── llm.py                   # ChatGoogleGenerativeAI / embeddings factories, safety settings
-│   ├── rag/
-│   │   ├── chunking.py          # list/item/history/doc → text templates
-│   │   ├── embed.py             # batching, retries, task_type handling
-│   │   ├── store.py             # VectorStore protocol + MySQLNumpyStore
-│   │   ├── retriever.py         # TaskRetriever(BaseRetriever) + hybrid scoring
-│   │   ├── indexer.py           # index_list, forget_list, reconcile
-│   │   ├── backfill.py          # CLI
-│   │   └── index_docs.py        # CLI for docs/*.md
-│   ├── chains/
-│   │   └── summarize.py
-│   ├── graphs/
-│   │   ├── prioritize.py
-│   │   ├── chat.py
-│   │   └── checkpointer.py      # MySQL BaseCheckpointSaver
-│   ├── tools/
-│   │   ├── read_tools.py
-│   │   └── write_tools.py       # call Express /internal/*
-│   ├── prompts/*.md
-│   ├── routers/
-│   │   ├── v1.py                # /v1/summary, /v1/prioritize, /v1/chat, /v1/threads
-│   │   └── internal.py          # /internal/index, /internal/forget
-│   └── usage.py                 # quota check + token accounting (ai_usage)
-└── tests/
-    ├── unit/                    # chunking, scoring, validation, store math
-    ├── graphs/                  # graph paths with FakeListChatModel
-    ├── evals/                   # golden sets (JSON) + runner
-    └── conftest.py
-```
-
-All `/v1/*` routes require `X-AI-Token` and an `X-Discord-Id` header set by Express.
+The service layout is documented next to the code, so it cannot drift: see the **Layout** section of [apps/ai/README.md](../apps/ai/README.md#layout) and the module-by-module description in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md).
 
 ---
 
 ## 13. Configuration and deployment
 
-### Environment variables (add to `.env.example`)
-
-```bash
-# ── AI (optional) ────────────────────────────────────────────────────────────
-AI_ENABLED=false
-AI_SERVICE_URL=http://localhost:8000      # web → ai
-AI_INTERNAL_TOKEN=                        # ≥ 32 chars, same value on web + ai
-AI_TIMEOUT_MS=20000
-WEB_INTERNAL_URL=http://localhost:3001    # ai → web (/internal/*)
-GEMINI_API_KEY=                           # server-side only, never VITE_*
-GEMINI_CHAT_MODEL=
-GEMINI_REASONING_MODEL=
-GEMINI_EMBED_MODEL=
-EMBED_DIM=768
-AI_DAILY_REQUEST_LIMIT=100                # per user, all features
-AI_DB_USER=                               # read-only MySQL user for the AI service
-AI_DB_PASSWORD=
-# LANGSMITH_API_KEY=                      # optional tracing
-# LANGSMITH_PROJECT=taskquest-ai
-```
-
-### Render (`render.yaml`)
-
-Add a third service, a **private service**, so it is reachable only from the other services:
-
-```yaml
-  - type: pserv
-    name: taskquest-ai
-    runtime: python
-    plan: starter
-    rootDir: apps/ai
-    buildCommand: pip install . && python -m app.rag.index_docs
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - fromGroup: taskquest-database
-      - fromGroup: taskquest-ai
-      - key: PYTHON_VERSION
-        value: "3.12"
-      - key: GEMINI_API_KEY
-        sync: false
-```
-
-Put `AI_INTERNAL_TOKEN` (`generateValue: true`) in a new `taskquest-ai` env group shared by `taskquest-web` and `taskquest-ai`. Set `AI_SERVICE_URL` on the web service to the private service's internal host. The AI service also needs `WEB_INTERNAL_URL` pointing at the web service.
-
-Notes:
-- `index_docs` needs `GEMINI_API_KEY` and DB access at build time. If the build environment cannot reach the DB, run it from the lifespan startup instead.
-- Free web instances sleep. The first AI call after a wake-up can take 10–30 s, so the UI should show a "warming up" state when a call takes longer than 5 s.
-
-### Local development
-
-```bash
-# terminal 1 — existing apps
-npm run dev
-
-# terminal 2 — AI service
-cd apps/ai && python -m venv .venv && .venv/Scripts/activate   # Windows
-pip install -e ".[dev]"
-uvicorn app.main:app --reload --port 8000
-```
-
-`docs/DEPLOYMENT.md` gets a new "AI service" section once this ships.
+Configuration and deployment are documented in [DEPLOYMENT.md](DEPLOYMENT.md#ai-service-appsai-optional) (every variable, which service reads it, the Render blueprint) and in [`.env.example`](../.env.example). To run it locally, see the README's [optional AI service](../README.md#optional-the-ai-service) section. The AI service never runs DDL: its tables come from the Node migrations `003_ai` to `006_ai_chat_format`.
 
 ---
 
@@ -779,7 +633,7 @@ uvicorn app.main:app --reload --port 8000
 ## 17. Open questions
 
 1. **Vector backend migration trigger.** At what size (total rows or per-user chunks) do we move off in-app cosine? Proposal: when p95 retrieval exceeds 150 ms or any user exceeds 10k chunks.
-2. **Item-level deadlines and priorities.** Items currently have neither. If they are added later, extend chunk templates and prioritizer features (and consider ranking at item level).
+2. **Item-level deadlines and priorities.** *Now built in the task model* (migration `007_item_fields`: due date, priority, tags, subtasks, recurrence). The AI side hasn't caught up: chunk templates, the prioritizer's features and the chat tools don't use them yet ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
 3. **Language.** Should the assistant reply in the user's language? Gemini handles this well, but the eval sets are English-only.
-4. **Opt-out and data retention.** Opt-out lives on `users.ai_enabled`. How long should chat threads be kept: forever, or auto-deleted after 90 days?
-5. **Proactive features.** A daily digest DM from the bot (which reuses the summarizer) is a natural v2, but it needs an opt-in setting.
+4. **Opt-out and data retention.** Opt-out lives on `users.ai_enabled`, and *Reset progress* now purges a user's vectors, chat threads and cached summaries (`POST /internal/forget` without a list). Still open: should chat threads also expire on their own (for example after 90 days)?
+5. **Proactive features.** *Built as a weekly digest*: an opt-in Monday DM (`/weekly`, `users.weekly_digest`) that appends the summarizer's weekly recap when AI is on. A daily digest remains open.

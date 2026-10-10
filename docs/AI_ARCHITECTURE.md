@@ -1,6 +1,6 @@
 # AI Architecture (LangChain + LangGraph)
 
-How the TaskQuest AI service is put together, as built. For the original design, the success criteria and the build phases, see [AI_INTEGRATION.md](AI_INTEGRATION.md). For the endpoints, see [API.md](API.md).
+How the TaskQuest AI service is put together, as built. **This is the authoritative how-it-works guide.** For the original design, the success criteria and the build phases (the *why*), see the design record [AI_INTEGRATION.md](AI_INTEGRATION.md); for going live, see [OPERATIONS.md](OPERATIONS.md#first-live-gemini-run). For the endpoints, see [API.md](API.md).
 
 ## Contents
 

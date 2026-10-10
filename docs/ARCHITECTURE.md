@@ -71,20 +71,26 @@ Before 4.0, the bot and the web server each had their own copy of the classes, s
 
 ```
 packages/shared/src
-├── constants.js     CLASSES, SKILL_TREES, ACHIEVEMENTS, REWARDS, LIMITS, game config
-├── xp.js            levelFromXP, calculateClassXP, getSkillBonuses, calculateFinalXP, calculateDailyReward
+├── constants.js     CLASSES, SKILL_TREES, ACHIEVEMENTS, QUESTS, REWARDS, LIMITS, game config
+├── xp.js            levelFromXP, calculateClassXP, getSkillBonuses, calculateFinalXP, calculateDailyReward (incl. streak freezes)
 ├── achievements.js  evaluateAchievements(stats, unlocked, events)
+├── dates.js         date-only helpers: todayInZone, isPastDeadline, formatDeadline, nextOccurrence (no zone shifts)
+├── quests.js        questPeriod (UTC day / Monday-to-Monday week)
+├── quickAdd.js      parseQuickAdd: "Finish report fri !high #work" -> task fields
+├── ics.js           buildIcs: the calendar feed (RFC 5545)
 ├── games/           blackjack.js · rps.js · hangman.js · arcade.js   (pure engines)
-├── validation.js    listName, itemName, deadline, priority, escapeLike, ...
+├── validation.js    listName, itemName, deadline, dueDate, priority, tags, recurrence, escapeLike, ...
 ├── random.js        CSPRNG helpers (crypto.randomInt)
 ├── errors.js        TaskQuestError + factories
 └── db/
     ├── pool.js      mysql2 pool (UTC, DATE as string, TLS), withTransaction
     ├── migrate.js   runner + information_schema helpers
-    ├── migrations/  001_initial_schema.js, 002_upgrade_legacy.js
-    ├── users.js     profile, settings, stats, leaderboard, reset
-    ├── progression.js  applyXP, rewardAction, achievements, daily, classes, skills
-    ├── tasks.js     owner-scoped lists/items, reminders, clean-up
+    ├── migrations/  001 … 009 (initial schema, legacy upgrade, AI, task details, preferences, quests)
+    ├── users.js     profile, settings, stats, leaderboard boards, weekly digest data, reset
+    ├── progression.js  applyXP, rewardAction, achievements, daily, streak freezes, classes, skills
+    ├── tasks.js     owner-scoped lists/items/subtasks, ordering, recurrence, reminders, clean-up
+    ├── quests.js    daily/weekly quest progress and atomic claims
+    ├── transfer.js  export, reward-free import, calendar feed data and token
     └── games.js     blackjack / rps / hangman / arcade services, expiry
 ```
 
@@ -192,8 +198,9 @@ All jobs run in the bot process. Each is wrapped so that a failure is logged and
 
 | Job | Schedule | What it does |
 |---|---|---|
-| Deadline reminders | 5s after ready, then hourly | DMs owners of lists due today (UTC) whose `automation_enabled` is on. Each list is marked notified even if the DM fails (closed DMs). |
-| Old-list clean-up | 10s after ready, then daily | One `DELETE ... JOIN` query (see [DATABASE.md](DATABASE.md#automation-queries)). |
+| Deadline reminders | 5s after ready, then hourly | `utils/reminders.js`: for each candidate list (`tasks.getReminderCandidates`) it decides, in the owner's time zone and at their reminder hour, whether to send a *due* reminder, one *overdue* notice or a *snooze* reminder (`decideReminder`, a pure function). A list is marked handled only when the DM was sent or can never be sent (DMs closed); temporary errors retry on the next run. Reminder DMs carry Snooze and Stop buttons. |
+| Weekly digest | 15s after ready, then hourly | `utils/digest.js`: users who opted in (`/weekly`) get one DM on Monday at their reminder hour with their week's numbers, plus the AI recap when AI is on (best effort, never blocking). `last_digest_at` keeps it to once a week. |
+| Finished-list clean-up | 10s after ready, then daily | Deletes lists whose tasks have all been done for 5+ days (see [DATABASE.md](DATABASE.md#automation-queries)) and tells the AI service to forget their vectors. |
 | Game session expiry | On ready, then every 5 min | Expires sessions older than 30 minutes and refunds escrowed bets. |
 
 ## 9. Configuration and startup

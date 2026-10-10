@@ -354,6 +354,20 @@ async function getListsDueOn(date) {
     );
 }
 
+/**
+ * Lists due on `date` or up to `graceDays` earlier that haven't been reminded yet
+ * (so a reminder missed during an outage is still sent), for users with automation on.
+ */
+async function getListsDueBy(date, graceDays = 3) {
+    const from = new Date(`${date}T00:00:00Z`);
+    from.setUTCDate(from.getUTCDate() - graceDays);
+    return run(
+        `SELECT l.* FROM lists l JOIN users u ON u.discord_id = l.discord_id
+         WHERE l.deadline <= ? AND l.deadline >= ? AND l.deadline_notified = FALSE AND u.automation_enabled = TRUE`,
+        [date, from.toISOString().slice(0, 10)]
+    );
+}
+
 async function markDeadlineNotified(listId) {
     // Keep updated_at: a reminder being sent is not an edit of the list.
     await run('UPDATE lists SET deadline_notified = TRUE, updated_at = updated_at WHERE id = ?', [listId]);
@@ -402,6 +416,7 @@ module.exports = {
     moveItem,
     reorderItems,
     getListsDueOn,
+    getListsDueBy,
     markDeadlineNotified,
     cleanupOldLists
 };

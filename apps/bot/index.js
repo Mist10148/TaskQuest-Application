@@ -22,6 +22,7 @@ const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
 const aiSync = require('./utils/aiSync');
+const { sendDeadlineReminders } = require('./utils/reminders');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -59,36 +60,7 @@ function job(name, fn) {
     };
 }
 
-const checkDeadlines = job('DEADLINE', async () => {
-    const today = new Date().toISOString().slice(0, 10);
-    for (const list of await db.tasks.getListsDueOn(today)) {
-        try {
-            const user = await client.users.fetch(list.discord_id);
-            const items = (await db.tasks.getItems(list.discord_id, list.id)) || [];
-            const done = items.filter((i) => i.completed).length;
-            await user.send({
-                embeds: [
-                    {
-                        color: 0xff6b6b,
-                        title: '⏰ Deadline Today!',
-                        description: `Your list **${list.name}** is due today!`,
-                        fields: [
-                            { name: '📊 Progress', value: `${done}/${items.length} tasks`, inline: true },
-                            { name: '📁 Category', value: list.category || 'None', inline: true }
-                        ],
-                        footer: { text: 'TaskQuest • /automation to turn reminders off' }
-                    }
-                ]
-            });
-            log('📬', 'DEADLINE', `Reminded ${list.discord_id} about list ${list.id}`);
-        } catch (err) {
-            // 50007 = cannot DM this user (DMs closed). Anything else is worth logging.
-            if (err.code !== 50007) log('⚠️', 'DEADLINE', `list ${list.id}: ${err.message}`);
-        }
-        // Mark even when the DM fails so a closed inbox isn't retried every hour.
-        await db.tasks.markDeadlineNotified(list.id);
-    }
-});
+const checkDeadlines = job('DEADLINE', () => sendDeadlineReminders({ db, client, log }));
 
 const cleanupLists = job('AUTO-DELETE', async () => {
     const deleted = await db.tasks.cleanupOldLists();

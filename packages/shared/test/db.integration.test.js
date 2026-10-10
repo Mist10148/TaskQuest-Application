@@ -135,6 +135,19 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual(await positions(), [0, 1, 2, 3]);
     });
 
+    await t.test('reminders cover due and recently missed lists only', async () => {
+        const mk = async (name, deadline) => (await db.tasks.createList(CAROL, { name, deadline })).list;
+        const today = await mk('due today', '2030-06-10');
+        const missed = await mk('missed', '2030-06-08');
+        const ancient = await mk('ancient', '2030-05-01');
+        const future = await mk('future', '2030-06-11');
+        const ids = (await db.tasks.getListsDueBy('2030-06-10')).map((l) => l.id);
+        assert.ok(ids.includes(today.id) && ids.includes(missed.id));
+        assert.ok(!ids.includes(ancient.id) && !ids.includes(future.id));
+        await db.tasks.markDeadlineNotified(today.id);
+        assert.ok(!(await db.tasks.getListsDueBy('2030-06-10')).some((l) => l.id === today.id));
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy import text
@@ -16,7 +16,7 @@ from app.main import create_app
 from tests.conftest import OTHER, UID, auth
 from tests.fakes import ScriptedLLM
 
-TODAY = date.today()
+TODAY = datetime.now(UTC).date()  # the service works in UTC; date.today() is the machine's local date
 
 
 def good(ids=("L1",)):

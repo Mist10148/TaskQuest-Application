@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -15,7 +15,7 @@ from app.tools.specs import TOOLS, ToolContext
 from app.tools.web_client import ToolError, WebClient
 from tests.conftest import OTHER, UID
 
-TODAY = date.today()
+TODAY = datetime.now(UTC).date()  # the service works in UTC; date.today() is the machine's local date
 
 
 def make_web(responses=None, calls=None):

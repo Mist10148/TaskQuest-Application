@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,8 @@ class Seeded:
 
 async def seed(conn: AsyncConnection, data: dict[str, Any] | None = None, now: datetime | None = None) -> Seeded:
     data = data or load_json("seed.json")
-    out = Seeded(now=(now or datetime.now()).replace(microsecond=0), docs=dict(data.get("docs", {})))
+    # Naive UTC, as Express stores it (datetime.now() would be the machine's local time).
+    out = Seeded(now=(now or datetime.now(UTC).replace(tzinfo=None)).replace(microsecond=0), docs=dict(data.get("docs", {})))
     for uid, user in data["users"].items():
         await conn.execute(text("INSERT INTO users (discord_id) VALUES (:u)"), {"u": uid})
         for xp in user.get("xp", []):

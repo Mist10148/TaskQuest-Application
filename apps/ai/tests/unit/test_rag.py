@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import numpy as np
 from sqlalchemy import text
@@ -199,7 +199,7 @@ async def test_retrieval_is_fresh_scoped_and_filtered(seeded):
     async with seeded.begin() as conn:
         await indexer.reconcile(conn, store, emb)
         r = TaskRetriever(store, emb)
-        results = await r.retrieve(conn, UID, "math homework problems", k=3, today=date.today())
+        results = await r.retrieve(conn, UID, "math homework problems", k=3, today=datetime.now(UTC).date())
         ids = [x.id for x in results]
         assert ids[0] == "L1"
         assert "L4" not in ids  # other user's quest ("Secret plans")

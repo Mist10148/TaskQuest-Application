@@ -43,6 +43,13 @@ function formatDeadline(deadline, today = todayInZone()) {
     return m[1] === today.slice(0, 4) ? label : `${label}, ${m[1]}`;
 }
 
+/** The hour (0-23) it is right now in `tz` (UTC when omitted or unknown). */
+function hourInZone(tz, now = new Date()) {
+    if (!isValidTimeZone(tz)) return now.getUTCHours();
+    const h = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).formatToParts(now).find((p) => p.type === 'hour');
+    return Number(h.value) % 24;
+}
+
 const pad = (n) => String(n).padStart(2, '0');
 
 /**
@@ -74,4 +81,4 @@ function nextDueOnOrAfter(date, rule, today) {
     return next;
 }
 
-module.exports = { isValidTimeZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };
+module.exports = { isValidTimeZone, hourInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };

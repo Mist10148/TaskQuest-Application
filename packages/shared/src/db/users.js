@@ -4,6 +4,8 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { LEADERBOARDS, WEEKLY_XP_SOURCES } = require('../constants');
+const { errors } = require('../errors');
+const { isValidTimeZone } = require('../dates');
 const { questPeriod } = require('../quests');
 
 const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled'];
@@ -52,6 +54,17 @@ async function updateSettings(discordId, settings) {
             sets.push(`${key} = ?`);
             values.push(settings[key] ? 1 : 0);
         }
+    }
+    if (settings.timezone !== undefined) {
+        if (settings.timezone !== null && !isValidTimeZone(settings.timezone)) throw errors.validation('Unknown time zone. Use a name like Europe/Paris or Asia/Manila.');
+        sets.push('timezone = ?');
+        values.push(settings.timezone);
+    }
+    if (settings.reminder_hour !== undefined) {
+        const hour = settings.reminder_hour;
+        if (!Number.isInteger(hour) || hour < 0 || hour > 23) throw errors.validation('Reminder hour must be a whole number from 0 to 23.');
+        sets.push('reminder_hour = ?');
+        values.push(hour);
     }
     await ensureUser(discordId);
     if (sets.length) await run(null, `UPDATE users SET ${sets.join(', ')} WHERE discord_id = ?`, [...values, String(discordId)]);

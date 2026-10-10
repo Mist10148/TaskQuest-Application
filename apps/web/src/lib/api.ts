@@ -218,6 +218,8 @@ export interface User {
     total_lists_created: number;
     streak_freezes?: number;
     xp_spent?: number;
+    timezone?: string | null;
+    reminder_hour?: number;
 }
 
 export interface DiscordUser {

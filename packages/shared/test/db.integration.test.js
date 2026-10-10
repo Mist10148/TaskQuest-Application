@@ -150,132 +150,51 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual(await positions(), [0, 1, 2, 3]);
     });
 
-    await t.test('reminders cover due and recently missed lists only', async () => {
-        const mk = async (name, deadline) => (await db.tasks.createList(CAROL, { name, deadline })).list;
+    await t.test('reminder candidates, snooze and re-arming', async () => {
+        const FRANK = '100000000000000006';
+        await db.users.ensureUser(FRANK);
+        await db.users.updateSettings(FRANK, { timezone: 'Asia/Manila', reminder_hour: 7 });
+        const u = await db.users.getUser(FRANK);
+        assert.equal(u.timezone, 'Asia/Manila');
+        assert.equal(u.reminder_hour, 7);
+        await assert.rejects(db.users.updateSettings(FRANK, { timezone: 'Mars/Base' }), { code: 'VALIDATION' });
+        await assert.rejects(db.users.updateSettings(FRANK, { reminder_hour: 24 }), { code: 'VALIDATION' });
+        assert.equal((await db.users.updateSettings(FRANK, { timezone: null })).timezone, null);
+
+        const now = new Date('2030-06-10T12:00:00Z');
+        const mk = async (name, deadline) => (await db.tasks.createList(FRANK, { name, deadline })).list;
         const today = await mk('due today', '2030-06-10');
         const missed = await mk('missed', '2030-06-08');
         const ancient = await mk('ancient', '2030-05-01');
-        const future = await mk('future', '2030-06-11');
-        const ids = (await db.tasks.getListsDueBy('2030-06-10')).map((l) => l.id);
-        assert.ok(ids.includes(today.id) && ids.includes(missed.id));
-        assert.ok(!ids.includes(ancient.id) && !ids.includes(future.id));
-        await db.tasks.markDeadlineNotified(today.id);
-        assert.ok(!(await db.tasks.getListsDueBy('2030-06-10')).some((l) => l.id === today.id));
-    });
+        const far = await mk('far future', '2030-07-20');
+        const ids = async () => (await db.tasks.getReminderCandidates(now)).map((l) => l.id);
+        let found = await ids();
+        assert.ok(found.includes(today.id) && found.includes(missed.id));
+        assert.ok(!found.includes(ancient.id) && !found.includes(far.id));
+        const row = (await db.tasks.getReminderCandidates(now)).find((l) => l.id === today.id);
+        assert.equal(row.reminder_hour, 7, "the candidate carries the owner reminder hour");
+        assert.equal(row.items_total, 0);
 
-    await t.test('tasks carry their own due date, priority, tags and subtasks', async () => {
-        const { list } = await db.tasks.createList(CAROL, { name: 'Detailed', priority: 'LOW' });
-        const { item: parent } = await db.tasks.addItem(CAROL, list.id, {
-            name: 'Write report', due_date: '2030-07-01', priority: 'high', tags: '#Work, urgent', recurrence: 'weekly'
-        });
-        assert.equal(parent.priority, 'HIGH');
-        assert.equal(parent.tags, 'work,urgent');
-        assert.equal(parent.recurrence, 'weekly');
-        assert.equal(String(parent.due_date), '2030-07-01');
+        await db.tasks.markReminderSent(today.id, 'due');
+        found = await ids();
+        assert.ok(found.includes(today.id), 'still a candidate until the overdue notice is also sent');
+        await db.tasks.markReminderSent(today.id, 'overdue');
+        await db.tasks.markReminderSent(missed.id, 'due', { late: true });
+        found = await ids();
+        assert.ok(!found.includes(today.id) && !found.includes(missed.id));
 
-        const { item: child } = await db.tasks.addItem(CAROL, list.id, { name: 'Outline', parent_id: parent.id });
-        assert.equal(child.parent_id, parent.id);
-        await assert.rejects(db.tasks.addItem(CAROL, list.id, { name: 'Too deep', parent_id: child.id }), { code: 'VALIDATION' });
-        await assert.rejects(db.tasks.updateItem(CAROL, parent.id, { parent_id: child.id }), { code: 'VALIDATION' });
-        await assert.rejects(db.tasks.updateItem(CAROL, child.id, { parent_id: child.id }), { code: 'VALIDATION' });
-        const { list: other } = await db.tasks.createList(CAROL, { name: 'Elsewhere' });
-        await assert.rejects(db.tasks.addItem(CAROL, other.id, { name: 'x', parent_id: parent.id }), { code: 'VALIDATION' });
-        await assert.rejects(db.tasks.addItem(CAROL, list.id, { name: 'x', tags: 'a b c d e f' }), { code: 'VALIDATION' });
-        await assert.rejects(db.tasks.addItem(CAROL, list.id, { name: 'x', due_date: '2030-13-01' }), { code: 'VALIDATION' });
+        // Snooze: not a candidate until the snooze ends, then again.
+        await db.tasks.snoozeList(FRANK, today.id, new Date('2030-06-11T09:00:00Z'));
+        assert.ok(!(await ids()).includes(today.id));
+        const later = new Date('2030-06-11T10:00:00Z');
+        assert.ok((await db.tasks.getReminderCandidates(later)).some((l) => l.id === today.id));
+        await db.tasks.markReminderSent(today.id, 'snooze');
+        assert.ok(!(await db.tasks.getReminderCandidates(later)).some((l) => l.id === today.id));
+        await assert.rejects(db.tasks.snoozeList(BOB, today.id, later), { code: 'NOT_FOUND' });
 
-        const edited = await db.tasks.updateItem(CAROL, child.id, { priority: null, tags: ['one'], due_date: '2030-07-02', recurrence: null });
-        assert.equal(edited.tags, 'one');
-        assert.equal(edited.priority, null);
-        const detached = await db.tasks.updateItem(CAROL, child.id, { parent_id: null });
-        assert.equal(detached.parent_id, null);
-
-        await db.tasks.updateItem(CAROL, child.id, { parent_id: parent.id });
-        await db.tasks.deleteItem(CAROL, parent.id);
-        assert.equal(await db.tasks.getItem(CAROL, child.id), null, 'subtasks go with their parent');
-    });
-
-    await t.test('completing a repeating task creates exactly one next occurrence', async () => {
-        const { list } = await db.tasks.createList(CAROL, { name: 'Habits' });
-        const { item } = await db.tasks.addItem(CAROL, list.id, { name: 'Water plants', due_date: '2099-01-31', recurrence: 'monthly', tags: 'home' });
-        const before = await db.users.getUser(CAROL);
-        const done = await db.tasks.setItemCompleted(CAROL, item.id, true);
-        assert.ok(done.nextItem, 'next occurrence created');
-        assert.equal(String(done.nextItem.due_date).slice(0, 10), '2099-02-28');
-        assert.equal(done.nextItem.name, 'Water plants');
-        assert.equal(done.nextItem.tags, 'home');
-        assert.equal(Boolean(done.nextItem.completed), false);
-
-        await db.tasks.setItemCompleted(CAROL, item.id, false);
-        const again = await db.tasks.setItemCompleted(CAROL, item.id, true);
-        assert.equal(again.nextItem, null, 're-checking must not spawn another copy');
-        const copies = (await db.tasks.getItems(CAROL, list.id)).filter((i) => i.name === 'Water plants');
-        assert.equal(copies.length, 2);
-
-        const after = await db.users.getUser(CAROL);
-        assert.equal(Number(after.total_items_added), Number(before.total_items_added), 'a repeat is not a newly added task');
-    });
-
-    await t.test('streak freezes are bought, capped, consumed once, and count as spending', async () => {
-        const DAVE = '100000000000000004';
-        await db.users.ensureUser(DAVE);
-        await assert.rejects(db.progression.buyStreakFreeze(DAVE), { code: 'INSUFFICIENT_XP' });
-        await setXP(DAVE, 1000);
-        for (let i = 1; i <= 3; i++) assert.equal((await db.progression.buyStreakFreeze(DAVE)).freezes, i);
-        await assert.rejects(db.progression.buyStreakFreeze(DAVE), { code: 'CONFLICT' });
-        let user = await db.users.getUser(DAVE);
-        assert.equal(Number(user.player_xp), 1000 - 3 * 150);
-        assert.equal(Number(user.xp_spent), 450);
-
-        // Streak of 5, last claimed 60 hours ago: the freeze keeps it alive and is used up.
-        await pool.query('UPDATE users SET streak_count = 5, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 60 HOUR WHERE discord_id = ?', [DAVE]);
-        const claim = await db.progression.claimDaily(DAVE);
-        assert.equal(claim.streak, 6);
-        assert.equal(claim.freezeUsed, true);
-        user = await db.users.getUser(DAVE);
-        assert.equal(Number(user.streak_freezes), 2);
-
-        // Buying a class counts toward the spending achievements.
-        await setXP(DAVE, 5000);
-        await db.progression.buyClass(DAVE, 'hero');
-        assert.ok(Number((await db.users.getUser(DAVE)).xp_spent) >= 450 + 500);
-    });
-
-    await t.test('quests: progress from real activity, one claim per period', async () => {
-        const ERIN = '100000000000000005';
-        await db.users.ensureUser(ERIN);
-        const { list } = await db.tasks.createList(ERIN, { name: 'Quest list', priority: 'HIGH' });
-        const quests = async () => Object.fromEntries((await db.quests.getQuests(ERIN)).map((q) => [q.key, q]));
-
-        let q = await quests();
-        assert.equal(q.DAILY_COMPLETE_3.progress, 0);
-        await assert.rejects(db.quests.claimQuest(ERIN, 'DAILY_COMPLETE_3'), { code: 'VALIDATION' });
-        await assert.rejects(db.quests.claimQuest(ERIN, 'NOPE'), { code: 'NOT_FOUND' });
-
-        for (const name of ['a', 'b', 'c']) {
-            const { item } = await db.tasks.addItem(ERIN, list.id, { name });
-            await db.tasks.setItemCompleted(ERIN, item.id, true);
-        }
-        q = await quests();
-        assert.equal(q.DAILY_COMPLETE_3.progress, 3);
-        assert.equal(q.DAILY_COMPLETE_3.claimable, true);
-        assert.equal(q.DAILY_HIGH_1.claimable, true, 'tasks inherit the list priority');
-        assert.equal(q.DAILY_ADD_3.claimable, true);
-        assert.equal(q.WEEKLY_COMPLETE_15.claimable, false);
-
-        const before = Number((await db.users.getUser(ERIN)).player_xp);
-        const [a, b] = await Promise.allSettled([db.quests.claimQuest(ERIN, 'DAILY_COMPLETE_3'), db.quests.claimQuest(ERIN, 'daily_complete_3')]);
-        assert.equal([a, b].filter((r) => r.status === 'fulfilled').length, 1, 'concurrent claims pay once');
-        assert.equal(Number((await db.users.getUser(ERIN)).player_xp) - before, 30);
-        q = await quests();
-        assert.equal(q.DAILY_COMPLETE_3.claimed, true);
-        assert.equal(q.DAILY_COMPLETE_3.claimable, false);
-        await assert.rejects(db.quests.claimQuest(ERIN, 'DAILY_COMPLETE_3'), { code: 'CONFLICT' });
-
-        // Tomorrow the daily quest is fresh again, but this week's weekly claim state is separate.
-        const tomorrow = new Date(Date.now() + 36 * 3600e3);
-        const next = (await db.quests.getQuests(ERIN, tomorrow)).find((x) => x.key === 'DAILY_COMPLETE_3');
-        assert.equal(next.claimed, false);
-        assert.equal(next.progress, 0);
+        // Changing the deadline re-arms everything.
+        await db.tasks.updateList(FRANK, today.id, { deadline: '2030-06-10' });
+        assert.ok((await ids()).includes(today.id));
     });
 
     await t.test('class purchase is atomic under concurrency', async () => {

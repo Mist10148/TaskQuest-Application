@@ -29,7 +29,9 @@ export const settingsBody = z
         gamification_enabled: z.boolean().optional(),
         automation_enabled: z.boolean().optional(),
         auto_delete_old_lists: z.boolean().optional(),
-        ai_enabled: z.boolean().optional()
+        ai_enabled: z.boolean().optional(),
+        timezone: z.string().min(1).max(64).nullable().optional(),
+        reminder_hour: z.number().int().min(0).max(23).optional()
     })
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');

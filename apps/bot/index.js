@@ -23,7 +23,8 @@ const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
 const questCommands = require('./commands/quests');
 const aiSync = require('./utils/aiSync');
-const { sendDeadlineReminders } = require('./utils/reminders');
+const reminders = require('./utils/reminders');
+const timezoneCommand = require('./commands/timezone');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -61,7 +62,7 @@ function job(name, fn) {
     };
 }
 
-const checkDeadlines = job('DEADLINE', () => sendDeadlineReminders({ db, client, log }));
+const checkDeadlines = job('DEADLINE', () => reminders.sendDeadlineReminders({ db, client, log }));
 
 const cleanupLists = job('AUTO-DELETE', async () => {
     const deleted = await db.tasks.cleanupOldLists();
@@ -104,6 +105,7 @@ const COMMANDS = {
     daily: gamification.daily,
     freeze: gamification.freeze,
     quests: questCommands.execute,
+    timezone: timezoneCommand.execute,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,
@@ -123,6 +125,7 @@ async function route(interaction) {
     if (interaction.isAutocomplete()) {
         if (interaction.commandName === 'list') return listCommand.autocomplete(interaction);
         if (interaction.commandName === 'summary') return aiCommands.autocomplete(interaction);
+        if (interaction.commandName === 'timezone') return timezoneCommand.autocomplete(interaction);
         return interaction.respond([]);
     }
 
@@ -136,6 +139,7 @@ async function route(interaction) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
         if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
+        if (id === 'remind_off' || id.startsWith('remind_snooze_')) return reminders.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
         if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
             return gamification.handleClassButton(interaction);

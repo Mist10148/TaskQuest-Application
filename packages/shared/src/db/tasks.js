@@ -115,8 +115,9 @@ async function updateList(discordId, listId, input) {
     const keys = Object.keys(fields);
     if (!keys.length) throw errors.validation('Nothing to update.');
     if (keys.includes('deadline')) {
-        fields.deadline_notified = 0;
-        keys.push('deadline_notified');
+        // A new deadline re-arms every reminder (due, overdue and any snooze).
+        Object.assign(fields, { deadline_notified: 0, overdue_notified: 0, remind_at: null });
+        keys.push('deadline_notified', 'overdue_notified', 'remind_at');
     }
     try {
         const [res] = await getPool().query(
@@ -417,17 +418,52 @@ async function getListsDueOn(date) {
 }
 
 /**
- * Lists due on `date` or up to `graceDays` earlier that haven't been reminded yet
- * (so a reminder missed during an outage is still sent), for users with automation on.
+ * Lists that might need a reminder right now, with their owner's time zone and
+ * reminder hour. This is a deliberately wide net (a day either side covers every
+ * time zone); the bot decides per user, in their own local time, what to send.
+ *   - snoozed lists whose snooze has ended
+ *   - lists due in the next day or the last 14 days that still owe a due or overdue notice
  */
-async function getListsDueBy(date, graceDays = 3) {
-    const from = new Date(`${date}T00:00:00Z`);
-    from.setUTCDate(from.getUTCDate() - graceDays);
+async function getReminderCandidates(now = new Date()) {
+    const day = (offset) => {
+        const d = new Date(now.getTime() + offset * 86400e3);
+        return d.toISOString().slice(0, 10);
+    };
     return run(
-        `SELECT l.* FROM lists l JOIN users u ON u.discord_id = l.discord_id
-         WHERE l.deadline <= ? AND l.deadline >= ? AND l.deadline_notified = FALSE AND u.automation_enabled = TRUE`,
-        [date, from.toISOString().slice(0, 10)]
-    );
+        `SELECT l.*, u.timezone, u.reminder_hour,
+                (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id) AS items_total,
+                (SELECT COALESCE(SUM(i.completed), 0) FROM items i WHERE i.list_id = l.id) AS items_done
+         FROM lists l JOIN users u ON u.discord_id = l.discord_id
+         WHERE u.automation_enabled = TRUE AND (
+             (l.remind_at IS NOT NULL AND l.remind_at <= ?)
+             OR (l.deadline IS NOT NULL AND l.deadline >= ? AND l.deadline <= ?
+                 AND (l.deadline_notified = FALSE OR l.overdue_notified = FALSE))
+         )`,
+        [now, day(-14), day(1)]
+    ).then((rows) => rows.map((r) => ({ ...r, items_total: Number(r.items_total), items_done: Number(r.items_done) })));
+}
+
+/** Record that a reminder went out. `kind`: 'due' | 'overdue' | 'snooze'. Keeps updated_at: it is not an edit. */
+async function markReminderSent(listId, kind, { late = false } = {}) {
+    const sets = {
+        due: late ? 'deadline_notified = TRUE, overdue_notified = TRUE' : 'deadline_notified = TRUE',
+        overdue: 'deadline_notified = TRUE, overdue_notified = TRUE',
+        snooze: 'remind_at = NULL'
+    }[kind];
+    if (!sets) throw new Error(`Unknown reminder kind ${kind}`);
+    await run(`UPDATE lists SET ${sets}, updated_at = updated_at WHERE id = ?`, [listId]);
+}
+
+/** Remind the owner about a list again at `until`. */
+async function snoozeList(discordId, listId, until) {
+    const id = unwrap(v.id(listId));
+    const [res] = await getPool().query('UPDATE lists SET remind_at = ?, updated_at = updated_at WHERE id = ? AND discord_id = ?', [
+        until,
+        id,
+        String(discordId)
+    ]);
+    if (!res.affectedRows) throw errors.notFound('List not found.');
+    return true;
 }
 
 async function markDeadlineNotified(listId) {
@@ -475,7 +511,9 @@ module.exports = {
     moveItem,
     reorderItems,
     getListsDueOn,
-    getListsDueBy,
+    getReminderCandidates,
+    markReminderSent,
+    snoozeList,
     markDeadlineNotified,
     cleanupOldLists
 };

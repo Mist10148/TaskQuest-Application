@@ -220,6 +220,72 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await db.users.getDigestCandidates(new Date(now.getTime() + 7 * 86400e3))).some((u) => u.discord_id === GINA), 'due again next week');
     });
 
+    await t.test('export, import (reward-free) and the calendar feed', async () => {
+        const HANNA = '100000000000000008';
+        await db.users.ensureUser(HANNA);
+        const { list } = await db.tasks.createList(HANNA, { name: 'Trip, 2030', deadline: '2030-08-01', category: 'Travel' });
+        const { item: a } = await db.tasks.addItem(HANNA, list.id, { name: 'Book flights', due_date: '2030-06-01', tags: 'travel' });
+        await db.tasks.addItem(HANNA, list.id, { name: '=HYPERLINK("http://evil")', parent_id: a.id, priority: 'high' });
+        await db.tasks.setItemCompleted(HANNA, a.id, true);
+
+        const exported = await db.transfer.exportAll(HANNA);
+        assert.equal(exported.version, 1);
+        assert.equal(exported.lists[0].items.length, 2);
+        assert.equal(exported.lists[0].items[1].parent_id, a.id);
+        const csv = db.transfer.toCsv(exported);
+        assert.ok(csv.startsWith('list,task,subtask_of,done'));
+        assert.ok(csv.includes('"Trip, 2030"'), 'commas are quoted');
+        assert.ok(csv.includes("'=HYPERLINK"), 'spreadsheet formulas are defused');
+
+        // Import into a second account: same names get a suffix, nothing is rewarded.
+        const IVY = '100000000000000009';
+        await db.users.ensureUser(IVY);
+        await db.tasks.createList(IVY, { name: 'Trip, 2030' });
+        const before = await db.users.getUser(IVY);
+        const result = await db.transfer.importAll(IVY, JSON.parse(JSON.stringify(exported)));
+        assert.deepEqual(result, { lists: 1, items: 2 });
+        const after = await db.users.getUser(IVY);
+        assert.equal(Number(after.player_xp), Number(before.player_xp), 'importing never pays XP');
+        assert.equal(Number(after.total_items_added), Number(before.total_items_added));
+        assert.equal(Number(after.total_lists_created), Number(before.total_lists_created));
+        const lists = await db.tasks.getLists(IVY);
+        const imported = lists.find((l) => l.name === 'Trip, 2030 (imported)');
+        assert.ok(imported, 'name clash gets a suffix');
+        const items = await db.tasks.getItems(IVY, imported.id);
+        assert.equal(items.length, 2);
+        const parent = items.find((i) => i.name === 'Book flights');
+        assert.equal(Boolean(parent.completed), true);
+        assert.equal(Boolean(parent.xp_awarded), true, 'imported completions cannot be re-earned');
+        assert.equal(items.find((i) => i.name.startsWith('=')).parent_id, parent.id, 'subtask links survive');
+        assert.equal((await db.tasks.setItemCompleted(IVY, parent.id, false)).xp, null);
+        assert.equal((await db.tasks.setItemCompleted(IVY, parent.id, true)).xp, null);
+
+        // All or nothing, and bounded.
+        const count = async () => (await db.tasks.getLists(IVY)).length;
+        const n = await count();
+        await assert.rejects(db.transfer.importAll(IVY, { lists: [{ name: 'ok' }, { name: 'bad', deadline: '2030-02-30' }] }), { code: 'VALIDATION' });
+        assert.equal(await count(), n, 'a bad entry imports nothing');
+        await assert.rejects(db.transfer.importAll(IVY, { lists: 'nope' }), { code: 'VALIDATION' });
+        await assert.rejects(db.transfer.importAll(IVY, { lists: Array.from({ length: 101 }, (_, i) => ({ name: `l${i}` })) }), { code: 'VALIDATION' });
+        await assert.rejects(db.transfer.importAll(IVY, { lists: [{ name: 'x', items: [{ name: 'y', tags: 'a b c d e f' }] }] }), { code: 'VALIDATION' });
+
+        // Calendar token: create, look up, rotate (old one dies), revoke.
+        const token = await db.transfer.regenerateCalendarToken(HANNA);
+        assert.match(token, /^[a-f0-9]{32}$/);
+        assert.equal(await db.transfer.findUserByCalendarToken(token), HANNA);
+        assert.equal(await db.transfer.findUserByCalendarToken('0'.repeat(32)), null);
+        assert.equal(await db.transfer.findUserByCalendarToken("x' OR '1'='1"), null);
+        const rotated = await db.transfer.regenerateCalendarToken(HANNA);
+        assert.notEqual(rotated, token);
+        assert.equal(await db.transfer.findUserByCalendarToken(token), null);
+        const feed = await db.transfer.getCalendarData(HANNA);
+        assert.equal(feed.lists[0].deadline, '2030-08-01');
+        assert.equal(feed.items[0].due_date, '2030-06-01');
+        assert.equal(feed.items[0].completed, true);
+        await db.transfer.clearCalendarToken(HANNA);
+        assert.equal(await db.transfer.findUserByCalendarToken(rotated), null);
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

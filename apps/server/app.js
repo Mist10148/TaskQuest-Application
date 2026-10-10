@@ -13,6 +13,7 @@ import { listsRouter, itemsRouter } from './routes/tasks.js';
 import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } from './routes/progression.js';
 import gamesRouter from './routes/games.js';
 import questsRouter from './routes/quests.js';
+import calendarRouter from './routes/calendar.js';
 import aiRouter from './routes/ai.js';
 import internalRouter, { requireInternalToken } from './routes/internal.js';
 import { securityHeaders, sessionMiddleware, csrfProtection, apiLimiter, authLimiter, gameLimiter, aiLimiter } from './lib/security.js';
@@ -30,6 +31,8 @@ export function createApp() {
     app.use(securityHeaders());
     // Service-to-service (AI chat write tools): token-protected, no session or CSRF.
     app.use('/internal', express.json({ limit: '16kb' }), requireInternalToken, internalRouter);
+    // Imports carry whole lists, so that one route gets a bigger body limit (the shared service caps its size).
+    app.use('/api/user/import', express.json({ limit: '1mb' }));
     app.use(express.json({ limit: '16kb' }));
     app.use(sessionMiddleware(SESSION_COOKIE));
     app.use('/api', apiLimiter, csrfProtection);
@@ -52,6 +55,7 @@ export function createApp() {
 
     app.use('/api/auth', authRouter);
     app.use('/api/leaderboard', leaderboardRouter);
+    app.use('/api/calendar', calendarRouter);
 
     // ── Authenticated endpoints ──────────────────────────────────────────────
     app.use('/api/user', requireAuth, userRouter);

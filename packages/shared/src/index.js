@@ -12,6 +12,7 @@ const validation = require('./validation');
 const random = require('./random');
 const dates = require('./dates');
 const { questPeriod } = require('./quests');
+const { buildIcs } = require('./ics');
 const blackjack = require('./games/blackjack');
 const rps = require('./games/rps');
 const hangman = require('./games/hangman');
@@ -28,5 +29,6 @@ module.exports = {
     random,
     ...dates,
     questPeriod,
+    buildIcs,
     games: { blackjack, rps, hangman, arcade }
 };

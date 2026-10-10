@@ -28,15 +28,17 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 
 | Area | What you get |
 |---|---|
-| **Tasks** | Lists with description, category, priority and deadline. Tasks can be added, edited, reordered, completed and searched. |
-| **Progression** | XP for creating lists, adding tasks and completing tasks. Levels come from lifetime XP. There is a daily reward with streaks. |
+| **Tasks** | Lists with description, category, priority and deadline. Tasks have their own due date, priority, tags, subtasks and a repeat rule, and can be added (also from one line of text), edited, reordered, completed in bulk, deleted with undo and searched. |
+| **Progression** | XP for creating lists, adding tasks and completing tasks. Levels come from lifetime XP. There is a daily reward with streaks, streak freezes, and daily and weekly quests. |
 | **Classes** | Seven classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank), each changing how XP is earned. |
 | **Skills** | 27 skills in 7 trees, all with real effects that work the same on both platforms. |
-| **Achievements** | 30 achievements for lists, tasks, XP, levels, streaks, classes and games. |
+| **Achievements** | 33 achievements for lists, tasks, XP, levels, streaks, classes, games and spending. |
 | **Games** | Blackjack (bet XP, with double down), Rock Paper Scissors and Hangman on both platforms; Snake, Dino Runner and Space Invaders on the web. Every outcome is decided by the server. |
-| **Automation** | Deadline reminder DMs, and optional clean-up of old lists. |
+| **Automation** | Deadline reminder DMs at your own reminder hour and time zone (with Snooze), an overdue notice, an opt-in weekly summary DM, and optional clean-up of finished lists. |
+| **Your data** | JSON and CSV export, reward-free JSON import, and a private calendar feed (`.ics`) of deadlines and due dates. |
+| **Web app** | Light and dark themes, keyboard shortcuts, responsive layout with an accessible mobile drawer, reduce-motion setting, on-screen game controls. |
 | **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
-| **Leaderboard** | Top players by XP. Discord IDs are never exposed. |
+| **Leaderboard** | Boards for lifetime XP, XP earned this week, streaks and balance, filterable by class. Discord IDs are never exposed. |
 
 ## Architecture
 
@@ -123,6 +125,20 @@ npm install
 
 Open <http://localhost:8080> and log in with Discord.
 
+### Optional: the AI service
+
+The AI features (summaries, "what next?" ranking, chat) run as a separate private Python service and are **off by default**. To try them locally:
+
+```bash
+cd apps/ai
+python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+# in the root .env: AI_ENABLED=true, AI_INTERNAL_TOKEN=<32+ random chars>, GEMINI_API_KEY=<your key>
+uvicorn app.main:app --port 8000
+```
+
+Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and the bot, and restart them. See [apps/ai/README.md](apps/ai/README.md) for details and [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) for how it works.
+
 ## Scripts
 
 | Command | What it does |
@@ -134,7 +150,7 @@ Open <http://localhost:8080> and log in with Discord.
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint and TypeScript for the web app |
 | `npm run check` | `node --check` every Node source file |
-| `npm test` | Unit tests. Integration tests also run when `TEST_DB_NAME` is set (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
+| `npm test` | Unit tests (Node packages and the web app's Vitest suite). Integration tests also run when `TEST_DB_NAME` is set (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
 
 ## Configuration
 
@@ -155,9 +171,12 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 | [docs/API.md](docs/API.md) | Every REST endpoint with request and response shapes |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every Discord command and interaction |
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | XP, levels, classes, skills, achievements and game rules, with exact numbers |
-| [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | The AI features: design, what was built, and how it differs from the plan |
+| [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) | How the AI service works: graphs, retrieval, tools, guardrails |
+| [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | The AI design record: goals, decisions, and how the build differs from the plan |
 | [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, and upgrading a legacy database |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render, environment variables, Discord setup, operations |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Backups and restore, troubleshooting, and the first live Gemini run |
+| [docs/design/](docs/design/) | Design notes for work that is planned but not built: shared lists, Tailwind 4, arcade anti-cheat |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations and the roadmap |
 | [SECURITY.md](SECURITY.md) | Security model, fixed vulnerabilities, required secret rotation, reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, tests, conventions |

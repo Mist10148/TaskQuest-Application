@@ -32,7 +32,7 @@ Status legend: **Done** (works as described), **Partial** (works, with a noted g
 
 ## 1. Summary
 
-TaskQuest turns ordinary to-do lists into RPG-style progression. People create lists, add tasks and complete them, and every meaningful action earns XP. XP drives levels, a daily reward with streaks, seven character classes that change how XP is earned, 27 skills, 30 achievements, and a small game centre where XP can be won or wagered.
+TaskQuest turns ordinary to-do lists into RPG-style progression. People create lists, add tasks and complete them, and every meaningful action earns XP. XP drives levels, a daily reward with streaks, seven character classes that change how XP is earned, 27 skills, 33 achievements, daily and weekly quests, and a small game centre where XP can be won or wagered.
 
 TaskQuest is one product with two front ends that share one account (the Discord identity) and one database:
 
@@ -111,10 +111,14 @@ TaskQuest addresses this in three ways:
 | L3 | Filter lists (all, current, expired, completed, category) and sort them | Available on both platforms. | Done |
 | L4 | Search my lists | Matches name, category and description. `%` and `_` are matched literally. | Done |
 | L5 | Nobody else can see or change my lists | Every query is scoped to the owner, including clicks on someone else's public `/list` message. | Done |
-| L6 | Get a DM on a list's deadline day | Sent once per list. It can be turned off with `/automation` or in web Settings. | Done |
-| L7 | Have finished or long-expired lists cleaned up | Applies when every task has been done for 5+ days, or the deadline passed 5+ days ago with work unfinished. Opt-out in Settings. | Done |
-| L8 | Due dates and priorities on individual tasks | Not built. | Planned |
-| L9 | Recurring tasks | Not built. | Planned |
+| L6 | Get a DM on a list's deadline day | Sent once per list, at the user's reminder hour in their own time zone (`/timezone` or web Settings). A reminder missed during an outage is still sent (up to 3 days late), and temporary Discord errors are retried. One more notice follows if tasks are still open the day after. DMs carry Snooze and Stop buttons. Can be turned off with `/automation` or in web Settings. | Done |
+| L7 | Have finished lists cleaned up | Deletes a list when every task has been done for 5+ days. Unfinished lists are never deleted, even when overdue. Opt-out in Settings. | Done |
+| L8 | Due dates, priorities, tags and subtasks on individual tasks | Own due date and priority (the task's priority drives class and skill effects), up to 5 tags, one level of subtasks. Shown and editable on the web; `/quick` on Discord. | Done |
+| L9 | Recurring tasks | Daily, weekly or monthly. Completing one creates the next copy (no creation XP). | Done |
+| L10 | Add a task from one line of text | "Finish report fri !high #work every week" is understood on the web (quick-add bar) and in Discord (`/quick`). | Done |
+| L11 | Undo a deletion, and act on several tasks at once | Deleting a task hides it with an Undo toast and only deletes when it expires; select mode completes or deletes several. | Done |
+| L12 | Export my data, import it back, and see deadlines in my calendar | JSON and CSV export, reward-free JSON import, and a secret iCalendar feed. | Done |
+| L13 | A Monday summary of my week | Opt-in DM (`/weekly`), with the AI recap appended when AI is on. | Done |
 
 ### 5.3 Progression
 
@@ -127,7 +131,10 @@ TaskQuest addresses this in three ways:
 | P5 | Unlock and level skills | The tree must be owned and the prerequisite unlocked. Cost is charged per level. Every skill has a working effect. | Done |
 | P6 | Unlock achievements and see them immediately | Evaluated in the same transaction as the action that earned them. | Done |
 | P7 | Turn XP off entirely | The XP toggle stops rewards, purchases and games. Tasks keep working. | Done |
-| P8 | Compare with others on a leaderboard | Top 10 by XP. Shows the stored display name and avatar, never a Discord ID. | Done |
+| P8 | Compare with others on a leaderboard | Top 10 on four boards: lifetime XP (default), XP earned this week, daily streak, current balance; optional class filter. Shows the stored display name and avatar, never a Discord ID. Spending XP does not lower the default board. | Done |
+| P9 | Work towards daily and weekly quests | Five quests with progress from real activity; one claim per period. | Done |
+| P10 | Protect a streak | A 150 XP streak freeze (max 3) saves a streak of 2+ days that a missed day would break. | Done |
+| P11 | Be rewarded for spending | Achievements for spending 1,000 / 5,000 / 10,000 XP on classes, skills and freezes. | Done |
 
 ### 5.4 Games
 
@@ -147,7 +154,7 @@ TaskQuest addresses this in three ways:
 | FR1 | All XP changes go through one service that locks the user row and writes an `xp_transactions` entry | Done |
 | FR2 | Lifetime XP is tracked separately from the spendable balance | Done |
 | FR3 | Class and skill effects are computed by one shared function on both platforms | Done |
-| FR4 | Creation rewards are capped per UTC day: 10 lists and 50 tasks | Done |
+| FR4 | Rewards are capped per UTC day: 10 list creations, 50 task creations and 50 task completions | Done |
 | FR5 | Free games (RPS, Hangman, arcade) share a cap of 500 XP per UTC day | Done |
 | FR6 | Game state is persisted in `game_sessions.game_data`, so games survive restarts | Done |
 | FR7 | Schema changes happen only through versioned migrations, and legacy databases are upgraded automatically | Done |
@@ -165,7 +172,7 @@ TaskQuest addresses this in three ways:
 | **Availability** | Sessions persist in MySQL, so they survive restarts and redeploys. Graceful SIGTERM handling. Background jobs never crash the process. |
 | **Portability** | MySQL 8 and MariaDB 10.4+. TLS with certificate verification for cloud databases. |
 | **Quality** | CI runs lint, typecheck, build, syntax checks, unit tests, integration tests on MySQL 8, and a production dependency audit. |
-| **Accessibility** | Keyboard-usable controls on the web, and text equivalents for emoji-only buttons in games. |
+| **Accessibility** | Keyboard-usable controls on the web (shortcuts, skip link, focus trap in the mobile drawer, visible focus), labelled icon buttons, `aria-live` status messages, WCAG AA text contrast in both themes (enforced by a test), a reduce-motion setting, and on-screen controls for touch play. |
 
 ## 8. Platform parity
 
@@ -180,6 +187,12 @@ TaskQuest addresses this in three ways:
 | Deadline reminder DMs | ✓ | Setting only |
 | Settings (XP, reminders, auto-delete) | `/toggle`, `/automation` | ✓ (all three) |
 | Reset progress | — | ✓ |
+| Quests, streak freeze | `/quests`, `/freeze` | ✓ |
+| Time zone, reminder hour, weekly digest | `/timezone`, `/weekly` | ✓ |
+| Quick add | `/quick` | ✓ (quick-add bar) |
+| Subtasks, tags, recurrence, bulk actions | Set through `/quick` and AI | ✓ |
+| Export / import / calendar feed | — | ✓ |
+| Light and dark theme | — | ✓ |
 
 ## 9. Success metrics
 
@@ -214,11 +227,12 @@ TaskQuest addresses this in three ways:
 
 | Priority | Item |
 |---|---|
-| Next | Per-task due dates and priorities; leaderboard tabs (lifetime XP, streaks); web search in task descriptions |
-| Next | Server-side anti-cheat telemetry for arcade games (input replays or signed checkpoints) |
-| Later | Recurring tasks; reminder time-of-day; weekly summary DM |
-| Later | Shared or team lists (would require a permission model) |
-| Later | Code-split the web bundle; move to Tailwind CSS 4 |
+| Next | Server-side anti-cheat telemetry for arcade games. Design: [arcade-anti-cheat](design/arcade-anti-cheat.md) |
+| Next | Run the AI evals against real Gemini and grow the golden sets. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
+| Later | Shared or team lists (needs a permission model). Design: [shared-lists](design/shared-lists.md) |
+| Later | Move to Tailwind CSS 4. Plan: [tailwind-4-migration](design/tailwind-4-migration.md) |
+| Later | Search inside task descriptions; per-task reminders; push notifications |
+| Done in this release | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |
 
 ## 12. Risks and assumptions
 

@@ -8,13 +8,18 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 |---|---|---|---|
 | `/list` | `name` (autocomplete, optional) | Public overview / view | Your lists. With `name`, opens that list directly. |
 | `/game` | — | Ephemeral | Game centre (Blackjack, Rock Paper Scissors, Hangman). Resumes an unfinished hand. |
-| `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks) |
+| `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. |
+| `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held) |
+| `/quests` | — | Ephemeral | 📜 Daily and weekly quests with progress bars and Claim buttons |
 | `/profile` | `user` (optional) | Ephemeral | Level, balance and lifetime XP, focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet". |
 | `/achievements` | — | Ephemeral | Paginated achievement list |
 | `/class` | — | Ephemeral | Class browser: buy, equip, view and unlock skills |
-| `/leaderboard` | — | Public | Top 10 by XP |
+| `/leaderboard` | `by` (lifetime XP / earned this week / daily streak / current balance) | Public | Top 10. Defaults to lifetime XP, so spending XP doesn't lower your rank. |
 | `/toggle` | — | Ephemeral | Turn the XP system on or off |
 | `/automation` | — | Ephemeral | Turn deadline reminder DMs on or off |
+| `/timezone` | `zone` (autocomplete, IANA name), `hour` (0–23, default 9) | Ephemeral | 🕒 When "today" starts for you and when in the day reminders and the weekly digest arrive. With no options it shows the current settings. |
+| `/weekly` | — | Ephemeral | 📅 Turn the Monday weekly summary DM on or off |
+| `/quick` | `text` (required, ≤ 300), `list` (autocomplete, required) | Ephemeral | ⚡ Add a task from one line: dates (`today`, `tomorrow`, `fri`, `in 3 days`, `2030-05-04`, `jan 5`), `!high`/`!med`/`!low`, `#tags` (max 5) and repeats (`daily`, `every week`, `monthly`) are read from the text and the rest is the name. |
 | `/help` | — | Public | Command overview |
 | `/app` | — | Ephemeral | Link to the web app (`WEB_APP_URL`). It says "not configured" when unset. |
 | `/ping` | — | Ephemeral | Bot and API latency |
@@ -99,14 +104,17 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 
 ## Background behaviour
 
-- **Deadline DMs:** checked hourly. You get one DM per list on its deadline day (UTC), if `/automation` is on. If the bot was offline that day, the reminder is sent late (up to 3 days), and temporary Discord errors are retried on the next run.
+- **Deadline DMs:** checked hourly. You get one DM per list on its deadline day, at your reminder hour in your time zone (`/timezone`; UTC and 09:00 until you set them), if `/automation` is on. If tasks are still open the day after the deadline you get one overdue notice. Every reminder has **Snooze 1 day** and **Stop reminders** buttons. If the bot was offline that day, the reminder is sent late (up to 3 days), and temporary Discord errors are retried on the next run.
 - **Old-list clean-up:** daily. It deletes lists whose tasks have all been completed for 5+ days, if auto-delete is on (web Settings). Unfinished lists are never deleted, even when overdue.
 - **Abandoned games:** expired every 5 minutes, with Blackjack bets refunded.
+- **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out).
 
 ## Interaction IDs (for developers)
 
 | Prefix | Handler |
 |---|---|
+| `quest_claim_<KEY>` | `commands/quests.js` buttons |
+| `remind_snooze_<listId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
 | `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_`, `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
 | `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
 | `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_search` | `commands/list.js` modals |

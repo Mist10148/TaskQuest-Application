@@ -8,7 +8,8 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 2. [How XP is calculated](#2-how-xp-is-calculated)
 3. [Classes](#3-classes)
 4. [Skills](#4-skills)
-5. [Daily reward](#5-daily-reward)
+5. [Daily reward](#5-daily-reward) (and streak freezes)
+   - [Quests](#5b-quests)
 6. [Achievements](#6-achievements)
 7. [Games](#7-games)
 8. [Limits and anti-farming](#8-limits-and-anti-farming)
@@ -27,7 +28,8 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 |---|---|---|
 | Create a list | 10 | Only the first 10 list creations per UTC day are rewarded |
 | Add a task | 5 | Only the first 50 per UTC day are rewarded |
-| Complete a task | 10 | **Once per task, ever.** Un-completing and re-completing pays nothing. |
+| Complete a task | 10 | **Once per task, ever**, and only the first **50 completions per UTC day** are rewarded (so add, complete, delete loops can't farm XP). Un-completing and re-completing pays nothing. A repeating task's next copy is a new task that can earn its own completion XP, within the same daily cap. |
+| Claim a quest | 15–120 | Flat reward, once per period (see §5b) |
 | Daily reward | 100 | Plus streak and skill bonuses (see §5) |
 | RPS win | 10 | Free game |
 | Hangman win | max(10, 10 × lives left) | Free game |
@@ -143,9 +145,29 @@ The Default class is free. Buying a class also equips it. Switching class resets
   - Otherwise the streak resets to 1.
 - **XP** = class and skill modifiers applied to 100, plus min((streak − 1) × 5, 50), plus Early Bird (10 per level).
 
+### Leaderboard boards
+
+The leaderboard defaults to **lifetime XP**, so buying a class or skill never lowers your rank. Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins and quests since Monday 00:00 UTC; bets and refunds don't count), **daily streak**, and **current balance**. Any board can be filtered by class.
+
+### Streak freeze
+
+A **streak freeze** costs 150 XP (hold at most 3). It is used automatically when you claim your daily reward after a gap that would otherwise reset a streak of 2 or more days. Order of protection: Unstoppable (free, always) first, then Streak Shield's longer window, then a freeze. A freeze never gets spent while your streak is alive or when the streak is 1.
+
+## 5b. Quests
+
+Five quests, with periods in UTC (daily: the UTC day; weekly: Monday 00:00 to Monday 00:00). Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers).
+
+| Quest | Period | Goal | Reward |
+|---|---|---|---|
+| ⚒️ Daily Grind | Daily | Complete 3 tasks | 30 XP |
+| 🏋️ Heavy Lifter | Daily | Complete a high-priority task (the task's own priority, else its list's) | 25 XP |
+| 🗒️ Planner | Daily | Add 3 tasks | 15 XP |
+| 🛡️ Weekly Warrior | Weekly | Complete 15 tasks | 120 XP |
+| 📆 Regular | Weekly | Claim the daily reward on 5 days | 80 XP |
+
 ## 6. Achievements
 
-There are 30 achievements. They unlock in the same transaction as the action that earned them.
+There are 33 achievements. They unlock in the same transaction as the action that earned them.
 
 | Category | Keys and thresholds |
 |---|---|
@@ -157,6 +179,7 @@ There are 30 achievements. They unlock in the same transaction as the action tha
 | Streaks (daily) | `STREAK_3` · `STREAK_7` · `STREAK_14` · `STREAK_30` |
 | Classes | `FIRST_CLASS` (any purchased class) · `ALL_CLASSES` (all six) |
 | Games | `FIRST_GAME` (1 finished game) · `GAME_WIN_10` (10 wins) · `BLACKJACK` (a natural) · `HIGH_ROLLER` (500+ net XP in one game) |
+| Economy (XP spent on classes, skills and streak freezes) | `SPEND_1000` · `SPEND_5000` · `SPEND_10000` |
 
 Counters never decrease, so deleting lists or tasks doesn't undo achievements.
 
@@ -201,7 +224,10 @@ A run must be started on the server before playing. A score above `seconds × ra
 |---|---|
 | Rewarded list creations per UTC day | 10 |
 | Rewarded task additions per UTC day | 50 |
-| Completion XP | Once per task |
+| Rewarded task completions per UTC day | 50 (and once per task, ever) |
+| Streak freezes held | 3 |
+| Quest claims | Once per quest per period |
+| Import / export | Imports never grant XP, counters or achievements |
 | Free-game XP (RPS + Hangman + arcade) per UTC day | 500 |
 | Cooldown between RPS and Hangman rounds | 3 seconds |
 | Abandoned game session timeout | 30 minutes |

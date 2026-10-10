@@ -194,6 +194,27 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await db.tasks.getItem(CAROL, child.id), null, 'subtasks go with their parent');
     });
 
+    await t.test('completing a repeating task creates exactly one next occurrence', async () => {
+        const { list } = await db.tasks.createList(CAROL, { name: 'Habits' });
+        const { item } = await db.tasks.addItem(CAROL, list.id, { name: 'Water plants', due_date: '2099-01-31', recurrence: 'monthly', tags: 'home' });
+        const before = await db.users.getUser(CAROL);
+        const done = await db.tasks.setItemCompleted(CAROL, item.id, true);
+        assert.ok(done.nextItem, 'next occurrence created');
+        assert.equal(String(done.nextItem.due_date).slice(0, 10), '2099-02-28');
+        assert.equal(done.nextItem.name, 'Water plants');
+        assert.equal(done.nextItem.tags, 'home');
+        assert.equal(Boolean(done.nextItem.completed), false);
+
+        await db.tasks.setItemCompleted(CAROL, item.id, false);
+        const again = await db.tasks.setItemCompleted(CAROL, item.id, true);
+        assert.equal(again.nextItem, null, 're-checking must not spawn another copy');
+        const copies = (await db.tasks.getItems(CAROL, list.id)).filter((i) => i.name === 'Water plants');
+        assert.equal(copies.length, 2);
+
+        const after = await db.users.getUser(CAROL);
+        assert.equal(Number(after.total_items_added), Number(before.total_items_added), 'a repeat is not a newly added task');
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

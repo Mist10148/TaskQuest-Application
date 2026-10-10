@@ -12,6 +12,7 @@ const { rewardAction, unlockAchievements } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS } = require('../constants');
 const v = require('../validation');
+const { nextDueOnOrAfter, todayInZone } = require('../dates');
 
 const run = async (sql, params = []) => (await getPool().query(sql, params))[0];
 
@@ -326,6 +327,26 @@ async function deleteItem(discordId, itemId) {
 }
 
 /**
+ * Create the next copy of a repeating task. It runs only on the first completion
+ * (the xp_awarded guard), so un-checking and re-checking cannot duplicate it, and it
+ * grants no creation XP or counters, so repeating tasks cannot be used to farm.
+ */
+async function spawnNextOccurrence(conn, item, user) {
+    const today = todayInZone(user.timezone);
+    const base = item.due_date ? String(item.due_date).slice(0, 10) : today;
+    const due = nextDueOnOrAfter(base, item.recurrence, today);
+    if (!due) return null;
+    const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
+    const [res] = await conn.query(
+        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id]
+    );
+    const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
+    return created;
+}
+
+/**
  * Mark an item complete/incomplete (toggle when `completed` is undefined).
  * Completion XP and the completion counter are granted only the first time
  * an item is ever completed, so toggling cannot farm XP.
@@ -346,6 +367,7 @@ async function setItemCompleted(discordId, itemId, completed) {
 
         let xp = null;
         let achievements = [];
+        let nextItem = null;
         if (target && !item.xp_awarded) {
             await conn.query('UPDATE items SET xp_awarded = TRUE WHERE id = ?', [id]);
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
@@ -356,9 +378,10 @@ async function setItemCompleted(discordId, itemId, completed) {
                 referenceId: id
             });
             achievements = await unlockAchievements(conn, user);
+            if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
-        return { item: updated, completed: target, xp, achievements, firstCompletion: Boolean(target && !item.xp_awarded) };
+        return { item: updated, completed: target, xp, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }
 

@@ -43,4 +43,35 @@ function formatDeadline(deadline, today = todayInZone()) {
     return m[1] === today.slice(0, 4) ? label : `${label}, ${m[1]}`;
 }
 
-module.exports = { isValidTimeZone, todayInZone, isPastDeadline, formatDeadline };
+const pad = (n) => String(n).padStart(2, '0');
+
+/**
+ * The next due date for a repeating task, as YYYY-MM-DD.
+ * Monthly repeats keep the day of month but clamp to short months (Jan 31 -> Feb 28/29).
+ * @param {string} date    the date being repeated from (YYYY-MM-DD)
+ * @param {'daily'|'weekly'|'monthly'} rule
+ */
+function nextOccurrence(date, rule) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || ''));
+    if (!m) return null;
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (rule === 'daily' || rule === 'weekly') {
+        const next = new Date(Date.UTC(y, mo - 1, d + (rule === 'daily' ? 1 : 7)));
+        return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
+    }
+    if (rule === 'monthly') {
+        const target = new Date(Date.UTC(y, mo, 1)); // first of next month
+        const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+        return `${target.getUTCFullYear()}-${pad(target.getUTCMonth() + 1)}-${pad(Math.min(d, lastDay))}`;
+    }
+    return null;
+}
+
+/** Repeat until the date is `today` or later, so completing a task late doesn't spawn an already-overdue copy. */
+function nextDueOnOrAfter(date, rule, today) {
+    let next = nextOccurrence(date, rule);
+    for (let i = 0; next && next < today && i < 400; i++) next = nextOccurrence(next, rule);
+    return next;
+}
+
+module.exports = { isValidTimeZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };

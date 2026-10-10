@@ -29,3 +29,18 @@ test('isValidTimeZone', () => {
     assert.equal(isValidTimeZone('Mars/Olympus'), false);
     assert.equal(isValidTimeZone(''), false);
 });
+
+test('nextOccurrence: daily, weekly and monthly with month-end clamping', () => {
+    const { nextOccurrence, nextDueOnOrAfter } = require('../src/dates');
+    assert.equal(nextOccurrence('2030-01-31', 'daily'), '2030-02-01');
+    assert.equal(nextOccurrence('2030-12-30', 'weekly'), '2031-01-06');
+    assert.equal(nextOccurrence('2030-01-31', 'monthly'), '2030-02-28');
+    assert.equal(nextOccurrence('2032-01-31', 'monthly'), '2032-02-29', 'leap year');
+    assert.equal(nextOccurrence('2030-12-15', 'monthly'), '2031-01-15');
+    assert.equal(nextOccurrence('2030-03-31', 'monthly'), '2030-04-30');
+    assert.equal(nextOccurrence('garbage', 'daily'), null);
+    assert.equal(nextOccurrence('2030-01-01', 'yearly'), null);
+    // finishing a weekly task three weeks late must not create an already-overdue copy
+    assert.equal(nextDueOnOrAfter('2030-01-01', 'weekly', '2030-01-22'), '2030-01-22');
+    assert.equal(nextDueOnOrAfter('2030-01-01', 'daily', '2030-01-01'), '2030-01-02');
+});

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useLists, useList, useCreateList, useUpdateList, useDeleteList, useCreateItem, useToggleItem, useUpdateItem, useDeleteItem } from "@/hooks/useApi";
+import { useLists, useList, useCreateList, useUpdateList, useDeleteList, useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems } from "@/hooks/useApi";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -60,6 +60,7 @@ const Tasks = () => {
   const createItem = useCreateItem();
   const toggleItem = useToggleItem();
   const updateItem = useUpdateItem();
+  const reorderItems = useReorderItems();
   const deleteItem = useDeleteItem();
 
   // /tasks?list=42 opens a quest directly (used by links from AI answers).
@@ -317,18 +318,11 @@ const Tasks = () => {
     const [draggedItem] = newItems.splice(draggedIndex, 1);
     newItems.splice(targetIndex, 0, draggedItem);
 
-    // Update positions for all affected items
     try {
-      // Update the dragged item's position to the target's position
-      const newPosition = targetIndex + 1;
-      await updateItem.mutateAsync({ 
-        itemId: draggedItemId, 
-        data: { position: newPosition } 
-      });
+      await reorderItems.mutateAsync({ listId: selectedListId as number, itemIds: newItems.map((i: Item) => i.id) });
       toast.success('Task reordered');
-      refetchList();
-    } catch { 
-      toast.error('Failed to reorder'); 
+    } catch {
+      /* error toast shown by the mutation hook */
     }
     
     setDraggedItemId(null);

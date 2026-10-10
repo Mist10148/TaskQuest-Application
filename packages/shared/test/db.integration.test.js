@@ -107,6 +107,34 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(again.xp, null, 'a capped completion cannot be re-earned later');
     });
 
+    await t.test('reordering keeps positions unique and contiguous', async () => {
+        const { list } = await db.tasks.createList(CAROL, { name: 'Order me' });
+        const ids = [];
+        for (const name of ['a', 'b', 'c', 'd']) ids.push((await db.tasks.addItem(CAROL, list.id, { name })).item.id);
+        const order = async () => (await db.tasks.getItems(CAROL, list.id)).map((i) => i.name).join('');
+        const positions = async () => (await db.tasks.getItems(CAROL, list.id)).map((i) => i.position);
+
+        await db.tasks.updateItem(CAROL, ids[3], { position: 0 });
+        assert.equal(await order(), 'dabc');
+        assert.deepEqual(await positions(), [0, 1, 2, 3]);
+        await db.tasks.updateItem(CAROL, ids[3], { position: 99 }); // clamped to the end
+        assert.equal(await order(), 'abcd');
+
+        await db.tasks.reorderItems(CAROL, list.id, [ids[2], ids[0], ids[3], ids[1]]);
+        assert.equal(await order(), 'cadb');
+        await assert.rejects(db.tasks.reorderItems(CAROL, list.id, [ids[0], ids[1]]), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.reorderItems(CAROL, list.id, [ids[0], ids[0], ids[1], ids[2]]), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.reorderItems(BOB, list.id, ids), { code: 'NOT_FOUND' });
+        await assert.rejects(db.tasks.moveItem(BOB, ids[0], 0), { code: 'NOT_FOUND' });
+
+        // Legacy lists may hold duplicate positions; a swap must still swap.
+        await db.getPool().query('UPDATE items SET position = 0 WHERE list_id = ?', [list.id]);
+        await db.tasks.swapItemPositions(CAROL, ids[0], ids[1]);
+        const [first, second] = (await db.tasks.getItems(CAROL, list.id)).map((i) => i.id);
+        assert.ok(first !== undefined && second !== undefined);
+        assert.deepEqual(await positions(), [0, 1, 2, 3]);
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

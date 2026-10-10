@@ -206,21 +206,74 @@ async function updateItem(discordId, itemId, input) {
     const fields = {};
     if (input.name !== undefined) fields.name = unwrap(v.itemName(input.name));
     if (input.description !== undefined) fields.description = unwrap(v.description(input.description));
+    let position;
     if (input.position !== undefined) {
         if (!Number.isSafeInteger(input.position) || input.position < 0) throw errors.validation('Position must be a non-negative integer.');
-        fields.position = input.position;
+        position = input.position;
     }
     const keys = Object.keys(fields);
-    if (!keys.length) throw errors.validation('Nothing to update.');
+    if (!keys.length && position === undefined) throw errors.validation('Nothing to update.');
 
-    const [res] = await getPool().query(
-        `UPDATE items i JOIN lists l ON l.id = i.list_id
-         SET ${keys.map((k) => `i.${k} = ?`).join(', ')}
-         WHERE i.id = ? AND l.discord_id = ?`,
-        [...keys.map((k) => fields[k]), id, String(discordId)]
-    );
-    if (!res.affectedRows) throw errors.notFound('Task not found.');
-    return getItem(discordId, id);
+    if (keys.length) {
+        const [res] = await getPool().query(
+            `UPDATE items i JOIN lists l ON l.id = i.list_id
+             SET ${keys.map((k) => `i.${k} = ?`).join(', ')}
+             WHERE i.id = ? AND l.discord_id = ?`,
+            [...keys.map((k) => fields[k]), id, String(discordId)]
+        );
+        if (!res.affectedRows) throw errors.notFound('Task not found.');
+    }
+    if (position !== undefined) await moveItem(discordId, id, position);
+    const item = await getItem(discordId, id);
+    if (!item) throw errors.notFound('Task not found.');
+    return item;
+}
+
+/** Rewrite a list's positions as 0..n-1 in the given item-id order (inside a transaction). */
+async function writePositions(conn, orderedIds) {
+    for (let i = 0; i < orderedIds.length; i++) {
+        await conn.query('UPDATE items SET position = ? WHERE id = ?', [i, orderedIds[i]]);
+    }
+}
+
+/**
+ * Move one item to a 0-based position (clamped to the list) and close the gaps,
+ * so positions stay unique and contiguous.
+ */
+async function moveItem(discordId, itemId, position) {
+    const id = unwrap(v.id(itemId));
+    if (!Number.isSafeInteger(position) || position < 0) throw errors.validation('Position must be a non-negative integer.');
+    return withTransaction(async (conn) => {
+        const [[item]] = await conn.query(
+            `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
+             WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
+            [id, String(discordId)]
+        );
+        if (!item) throw errors.notFound('Task not found.');
+        const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
+        const ids = rows.map((r) => r.id).filter((x) => x !== id);
+        ids.splice(Math.min(position, ids.length), 0, id);
+        await writePositions(conn, ids);
+        return ids;
+    });
+}
+
+/** Apply a full new order to an owned list. `orderedIds` must be exactly the list's item ids. */
+async function reorderItems(discordId, listId, orderedIds) {
+    const lid = unwrap(v.id(listId));
+    if (!Array.isArray(orderedIds) || orderedIds.length > 5000) throw errors.validation('Provide the task ids in their new order.');
+    const wanted = orderedIds.map((x) => unwrap(v.id(x)));
+    return withTransaction(async (conn) => {
+        const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, String(discordId)]);
+        if (!list) throw errors.notFound('List not found.');
+        const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? FOR UPDATE', [lid]);
+        const have = new Set(rows.map((r) => r.id));
+        if (wanted.length !== have.size || new Set(wanted).size !== wanted.length || !wanted.every((x) => have.has(x))) {
+            throw errors.validation('The order must list every task in this list exactly once.');
+        }
+        await writePositions(conn, wanted);
+        return wanted;
+    });
 }
 
 async function deleteItem(discordId, itemId) {
@@ -270,19 +323,22 @@ async function setItemCompleted(discordId, itemId, completed) {
     });
 }
 
-/** Swap the positions of two items in the same owned list. */
+/** Swap two items of the same owned list (works even on legacy lists with duplicate positions). */
 async function swapItemPositions(discordId, itemIdA, itemIdB) {
     const a = unwrap(v.id(itemIdA));
     const b = unwrap(v.id(itemIdB));
     return withTransaction(async (conn) => {
         const [rows] = await conn.query(
-            `SELECT i.id, i.position, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
+            `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
              WHERE i.id IN (?, ?) AND l.discord_id = ? FOR UPDATE`,
             [a, b, String(discordId)]
         );
         if (rows.length !== 2 || rows[0].list_id !== rows[1].list_id) throw errors.notFound('Tasks not found.');
-        await conn.query('UPDATE items SET position = ? WHERE id = ?', [rows[1].position, rows[0].id]);
-        await conn.query('UPDATE items SET position = ? WHERE id = ?', [rows[0].position, rows[1].id]);
+        const [all] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [rows[0].list_id]);
+        const ids = all.map((r) => r.id);
+        const [ia, ib] = [ids.indexOf(a), ids.indexOf(b)];
+        [ids[ia], ids[ib]] = [ids[ib], ids[ia]];
+        await writePositions(conn, ids);
         return true;
     });
 }
@@ -343,6 +399,8 @@ module.exports = {
     deleteItem,
     setItemCompleted,
     swapItemPositions,
+    moveItem,
+    reorderItems,
     getListsDueOn,
     markDeadlineNotified,
     cleanupOldLists

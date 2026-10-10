@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, uid, xpResult } from '../lib/http.js';
-import { idParam, listIdParam, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody } from '../lib/schemas.js';
+import { idParam, listIdParam, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody } from '../lib/schemas.js';
 
 export const listsRouter = Router();
 export const itemsRouter = Router();
@@ -59,6 +59,16 @@ listsRouter.delete(
         await db.tasks.deleteList(uid(req), id);
         aiClient.forget(uid(req), id);
         res.json({ success: true });
+    })
+);
+
+listsRouter.patch(
+    '/:id/reorder',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { itemIds } = parse(reorderBody, req.body);
+        await db.tasks.reorderItems(uid(req), id, itemIds);
+        res.json(await db.tasks.getItems(uid(req), id));
     })
 );
 

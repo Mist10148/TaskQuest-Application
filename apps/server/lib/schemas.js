@@ -61,6 +61,8 @@ export const updateItemBody = z
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
+export const reorderBody = z.object({ itemIds: z.array(z.number().int().positive()).max(5000) }).strict();
+
 export const toggleItemBody = z.object({ completed: z.boolean().optional() }).strict().optional();
 
 export const blackjackStartBody = z.object({ bet: z.number().int().positive().max(1_000_000) }).strict();

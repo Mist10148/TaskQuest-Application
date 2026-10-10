@@ -167,6 +167,15 @@ export function useDeleteItem() {
     });
 }
 
+export function useReorderItems() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ listId, itemIds }: { listId: number; itemIds: number[] }) => listsApi.reorder(listId, itemIds),
+        onSuccess: (_items, { listId }) => qc.invalidateQueries({ queryKey: ['lists', listId] }),
+        onError: showError,
+    });
+}
+
 export function useToggleItem() {
     const qc = useQueryClient();
     return useMutation({

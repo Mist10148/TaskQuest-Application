@@ -64,6 +64,7 @@ export const listsApi = {
     create: (data: CreateListData) => post<List & RewardFields>('/api/lists', data),
     update: (id: number, data: Partial<CreateListData>) => patch<List>(`/api/lists/${id}`, data),
     delete: (id: number) => del<{ success: boolean }>(`/api/lists/${id}`),
+    reorder: (id: number, itemIds: number[]) => patch<Item[]>(`/api/lists/${id}/reorder`, { itemIds }),
 };
 
 export const itemsApi = {

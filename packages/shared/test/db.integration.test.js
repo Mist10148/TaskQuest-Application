@@ -43,6 +43,21 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await db.users.ensureUser(ALICE, { username: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
+    await t.test('migrations 007-009 are idempotent and add the new columns', async () => {
+        await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
+        const again = await db.runMigrations({ log: () => {} });
+        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims']);
+        const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
+        const items = await cols('items');
+        for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
+        const users = await cols('users');
+        for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent']) {
+            assert.ok(users.includes(c), `users.${c}`);
+        }
+        assert.ok((await cols('lists')).includes('remind_at'));
+        assert.equal((await pool.query("SHOW TABLES LIKE 'quest_claims'"))[0].length, 1);
+    });
+
     await t.test('lists, items and ownership', async () => {
         const { list, xp } = await db.tasks.createList(ALICE, { name: 'Groceries 🛒', priority: 'high' });
         assert.equal(list.priority, 'HIGH');

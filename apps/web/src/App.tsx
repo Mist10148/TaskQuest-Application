@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,18 +9,21 @@ import { MotionConfig } from "framer-motion";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PreferencesProvider, usePreferences } from "@/contexts/PreferencesContext";
 import { CelebrationHost } from "@/components/feedback/CelebrationHost";
+import { RouteFallback } from "@/components/RouteFallback";
 import { AuthGate } from "@/components/AuthGate";
-import Dashboard from "./pages/Dashboard";
-import Profile from "./pages/Profile";
-import Tasks from "./pages/Tasks";
-import Classes from "./pages/Classes";
-import Skills from "./pages/Skills";
-import Achievements from "./pages/Achievements";
-import Leaderboard from "./pages/Leaderboard";
-import Games from "./pages/Games";
-import Settings from "./pages/Settings";
-import Chat from "./pages/Chat";
-import NotFound from "./pages/NotFound";
+
+// Each page is its own chunk, so the first visit downloads only what it shows.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const Classes = lazy(() => import("./pages/Classes"));
+const Skills = lazy(() => import("./pages/Skills"));
+const Achievements = lazy(() => import("./pages/Achievements"));
+const Leaderboard = lazy(() => import("./pages/Leaderboard"));
+const Games = lazy(() => import("./pages/Games"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Chat = lazy(() => import("./pages/Chat"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +53,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthGate>
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/app" element={<Navigate to="/dashboard" replace />} />
@@ -65,6 +70,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           </AuthGate>
         </BrowserRouter>
       </TooltipProvider>

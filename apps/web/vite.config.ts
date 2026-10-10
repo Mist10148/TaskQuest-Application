@@ -28,6 +28,18 @@ export default defineConfig(({ mode }) => {
       host: "localhost",
       port: 8080,
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // Stable vendor chunks cache well across deploys; page code changes far more often.
+          manualChunks: {
+            react: ["react", "react-dom", "react-router-dom"],
+            motion: ["framer-motion"],
+            query: ["@tanstack/react-query"],
+          },
+        },
+      },
+    },
     plugins: [react()],
     resolve: {
       alias: {

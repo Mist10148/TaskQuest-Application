@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Sparkles, Flame, Target, ListTodo, Trophy, Gamepad2, TrendingUp } from "lucide-react";
 import { useAuth, getAvatarUrl } from "@/contexts/AuthContext";
 import { classColor } from "@/lib/classColors";
+import { StreakFreezeCard } from "@/components/game/StreakFreezeCard";
 
 const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   DEFAULT: { name: 'Default', emoji: '⚪' },
@@ -14,6 +15,16 @@ const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   WIZARD: { name: 'Wizard', emoji: '🔮' },
   ARCHER: { name: 'Archer', emoji: '🏹' },
   TANK: { name: 'Tank', emoji: '🛡️' },
+};
+
+// Full class names, so Tailwind's scanner keeps them (it cannot see `bg-${color}-500/20`).
+const STAT_TONES: Record<string, { bg: string; icon: string }> = {
+  orange: { bg: "bg-orange-500/20", icon: "text-orange-700 dark:text-orange-400" },
+  green: { bg: "bg-green-500/20", icon: "text-green-700 dark:text-green-400" },
+  blue: { bg: "bg-blue-500/20", icon: "text-blue-700 dark:text-blue-400" },
+  purple: { bg: "bg-purple-500/20", icon: "text-purple-700 dark:text-purple-400" },
+  yellow: { bg: "bg-yellow-500/20", icon: "text-yellow-700 dark:text-yellow-400" },
+  cyan: { bg: "bg-cyan-500/20", icon: "text-cyan-700 dark:text-cyan-400" },
 };
 
 const Profile = () => {
@@ -100,6 +111,8 @@ const Profile = () => {
           </div>
         </motion.div>
 
+        <StreakFreezeCard freezes={Number(dbUser.streak_freezes) || 0} balance={totalXP} gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
+
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
           {[
@@ -118,8 +131,8 @@ const Profile = () => {
               className="rounded-xl bg-card border border-border p-3 sm:p-4"
             >
               <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-                <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-${stat.color}-500/20 flex items-center justify-center flex-shrink-0`}>
-                  <stat.icon className={`h-4 w-4 sm:h-5 sm:w-5 text-${stat.color}-400`} />
+                <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg ${STAT_TONES[stat.color].bg} flex items-center justify-center flex-shrink-0`}>
+                  <stat.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${STAT_TONES[stat.color].icon}`} aria-hidden />
                 </div>
                 <div className="min-w-0">
                   <p className="text-lg sm:text-2xl font-heading font-bold truncate">{stat.value}</p>

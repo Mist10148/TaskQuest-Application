@@ -1,0 +1,44 @@
+import { Loader2, Snowflake } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useBuyStreakFreeze } from "@/hooks/useApi";
+
+// Mirrors @taskquest/shared STREAK_FREEZE; the server enforces it.
+const COST = 150;
+const MAX = 3;
+
+interface Props {
+  freezes: number;
+  balance: number;
+  gamificationOn: boolean;
+}
+
+/** Buy streak freezes: each one saves the daily streak once if you miss a day. */
+export const StreakFreezeCard = ({ freezes, balance, gamificationOn }: Props) => {
+  const buy = useBuyStreakFreeze();
+  const full = freezes >= MAX;
+  const poor = balance < COST;
+  const disabled = !gamificationOn || full || poor || buy.isPending;
+  const hint = !gamificationOn ? "Turn on gamification to buy freezes." : full ? `You hold the maximum of ${MAX}.` : poor ? `You need ${COST} XP (you have ${balance.toLocaleString()}).` : "Used automatically when a missed day would break your streak.";
+
+  return (
+    <section className="mb-6 rounded-xl border border-border bg-card p-4 sm:mb-8 sm:p-5" aria-labelledby="freeze-heading">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-cyan-500/20 sm:h-12 sm:w-12">
+            <Snowflake className="h-5 w-5 text-cyan-700 dark:text-cyan-400 sm:h-6 sm:w-6" aria-hidden />
+          </div>
+          <div>
+            <h2 id="freeze-heading" className="font-heading font-semibold">Streak freezes</h2>
+            <p className="text-sm text-foreground-muted">
+              <span className="font-medium text-foreground">{freezes}/{MAX}</span> held. {hint}
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" className="gap-2" disabled={disabled} onClick={() => buy.mutate()}>
+          {buy.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Snowflake className="h-4 w-4" aria-hidden />}
+          Buy one ({COST} XP)
+        </Button>
+      </div>
+    </section>
+  );
+};

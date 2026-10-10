@@ -15,6 +15,7 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { BriefingCard } from "@/components/ai/BriefingCard";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { QuestsCard } from "@/components/dashboard/QuestsCard";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 
 const Dashboard = () => {
@@ -139,6 +140,8 @@ const Dashboard = () => {
             <StatCard label="Achievements" value={achievementCount} icon={<Trophy className="h-4 w-4 sm:h-5 sm:w-5" />} colorScheme="xp" subValue="Unlock more!" />
           </motion.div>
         </div>
+
+        <QuestsCard />
 
         <BriefingCard />
 

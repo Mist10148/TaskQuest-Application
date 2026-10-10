@@ -165,6 +165,7 @@ export const achievementsApi = {
 export type LeaderboardBoard = 'lifetime' | 'weekly' | 'streak' | 'xp';
 
 export const leaderboardApi = {
+    me: (by: LeaderboardBoard = 'lifetime') => apiFetch<{ rank: number | null }>(`/api/leaderboard/me?by=${by}`),
     get: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
         const params = new URLSearchParams({ by });
         if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);

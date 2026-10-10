@@ -310,6 +310,11 @@ export function useGameAllowance() {
     return useQuery({ queryKey: ['games', 'allowance'], queryFn: gamesApi.getAllowance });
 }
 
+/** The signed-in player's own rank on a board (null when they have no score there yet). */
+export function useMyRank(by: LeaderboardBoard = 'lifetime') {
+    return useQuery({ queryKey: ['leaderboard', 'me', by], queryFn: () => leaderboardApi.me(by) });
+}
+
 export function useGameHistory() {
     return useQuery({ queryKey: ['games', 'history'], queryFn: gamesApi.getHistory });
 }

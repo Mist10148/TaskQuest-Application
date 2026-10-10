@@ -35,9 +35,9 @@ interface Props {
 }
 
 const PRIORITY_BADGE: Record<string, string> = {
-  HIGH: "bg-red-500/20 text-red-400 border border-red-500/30",
-  MEDIUM: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
-  LOW: "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+  HIGH: "bg-red-500/20 text-red-700 dark:text-red-400 border border-red-500/30",
+  MEDIUM: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-500/30",
+  LOW: "bg-blue-500/20 text-blue-700 dark:text-blue-400 border border-blue-500/30",
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */

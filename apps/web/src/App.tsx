@@ -3,7 +3,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "next-themes";
+import { MotionConfig } from "framer-motion";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { PreferencesProvider, usePreferences } from "@/contexts/PreferencesContext";
 import { AuthGate } from "@/components/AuthGate";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
@@ -27,7 +30,16 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Framer Motion follows the OS reduced-motion setting, or always when the user turned animations off. */
+const MotionRoot = ({ children }: { children: React.ReactNode }) => {
+  const { reduceMotion } = usePreferences();
+  return <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>{children}</MotionConfig>;
+};
+
 const App = () => (
+  <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="tq.theme" disableTransitionOnChange>
+  <PreferencesProvider>
+  <MotionRoot>
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
@@ -56,6 +68,9 @@ const App = () => (
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
+  </MotionRoot>
+  </PreferencesProvider>
+  </ThemeProvider>
 );
 
 export default App;

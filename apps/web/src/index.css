@@ -42,7 +42,7 @@
     --success-foreground: 0 0% 10%;
 
     /* Error Red */
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
 
     --secondary: 215 22% 18%;
@@ -63,11 +63,11 @@
     /* Class Colors */
     --class-default: 210 5% 65%;
     --class-hero: 45 100% 50%;
-    --class-gambler: 280 50% 55%;
-    --class-assassin: 210 30% 25%;
-    --class-wizard: 205 75% 52%;
+    --class-gambler: 280 65% 72%;
+    --class-assassin: 210 40% 70%;
+    --class-wizard: 205 85% 60%;
     --class-archer: 145 55% 42%;
-    --class-tank: 5 75% 55%;
+    --class-tank: 5 85% 66%;
 
     /* Priority Colors */
     --priority-high: 0 84% 60%;
@@ -97,6 +97,69 @@
     --font-heading: 'Rajdhani', sans-serif;
     --font-body: 'Inter', sans-serif;
   }
+
+  /* Light theme: class "light" on <html> (next-themes). Every text/surface pair is checked in src/lib/theme.test.ts. */
+  .light {
+    --background: 220 33% 98%;
+    --background-secondary: 220 25% 94%;
+    --background-tertiary: 220 22% 90%;
+
+    --foreground: 222 30% 12%;
+    --foreground-muted: 218 15% 36%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 30% 12%;
+    --card-hover: 220 25% 97%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 30% 12%;
+
+    --primary: 235 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 235 80% 60%;
+
+    --xp: 30 100% 29%;
+    --xp-foreground: 0 0% 100%;
+    --xp-glow: 38 100% 40%;
+
+    --success: 145 63% 24%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --secondary: 220 25% 92%;
+    --secondary-foreground: 222 30% 12%;
+
+    --muted: 220 25% 92%;
+    --muted-foreground: 218 15% 38%;
+
+    --accent: 235 70% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --border: 220 20% 82%;
+    --input: 220 20% 82%;
+    --ring: 235 70% 50%;
+
+    --class-default: 215 12% 36%;
+    --class-hero: 33 100% 27%;
+    --class-gambler: 280 55% 38%;
+    --class-assassin: 215 30% 28%;
+    --class-wizard: 205 90% 30%;
+    --class-archer: 145 65% 23%;
+    --class-tank: 5 70% 38%;
+
+    --priority-none: 218 15% 40%;
+
+    --sidebar-background: 220 25% 96%;
+    --sidebar-foreground: 222 30% 12%;
+    --sidebar-primary: 235 70% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 25% 90%;
+    --sidebar-accent-foreground: 222 30% 12%;
+    --sidebar-border: 220 20% 84%;
+    --sidebar-ring: 235 70% 50%;
+  }
 }
 
 @layer base {
@@ -107,6 +170,39 @@
   html {
     font-family: var(--font-body);
     scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
+  }
+
+  /* Visible keyboard focus everywhere; :where() keeps specificity at zero so components can restyle it. */
+  :where(a, button, [role="button"], [role="tab"], [role="radio"], summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Animations stay out of the way for people who asked for less motion (OS setting or Settings > Reduce motion). */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  html[data-reduce-motion="true"] {
+    scroll-behavior: auto;
+  }
+
+  html[data-reduce-motion="true"] *,
+  html[data-reduce-motion="true"] ::before,
+  html[data-reduce-motion="true"] ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 
   body {

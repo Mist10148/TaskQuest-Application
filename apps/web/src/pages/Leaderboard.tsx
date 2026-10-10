@@ -193,7 +193,7 @@ const Leaderboard = () => {
                     <div className="text-right">
                       <span className="text-xp font-bold text-sm flex items-center gap-1"><Sparkles className="h-3 w-3" />{entry.xp?.toLocaleString()}</span>
                       <div className="flex items-center gap-2 text-xs text-foreground-muted mt-1">
-                        <span className="flex items-center gap-1 text-orange-400"><Flame className="h-3 w-3" />{entry.streak}</span>
+                        <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400"><Flame className="h-3 w-3" />{entry.streak}</span>
                         <span className="flex items-center gap-1"><Target className="h-3 w-3" />{entry.tasksCompleted}</span>
                       </div>
                     </div>
@@ -229,7 +229,7 @@ const Leaderboard = () => {
                     </span>
                   </div>
                   <div className="col-span-1 text-center">
-                    <span className="flex items-center justify-center gap-1 text-orange-400">
+                    <span className="flex items-center justify-center gap-1 text-orange-700 dark:text-orange-400">
                       <Flame className="h-4 w-4" />{entry.streak}
                     </span>
                   </div>

@@ -4,9 +4,9 @@ import { motion } from "framer-motion";
 import { Calendar } from "lucide-react";
 
 const priorityConfig = {
-  HIGH: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", dot: "bg-red-500" },
-  MEDIUM: { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30", dot: "bg-yellow-500" },
-  LOW: { color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/30", dot: "bg-blue-500" },
+  HIGH: { color: "text-red-700 dark:text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", dot: "bg-red-500" },
+  MEDIUM: { color: "text-yellow-700 dark:text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30", dot: "bg-yellow-500" },
+  LOW: { color: "text-blue-700 dark:text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/30", dot: "bg-blue-500" },
 };
 
 interface TaskListCardProps {

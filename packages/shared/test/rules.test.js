@@ -240,3 +240,15 @@ test('spending achievements unlock from xp_spent', () => {
     assert.ok(keys(5000).includes('SPEND_5000') && !keys(5000).includes('SPEND_10000'));
     assert.ok(keys(10000).includes('SPEND_10000'));
 });
+
+test('quest periods: daily is the UTC day, weekly runs Monday to Monday', () => {
+    const thursday = new Date('2030-01-10T23:59:59Z');
+    const day = shared.questPeriod('daily', thursday);
+    assert.equal(day.start, '2030-01-10');
+    assert.equal(day.endsAt.toISOString(), '2030-01-11T00:00:00.000Z');
+    const week = shared.questPeriod('weekly', thursday);
+    assert.equal(week.start, '2030-01-07');
+    assert.equal(week.endsAt.toISOString(), '2030-01-14T00:00:00.000Z');
+    assert.equal(shared.questPeriod('weekly', new Date('2030-01-13T10:00:00Z')).start, '2030-01-07', 'Sunday belongs to the week that started Monday');
+    assert.equal(shared.questPeriod('weekly', new Date('2030-01-14T00:00:00Z')).start, '2030-01-14');
+});

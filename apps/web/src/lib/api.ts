@@ -67,6 +67,11 @@ export const listsApi = {
     reorder: (id: number, itemIds: number[]) => patch<Item[]>(`/api/lists/${id}/reorder`, { itemIds }),
 };
 
+export const questsApi = {
+    getAll: () => apiFetch<{ quests: Quest[] }>('/api/quests'),
+    claim: (key: string) => post<QuestClaimResult>(`/api/quests/${key}/claim`),
+};
+
 export const itemsApi = {
     create: (listId: number, data: ItemInput) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
     update: (id: number, data: Partial<ItemInput> & { position?: number }) => patch<Item>(`/api/items/${id}`, data),
@@ -533,6 +538,32 @@ export interface DailyClaimResult {
     newLevel?: number;
     leveledUp?: boolean;
     newAchievements?: AchievementUnlock[];
+}
+
+export interface Quest {
+    key: string;
+    name: string;
+    emoji: string;
+    description: string;
+    period: 'daily' | 'weekly';
+    target: number;
+    reward: number;
+    progress: number;
+    claimed: boolean;
+    claimable: boolean;
+    periodStart: string;
+    resetsAt: string;
+}
+
+export interface QuestClaimResult {
+    success: boolean;
+    key: string;
+    name: string;
+    reward: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
 }
 
 // ─── AI types ────────────────────────────────────────────────────────────────

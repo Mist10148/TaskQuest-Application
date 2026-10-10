@@ -12,6 +12,7 @@ const { TEXT_LIMITS, PRIORITIES, GAME_TYPES } = shared;
 export const idParam = z.object({ id: z.coerce.number().int().positive() });
 export const listIdParam = z.object({ listId: z.coerce.number().int().positive() });
 export const keyParam = z.object({ key: z.string().regex(/^[A-Za-z]{1,20}$/) });
+export const questParam = z.object({ key: z.string().regex(/^[A-Za-z0-9_]{1,40}$/) });
 export const skillParam = z.object({ skillId: z.string().regex(/^[a-z_]{1,50}$/) });
 
 const optionalText = (max) => z.string().max(max).nullable().optional();

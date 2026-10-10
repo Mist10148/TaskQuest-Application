@@ -15,6 +15,7 @@ import {
     achievementsApi,
     leaderboardApi,
     gamesApi,
+    questsApi,
     aiApi,
     type AchievementUnlock,
     type CreateListData,
@@ -227,6 +228,28 @@ export function useUnlockSkill() {
         // classKey is accepted for compatibility; the server derives the tree.
         mutationFn: ({ skillId }: { skillId: string; classKey?: string }) => skillsApi.unlock(skillId),
         onSuccess: () => invalidateProgress(qc),
+        onError: showError,
+    });
+}
+
+// ─── Quests ──────────────────────────────────────────────────────────────────
+
+export function useQuests() {
+    return useQuery({ queryKey: ['quests'], queryFn: questsApi.getAll });
+}
+
+export function useClaimQuest() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (key: string) => questsApi.claim(key),
+        onSuccess: (result) => {
+            qc.invalidateQueries({ queryKey: ['quests'] });
+            invalidateProgress(qc);
+            toast.success(`🎁 ${result.name} claimed +${result.reward} XP!`, {
+                description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
+            });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
         onError: showError,
     });
 }

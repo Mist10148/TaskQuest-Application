@@ -21,6 +21,7 @@ const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
+const questCommands = require('./commands/quests');
 const aiSync = require('./utils/aiSync');
 const { sendDeadlineReminders } = require('./utils/reminders');
 const chat = require('./chat');
@@ -102,6 +103,7 @@ const COMMANDS = {
     ping: gamification.ping,
     daily: gamification.daily,
     freeze: gamification.freeze,
+    quests: questCommands.execute,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,
@@ -133,6 +135,7 @@ async function route(interaction) {
     if (interaction.isButton()) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
+        if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
         if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
             return gamification.handleClassButton(interaction);

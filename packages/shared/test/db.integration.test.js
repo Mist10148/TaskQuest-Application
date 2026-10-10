@@ -240,6 +240,44 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(Number((await db.users.getUser(DAVE)).xp_spent) >= 450 + 500);
     });
 
+    await t.test('quests: progress from real activity, one claim per period', async () => {
+        const ERIN = '100000000000000005';
+        await db.users.ensureUser(ERIN);
+        const { list } = await db.tasks.createList(ERIN, { name: 'Quest list', priority: 'HIGH' });
+        const quests = async () => Object.fromEntries((await db.quests.getQuests(ERIN)).map((q) => [q.key, q]));
+
+        let q = await quests();
+        assert.equal(q.DAILY_COMPLETE_3.progress, 0);
+        await assert.rejects(db.quests.claimQuest(ERIN, 'DAILY_COMPLETE_3'), { code: 'VALIDATION' });
+        await assert.rejects(db.quests.claimQuest(ERIN, 'NOPE'), { code: 'NOT_FOUND' });
+
+        for (const name of ['a', 'b', 'c']) {
+            const { item } = await db.tasks.addItem(ERIN, list.id, { name });
+            await db.tasks.setItemCompleted(ERIN, item.id, true);
+        }
+        q = await quests();
+        assert.equal(q.DAILY_COMPLETE_3.progress, 3);
+        assert.equal(q.DAILY_COMPLETE_3.claimable, true);
+        assert.equal(q.DAILY_HIGH_1.claimable, true, 'tasks inherit the list priority');
+        assert.equal(q.DAILY_ADD_3.claimable, true);
+        assert.equal(q.WEEKLY_COMPLETE_15.claimable, false);
+
+        const before = Number((await db.users.getUser(ERIN)).player_xp);
+        const [a, b] = await Promise.allSettled([db.quests.claimQuest(ERIN, 'DAILY_COMPLETE_3'), db.quests.claimQuest(ERIN, 'daily_complete_3')]);
+        assert.equal([a, b].filter((r) => r.status === 'fulfilled').length, 1, 'concurrent claims pay once');
+        assert.equal(Number((await db.users.getUser(ERIN)).player_xp) - before, 30);
+        q = await quests();
+        assert.equal(q.DAILY_COMPLETE_3.claimed, true);
+        assert.equal(q.DAILY_COMPLETE_3.claimable, false);
+        await assert.rejects(db.quests.claimQuest(ERIN, 'DAILY_COMPLETE_3'), { code: 'CONFLICT' });
+
+        // Tomorrow the daily quest is fresh again, but this week's weekly claim state is separate.
+        const tomorrow = new Date(Date.now() + 36 * 3600e3);
+        const next = (await db.quests.getQuests(ERIN, tomorrow)).find((x) => x.key === 'DAILY_COMPLETE_3');
+        assert.equal(next.claimed, false);
+        assert.equal(next.progress, 0);
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

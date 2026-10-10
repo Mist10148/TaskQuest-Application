@@ -235,6 +235,18 @@ const REWARDS = {
     HANGMAN_MIN: 10
 };
 
+/**
+ * Daily and weekly quests. `metric` names a progress query in db/quests.js; rewards are flat XP
+ * (no class or skill modifiers) and each quest can be claimed once per period.
+ */
+const QUESTS = {
+    DAILY_COMPLETE_3: { name: 'Daily Grind', emoji: '⚒️', description: 'Complete 3 tasks today', period: 'daily', metric: 'completions', target: 3, reward: 30 },
+    DAILY_HIGH_1: { name: 'Heavy Lifter', emoji: '🏋️', description: 'Complete a high-priority task today', period: 'daily', metric: 'high_completions', target: 1, reward: 25 },
+    DAILY_ADD_3: { name: 'Planner', emoji: '🗒️', description: 'Add 3 tasks today', period: 'daily', metric: 'adds', target: 3, reward: 15 },
+    WEEKLY_COMPLETE_15: { name: 'Weekly Warrior', emoji: '🛡️', description: 'Complete 15 tasks this week', period: 'weekly', metric: 'completions', target: 15, reward: 120 },
+    WEEKLY_DAILY_5: { name: 'Regular', emoji: '📆', description: 'Claim your daily reward on 5 days this week', period: 'weekly', metric: 'daily_claims', target: 5, reward: 80 }
+};
+
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
 const STREAK_FREEZE = { COST: 150, MAX: 3 };
 
@@ -324,6 +336,7 @@ module.exports = {
     REWARDS,
     STREAK_FREEZE,
     SPEND_SOURCES,
+    QUESTS,
     LIMITS,
     DAILY,
     TEXT_LIMITS,

@@ -205,6 +205,8 @@ export interface User {
     total_items_added: number;
     total_items_completed: number;
     total_lists_created: number;
+    streak_freezes?: number;
+    xp_spent?: number;
 }
 
 export interface DiscordUser {
@@ -526,6 +528,7 @@ export interface DailyClaimResult {
     bonusInfo?: BonusInfo;
     streakBroken?: boolean;
     streakPreserved?: boolean;
+    freezeUsed?: boolean;
     newBalance?: number;
     newLevel?: number;
     leveledUp?: boolean;

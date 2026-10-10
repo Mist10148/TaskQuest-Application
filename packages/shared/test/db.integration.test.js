@@ -215,6 +215,31 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number(after.total_items_added), Number(before.total_items_added), 'a repeat is not a newly added task');
     });
 
+    await t.test('streak freezes are bought, capped, consumed once, and count as spending', async () => {
+        const DAVE = '100000000000000004';
+        await db.users.ensureUser(DAVE);
+        await assert.rejects(db.progression.buyStreakFreeze(DAVE), { code: 'INSUFFICIENT_XP' });
+        await setXP(DAVE, 1000);
+        for (let i = 1; i <= 3; i++) assert.equal((await db.progression.buyStreakFreeze(DAVE)).freezes, i);
+        await assert.rejects(db.progression.buyStreakFreeze(DAVE), { code: 'CONFLICT' });
+        let user = await db.users.getUser(DAVE);
+        assert.equal(Number(user.player_xp), 1000 - 3 * 150);
+        assert.equal(Number(user.xp_spent), 450);
+
+        // Streak of 5, last claimed 60 hours ago: the freeze keeps it alive and is used up.
+        await pool.query('UPDATE users SET streak_count = 5, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 60 HOUR WHERE discord_id = ?', [DAVE]);
+        const claim = await db.progression.claimDaily(DAVE);
+        assert.equal(claim.streak, 6);
+        assert.equal(claim.freezeUsed, true);
+        user = await db.users.getUser(DAVE);
+        assert.equal(Number(user.streak_freezes), 2);
+
+        // Buying a class counts toward the spending achievements.
+        await setXP(DAVE, 5000);
+        await db.progression.buyClass(DAVE, 'hero');
+        assert.ok(Number((await db.users.getUser(DAVE)).xp_spent) >= 450 + 500);
+    });
+
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);

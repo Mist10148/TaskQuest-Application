@@ -55,7 +55,10 @@ function achievementConditions(stats, events = {}) {
         ['FIRST_GAME', num(stats.games_played) >= 1],
         ['GAME_WIN_10', num(stats.games_won) >= 10],
         ['BLACKJACK', Boolean(events.blackjack)],
-        ['HIGH_ROLLER', num(events.gameWinXP) >= 500]
+        ['HIGH_ROLLER', num(events.gameWinXP) >= 500],
+        ['SPEND_1000', num(stats.xp_spent) >= 1000],
+        ['SPEND_5000', num(stats.xp_spent) >= 5000],
+        ['SPEND_10000', num(stats.xp_spent) >= 10000]
     ];
 }
 

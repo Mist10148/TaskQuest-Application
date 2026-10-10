@@ -45,11 +45,20 @@ router.post(
             streak: r.streak,
             streakBroken: r.streakBroken,
             streakPreserved: r.streakPreserved,
+            freezeUsed: r.freezeUsed,
             newBalance: r.balance,
             newLevel: r.level,
             leveledUp: r.leveledUp,
             newAchievements: r.achievements
         });
+    })
+);
+
+router.post(
+    '/streak-freeze',
+    asyncRoute(async (req, res) => {
+        const r = await db.progression.buyStreakFreeze(uid(req));
+        res.json({ success: true, freezes: r.freezes, cost: r.cost, newBalance: r.balance, newAchievements: r.achievements });
     })
 );
 

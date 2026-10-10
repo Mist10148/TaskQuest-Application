@@ -15,7 +15,9 @@ const {
     PURCHASABLE_CLASS_KEYS,
     classOwnershipColumn,
     findSkill,
-    LIMITS
+    LIMITS,
+    STREAK_FREEZE,
+    SPEND_SOURCES
 } = require('../constants');
 const { levelFromXP, calculateFinalXP, calculateDailyReward } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
@@ -24,7 +26,7 @@ const { evaluateAchievements } = require('../achievements');
 const UPDATABLE_COLUMNS = new Set([
     'assassin_streak', 'assassin_stacks', 'wizard_counter', 'archer_streak', 'tank_stacks',
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
-    'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank'
+    'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes'
 ]);
 
 const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
@@ -74,6 +76,10 @@ async function applyXP(conn, user, amount, source, opts = {}) {
     ]);
     Object.assign(user, { player_xp: balanceAfter, lifetime_xp: lifetimeAfter, player_level: level });
     await updateUserColumns(conn, user, opts.userUpdates);
+    if (delta < 0 && SPEND_SOURCES.includes(source)) {
+        await conn.query('UPDATE users SET xp_spent = xp_spent + ? WHERE discord_id = ?', [-delta, user.discord_id]);
+        user.xp_spent = Number(user.xp_spent) - delta;
+    }
 
     const [res] = await conn.query(
         `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id)
@@ -203,6 +209,7 @@ async function claimDaily(discordId) {
         const tx = await applyXP(conn, user, reward.totalXP, 'daily', {
             userUpdates: {
                 ...reward.xp.userUpdates,
+                ...(reward.freezeUsed ? { streak_freezes: Number(user.streak_freezes) - 1 } : {}),
                 streak_count: reward.newStreak,
                 last_daily_claim: new Date(),
                 last_active_day: new Date().toISOString().slice(0, 10)
@@ -222,11 +229,28 @@ async function claimDaily(discordId) {
             previousStreak,
             streakBroken: reward.streakBroken,
             streakPreserved: reward.streakPreserved,
+            freezeUsed: reward.freezeUsed,
             balance: tx.balanceAfter,
             level: tx.level,
             leveledUp: tx.leveledUp,
             achievements
         };
+    });
+}
+
+// ─── Streak freeze ───────────────────────────────────────────────────────────
+
+/** Buy one streak freeze (kept until a daily claim would otherwise break the streak). */
+async function buyStreakFreeze(discordId) {
+    return withTransaction(async (conn) => {
+        const user = await lockUser(conn, discordId);
+        requireGamification(user);
+        const owned = Number(user.streak_freezes) || 0;
+        if (owned >= STREAK_FREEZE.MAX) throw errors.conflict(`You can hold at most ${STREAK_FREEZE.MAX} streak freezes.`);
+        if (Number(user.player_xp) < STREAK_FREEZE.COST) throw errors.insufficientXP(STREAK_FREEZE.COST, Number(user.player_xp));
+        const tx = await applyXP(conn, user, -STREAK_FREEZE.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
+        const achievements = await unlockAchievements(conn, user);
+        return { freezes: owned + 1, cost: STREAK_FREEZE.COST, balance: tx.balanceAfter, achievements };
     });
 }
 
@@ -333,6 +357,7 @@ module.exports = {
     sumToday,
     startOfUtcDay,
     claimDaily,
+    buyStreakFreeze,
     buyClass,
     equipClass,
     unlockSkill,

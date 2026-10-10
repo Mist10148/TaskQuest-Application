@@ -286,7 +286,7 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
  * Work out the daily reward for a user at `now`. Does not write anything.
  *
  * @returns {{ eligible: false, remainingMs: number, streak: number }
- *         | { eligible: true, newStreak, streakBroken, streakPreserved, streakBonus,
+ *         | { eligible: true, newStreak, streakBroken, streakPreserved, freezeUsed, streakBonus,
  *             skillDailyBonus, xp: object, totalXP: number }}
  */
 function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
@@ -304,11 +304,17 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
     let newStreak = 1;
     let streakBroken = false;
     let streakPreserved = false;
+    let freezeUsed = false;
     if (lastClaim && since <= window) {
         newStreak = streak + 1;
     } else if (lastClaim && bonuses.streakUnstoppable) {
         newStreak = streak + 1;
         streakPreserved = true;
+    } else if (lastClaim && streak > 1 && (Number(user.streak_freezes) || 0) > 0) {
+        // A bought streak freeze saves the streak (the skill above is free, so it goes first).
+        newStreak = streak + 1;
+        streakPreserved = true;
+        freezeUsed = true;
     } else if (lastClaim) {
         streakBroken = streak > 1;
     }
@@ -322,6 +328,7 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
         newStreak,
         streakBroken,
         streakPreserved,
+        freezeUsed,
         streakBonus,
         skillDailyBonus: bonuses.dailyBonus,
         xp,

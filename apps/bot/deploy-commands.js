@@ -22,6 +22,7 @@ const commands = [
     gameCommand.data,
     gamification.pingData,
     gamification.dailyData,
+    gamification.freezeData,
     gamification.automationData,
     gamification.profileData,
     gamification.achievementsData,

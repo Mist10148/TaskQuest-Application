@@ -305,7 +305,7 @@ function helpEmbed() {
         .addFields(
             { name: 'Tasks', value: '`/list` Manage lists', inline: true },
             { name: 'Games', value: '`/game` Mini-games', inline: true },
-            { name: 'Daily', value: '`/daily` Claim XP', inline: true },
+            { name: 'Daily', value: '`/daily` `/freeze`', inline: true },
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },
             { name: 'Classes', value: '`/class` `/leaderboard`', inline: true },
             { name: 'Settings', value: '`/toggle` `/automation`', inline: true },

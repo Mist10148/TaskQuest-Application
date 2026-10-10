@@ -18,7 +18,7 @@
 
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { users, progression } = require('@taskquest/shared/db');
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, levelProgress } = require('@taskquest/shared');
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, levelProgress } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -47,6 +47,23 @@ async function ping(interaction) {
 const dailyData = new SlashCommandBuilder()
     .setName('daily')
     .setDescription('🎁 Claim your daily 100 XP reward');
+
+const freezeData = new SlashCommandBuilder()
+    .setName('freeze')
+    .setDescription(`🧊 Buy a streak freeze (${STREAK_FREEZE.COST} XP) that saves your daily streak once`);
+
+async function freeze(interaction) {
+    await interaction.deferReply(EPHEMERAL);
+    try {
+        const r = await progression.buyStreakFreeze(interaction.user.id);
+        await interaction.editReply({
+            embeds: [ui.success('Streak freeze bought', `You now hold **${r.freezes}/${STREAK_FREEZE.MAX}**. It is used automatically if you miss a day. Balance: ${Number(r.balance).toLocaleString()} XP.`)]
+        });
+        await sendRewards(interaction, { achievements: r.achievements });
+    } catch (err) {
+        await handleError(interaction, err);
+    }
+}
 
 function formatTimeRemaining(ms) {
     const hours = Math.floor(ms / (1000 * 60 * 60));
@@ -102,7 +119,8 @@ async function daily(interaction) {
 
     if (r.leveledUp) embed.addFields({ name: '🎉 Level Up!', value: `You reached **Level ${r.level}**!`, inline: false });
     if (r.streakBroken) embed.addFields({ name: '💔 Streak Lost', value: `Your ${r.previousStreak}-day streak was reset. Start again!`, inline: false });
-    if (r.streakPreserved) embed.addFields({ name: '🚀 Unstoppable', value: 'You missed a day, but your streak was kept!', inline: false });
+    if (r.freezeUsed) embed.addFields({ name: '🧊 Streak Freeze Used', value: 'You missed a day, but a streak freeze saved your streak!', inline: false });
+    else if (r.streakPreserved) embed.addFields({ name: '🚀 Unstoppable', value: 'You missed a day, but your streak was kept!', inline: false });
     if (r.streak === 7) embed.addFields({ name: '🎊 Week Streak!', value: 'Amazing! 7 days in a row!', inline: false });
     else if (r.streak === 30) embed.addFields({ name: '🏆 Month Streak!', value: 'Incredible! 30 days in a row!', inline: false });
 
@@ -812,10 +830,10 @@ async function app(interaction) {
 
 module.exports = {
     // Command data
-    pingData, dailyData, automationData, profileData, achievementsData,
+    pingData, dailyData, freezeData, automationData, profileData, achievementsData,
     classData, leaderboardData, toggleData, helpData, appData,
     // Command handlers
-    ping, daily, automation, profile, achievements, classShop, leaderboard, toggle, help, app,
+    ping, daily, freeze, automation, profile, achievements, classShop, leaderboard, toggle, help, app,
     // Button handlers
     handleClassButton, handleAchievementPagination,
     // Select menu handlers

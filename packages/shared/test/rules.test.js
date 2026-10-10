@@ -204,3 +204,39 @@ test('task detail validation: tags, repeat and due date', () => {
     assert.match(v.dueDate('nope').error, /Due date/);
     assert.equal(v.dueDate('2030-02-28').value, '2030-02-28');
 });
+
+test('daily reward: a streak freeze saves a broken streak, after the free skill', () => {
+    const now = Date.parse('2030-01-10T12:00:00Z');
+    const old = new Date(now - 60 * 3600e3);
+
+    const saved = shared.calculateDailyReward(user({ last_daily_claim: old, streak_count: 9, streak_freezes: 2 }), [], now);
+    assert.equal(saved.newStreak, 10);
+    assert.equal(saved.freezeUsed, true);
+    assert.equal(saved.streakBroken, false);
+
+    const none = shared.calculateDailyReward(user({ last_daily_claim: old, streak_count: 9, streak_freezes: 0 }), [], now);
+    assert.equal(none.newStreak, 1);
+    assert.equal(none.freezeUsed, false);
+
+    const tiny = shared.calculateDailyReward(user({ last_daily_claim: old, streak_count: 1, streak_freezes: 3 }), [], now);
+    assert.equal(tiny.freezeUsed, false, 'a 1-day streak is not worth a freeze');
+
+    const unstoppable = shared.calculateDailyReward(
+        user({ last_daily_claim: old, streak_count: 9, streak_freezes: 3 }),
+        [{ skill_id: 'tank_unstoppable', skill_level: 1 }],
+        now
+    );
+    assert.equal(unstoppable.newStreak, 10);
+    assert.equal(unstoppable.freezeUsed, false, 'the skill is used before a bought freeze');
+
+    const inWindow = shared.calculateDailyReward(user({ last_daily_claim: new Date(now - 30 * 3600e3), streak_count: 4, streak_freezes: 3 }), [], now);
+    assert.equal(inWindow.freezeUsed, false, 'no freeze is spent while the streak is alive');
+});
+
+test('spending achievements unlock from xp_spent', () => {
+    const keys = (xp_spent) => shared.evaluateAchievements({ xp_spent }, []).map((a) => a.key);
+    assert.ok(!keys(999).includes('SPEND_1000'));
+    assert.ok(keys(1000).includes('SPEND_1000'));
+    assert.ok(keys(5000).includes('SPEND_5000') && !keys(5000).includes('SPEND_10000'));
+    assert.ok(keys(10000).includes('SPEND_10000'));
+});

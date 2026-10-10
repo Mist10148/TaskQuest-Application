@@ -209,7 +209,11 @@ const ACHIEVEMENTS = {
     FIRST_GAME: { name: 'Player One', emoji: '🎮', description: 'Finish your first game', category: 'games' },
     GAME_WIN_10: { name: 'Winner', emoji: '🥇', description: 'Win 10 games', category: 'games' },
     BLACKJACK: { name: 'Blackjack!', emoji: '🃏', description: 'Get a natural blackjack', category: 'games' },
-    HIGH_ROLLER: { name: 'High Roller', emoji: '💰', description: 'Win 500+ XP in one game', category: 'games' }
+    HIGH_ROLLER: { name: 'High Roller', emoji: '💰', description: 'Win 500+ XP in one game', category: 'games' },
+    // Spending (classes, skills and streak freezes)
+    SPEND_1000: { name: 'Big Spender', emoji: '🛍️', description: 'Spend 1,000 XP on classes, skills and upgrades', category: 'economy' },
+    SPEND_5000: { name: 'Investor', emoji: '📈', description: 'Spend 5,000 XP on classes, skills and upgrades', category: 'economy' },
+    SPEND_10000: { name: 'Tycoon', emoji: '🏦', description: 'Spend 10,000 XP on classes, skills and upgrades', category: 'economy' }
 };
 
 // ─── Leveling ────────────────────────────────────────────────────────────────
@@ -230,6 +234,12 @@ const REWARDS = {
     HANGMAN_PER_LIFE: 10,
     HANGMAN_MIN: 10
 };
+
+/** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
+const STREAK_FREEZE = { COST: 150, MAX: 3 };
+
+/** xp_transactions sources that count as "spending" for xp_spent and the spending achievements. */
+const SPEND_SOURCES = ['class_purchase', 'skill_purchase', 'streak_freeze'];
 
 /** Anti-farming limits (per user, per UTC day unless noted). */
 const LIMITS = {
@@ -312,6 +322,8 @@ module.exports = {
     ACHIEVEMENTS,
     XP_PER_LEVEL,
     REWARDS,
+    STREAK_FREEZE,
+    SPEND_SOURCES,
     LIMITS,
     DAILY,
     TEXT_LIMITS,

@@ -101,6 +101,7 @@ const COMMANDS = {
     game: gameCommand.execute,
     ping: gamification.ping,
     daily: gamification.daily,
+    freeze: gamification.freeze,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,

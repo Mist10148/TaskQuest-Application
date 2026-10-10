@@ -50,10 +50,14 @@ export const authApi = {
 
 export const userApi = {
     getProfile: () => apiFetch<UserStats>('/api/user'),
-    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled'>>) =>
+    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'weekly_digest' | 'timezone' | 'reminder_hour'>>) =>
         patch<User>('/api/user', settings),
     claimDaily: () => post<DailyClaimResult>('/api/user/daily'),
     resetProgress: () => post<{ success: boolean; message: string }>('/api/user/reset', { confirm: 'RESET' }),
+    createCalendarToken: () => post<{ token: string }>('/api/user/calendar-token'),
+    revokeCalendarToken: () => del<{ success: boolean }>('/api/user/calendar-token'),
+    importData: (data: unknown) => post<{ success: boolean; lists: number; items: number }>('/api/user/import', data),
+    buyStreakFreeze: () => post<{ success: boolean; freezes: number; cost: number; newBalance: number; newAchievements: AchievementUnlock[] }>('/api/user/streak-freeze'),
 };
 
 // ─── Lists & items ───────────────────────────────────────────────────────────
@@ -222,6 +226,7 @@ export interface User {
     timezone?: string | null;
     reminder_hour?: number;
     weekly_digest?: boolean | number;
+    calendar_token?: string | null;
 }
 
 export interface DiscordUser {

@@ -99,6 +99,38 @@ export function useResetProgress() {
     });
 }
 
+/** Create/rotate or turn off the secret calendar feed address. */
+export function useCalendarToken() {
+    const qc = useQueryClient();
+    const refresh = () => qc.invalidateQueries({ queryKey: ['auth'] });
+    return {
+        create: useMutation({ mutationFn: userApi.createCalendarToken, onSuccess: refresh, onError: showError }),
+        revoke: useMutation({ mutationFn: userApi.revokeCalendarToken, onSuccess: refresh, onError: showError }),
+    };
+}
+
+export function useImportData() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (data: unknown) => userApi.importData(data),
+        onSuccess: () => qc.invalidateQueries(),
+        onError: showError,
+    });
+}
+
+export function useBuyStreakFreeze() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: userApi.buyStreakFreeze,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            toast.success(`🧊 Streak freeze bought (${result.freezes}/3)`, { description: 'It saves your streak automatically if you miss a day.' });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
 // ─── Lists & items ───────────────────────────────────────────────────────────
 
 export function useLists() {

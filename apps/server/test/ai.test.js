@@ -143,11 +143,13 @@ test('aiClient: reindex, syncUser and forget are fire-and-forget and never throw
         aiClient.reindex('7', 11);
         aiClient.forget('7', 11);
         aiClient.syncUser('7');
-        for (let i = 0; i < 50 && ai.requests.length < 3; i++) await new Promise((r) => setTimeout(r, 20));
+        aiClient.forgetUser('7');
+        for (let i = 0; i < 50 && ai.requests.length < 4; i++) await new Promise((r) => setTimeout(r, 20));
         assert.deepEqual(
             ai.requests.map((r) => [r.url, r.body]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
             [
                 ['/internal/forget', { discordId: '7', listId: 11 }],
+                ['/internal/forget', { discordId: '7' }],
                 ['/internal/index', { discordId: '7', listId: 11 }],
                 ['/internal/index', { discordId: '7' }]
             ]

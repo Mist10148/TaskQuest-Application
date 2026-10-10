@@ -212,7 +212,9 @@ function createAiClient(options = {}) {
         /** Refresh one quest's embeddings after a write. Never throws. */
         reindex: (discordId, listId) => background('/internal/index', discordId, { listId: Number(listId) }),
         /** Drop a deleted quest's embeddings. Never throws. */
-        forget: (discordId, listId) => background('/internal/forget', discordId, { listId: Number(listId) })
+        forget: (discordId, listId) => background('/internal/forget', discordId, { listId: Number(listId) }),
+        /** Drop everything the AI service stored about a user (vectors, chats, summaries). Never throws. */
+        forgetUser: (discordId) => background('/internal/forget', discordId, {})
     };
 }
 

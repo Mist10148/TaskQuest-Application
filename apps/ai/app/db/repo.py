@@ -171,3 +171,16 @@ async def ai_enabled(conn: AsyncConnection, discord_id: str) -> bool:
     result = await conn.execute(text("SELECT ai_enabled FROM users WHERE discord_id = :uid"), {"uid": discord_id})
     row = result.first()
     return bool(row and row[0])
+
+
+async def delete_user_ai_data(conn: AsyncConnection, discord_id: str) -> None:
+    """Remove a user's chat threads (with their checkpoints) and cached summaries.
+
+    ai_usage is kept on purpose: resetting progress must not refill the daily AI quota.
+    """
+    params = {"uid": discord_id}
+    owned = "SELECT id FROM ai_chat_threads WHERE discord_id = :uid"
+    await conn.execute(text(f"DELETE FROM ai_checkpoint_writes WHERE thread_id IN ({owned})"), params)
+    await conn.execute(text(f"DELETE FROM ai_checkpoints WHERE thread_id IN ({owned})"), params)
+    await conn.execute(text("DELETE FROM ai_chat_threads WHERE discord_id = :uid"), params)
+    await conn.execute(text("DELETE FROM ai_summary_cache WHERE discord_id = :uid"), params)

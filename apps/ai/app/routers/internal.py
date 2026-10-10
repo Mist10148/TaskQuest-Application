@@ -44,6 +44,14 @@ async def index(body: IndexBody):
 
 @router.post("/forget", status_code=204)
 async def forget(body: IndexBody):
+    """Drop one deleted list's vectors, or (no listId) everything stored about the user.
+
+    The whole-user form backs "Reset progress": vectors, chat threads and cached summaries go.
+    """
     if body.listId is not None:
         await indexer.forget_list(body.discordId, body.listId)
+        return Response(status_code=204)
+    async with pool.connection() as conn:
+        await runtime.get_store().delete(conn, body.discordId)
+        await repo.delete_user_ai_data(conn, body.discordId)
     return Response(status_code=204)

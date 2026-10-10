@@ -221,7 +221,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
         const { list } = await db.tasks.createList(BOB, { name: 'Old', deadline: '2020-01-01' });
         await db.tasks.addItem(BOB, list.id, { name: 'never done' });
-        assert.ok((await db.tasks.cleanupOldLists()) >= 1);
+        const removed = await db.tasks.cleanupOldLists();
+        assert.ok(removed.some((l) => l.id === list.id && l.discord_id === BOB), 'reports which lists were deleted');
         assert.equal(await db.tasks.getList(BOB, list.id), null);
 
         await db.users.resetProgress(BOB);

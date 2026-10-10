@@ -21,6 +21,7 @@ const listCommand = require('./commands/list');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
+const aiSync = require('./utils/aiSync');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -91,7 +92,8 @@ const checkDeadlines = job('DEADLINE', async () => {
 
 const cleanupLists = job('AUTO-DELETE', async () => {
     const deleted = await db.tasks.cleanupOldLists();
-    if (deleted > 0) log('🗑️', 'AUTO-DELETE', `Removed ${deleted} old lists`);
+    for (const list of deleted) aiSync.forget(list.discord_id, list.id); // drop their vectors too
+    if (deleted.length > 0) log('🗑️', 'AUTO-DELETE', `Removed ${deleted.length} old lists`);
 });
 
 const expireGames = job('GAMES', async () => {

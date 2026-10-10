@@ -66,6 +66,8 @@ router.post(
     asyncRoute(async (req, res) => {
         parse(resetBody, req.body);
         await db.users.resetProgress(uid(req));
+        // Deleted quests must not stay searchable: purge vectors, chat threads and summaries too.
+        aiClient.forgetUser(uid(req));
         res.json({ success: true, message: 'All progress has been reset' });
     })
 );

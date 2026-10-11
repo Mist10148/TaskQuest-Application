@@ -88,13 +88,18 @@ packages/shared/src
     ├── migrations/  001 … 009 (initial schema, legacy upgrade, AI, task details, preferences, quests)
     ├── users.js     profile, settings, stats, leaderboard boards, weekly digest data, reset
     ├── progression.js  applyXP, rewardAction, achievements, daily, streak freezes, classes, skills
-    ├── tasks.js     owner-scoped lists/items/subtasks, ordering, recurrence, reminders, clean-up
+    ├── access.js    the one rule for who may touch a list or task (owner, or a member with a sufficient role); everything else calls it
+    ├── sharing.js   invitations, members, roles for shared lists
+    ├── parties.js   parties and the shared weekly quest
+    ├── tasks.js     lists/items/subtasks (own and shared, through access.js), ordering, recurrence, reminders, clean-up
     ├── quests.js    daily/weekly quest progress and atomic claims
     ├── transfer.js  export, reward-free import, calendar feed data and token
     └── games.js     blackjack / rps / hangman / arcade services, expiry
 ```
 
 **Rules are pure.** The `xp`, `achievements` and `games` modules do no I/O and take an injectable RNG, so they are unit-tested deterministically.
+
+**Access rule.** A list belongs to one owner (`lists.discord_id`) and may be shared through `list_members` (viewer, editor, manager; the owner is an implicit manager). Nothing decides ownership on its own: `access.forList` / `forItem` load a list or task for a user at a minimum role, and `accessSql` is the fragment for queries over many lists. A stranger gets `NOT_FOUND`, never `FORBIDDEN`, so a list's existence does not leak; a member whose role is too weak gets `FORBIDDEN`. XP, caps, quests and stats always belong to the **actor**: `rewardAction` takes the acting user's locked row, and `items.created_by` / `completed_by` / `first_completed_by` record who did what. The AI service is untouched by sharing: `routes/internal.js` calls `db.tasks.asOwner.*`, which refuses a list the user merely belongs to. An automated test enumerates every exported function of `db.tasks`, `db.templates`, `db.transfer` and `db.quests` and proves a non-member gets `NOT_FOUND` and changes nothing; a new export must be classified there. Design record: [design/shared-lists.md](design/shared-lists.md).
 
 **Services are the only writers.** Apps never write SQL. Services validate input, enforce ownership, run in transactions, and throw `TaskQuestError(code, message, status)` for expected failures. The API maps `status` to an HTTP status. The bot shows `message` in an ephemeral embed. Any other error is treated as a bug: it is logged, and the user sees a generic message.
 
@@ -175,7 +180,7 @@ Achievement unlocks happen in the same transaction (`INSERT IGNORE` on the uniqu
 | CSRF (e.g. hidden form posting to `/api/user/reset`) | `SameSite=Lax` cookie on a single origin. State-changing requests must carry an `Origin` or `Referer` matching `PUBLIC_URL`/`ALLOWED_ORIGINS`. Bodies must be `application/json`. Reset also needs `{"confirm":"RESET"}`. |
 | Session fixation / theft | `session.regenerate()` at login. `httpOnly`, `secure` in production, cookie name `tq.sid`, store in MySQL. |
 | Login CSRF | OAuth `state` bound to the session and compared in constant time. |
-| IDOR | Ownership is part of every SQL statement (`JOIN lists ... WHERE discord_id = ?`). |
+| IDOR | Access is decided in one place (`access.js`: ownership or a membership row with a sufficient role) and a stranger gets 404. Discord IDs of other people are never sent to a client (members are addressed by an opaque key, tasks expose display names). |
 | XSS / clickjacking | helmet CSP (`script-src 'self'`, `frame-ancestors 'none'`, `img-src 'self' cdn.discordapp.com`). React escapes output. |
 | Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games). |
 | Mass assignment / bad input | `.strict()` zod schemas, then service-level validation. 16 KB body limit. |
@@ -188,7 +193,7 @@ See [SECURITY.md](../SECURITY.md) for the full list of fixed vulnerabilities.
 
 - **Intents:** `Guilds` only. No privileged intents are needed: commands arrive as interactions, and DMs are sent, never read.
 - **Routing:** `index.js` dispatches by interaction type and `customId` prefix to `commands/list.js`, `commands/game.js` or `commands/gamification.js`.
-- **Ownership:** `/list` replies are public, so anyone in the channel can click their buttons. Every handler passes the clicking user's ID to the services, so clicks on someone else's list only ever return "not found".
+- **Ownership:** `/list` replies are public, so anyone in the channel can click their buttons. A click on a message that belongs to another user is refused up front, and every handler passes the clicking user's ID to the services, so clicks on a list they have no part in only ever return "not found". On a shared list the service also checks the clicker's role (a viewer's edit click is refused).
 - **Privacy:** XP, achievements, games and `/profile` are ephemeral. `/profile @user` never creates a row for the target.
 - **Errors:** `utils/respond.js#handleError` turns `TaskQuestError` into a friendly embed. Anything else is logged with its stack and shown as a generic message.
 

@@ -15,6 +15,7 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
    - [Weekly review](#5e-weekly-review)
    - [Prestige](#5f-prestige)
    - [Cosmetics](#5g-cosmetics-the-shop)
+   - [Parties](#5h-parties)
 6. [Achievements](#6-achievements)
 7. [Games](#7-games)
 8. [Limits and anti-farming](#8-limits-and-anti-farming)
@@ -257,6 +258,8 @@ Daily, weekly and monthly quests, with periods in **your** time zone (daily: you
 | 🪣 Spring Cleaning | Complete 10 overdue tasks | 80 XP |
 | 🗓️ Planner Pro | Add 10 tasks with due dates | 50 XP |
 
+**Shared lists.** On a list shared with you, quests count **you**: a task you complete counts for your completion quests, and a task you add counts for yours, whoever owns the list. Clearing a list pays and counts the person who finished its last task. The owner gets nothing for a member's work, and a member gets nothing for the owner's.
+
 What counts: a task counts toward the completion quests once, at the moment it is first completed (the same moment its completion XP is paid), so un-checking and re-checking never moves it into a new period. *Heavy Lifter* uses the task's priority at that moment, so raising it afterwards does not qualify. Imported tasks and the next copy a repeating task creates never count towards any quest (adds or completions). *Early Riser* and *Spring Cleaning* use whether the task was early or overdue **at its first completion**, so editing the due date afterwards changes nothing. A progress reset clears your claims.
 
 ## 5c. Bonus XP sources
@@ -343,6 +346,20 @@ You can equip one of each kind (or none). **Prestige keeps** everything you own 
 | Rose | 400 XP | Reach level 5 |
 | Slate | 500 XP | Reach level 10 |
 
+## 5h. Parties
+
+A party is a group of up to **6** people (the owner included) with one shared **weekly quest**. You can be in one party at a time; the owner invites people by name (`/party invite`, the web Party page), they accept, and the owner can disband it. Members see each other's **display names and this week's counts** and nothing else (no XP, levels, lists or progress elsewhere).
+
+| | |
+|---|---|
+| Window | One global ISO week, **Monday 00:00 UTC to the next Monday**, the same for every member (members live in different time zones, so no personal week could be shared) |
+| Goal | **12 tasks per member**: a party of 3 needs 36 |
+| Progress | The sum of each member's *first completions* in the window (the same tasks that count for quests: imported tasks and auto-created repeats never count, un-checking and re-checking changes nothing). A task counts for the person who completed it, also on a shared list. |
+| Reward | **+60 XP** (flat, no class or skill modifiers) for **every member**, claimed by each of them once the goal is reached (`/party status` → Claim, or the web Party page) |
+| Once a week | One party reward per person per week, whichever party it came from, so leaving and joining another party cannot pay twice (the claim is a `quest_claims` row with key `PARTY_<partyId>`) |
+
+The target uses the number of members at the time you look or claim, so the goal grows when someone joins and shrinks when someone leaves. A person with XP turned off sees the quest but cannot claim.
+
 ## 6. Achievements
 
 There are 33 achievements. They unlock in the same transaction as the action that earned them.
@@ -419,6 +436,9 @@ Every "per day" below, the quests, the weekly review and the Stats page use **yo
 | Habit bonus | 20 XP per completion, 60 XP a day |
 | Focus sessions | 10 to 90 minutes each, 100 XP and 8 sessions a day, one active session |
 | Weekly review | Once per week |
+| Party quest | 12 first completions per member in the UTC week; +60 XP once per person per week |
+| List members | 10 people besides the owner (members and pending invitations); 30 invitations a day per person; an invitation lives 7 days |
+| Party members | 6 including the owner, one party per user |
 | Streak chests | Once per streak run (7, 14, 30 days) |
 | Achievement rewards | 25 XP, once per achievement |
 | Prestige | Level 30, at most 10 times |

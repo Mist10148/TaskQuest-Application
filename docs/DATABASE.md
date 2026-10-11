@@ -115,15 +115,31 @@ Index: `(gamification_enabled, player_xp)` for the leaderboard.
 
 ### `lists`
 
-`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `overdue_notified` BOOLEAN · `remind_at` DATETIME (snooze: remind again at this time) · `cleared_at` DATETIME NULL (when the list-cleared bonus was paid; the Tidy Up quest counts it) · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
+`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `overdue_notified` BOOLEAN · `remind_at` DATETIME (snooze: remind again at this time) · `cleared_at` DATETIME NULL (when the list-cleared bonus was paid; the Tidy Up quest counts it) · `cleared_by` VARCHAR(32) NULL (who was paid for clearing it; the Tidy Up quest counts that person) · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
 
-Unique key `(discord_id, name)`, index on `deadline`.
+`discord_id` is the **owner**. Unique key `(discord_id, name)`, index on `deadline`. Other people use a list through `list_members`; the rule for who may touch a list lives in `packages/shared/src/db/access.js` (owner, or a member with a role that is enough; anyone else gets NOT_FOUND).
 
 ### `items`
 
-`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `first_completed_early` / `first_completed_overdue` TINYINT NULL (whether that first completion was before / after the due date; NULL without a due date) · `habit_streak` INT (consecutive on-time completions of a repeating task, copied to each spawned copy) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `reminded_at` DATETIME (the due-day DM was sent) · `remind_at` DATETIME (snooze) · `created_at` · `updated_at` (auto-updated).
+`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `first_completed_early` / `first_completed_overdue` TINYINT NULL (whether that first completion was before / after the due date; NULL without a due date) · `habit_streak` INT (consecutive on-time completions of a repeating task, copied to each spawned copy) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `reminded_at` DATETIME (the due-day DM was sent) · `remind_at` DATETIME (snooze) · `created_by`, `completed_by`, `first_completed_by` VARCHAR(32) NULL (the **actor** of each event; quests, the weekly review, stats and the daily caps count a person's own actions, whoever owns the list; backfilled from the list owner by migration `018`; never sent to a client, which sees only `completed_by_name`) · `created_at` · `updated_at` (auto-updated).
 
-Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`. Positions are kept unique and contiguous (0..n-1) by `moveItem` / `reorderItems`.
+Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`, `(created_by, created_at)`, `(completed_by, completed_at)`, `(first_completed_by, first_completed_at)`. Positions are kept unique and contiguous (0..n-1) by `moveItem` / `reorderItems`. A row whose actor column is NULL (written by a script that skipped it) counts for its list's owner in every metric (`actorSql`).
+
+### `list_members`
+
+`list_id` FK → `lists(id)` CASCADE · `discord_id` FK → `users` CASCADE · `role` ENUM(viewer, editor, manager) · `public_id` CHAR(12) UNIQUE (random; the opaque member key the API uses, so a Discord ID never reaches another member) · `added_by` · `created_at`. Primary key `(list_id, discord_id)`. The owner has **no row** (an implicit manager). At most 10 rows plus pending invitations per list (`LIMITS.MAX_LIST_MEMBERS`).
+
+### `list_invites`
+
+`id` · `list_id` FK CASCADE · `invitee_discord_id` FK CASCADE · `role` · `invited_by` · `created_at` · `expires_at` DATETIME (7 days) · `status` ENUM(pending, accepted, declined, revoked). One live pending invitation per list and person is enforced by the service under the list's row lock (MariaDB has no partial unique index); an expired pending row is treated as not pending and is marked `revoked` when the person is invited again. Index `(invited_by, created_at)` serves the 30-invitations-a-day limit.
+
+### `list_reminders` and `item_reminders`
+
+A member's own reminder state, so each member is reminded once: `list_reminders(list_id, discord_id, deadline_notified, overdue_notified, remind_at)` and `item_reminders(item_id, discord_id, reminded_at, remind_at)`, both primary-keyed by the pair and cascading. The owner's state stays on `lists` / `items`. Rows are created lazily, removed when a member leaves, and `list_reminders` is cleared when the list's deadline changes.
+
+### `parties`, `party_members`, `party_invites`
+
+`parties(id, name VARCHAR(40), owner_id FK, created_at)` with a unique key `(owner_id, name)`. `party_members(party_id FK CASCADE, discord_id FK CASCADE, joined_at)`, primary key `(party_id, discord_id)` plus **UNIQUE `(discord_id)`**: one party per user, enforced by the database; the owner is a member too (at most 6, `LIMITS.MAX_PARTY_MEMBERS`). `party_invites` mirrors `list_invites` without a role. The weekly party quest has no table of its own: progress is derived from `items.first_completed_by`, and a claim is a `quest_claims` row with `quest_key = 'PARTY_<partyId>'` and the UTC week's Monday as `period_start` (the service allows one `PARTY_` claim per person per week). A progress reset removes the user's memberships and invitations, and disbands a party they own.
 
 ### `achievements`
 
@@ -204,7 +220,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | `list_create`, `item_add`, `item_complete` | + | Task rewards |
 | `daily` | + | Daily reward |
 | `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
-| `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review` | + | Flat bonuses from streaks, achievements, focus sessions and the weekly review |
+| `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review`, `party_quest` | + | Flat bonuses from streaks, achievements, focus sessions, the weekly review and the party quest |
 | `prestige` | − | The balance leaving at a prestige (not spending: `xp_spent` is unchanged) |
 | `game_reward` | + | RPS, Hangman and arcade winnings. These count toward the free-game daily cap. |
 | `blackjack_bet` | − | Bet escrow (and double down) |

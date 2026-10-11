@@ -33,7 +33,7 @@ This monorepo was created **without importing either history**, and `.gitignore`
 
 - **Identity.** Discord is the only identity provider. The web app uses OAuth2 authorization code flow with the `identify` scope, and stores no passwords.
 - **Trust boundary.** Clients (browser and Discord UI) are untrusted. All rules, outcomes and prices are decided in `@taskquest/shared` on the server.
-- **Authorization.** Ownership is part of every SQL statement that touches user data (`... WHERE discord_id = ?`, items through `JOIN lists`). A missing row and someone else's row are indistinguishable (`404`).
+- **Authorization.** A list is reachable only by its owner or a member holding a `list_members` row; that rule is one module (`packages/shared/src/db/access.js`) used by every service, and any other user data is scoped by `discord_id` in the SQL. A missing list and a list you have no part in are indistinguishable (`404`); a member whose role is too weak gets `403` (they already know the list exists). Sharing exposes only display names: no response contains another person's Discord ID, members are addressed by a random key, invitations name a person by their stored display name (the API rejects Discord IDs), the invite lookup and the per-day send limit are rate limited, and the AI service never reaches a shared list (`db.tasks.asOwner`). XP, caps, quests and stats stay with the person who acted, so two cooperating accounts gain nothing beyond what each could do alone.
 - **Integrity.** XP changes run in transactions holding a row lock on the user and are recorded in an append-only ledger (`xp_transactions`).
 - **Web surface:**
   - Single origin with `SameSite=Lax` cookies.
@@ -85,7 +85,8 @@ This monorepo was created **without importing either history**, and `.gitignore`
 | Risk | Impact | Mitigation |
 |---|---|---|
 | **Arcade games run in the browser.** A scripted client can submit plausible fake scores. | At most 100–150 XP per run, and at most 500 XP per day across all free games. | Server-issued runs, plausibility rate check, caps. See the roadmap in [docs/PRD.md](docs/PRD.md#11-roadmap). |
-| **Public `/list` messages.** Anyone in the channel sees your list names and tasks (by design: lists are shared in-channel). | Information visible to channel members | Use `/list` in DMs or a private channel for private lists. Mutations are owner-only. |
+| **Public `/list` messages.** Anyone in the channel sees your list names and tasks (by design: lists are shared in-channel). | Information visible to channel members | Use `/list` in DMs or a private channel for private lists. Mutations are limited to the owner and members with a role, and a click on someone else's message is refused. |
+| **Invitation spam and name enumeration.** Anyone can try to invite a name, and a `404` tells them the name has not used TaskQuest. | `POST /api/lists/:id/invites`, `POST /api/parties/invites`, `/share`, `/party invite` | Rate limit on the endpoint, 30 invitations a day per person, 7-day expiry, the invitee must accept. There is no opt-out of invitations yet (a product decision). |
 | **Dev-only dependency advisories** in the Tailwind CSS 3 toolchain (`braces`, `micromatch`, `chokidar`, `postcss-selector-parser`) | Build time only; nothing is shipped to users or servers | Tracked in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Tailwind 4 migration). |
 | **Single shared database user** for both apps | A compromise of either app reaches all data | Use `MIGRATE_ON_START=false` with a DML-only user, and restrict network access to the DB. |
 

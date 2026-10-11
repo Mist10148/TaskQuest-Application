@@ -7,6 +7,11 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | Command | Options | Visibility | Description |
 |---|---|---|---|
 | `/list` | `name` (autocomplete, optional) | Public overview / view | Your lists. With `name`, opens that list directly. |
+| `/share` | `list` (autocomplete: lists you manage), `user` (required), `role` (viewer / editor / manager, default viewer) | Ephemeral | 👥 Invite someone to a list. They get a DM with **Accept** / **Decline** (if their DMs are closed you are told, and the invitation waits in `/invites`). The person must have used TaskQuest before; bots and yourself are refused. Only a manager invites, and only the owner invites managers. |
+| `/invites` | — | Ephemeral | 📨 Invitations to shared lists waiting for you, with Accept / Decline buttons (valid 7 days). |
+| `/members` | `list` (autocomplete: shared lists) | Ephemeral | 👥 Who is on a shared list, by display name and role. A manager gets a menu to remove someone (only the owner removes a manager). |
+| `/leave` | `list` (autocomplete: lists you do not own) | Ephemeral | 🚪 Leave a list that was shared with you (asks first). The owner cannot leave: delete the list instead. |
+| `/party` | subcommands `status`, `create name`, `invite user`, `invites`, `leave`, `disband` | Ephemeral | 🎉 A small group (up to 6) with a shared weekly quest: see [GAMEPLAY](GAMEPLAY.md#5h-parties). `status` shows who contributed this week (names and counts) and a **Claim reward** button; `invite` DMs the invitee Join / Decline buttons (`invites` is the closed-DM fallback). The owner invites and disbands (asks first); everyone else can leave. |
 | `/game` | — | Ephemeral | Game centre (Blackjack, Rock Paper Scissors, Hangman). Resumes an unfinished hand. |
 | `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. The reply also shows the Daily Surprise and any milestone chest. |
 | `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill) |
@@ -33,6 +38,8 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/ai-format` | `format` (plain messages / embeds) | Ephemeral | 🎨 How the AI replies when you mention it |
 
 ## `/list` flow
+
+Lists shared with you appear next to your own with a 👥 marker, your role and the owner's name. A **viewer** opens a read-only view (no Edit button; every edit button and menu answers "view only"), an **editor** edits tasks but sees no List info or Delete list buttons, a **manager** also edits the list's info, and only the **owner** deletes it. XP for a task you complete is yours.
 
 ```
 Overview ──select list──▶ View (read-only) ──Edit──▶ Edit (all changes)
@@ -114,7 +121,8 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 
 - **Deadline DMs:** checked hourly. You get one DM per list on its deadline day, at your reminder hour in your time zone (`/timezone`; UTC and 09:00 until you set them), if `/automation` is on. If tasks are still open the day after the deadline you get one overdue notice. Every reminder has **Snooze 1 day** and **Stop reminders** buttons. If the bot was offline that day, the reminder is sent late (up to 3 days), and temporary Discord errors are retried on the next run.
 - **Task DMs:** a task with its own due date gets the same treatment: one DM on its due day (up to 3 days late) at your reminder hour, with **Snooze 1 day** and **Stop reminders**. Completed tasks are skipped, and a task due on the same day as its list's deadline is covered by the list reminder (no double DM). Changing a task's due date re-arms its reminder. `/automation` turns both kinds off.
-- **Old-list clean-up:** daily. It deletes lists whose tasks have all been completed for 5+ days, if auto-delete is on (web Settings). Unfinished lists are never deleted, even when overdue.
+- **Old-list clean-up:** daily. It deletes lists whose tasks have all been completed for 5+ days, if auto-delete is on (web Settings). Unfinished lists are never deleted, even when overdue, and a list that has members is never deleted automatically.
+- **Shared lists:** the deadline and task reminders go to the owner **and** to every member with `/automation` on, once each; each person's Snooze applies to them alone, in their own time zone and at their own reminder hour.
 - **Abandoned games:** expired every 5 minutes, with Blackjack bets refunded.
 - **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out).
 
@@ -127,6 +135,8 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 | `prestige_ask`, `prestige_confirm`, `prestige_cancel` | `commands/prestige.js` buttons |
 | `shop_tab_<kind>`, `shop_buy_<id>`, `shop_equip_<id>`, `shop_unequip_<kind>`, `shop_pick_<kind>` (menu) | `commands/shop.js` buttons and menu |
 | `remind_snooze_<listId>`, `task_remind_snooze_<itemId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
+| `inv_accept_<id>`, `inv_decline_<id>`, `leave_yes_<listId>`, `leave_no`, `mem_rm_<listId>` (menu; the value is the opaque member key) | `commands/sharing.js` |
+| `party_claim`, `party_accept_<id>`, `party_decline_<id>`, `party_disband_yes`, `party_disband_no` | `commands/party.js` buttons |
 | `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_` (incl. `item_details_`), `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
 | `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_details_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
 | `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_details_`, `m_search` | `commands/list.js` modals |

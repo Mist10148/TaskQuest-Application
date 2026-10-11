@@ -89,7 +89,9 @@ Daily reward response (`200` in both cases):
 
 ## Lists and items
 
-All routes are 🔒 and owner-scoped. Another user's IDs return `404`.
+All routes are 🔒 and scoped to the lists you **own or are a member of** (see [Shared lists](#shared-lists-and-invitations)). A list or task you have no part in returns `404`, exactly like one that does not exist; a member whose role is too weak gets `403 FORBIDDEN` with a readable message. Lists you do not own never carry the owner's `discord_id`, and no response contains another person's Discord ID.
+
+Every list in `GET /api/lists`, `GET /api/lists/:id` and `PATCH /api/lists/:id` also has `shared` (true when anyone else is on it), `role` (`viewer`, `editor` or `manager`; the owner reads `manager`), `isOwner`, `ownerName` (a display name) and `memberCount` (people, the owner included). On a shared list each task also carries `completed_by_name`. Roles: **viewer** reads; **editor** adds, edits, reorders, completes and deletes tasks; **manager** also edits the list's own fields; only the **owner** deletes the list. XP, quests and stats for a completion go to the person who completed it.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -98,7 +100,7 @@ All routes are 🔒 and owner-scoped. Another user's IDs return `404`.
 | POST | `/api/lists` | `{name, description?, category?, priority?: "LOW"\|"MEDIUM"\|"HIGH"\|null, deadline?: "YYYY-MM-DD"\|null}` | `201 {...list, xpResult, newAchievements}`. `409` on duplicate name. |
 | GET | `/api/lists/:id` | — | `{...list, items:[...]}` (items by position) |
 | PATCH | `/api/lists/:id` | Any subset of the create fields (≥1). Changing `deadline` re-arms the reminder. | Updated list |
-| DELETE | `/api/lists/:id` | — | `{success:true}` (items cascade) |
+| DELETE | `/api/lists/:id` | — | `{success:true}` (items cascade). Owner only: `403` for a member (leave it instead). |
 | POST | `/api/lists/:id/save-as-template` | `{name?}` (default: the quest's name) | `201` template (see [Templates](#templates)). Saves the quest's tasks, in order, as a flat list: subtasks become plain tasks, and completion state and due dates are dropped. `409` when the name is taken, `400` for a quest with no tasks or more than 30. |
 | PATCH | `/api/lists/:id/reorder` | `{itemIds: [int]}`: every task id of the list, exactly once, in the new order | The list's items in the new order. Positions become 0..n-1. `400` if the ids are not exactly the list's tasks. |
 | POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000), due_date?: "YYYY-MM-DD"\|null, priority?, tags?: string\|string[], recurrence?: "daily"\|"weekly"\|"monthly"\|null, parent_id?: int\|null}` | `201 {...item, xpResult, newAchievements}` |
@@ -111,6 +113,42 @@ Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadline
 **Task details.** A task can have its own `due_date`, `priority` (used for class and skill effects instead of the list's) and up to 5 `tags` (letters, numbers, `-` and `_`, ≤ 20 characters, stored lower-case as `"work,home"`). `recurrence` repeats it: completing a repeating task for the first time creates the next copy in the same transaction (monthly repeats clamp to short months, and a late completion never creates an already-overdue copy). A repeat grants no creation XP and is not counted as an added task. `parent_id` makes a task a **subtask**: the parent must be a top-level task of the same list, nesting is one level deep, and a task that has subtasks cannot become a subtask. Deleting a parent deletes its subtasks.
 
 Completing tasks pays XP for the first **50 completions per day (in your time zone)** (like list and task creation, so an add / complete / delete loop cannot farm XP). A capped completion is still recorded and cannot be re-earned by un-checking and re-checking.
+
+## Shared lists and invitations
+
+All routes are 🔒. People are invited by their **stored display name** (the Discord username they last logged in with), never by Discord ID: the API rejects unknown fields, so a `discordId` in a body is a `400`. A stranger gets `404` from every route below (the list's existence never leaks); a member whose role is too weak gets `403`. Members are addressed by an opaque 12-character `memberKey`; the owner's key is the string `owner`.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/lists/:id/members` | — | `{list:{id,name}, role, isOwner, members:[{memberKey, name, role, isOwner, isYou, since?}], invites:[{id, inviteeName, role, createdAt, expiresAt}], limit}`. Any member may read it; `invites` (pending, not expired) is filled for managers only. |
+| POST | `/api/lists/:id/invites` | `{username (1–100, a leading @ is ignored), role?: "viewer"\|"editor"\|"manager"}` (default `viewer`) | `201 {id, role, expiresAt, inviteeName}`. Managers only, and only the owner invites managers (`403`). `404` for an unknown name (the person must have used TaskQuest), `409` when the name is ambiguous, they are already on the list or already invited, `400` for yourself, a bad role or a full list (`LIMITS.MAX_LIST_MEMBERS` = 10 people besides the owner, members and pending invitations together), `429` after 30 invitations a day (and the endpoint is rate limited, because it looks names up). An invitation is valid for 7 days. |
+| DELETE | `/api/invites/:id` | — | Withdraw a pending invitation of a list you manage. `{success:true}`; `409` if it was already answered. |
+| PATCH | `/api/lists/:id/members/:memberKey` | `{role}` | `{memberKey, role}`. Managers only; only the owner makes or changes a manager. |
+| DELETE | `/api/lists/:id/members/:memberKey` | — | Remove a member (their personal reminder state goes with them). Managers only; only the owner removes a manager. Their next request on the list is `404`. |
+| POST | `/api/lists/:id/leave` | — | Leave a list you are a member of. `403` for the owner, who deletes the list instead. |
+| GET | `/api/invites` | — | The invitations waiting for you: `[{id, listName, ownerName, invitedByName, role, createdAt, expiresAt}]`. |
+| POST | `/api/invites/:id/accept` | — | `{accepted:true, list:{id,name}, role}`. Only the invitee can answer (`404` otherwise); `409` when it is no longer open or has expired, `400` when the list is full. |
+| POST | `/api/invites/:id/decline` | — | `{accepted:false}` |
+
+Not shared: the **export** holds only lists you own, an **import** always creates lists you own, **templates** are personal (saving one from a shared list needs the editor role), the **calendar feed** includes lists you own or are a member of, auto-delete never removes a list that has members, and the **AI service** (chat tools and the `/internal/*` routes) stays owner-only. Reminders reach every member with automation on, once each.
+
+## Parties
+
+All routes are 🔒. A user is in at most one party (up to 6 people, the owner included). People are invited by display name, like list invitations (7 days, 30 a day, `inviteLimiter`); only the owner invites. Members see each other's **display names and this week's task counts** only.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, target, progress, reward, members:[{name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. |
+| POST | `/api/parties` | `{name (1–40)}` | `201` the new party in the shape above. `409` if you are already in one. |
+| POST | `/api/parties/invites` | `{username}` | `201 {id, inviteeName, expiresAt}`. Owner only (`403`); `409` for someone already in a party or already invited, `400` when the party is full (6, pending invitations included). |
+| DELETE | `/api/parties/invites/:id` | — | Withdraw a pending invitation (owner). |
+| POST | `/api/parties/invites/:id/accept` | — | `{accepted:true, party:{id,name}}`. `409` if you are already in a party or the invitation is no longer open. |
+| POST | `/api/parties/invites/:id/decline` | — | `{accepted:false}` |
+| POST | `/api/parties/leave` | — | `{success:true}`. `403` for the owner (disband instead). |
+| DELETE | `/api/parties` | — | Disband the party for everyone (owner only). |
+| POST | `/api/parties/claim` | — | `{success:true, weekStart, xp, balance, level, leveledUp, newAchievements}`. Flat +60 XP, once per person per week; `400` while the quest is unfinished, `409` if you already claimed a party reward this week, `403` when XP is off. |
+
+The party quest is described in [GAMEPLAY](GAMEPLAY.md#5h-parties).
 
 ## Templates
 
@@ -279,7 +317,7 @@ A `confirm` event pauses the turn. Nothing has been changed yet. Answer with `PO
 
 ## Internal API (service to service)
 
-`/internal/*` is **not** for browsers: it has no session or CSRF layer and is only mounted when `AI_ENABLED=true`. Every request must carry the shared `X-AI-Token` (checked in constant time; a wrong or missing token returns `404`, so the routes do not reveal themselves). The AI service calls these after the user confirmed an action in chat; they run through the same services as the public API, so XP, caps and achievements behave identically. The acting Discord ID comes from the trusted caller in the body.
+`/internal/*` is **not** for browsers: it has no session or CSRF layer and is only mounted when `AI_ENABLED=true`. Every request must carry the shared `X-AI-Token` (checked in constant time; a wrong or missing token returns `404`, so the routes do not reveal themselves). The AI service calls these after the user confirmed an action in chat; they run through the same services as the public API, so XP, caps and achievements behave identically. The acting Discord ID comes from the trusted caller in the body. These routes are **owner-only**: they go through `db.tasks.asOwner`, so a list the user merely belongs to (shared with them) answers `404` even when their role there is manager. The AI service itself reads only lists the user owns, and shared lists are never embedded or summarised into a member's data.
 
 | Method | Path | Body | Description |
 |---|---|---|---|

@@ -54,7 +54,7 @@ export const QuestsCard = () => {
   return (
     <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} aria-labelledby="quests-heading">
       <h2 id="quests-heading" className="mb-4 flex items-center gap-2 font-heading text-lg font-semibold sm:text-xl">
-        <ScrollText className="h-4 w-4 text-primary sm:h-5 sm:w-5" aria-hidden /> Daily &amp; weekly quests
+        <ScrollText className="h-4 w-4 text-primary-text sm:h-5 sm:w-5" aria-hidden /> Daily &amp; weekly quests
       </h2>
       {isError ? (
         <ErrorCard what="your quests" error={error} onRetry={() => void refetch()} retrying={isFetching} />

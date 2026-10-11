@@ -95,7 +95,7 @@ export const CalendarFeed = ({ token }: { token: string | null | undefined }) =>
         <Button type="button" variant="outline" size="sm" disabled={create.isPending} onClick={() => create.mutate()}>
           <RefreshCw className="h-4 w-4 mr-2" />New address
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
+        <Button type="button" variant="ghost" size="sm" className="text-destructive-text" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
           <Trash2 className="h-4 w-4 mr-2" />Turn off
         </Button>
       </div>

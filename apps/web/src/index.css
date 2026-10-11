@@ -31,6 +31,8 @@
     --primary: 235 86% 65%;
     --primary-foreground: 0 0% 100%;
     --primary-glow: 235 86% 75%;
+    /* Text variants: the button/background colors above are too dark (primary) or too saturated (red) for 4.5:1 text on the dark cards. */
+    --primary-text: 235 86% 74%;
 
     /* XP/Gold Color */
     --xp: 45 100% 50%;
@@ -44,6 +46,7 @@
     /* Error Red */
     --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-text: 0 84% 68%;
 
     --secondary: 215 22% 18%;
     --secondary-foreground: 210 40% 96%;
@@ -117,6 +120,7 @@
     --primary: 235 70% 50%;
     --primary-foreground: 0 0% 100%;
     --primary-glow: 235 80% 60%;
+    --primary-text: 235 70% 45%;
 
     --xp: 30 100% 29%;
     --xp-foreground: 0 0% 100%;
@@ -127,6 +131,7 @@
 
     --destructive: 0 72% 42%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-text: 0 72% 38%;
 
     --secondary: 220 25% 92%;
     --secondary-foreground: 222 30% 12%;

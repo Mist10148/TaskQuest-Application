@@ -44,7 +44,7 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {creating ? <Plus className="h-5 w-5 text-primary" /> : <Pencil className="h-5 w-5 text-primary" />}
+            {creating ? <Plus className="h-5 w-5 text-primary-text" /> : <Pencil className="h-5 w-5 text-primary-text" />}
             {creating ? "Add Task" : "Edit Task"}
           </DialogTitle>
         </DialogHeader>
@@ -60,7 +60,7 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
           <div>
             <label htmlFor="item-name" className="text-sm font-medium block mb-1">Task Name *</label>
             <Input id="item-name" placeholder="What needs to be done?" value={form.name} onChange={(e) => { set("name", e.target.value); setNameError(""); }} autoFocus required maxLength={TEXT_LIMITS.ITEM_NAME} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "item-name-error" : undefined} />
-            {nameError && <p id="item-name-error" role="alert" className="text-xs text-destructive mt-1">{nameError}</p>}
+            {nameError && <p id="item-name-error" role="alert" className="text-xs text-destructive-text mt-1">{nameError}</p>}
           </div>
           <div>
             <label htmlFor="item-desc" className="text-sm font-medium block mb-1">Description (optional)</label>

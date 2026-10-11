@@ -172,7 +172,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
             <Button variant="outline" size="sm" onClick={onEditList} className="gap-1">
               <Pencil className="h-4 w-4" /><span className="hidden sm:inline">Edit</span>
             </Button>
-            <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={onDeleteList} aria-label="Delete quest">
+            <Button variant="outline" size="sm" className="text-destructive-text hover:bg-destructive/10" onClick={onDeleteList} aria-label="Delete quest">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>

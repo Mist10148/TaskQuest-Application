@@ -115,7 +115,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         {(item.due_date || item.recurrence || tags.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive" : "border-border text-foreground-muted")}>
+              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
                 <Calendar className="h-3 w-3" aria-hidden /> {overdue && <span className="sr-only">Overdue: </span>}
                 {formatDeadline(item.due_date)}
               </span>
@@ -126,7 +126,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
               </span>
             )}
             {tags.map((t) => (
-              <span key={t} className="rounded-full px-2 py-0.5 bg-primary/10 text-primary">#{t}</span>
+              <span key={t} className="rounded-full px-2 py-0.5 bg-primary/10 text-primary-text">#{t}</span>
             ))}
           </div>
         )}
@@ -144,14 +144,14 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           </>
         )}
         {onAddSubtask && !isSubtask && (
-          <button type="button" aria-label={`Add a subtask to "${item.name}"`} onClick={() => onAddSubtask(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary")}>
+          <button type="button" aria-label={`Add a subtask to "${item.name}"`} onClick={() => onAddSubtask(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
             <ListPlus className="h-3.5 w-3.5" />
           </button>
         )}
-        <button type="button" aria-label={`Edit "${item.name}"`} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary")}>
+        <button type="button" aria-label={`Edit "${item.name}"`} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
           <Pencil className="h-3.5 w-3.5" />
         </button>
-        <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive")}>
+        <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive-text")}>
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>

@@ -128,9 +128,9 @@ const Skills = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center gap-3"
         >
-          <ShieldX className="h-5 w-5 text-destructive flex-shrink-0" />
+          <ShieldX className="h-5 w-5 text-destructive-text flex-shrink-0" />
           <div>
-            <p className="font-medium text-destructive">Class Not Owned</p>
+            <p className="font-medium text-destructive-text">Class Not Owned</p>
             <p className="text-sm text-foreground-muted">
               Purchase the <span className="font-semibold">{selectedTree.name}</span> class from the Classes page to unlock these skills.
             </p>
@@ -150,7 +150,7 @@ const Skills = () => {
             <h2 className="text-xl sm:text-2xl font-heading font-bold mt-2" style={{ color }}>{selectedTree.name} Tree</h2>
             <p className="text-foreground-muted text-xs sm:text-sm mt-1">{selectedTree.description}</p>
             {!isClassOwned && (
-              <p className="text-destructive text-xs mt-2 flex items-center justify-center gap-1">
+              <p className="text-destructive-text text-xs mt-2 flex items-center justify-center gap-1">
                 <Lock className="h-3 w-3" /> Requires owning this class
               </p>
             )}
@@ -198,7 +198,7 @@ const Skills = () => {
                   </div>
 
                   {isClassLocked && (
-                    <div className="text-center text-[10px] sm:text-xs text-destructive font-medium flex items-center justify-center gap-1">
+                    <div className="text-center text-[10px] sm:text-xs text-destructive-text font-medium flex items-center justify-center gap-1">
                       <Lock className="h-3 w-3" /> Buy {selectedTree.name} class first
                     </div>
                   )}

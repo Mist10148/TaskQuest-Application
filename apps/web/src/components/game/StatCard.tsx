@@ -44,15 +44,15 @@ export const StatCard = ({
     },
     primary: {
       iconBg: "bg-primary/10",
-      iconColor: "text-primary",
-      valueColor: "text-primary",
+      iconColor: "text-primary-text",
+      valueColor: "text-primary-text",
       glow: "hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]",
       border: "hover:border-primary/30",
     },
     destructive: {
       iconBg: "bg-destructive/10",
-      iconColor: "text-destructive",
-      valueColor: "text-destructive",
+      iconColor: "text-destructive-text",
+      valueColor: "text-destructive-text",
       glow: "hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]",
       border: "hover:border-destructive/30",
     },
@@ -97,7 +97,7 @@ export const StatCard = ({
           {subValue && (
             <span className="text-[10px] sm:text-sm text-foreground-muted mt-0.5 sm:mt-1 flex items-center gap-1 truncate">
               {trend === "up" && <span className="text-success">↑</span>}
-              {trend === "down" && <span className="text-destructive">↓</span>}
+              {trend === "down" && <span className="text-destructive-text">↓</span>}
               {subValue}
             </span>
           )}

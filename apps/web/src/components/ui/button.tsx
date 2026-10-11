@@ -14,7 +14,7 @@ const buttonVariants = cva(
         outline: "border border-border bg-transparent text-foreground hover:bg-card hover:border-primary/50",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-card hover:text-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "text-primary-text underline-offset-4 hover:underline",
         // Gaming variants
         discord: "bg-[#5865F2] text-primary-foreground hover:bg-[#4752C4] shadow-lg shadow-[#5865F2]/25 hover:shadow-[#5865F2]/40 hover:-translate-y-0.5",
         xp: "bg-gradient-to-r from-xp to-xp-glow text-xp-foreground hover:shadow-lg hover:shadow-xp/30 hover:-translate-y-0.5 font-bold",

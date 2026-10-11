@@ -45,7 +45,7 @@ export const ListFormDialog = ({ open, onOpenChange, mode, initial, resetKey = n
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {creating ? <Plus className="h-5 w-5 text-primary" /> : <Pencil className="h-5 w-5 text-primary" />}
+            {creating ? <Plus className="h-5 w-5 text-primary-text" /> : <Pencil className="h-5 w-5 text-primary-text" />}
             {creating ? "Create Quest" : "Edit Quest"}
           </DialogTitle>
         </DialogHeader>
@@ -61,7 +61,7 @@ export const ListFormDialog = ({ open, onOpenChange, mode, initial, resetKey = n
           <div>
             <label htmlFor="list-name" className="text-sm font-medium block mb-1">Name *</label>
             <Input id="list-name" placeholder="Quest name..." value={form.name} onChange={(e) => { set("name", e.target.value); setNameError(""); }} autoFocus required maxLength={TEXT_LIMITS.LIST_NAME} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "list-name-error" : undefined} />
-            {nameError && <p id="list-name-error" role="alert" className="text-xs text-destructive mt-1">{nameError}</p>}
+            {nameError && <p id="list-name-error" role="alert" className="text-xs text-destructive-text mt-1">{nameError}</p>}
           </div>
           <div>
             <label htmlFor="list-desc" className="text-sm font-medium block mb-1">Description (optional)</label>

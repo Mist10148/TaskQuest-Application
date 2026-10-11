@@ -93,7 +93,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
             <span className="text-xp font-semibold">Lv. {level}</span>
           </div>
           <div className="flex items-center gap-1">
-            <Flame className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive" aria-hidden />
+            <Flame className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-destructive-text" aria-hidden />
             <span className="text-foreground-muted">{streak} day streak</span>
           </div>
         </div>
@@ -134,7 +134,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
         <button
           type="button"
           onClick={() => void logout()}
-          className="w-full flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-destructive hover:bg-destructive/10 transition-colors text-sm sm:text-base"
+          className="w-full flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-destructive-text hover:bg-destructive/10 transition-colors text-sm sm:text-base"
         >
           <LogOut className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" aria-hidden />
           <span>Logout</span>
@@ -166,7 +166,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             </button>
           </SheetTrigger>
           <Link to="/dashboard" className="flex items-center gap-2 font-heading text-lg font-bold">
-            <Sword className="h-5 w-5 text-primary" aria-hidden /> TaskQuest
+            <Sword className="h-5 w-5 text-primary-text" aria-hidden /> TaskQuest
           </Link>
           <span className="ml-auto flex items-center gap-1 text-sm font-semibold text-xp">
             <Sparkles className="h-4 w-4" aria-hidden /> Lv. {level}

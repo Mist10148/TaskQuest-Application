@@ -72,7 +72,7 @@ export const TaskListCard = ({ name, description, category, priority, deadline, 
         </div>
       </div>
       {deadline && (
-        <div className={cn("flex items-center gap-1.5 text-sm", isOverdue ? "text-destructive" : "text-foreground-muted")}>
+        <div className={cn("flex items-center gap-1.5 text-sm", isOverdue ? "text-destructive-text" : "text-foreground-muted")}>
           <Calendar className="h-3.5 w-3.5" />
           <span>{isOverdue ? "Overdue: " : ""}{formatDeadline(deadline)}</span>
         </div>

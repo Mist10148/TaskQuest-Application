@@ -86,7 +86,7 @@ const Settings = () => {
           </motion.div>
         </div>
 
-        <SettingsSection icon={<Palette className="h-5 w-5 text-primary" />} title="Appearance" description="This device only" delay={0.05}>
+        <SettingsSection icon={<Palette className="h-5 w-5 text-primary-text" />} title="Appearance" description="This device only" delay={0.05}>
           <SettingRow label="Theme" description="Follow your system, or pick one.">
             <ThemeToggle />
           </SettingRow>
@@ -98,7 +98,7 @@ const Settings = () => {
           <SwitchRow label="Enable gamification" description="Earn XP for tasks" checked={on(dbUser.gamification_enabled, true)} disabled={saving.has("gamification_enabled")} onChange={(v) => void toggle("gamification", v)} />
         </SettingsSection>
 
-        <SettingsSection icon={<Zap className="h-5 w-5 text-primary" />} title="Reminders & automation" description="When and how TaskQuest nudges you on Discord" delay={0.15}>
+        <SettingsSection icon={<Zap className="h-5 w-5 text-primary-text" />} title="Reminders & automation" description="When and how TaskQuest nudges you on Discord" delay={0.15}>
           <ReminderSettings
             user={dbUser}
             automation={on(dbUser.automation_enabled, true)}
@@ -110,16 +110,16 @@ const Settings = () => {
           />
         </SettingsSection>
 
-        <SettingsSection icon={<CalendarDays className="h-5 w-5 text-primary" />} title="Calendar feed" description="Deadlines in Google, Apple or Outlook Calendar" delay={0.17}>
+        <SettingsSection icon={<CalendarDays className="h-5 w-5 text-primary-text" />} title="Calendar feed" description="Deadlines in Google, Apple or Outlook Calendar" delay={0.17}>
           <CalendarFeed token={dbUser.has_calendar_token ? calendar.data?.token : null} />
         </SettingsSection>
 
-        <SettingsSection icon={<Database className="h-5 w-5 text-primary" />} title="Your data" description="Export and import" delay={0.18}>
+        <SettingsSection icon={<Database className="h-5 w-5 text-primary-text" />} title="Your data" description="Export and import" delay={0.18}>
           <DataSettings />
         </SettingsSection>
 
         {user?.features?.aiAvailable && (
-          <SettingsSection icon={<Bot className="h-5 w-5 text-primary" />} title="AI Assistant" description="Summaries, priorities and chat" delay={0.19}>
+          <SettingsSection icon={<Bot className="h-5 w-5 text-primary-text" />} title="AI Assistant" description="Summaries, priorities and chat" delay={0.19}>
             <SwitchRow
               label="Enable AI features"
               description="Your quests are sent to Google Gemini only when you use an AI feature."
@@ -141,7 +141,7 @@ const Settings = () => {
           </SettingsSection>
         )}
 
-        <SettingsSection icon={<AlertTriangle className="h-5 w-5 text-destructive" />} title="Danger Zone" description="Irreversible actions" danger delay={0.25}>
+        <SettingsSection icon={<AlertTriangle className="h-5 w-5 text-destructive-text" />} title="Danger Zone" description="Irreversible actions" danger delay={0.25}>
           <SettingRow label="Reset all progress" description="Delete all data, including AI chats and summaries, and start fresh.">
             <AlertDialog
               open={resetOpen}
@@ -156,7 +156,7 @@ const Settings = () => {
               </AlertDialogTrigger>
               <AlertDialogContent className="max-w-md mx-4">
                 <AlertDialogHeader>
-                  <AlertDialogTitle className="text-destructive">⚠️ Reset all progress?</AlertDialogTitle>
+                  <AlertDialogTitle className="text-destructive-text">⚠️ Reset all progress?</AlertDialogTitle>
                   <AlertDialogDescription asChild>
                     <div className="space-y-2">
                       <p>This will permanently delete:</p>
@@ -167,7 +167,7 @@ const Settings = () => {
                         <li>All game history</li>
                         <li>All AI chats, summaries and search data</li>
                       </ul>
-                      <p className="font-semibold pt-2">Type <span className="text-destructive">RESET</span> to confirm:</p>
+                      <p className="font-semibold pt-2">Type <span className="text-destructive-text">RESET</span> to confirm:</p>
                       <input
                         type="text"
                         value={confirmText}

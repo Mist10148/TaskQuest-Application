@@ -30,8 +30,8 @@ interface Props {
 export const OnboardingChecklist = ({ hasQuest, hasTask, claimedDaily, onClaimDaily, claiming }: Props) => {
   const [dismissed, setDismissed] = useState(wasDismissed);
   const steps = [
-    { done: hasQuest, label: "Create your first quest", hint: "A quest is a list of tasks.", action: <Link to="/tasks" className="text-primary underline-offset-4 hover:underline">Open Quest Log</Link> },
-    { done: hasTask, label: "Add a task to it", hint: "Press n inside a quest, or type in quick add.", action: <Link to="/tasks" className="text-primary underline-offset-4 hover:underline">Add a task</Link> },
+    { done: hasQuest, label: "Create your first quest", hint: "A quest is a list of tasks.", action: <Link to="/tasks" className="text-primary-text underline-offset-4 hover:underline">Open Quest Log</Link> },
+    { done: hasTask, label: "Add a task to it", hint: "Press n inside a quest, or type in quick add.", action: <Link to="/tasks" className="text-primary-text underline-offset-4 hover:underline">Add a task</Link> },
     { done: claimedDaily, label: "Claim your daily reward", hint: "Come back every day to build a streak.", action: <Button size="sm" variant="outline" onClick={onClaimDaily} disabled={claiming}>Claim now</Button> },
   ];
   const doneCount = steps.filter((s) => s.done).length;

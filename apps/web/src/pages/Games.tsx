@@ -57,7 +57,7 @@ const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: numbe
       <button
         onClick={decrease}
         disabled={value <= min}
-        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary-text disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
       >
         <Minus className="h-4 w-4" />
       </button>
@@ -84,7 +84,7 @@ const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: numbe
       <button 
         onClick={increase}
         disabled={value >= max}
-        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary-text disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
       >
         <Plus className="h-4 w-4" />
       </button>
@@ -93,8 +93,8 @@ const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: numbe
 };
 
 const PlayingCard = ({ card }: { card: Card | null }) => {
-  if (!card) return <div className="w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/50 flex items-center justify-center text-xl sm:text-2xl text-primary shadow-[0_0_20px_rgba(99,102,241,0.3)]">?</div>;
-  return <motion.div initial={{ rotateY: 180, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} className={cn("w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-foreground border-2 border-border flex flex-col items-center justify-center shadow-lg", ["♥","♦"].includes(card.suit) ? "text-destructive" : "text-background")}><span className="text-base sm:text-lg font-bold">{card.rank}</span><span className="text-lg sm:text-xl">{card.suit}</span></motion.div>;
+  if (!card) return <div className="w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/50 flex items-center justify-center text-xl sm:text-2xl text-primary-text shadow-[0_0_20px_rgba(99,102,241,0.3)]">?</div>;
+  return <motion.div initial={{ rotateY: 180, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} className={cn("w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-foreground border-2 border-border flex flex-col items-center justify-center shadow-lg", ["♥","♦"].includes(card.suit) ? "text-destructive-text" : "text-background")}><span className="text-base sm:text-lg font-bold">{card.rank}</span><span className="text-lg sm:text-xl">{card.suit}</span></motion.div>;
 };
 
 // Game Instructions Component
@@ -142,7 +142,7 @@ const GameInstructions = ({ game }: { game: 'blackjack' | 'rps' | 'hangman' | 's
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4">
-      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-xs text-foreground-muted hover:text-primary transition-colors mx-auto">
+      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-xs text-foreground-muted hover:text-primary-text transition-colors mx-auto">
         <HelpCircle className="h-3.5 w-3.5" />
         {expanded ? 'Hide' : 'Show'} Rules
       </button>
@@ -210,7 +210,7 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500/20 to-purple-500/5 border border-violet-500/30 shadow-[0_0_20px_rgba(139,92,246,0.2)]">
@@ -251,10 +251,10 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
               </div>
             ) : ended ? (
               <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-                <p className={cn("text-2xl font-heading font-bold mb-2", view.outcome === "won" || view.outcome === "blackjack" ? "text-success" : view.outcome === "lost" ? "text-destructive" : "text-xp")}>
+                <p className={cn("text-2xl font-heading font-bold mb-2", view.outcome === "won" || view.outcome === "blackjack" ? "text-success" : view.outcome === "lost" ? "text-destructive-text" : "text-xp")}>
                   {view.outcome === "blackjack" ? "🎰 BLACKJACK!" : view.outcome === "won" ? "🎉 YOU WIN!" : view.outcome === "lost" ? (view.playerValue.bust ? "💔 BUST!" : "💔 DEALER WINS") : "🤝 PUSH"}
                 </p>
-                <p className={cn("text-lg font-bold mb-4", net >= 0 ? "text-success" : "text-destructive")}>{net >= 0 ? "+" : ""}{net} XP</p>
+                <p className={cn("text-lg font-bold mb-4", net >= 0 ? "text-success" : "text-destructive-text")}>{net >= 0 ? "+" : ""}{net} XP</p>
                 <div className="flex justify-center gap-3">
                   <Button onClick={deal} disabled={busy} variant="outline" className="gap-2 border-violet-500/50 hover:bg-violet-500/10"><RotateCcw className="h-4 w-4" /> Play Again</Button>
                   <Button onClick={onBack} className="bg-gradient-to-r from-violet-600 to-purple-600">Back to Games</Button>
@@ -301,7 +301,7 @@ const RPSGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () => v
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-500/5 border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
@@ -482,7 +482,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={leave} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={leave} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-2">
@@ -492,7 +492,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
           </div>
           <div className="flex gap-1 px-3 py-2 rounded-lg bg-background-secondary/50 border border-border">
             {Array(maxLives).fill(0).map((_, i) => (
-              <span key={i} className={cn("text-lg transition-all", i < lives ? "text-destructive" : "text-foreground-muted/30 scale-75")}>❤️</span>
+              <span key={i} className={cn("text-lg transition-all", i < lives ? "text-destructive-text" : "text-foreground-muted/30 scale-75")}>❤️</span>
             ))}
           </div>
         </div>
@@ -515,7 +515,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
                     key={i}
                     initial={c ? { scale: 1.2 } : {}}
                     animate={{ scale: 1 }}
-                    className={cn("w-8 h-12 flex items-center justify-center font-bold relative", view.masked[i] ? "text-cyan-400" : view.finished ? "text-destructive" : "")}
+                    className={cn("w-8 h-12 flex items-center justify-center font-bold relative", view.masked[i] ? "text-cyan-400" : view.finished ? "text-destructive-text" : "")}
                     style={{ borderBottom: view.masked[i] ? '3px solid rgb(6, 182, 212)' : '3px dashed rgb(148, 163, 184)' }}
                   >
                     {c ?? ""}
@@ -546,7 +546,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
                         used
                           ? !wrong
                             ? "bg-success/20 text-success border border-success/50"
-                            : "bg-destructive/20 text-destructive border border-destructive/50 opacity-50"
+                            : "bg-destructive/20 text-destructive-text border border-destructive/50 opacity-50"
                           : "bg-background-secondary hover:bg-cyan-500/20 hover:text-cyan-400 border border-border hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.3)]"
                       )}
                     >
@@ -565,7 +565,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
                   </>
                 ) : (
                   <>
-                    <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 GAME OVER</p>
+                    <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 GAME OVER</p>
                     <p className="text-foreground-muted mb-4">The word was: <span className="font-bold text-foreground">{view.word}</span></p>
                   </>
                 )}
@@ -775,7 +775,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-4">
@@ -819,7 +819,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
           
           {gameState === "ended" && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
-              <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 Game Over!</p>
+              <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 Game Over!</p>
               <p className="text-foreground-muted mb-2">Pellets eaten: {score}</p>
               <p className="text-lg font-bold text-success mb-4">+{score * 2} XP</p>
               <div className="flex justify-center gap-3">
@@ -1172,7 +1172,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-4">
@@ -1220,7 +1220,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
           
           {gameState === "ended" && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
-              <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 Game Over!</p>
+              <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 Game Over!</p>
               <p className="text-foreground-muted mb-2">Obstacles passed: {score}</p>
               <p className="text-lg font-bold text-success mb-4">+{score} XP</p>
               <div className="flex justify-center gap-3">
@@ -1487,7 +1487,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-4">
@@ -1534,7 +1534,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
           
           {gameState === "ended" && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
-              <p className={cn("text-2xl font-heading font-bold mb-2", gameRef.current.won ? "text-success" : "text-destructive")}>
+              <p className={cn("text-2xl font-heading font-bold mb-2", gameRef.current.won ? "text-success" : "text-destructive-text")}>
                 {gameRef.current.won ? "🎉 Victory!" : "💀 Game Over!"}
               </p>
               <p className="text-foreground-muted mb-2">Aliens destroyed: {aliensKilled}</p>
@@ -1651,7 +1651,7 @@ const Games = () => {
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-1 flex items-center gap-3">
             <div className="relative">
-              <Gamepad2 className="h-8 w-8 text-primary drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+              <Gamepad2 className="h-8 w-8 text-primary-text drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
               <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
             </div>
             <span className="bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">Game Center</span>
@@ -1692,7 +1692,7 @@ const Games = () => {
             aria-pressed={sound}
             className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium hover:border-primary/40"
           >
-            {sound ? <Volume2 className="h-4 w-4 text-primary" aria-hidden /> : <VolumeX className="h-4 w-4 text-foreground-muted" aria-hidden />}
+            {sound ? <Volume2 className="h-4 w-4 text-primary-text" aria-hidden /> : <VolumeX className="h-4 w-4 text-foreground-muted" aria-hidden />}
             Sound {sound ? "on" : "off"}
           </button>
         </div>
@@ -1715,7 +1715,7 @@ const Games = () => {
               <NeonNumberInput value={bet} onChange={setBet} min={BLACKJACK_CONFIG.MIN_BET} max={Math.max(BLACKJACK_CONFIG.MIN_BET, maxBet)} step={5} />
               <div className="flex gap-1">
                 {[10, 25, 50, 100].map(v => (
-                  <button key={v} onClick={() => setBet(Math.min(v, maxBet))} disabled={v > maxBet} className={cn("px-2 py-1 text-xs rounded-md border transition-all", bet === v ? "bg-primary/20 border-primary/50 text-primary" : "bg-background-secondary border-border hover:border-primary/30 disabled:opacity-30")}>{v}</button>
+                  <button key={v} onClick={() => setBet(Math.min(v, maxBet))} disabled={v > maxBet} className={cn("px-2 py-1 text-xs rounded-md border transition-all", bet === v ? "bg-primary/20 border-primary/50 text-primary-text" : "bg-background-secondary border-border hover:border-primary/30 disabled:opacity-30")}>{v}</button>
                 ))}
               </div>
             </div>
@@ -1725,7 +1725,7 @@ const Games = () => {
 
         {!canBet && (
           <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30">
-            <p className="text-sm text-destructive font-medium">⚠️ Not enough XP to bet</p>
+            <p className="text-sm text-destructive-text font-medium">⚠️ Not enough XP to bet</p>
             <p className="text-xs text-foreground-muted">Blackjack needs at least {BLACKJACK_CONFIG.MIN_BET * 4} XP. Try the free games below!</p>
           </div>
         )}
@@ -1741,14 +1741,14 @@ const Games = () => {
                 <div>
                   <h3 className="font-heading font-bold text-lg flex items-center gap-2">
                     {g.name}
-                    {g.webOnly && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">WEB</span>}
+                    {g.webOnly && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary-text">WEB</span>}
                   </h3>
                   <p className="text-sm text-foreground-muted">{g.desc}</p>
                 </div>
                 <div className={cn("text-xs px-2 py-1 rounded-full border", g.risk === "Risk-free" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : g.risk === "Free play" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : "bg-background-secondary text-foreground-muted border-border")}>{g.risk}</div>
               </div>
               <div className="flex items-center justify-end mt-3 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                <span className="text-sm text-primary font-medium flex items-center gap-1">Play <Zap className="h-4 w-4" /></span>
+                <span className="text-sm text-primary-text font-medium flex items-center gap-1">Play <Zap className="h-4 w-4" /></span>
               </div>
             </motion.div>
           ))}
@@ -1762,7 +1762,7 @@ const Games = () => {
           </h2>
           <div className="rounded-xl bg-card border border-border overflow-hidden">
             {isLoading ? (
-              <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>
+              <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary-text" /></div>
             ) : !history?.length ? (
               <div className="p-8 text-center text-foreground-muted">No games played yet. Try your luck!</div>
             ) : (
@@ -1781,8 +1781,8 @@ const Games = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={cn("font-bold", e.net > 0 ? "text-success" : e.net < 0 ? "text-destructive" : "text-foreground-muted")}>{e.net > 0 ? "+" : ""}{e.net} XP</p>
-                      <p className={cn("text-xs", e.state === 'won' || e.state === 'blackjack' ? "text-success" : e.state === 'lost' ? "text-destructive" : "text-foreground-muted")}>{stateLabel[e.state] || e.state}</p>
+                      <p className={cn("font-bold", e.net > 0 ? "text-success" : e.net < 0 ? "text-destructive-text" : "text-foreground-muted")}>{e.net > 0 ? "+" : ""}{e.net} XP</p>
+                      <p className={cn("text-xs", e.state === 'won' || e.state === 'blackjack' ? "text-success" : e.state === 'lost' ? "text-destructive-text" : "text-foreground-muted")}>{stateLabel[e.state] || e.state}</p>
                     </div>
                   </div>
                 );

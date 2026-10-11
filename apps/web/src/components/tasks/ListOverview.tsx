@@ -35,7 +35,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
       <div>
         <h1 className="text-2xl sm:text-3xl font-heading font-bold flex items-center gap-2">
-          <Scroll className="h-7 w-7 text-primary" />
+          <Scroll className="h-7 w-7 text-primary-text" />
           Quest Log
         </h1>
         <p className="text-foreground-muted text-sm sm:text-base">Manage your quests and track progress</p>

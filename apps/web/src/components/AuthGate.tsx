@@ -20,7 +20,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary-text" />
       </div>
     );
   }
@@ -37,12 +37,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <p className="text-foreground-muted mb-6">Level up your productivity. Your lists, XP, classes and games sync with the TaskQuest Discord bot.</p>
 
         {error ? (
-          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2 justify-center">
+          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive-text flex items-center gap-2 justify-center">
             <ShieldAlert className="h-4 w-4" /> Can't reach the TaskQuest server right now.
             <button className="underline" onClick={() => refresh()}>Retry</button>
           </div>
         ) : loginError ? (
-          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive-text">
             {LOGIN_ERRORS[loginError] || "Login failed. Please try again."}
           </div>
         ) : null}

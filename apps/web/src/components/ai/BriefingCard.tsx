@@ -9,7 +9,7 @@ export function BriefingCard() {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center"><Sparkles className="h-5 w-5 text-primary" /></div>
+        <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center"><Sparkles className="h-5 w-5 text-primary-text" /></div>
         <div>
           <h2 className="font-heading font-semibold text-sm sm:text-base">Today&apos;s briefing</h2>
           <p className="text-xs sm:text-sm text-foreground-muted">What is due, what is overdue, and where to start.</p>

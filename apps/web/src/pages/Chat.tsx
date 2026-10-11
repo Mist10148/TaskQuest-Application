@@ -79,7 +79,7 @@ const Chat = () => {
                 <button
                   type="button"
                   aria-label={`Delete ${t.title}`}
-                  className="p-1 text-foreground-muted hover:text-destructive [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100"
+                  className="p-1 text-foreground-muted hover:text-destructive-text [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100"
                   onClick={() => setPendingDelete({ id: t.id, title: t.title })}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -92,7 +92,7 @@ const Chat = () => {
         <section className="flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-background-secondary/30">
           <header className="flex items-center gap-2 border-b border-border px-4 py-3">
             <Button size="icon" variant="ghost" className="lg:hidden" aria-label="Show conversations" onClick={() => setShowThreads((v) => !v)}><PanelLeft className="h-4 w-4" /></Button>
-            <Bot className="h-5 w-5 text-primary" />
+            <Bot className="h-5 w-5 text-primary-text" />
             <h1 className="font-heading font-semibold">Quest Assistant</h1>
             <span className="ml-auto text-[11px] text-foreground-muted hidden sm:inline">AI-generated. Changes always ask first.</span>
           </header>
@@ -100,7 +100,7 @@ const Chat = () => {
           <div className="flex-1 overflow-y-auto p-4 space-y-4" aria-live="polite">
             {chat.messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-4">
-                <Bot className="h-10 w-10 text-primary" />
+                <Bot className="h-10 w-10 text-primary-text" />
                 <div>
                   <p className="font-heading font-semibold">Ask about your quests or how TaskQuest works</p>
                   <p className="text-sm text-foreground-muted">I can also create or complete tasks, once you approve.</p>

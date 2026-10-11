@@ -21,10 +21,11 @@ const CLASSES = ["default", "hero", "gambler", "assassin", "wizard", "archer", "
 
 /**
  * Text-on-surface pairs the UI actually renders, with the minimum contrast each needs.
- * Body text needs 4.5:1 (WCAG AA). The brand blurple and the destructive red are also used as
- * button backgrounds under white text, so as text-on-card colors they are held to 3:1, the WCAG
- * minimum for icons and large or bold text (a color cannot be both a 4.5:1 text color on a dark
- * card and a 4.5:1 background for white text).
+ * Body text needs 4.5:1 (WCAG AA). The brand blurple and the destructive red double as button
+ * backgrounds under white text, so the raw tokens (primary, destructive) are held to 3:1, the WCAG
+ * minimum for icons and large or bold text. Text uses the separate primary-text and
+ * destructive-text tokens (text-primary-text / text-destructive-text), which must reach 4.5:1 on
+ * every surface they can sit on, in both themes.
  */
 const PAIRS: Array<[string, string, number]> = [
   ["foreground", "background", 4.5],
@@ -39,6 +40,10 @@ const PAIRS: Array<[string, string, number]> = [
   ["success", "card", 4.5],
   ["primary", "card", 3],
   ["destructive", "card", 3],
+  ...["background", "background-secondary", "background-tertiary", "card"].flatMap((bg): Array<[string, string, number]> => [
+    ["primary-text", bg, 4.5],
+    ["destructive-text", bg, 4.5],
+  ]),
   ...CLASSES.flatMap((c): Array<[string, string, number]> => [[`class-${c}`, "card", 4.5], [`class-${c}`, "background", 4.5]]),
 ];
 

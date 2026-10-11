@@ -13,7 +13,7 @@ export function ConfirmActionCard({ actions, busy, onRespond }: Props) {
   return (
     <div role="alertdialog" aria-label="Confirm assistant action" className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-3">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <ShieldQuestion className="h-4 w-4 text-primary" />
+        <ShieldQuestion className="h-4 w-4 text-primary-text" />
         {actions.length > 1 ? "The assistant would like to make these changes" : "The assistant would like to make this change"}
       </div>
       <ul className="space-y-1.5 text-sm">

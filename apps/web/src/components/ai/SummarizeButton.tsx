@@ -34,20 +34,20 @@ export function SummarizeButton({ body, label = "Summarize", title = "Summary", 
   return (
     <>
       <Button variant="outline" size={size} onClick={run} className="gap-1">
-        <Sparkles className="h-4 w-4 text-primary" /> <span className="hidden sm:inline">{label}</span>
+        <Sparkles className="h-4 w-4 text-primary-text" /> <span className="hidden sm:inline">{label}</span>
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> {title}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary-text" /> {title}</DialogTitle>
           </DialogHeader>
           {summary.isPending && (
             <div className="py-8 text-center text-sm text-foreground-muted">
-              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3 text-primary" />
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3 text-primary-text" />
               {slow ? "Waking up the AI… the first request can take a few seconds." : "Reading your quests…"}
             </div>
           )}
-          {summary.isError && <p className="py-6 text-sm text-destructive">{(summary.error as Error).message}</p>}
+          {summary.isError && <p className="py-6 text-sm text-destructive-text">{(summary.error as Error).message}</p>}
           {summary.data && <SummaryCard summary={summary.data} />}
         </DialogContent>
       </Dialog>

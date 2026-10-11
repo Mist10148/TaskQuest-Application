@@ -133,11 +133,11 @@ const Leaderboard = () => {
       </div>
 
       {mineLoading && <p className="mb-4 text-sm text-foreground-muted" aria-busy="true">Checking your rank…</p>}
-      {mineFailed && <p className="mb-4 text-sm text-destructive" role="alert">Couldn't load your rank.</p>}
+      {mineFailed && <p className="mb-4 text-sm text-destructive-text" role="alert">Couldn't load your rank.</p>}
       {mine && (
         <p className="mb-4 text-sm text-foreground-muted" aria-live="polite">
           {mine.rank
-            ? <>Your rank: <span className="font-heading font-bold text-primary">#{mine.rank}</span>{!youInList ? " (outside the top 10)" : ""}</>
+            ? <>Your rank: <span className="font-heading font-bold text-primary-text">#{mine.rank}</span>{!youInList ? " (outside the top 10)" : ""}</>
             : by === "weekly" || by === "streak"
               ? "You're not on this board yet. Earn some XP or claim your daily reward!"
               : "Turn on gamification to appear on the leaderboard."}
@@ -243,7 +243,7 @@ const Leaderboard = () => {
                     </div>
                     <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} username={entry.username} size="sm" rank={entry.rank} />
                     <div className="flex-1 min-w-0">
-                      <p className={cn("font-medium text-sm truncate", isCurrentUser && "text-primary")}>
+                      <p className={cn("font-medium text-sm truncate", isCurrentUser && "text-primary-text")}>
                         {getDisplayName(entry, isCurrentUser)}
                       </p>
                       <p className="text-xs text-foreground-muted flex items-center gap-1">
@@ -272,7 +272,7 @@ const Leaderboard = () => {
                   <div className="col-span-4 flex items-center gap-3">
                     <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} username={entry.username} size="md" rank={entry.rank} />
                     <div className="min-w-0">
-                      <p className={cn("font-medium truncate", isCurrentUser && "text-primary")}>
+                      <p className={cn("font-medium truncate", isCurrentUser && "text-primary-text")}>
                         {getDisplayName(entry, isCurrentUser)}
                       </p>
                       <p className="text-xs text-foreground-muted flex items-center gap-1">

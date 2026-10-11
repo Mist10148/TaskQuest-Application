@@ -38,7 +38,7 @@ export const QuickAddBar = forwardRef<HTMLInputElement, Props>(({ pending, aiEna
     >
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Zap className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" aria-hidden />
+          <Zap className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary-text" aria-hidden />
           <Input
             ref={ref}
             aria-label="Quick add a task"
@@ -66,7 +66,7 @@ export const QuickAddBar = forwardRef<HTMLInputElement, Props>(({ pending, aiEna
           {parsed.due_date && <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" aria-hidden /> {formatDeadline(parsed.due_date)}</span>}
           {parsed.priority && <span>❗ {parsed.priority.toLowerCase()}</span>}
           {parsed.recurrence && <span className="inline-flex items-center gap-1"><Repeat className="h-3 w-3" aria-hidden /> {parsed.recurrence}</span>}
-          {parsed.tags.map((t) => <span key={t} className="text-primary">#{t}</span>)}
+          {parsed.tags.map((t) => <span key={t} className="text-primary-text">#{t}</span>)}
         </p>
       )}
     </form>

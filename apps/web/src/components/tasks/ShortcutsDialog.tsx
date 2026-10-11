@@ -14,7 +14,7 @@ export const ShortcutsDialog = ({ open, onOpenChange }: { open: boolean; onOpenC
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="sm:max-w-md">
       <DialogHeader>
-        <DialogTitle className="flex items-center gap-2"><Keyboard className="h-5 w-5 text-primary" /> Keyboard shortcuts</DialogTitle>
+        <DialogTitle className="flex items-center gap-2"><Keyboard className="h-5 w-5 text-primary-text" /> Keyboard shortcuts</DialogTitle>
         <DialogDescription>Shortcuts work when you are not typing in a field.</DialogDescription>
       </DialogHeader>
       <dl className="space-y-2 py-2">

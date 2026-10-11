@@ -26,7 +26,7 @@ export const SettingsSection = ({ icon, title, description, tint = "bg-primary/2
     <div className="flex items-center gap-3 mb-4">
       <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0", danger ? "bg-destructive/20" : tint)}>{icon}</div>
       <div className="min-w-0">
-        <h2 id={`settings-${title.replace(/\W+/g, "-").toLowerCase()}`} className={cn("font-heading font-semibold", danger && "text-destructive")}>{title}</h2>
+        <h2 id={`settings-${title.replace(/\W+/g, "-").toLowerCase()}`} className={cn("font-heading font-semibold", danger && "text-destructive-text")}>{title}</h2>
         <p className="text-sm text-foreground-muted">{description}</p>
       </div>
     </div>

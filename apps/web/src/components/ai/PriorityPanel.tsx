@@ -28,7 +28,7 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
     <div className="mb-6 rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Flame className="h-5 w-5 text-primary" />
+          <Flame className="h-5 w-5 text-primary-text" />
           <h2 className="font-heading font-semibold">What should I do next?</h2>
           {data && !data.usedFallback && <AiBadge />}
         </div>
@@ -39,7 +39,7 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
       </div>
 
       {isFetching && slow && <p className="mt-3 text-xs text-foreground-muted">Waking up the AI… the first request can take a few seconds.</p>}
-      {error && !isFetching && <p className="mt-3 text-sm text-destructive">{(error as Error).message}</p>}
+      {error && !isFetching && <p className="mt-3 text-sm text-destructive-text">{(error as Error).message}</p>}
 
       {data && (
         <div className="mt-4 space-y-3">
@@ -53,7 +53,7 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
               <li key={task.id} className="flex items-start gap-3 rounded-lg bg-background-secondary/60 p-3">
                 <span className={cn("h-6 w-6 shrink-0 rounded-full text-xs font-bold flex items-center justify-center", task.rank === 1 ? "bg-primary text-primary-foreground" : "bg-card text-foreground-muted")}>{task.rank}</span>
                 <div className="min-w-0 flex-1">
-                  <button type="button" onClick={() => onOpen?.(task.listId)} className="font-medium text-sm text-left hover:text-primary truncate max-w-full">
+                  <button type="button" onClick={() => onOpen?.(task.listId)} className="font-medium text-sm text-left hover:text-primary-text truncate max-w-full">
                     {task.name}
                   </button>
                   <p className="text-xs text-foreground-muted">{task.reason}</p>

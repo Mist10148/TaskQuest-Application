@@ -155,9 +155,9 @@ const Dashboard = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg sm:text-xl font-heading font-semibold flex items-center gap-2">
-              <ListTodo className="h-4 w-4 sm:h-5 sm:w-5 text-primary" /> Recent Quests
+              <ListTodo className="h-4 w-4 sm:h-5 sm:w-5 text-primary-text" /> Recent Quests
             </h2>
-            <Link to="/tasks"><Button variant="ghost" size="sm" className="text-xs sm:text-sm hover:text-primary">View All</Button></Link>
+            <Link to="/tasks"><Button variant="ghost" size="sm" className="text-xs sm:text-sm hover:text-primary-text">View All</Button></Link>
           </div>
 
           {listsQuery.isError ? (

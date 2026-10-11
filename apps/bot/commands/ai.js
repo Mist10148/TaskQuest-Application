@@ -164,6 +164,15 @@ async function handleButton(interaction) {
         });
         return giveRewards(interaction, turn.tools);
     } catch (err) {
+        // The action is still pending after a failed call (timeout, 429, outage), so give the buttons back.
+        // A 409 means nothing is waiting any more: leave them off.
+        if (!(err instanceof TaskQuestError && err.status === 409)) {
+            try {
+                await interaction.editReply({ components: [fmt.confirmRow(parsed.threadId)] });
+            } catch {
+                /* interaction expired */
+            }
+        }
         return handleError(interaction, err);
     }
 }

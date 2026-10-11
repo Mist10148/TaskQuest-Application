@@ -514,7 +514,7 @@ const LIMITS = {
     FREE_GAME_XP_PER_DAY: 500,
     /** Minimum time between two free-game rounds. */
     GAME_COOLDOWN_MS: 3000,
-    /** Active game sessions expire (and refund escrowed bets) after this long. */
+    /** Active game sessions expire (an unfinished blackjack hand is auto-stood and settled, never refunded) after this long. */
     GAME_SESSION_TTL_MINUTES: 30,
     /** Per-user storage quota enforced on import (lists/tasks already owned count). */
     MAX_LISTS_PER_USER: 200,

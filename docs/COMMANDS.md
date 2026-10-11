@@ -81,7 +81,7 @@ Both views show each task's priority dot, due date (⚠️ when an open task is 
 
 - Bets range from 10 to min(25% of balance, 1000).
 - RPS and Hangman have a 3-second cooldown and share a 500 XP per day cap with the web arcade games.
-- Unfinished Blackjack hands expire after 30 minutes: untouched hands are refunded, hands you already acted on are settled with you standing.
+- Unfinished Blackjack hands expire after 30 minutes and are settled with you standing (no refunds, untouched or not).
 - Game state lives in the database, so restarts don't lose games, and a hand started in Discord can be finished on the web.
 
 ## `/class`
@@ -123,7 +123,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 - **Task DMs:** a task with its own due date gets the same treatment: one DM on its due day (up to 3 days late) at your reminder hour, with **Snooze 1 day** and **Stop reminders**. Completed tasks are skipped, and a task due on the same day as its list's deadline is covered by the list reminder (no double DM). Changing a task's due date re-arms its reminder. `/automation` turns both kinds off.
 - **Old-list clean-up:** daily. It deletes lists whose tasks have all been completed for 5+ days, if auto-delete is on (web Settings). Unfinished lists are never deleted, even when overdue, and a list that has members is never deleted automatically.
 - **Shared lists:** the deadline and task reminders go to the owner **and** to every member with `/automation` on, once each; each person's Snooze applies to them alone, in their own time zone and at their own reminder hour.
-- **Abandoned games:** expired every 5 minutes, with Blackjack bets refunded.
+- **Abandoned games:** expired every 5 minutes; an unfinished Blackjack hand is settled as a stand, not refunded.
 - **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out).
 
 ## Interaction IDs (for developers)

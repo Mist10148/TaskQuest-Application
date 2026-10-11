@@ -361,7 +361,9 @@ async function getFreeGameAllowance(discordId, now = new Date()) {
 // ─── Housekeeping & history ──────────────────────────────────────────────────
 
 /**
- * Expire sessions older than the TTL. Escrowed blackjack bets are refunded.
+ * Expire sessions older than the TTL. An unfinished blackjack hand is never refunded, even an untouched one (a
+ * refund would let a player look at the deal and walk away from the bad hands): the player auto-stands, the
+ * dealer plays out and the hand is settled normally.
  * @returns {Promise<number>} sessions expired
  */
 async function expireStaleSessions(ttlMinutes = LIMITS.GAME_SESSION_TTL_MINUTES) {
@@ -377,22 +379,13 @@ async function expireStaleSessions(ttlMinutes = LIMITS.GAME_SESSION_TTL_MINUTES)
             if (!session) return;
             const data = parseData(session.game_data);
             if (session.game_type === 'blackjack' && data && !data.finished) {
-                if (data.playerHand.length > 2 || data.doubled) {
-                    // The player already acted on this hand: stand for them and settle normally, so
-                    // walking away from a bad hand costs the bet instead of refunding it.
-                    const state = blackjack.act(data, 'stand');
-                    await conn.query('UPDATE game_sessions SET bet_amount = ?, game_data = ? WHERE id = ?', [state.bet, JSON.stringify(state), session.id]);
-                    await settleBlackjack(conn, user, session, state);
-                    expired++;
-                    return;
-                }
-                // Untouched hand: nothing was decided yet, so the bet comes back.
-                await applyXP(conn, user, Number(session.bet_amount), 'blackjack_refund', { lifetimeDelta: 0, referenceId: session.id });
+                const state = blackjack.act(data, 'stand');
+                await conn.query('UPDATE game_sessions SET bet_amount = ?, game_data = ? WHERE id = ?', [state.bet, JSON.stringify(state), session.id]);
+                await settleBlackjack(conn, user, session, state);
+                expired++;
+                return;
             }
-            await conn.query(
-                "UPDATE game_sessions SET state = 'expired', payout = ?, ended_at = CURRENT_TIMESTAMP WHERE id = ?",
-                [session.game_type === 'blackjack' ? session.bet_amount : 0, session.id]
-            );
+            await conn.query("UPDATE game_sessions SET state = 'expired', payout = 0, ended_at = CURRENT_TIMESTAMP WHERE id = ?", [session.id]);
             expired++;
         });
     }

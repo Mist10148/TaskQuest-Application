@@ -459,17 +459,6 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(Number(n) <= 1, 'at most one payout transaction');
     });
 
-    await t.test('expired blackjack sessions refund the bet', async () => {
-        await setXP(BOB, 1000);
-        let s = await db.games.startBlackjack(BOB, 50);
-        while (s.settlement) s = await db.games.startBlackjack(BOB, 50);
-        const before = Number((await db.users.getUser(BOB)).player_xp);
-        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id = ?', [s.sessionId]);
-        assert.equal(await db.games.expireStaleSessions(), 1);
-        const after = Number((await db.users.getUser(BOB)).player_xp);
-        assert.equal(after - before, 50);
-    });
-
     // Replace the active hand with a fixed one so the outcome is known.
     async function rigHand(id, sessionId, player, dealer, extra = {}) {
         const card = (r) => ({ rank: r, suit: '♠' });
@@ -478,6 +467,32 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const state = { ...data, deck: [], playerHand: player.map(card), dealerHand: dealer.map(card), finished: false, outcome: null, ...extra };
         await pool.query('UPDATE game_sessions SET game_data = ? WHERE id = ?', [JSON.stringify(state), sessionId]);
     }
+
+    await t.test('an expired untouched blackjack hand is auto-stood and settled, never refunded (no peek-and-abandon)', async () => {
+        await setXP(BOB, 1000);
+        const fresh = async (bet) => {
+            let s = await db.games.startBlackjack(BOB, bet);
+            while (s.settlement) s = await db.games.startBlackjack(BOB, bet);
+            return s;
+        };
+        const expire = (id) => pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id = ?', [id]);
+        // A bad hand that was only looked at at: the player stands on 12 against 18 and loses the bet.
+        let s = await fresh(50);
+        let before = Number((await db.users.getUser(BOB)).player_xp);
+        await rigHand(BOB, s.sessionId, ['10', '2'], ['10', '8']);
+        await expire(s.sessionId);
+        assert.equal(await db.games.expireStaleSessions(), 1);
+        assert.equal(Number((await db.users.getUser(BOB)).player_xp), before, 'no refund');
+        assert.equal((await pool.query('SELECT state FROM game_sessions WHERE id = ?', [s.sessionId]))[0][0].state, 'lost');
+        assert.equal((await pool.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE reference_id = ? AND source = 'blackjack_refund'", [s.sessionId]))[0][0].n, 0);
+        // A good hand pays normally.
+        s = await fresh(50);
+        before = Number((await db.users.getUser(BOB)).player_xp);
+        await rigHand(BOB, s.sessionId, ['10', 'K'], ['10', '7']);
+        await expire(s.sessionId);
+        await db.games.expireStaleSessions();
+        assert.equal(Number((await db.users.getUser(BOB)).player_xp) - before, 100);
+    });
 
     await t.test('blackjack pays a flat 1:1 whatever the class or skills', async () => {
         await setXP(BOB, 1000);

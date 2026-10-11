@@ -395,7 +395,7 @@ Counters never decrease, so deleting lists or tasks doesn't undo achievements.
 | Push (incl. both naturals) | bet |
 | Loss / bust / dealer natural | nothing |
 
-- Hands left unfinished for 30 minutes expire. A hand you never acted on is refunded. If you had already hit or doubled, the dealer plays out the hand with you standing and it is settled normally, so walking away from a bad hand costs the bet.
+- Hands left unfinished for 30 minutes expire. Every expired hand is settled as if you had stood: the dealer plays out and it pays normally, whether or not you had acted. There are no refunds, so looking at the deal and walking away from a bad hand costs the bet.
 - Class and skill bonuses never apply to blackjack: paying more than 1:1 would make the game a positive-expectation XP farm.
 
 ### Rock Paper Scissors

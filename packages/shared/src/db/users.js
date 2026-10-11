@@ -9,6 +9,7 @@ const { isValidTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
 const { prestigeTitle } = require('../xp');
 const { describeEquipped } = require('../cosmetics');
+const { accessSql, actorSql } = require('./access');
 
 const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled', 'weekly_digest', 'web_push'];
 
@@ -324,12 +325,13 @@ async function getWeeklyStats(discordId, now = new Date()) {
     const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
     const user = await getUser(id);
     const today = todayInZone(user?.timezone, now); // "overdue" is the user's own calendar day
+    const acc = accessSql('l', id); // open lists include the ones shared with the user
     const [[done], [xp], [open]] = await Promise.all([
         run(
             null,
-            `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE l.discord_id = ? AND i.completed = 1 AND i.completed_at >= ?`,
-            [id, since]
+            `SELECT COUNT(*) AS n FROM items i
+             WHERE ${actorSql('completed_by')} AND i.completed = 1 AND i.completed_at >= ?`,
+            [id, id, since]
         ),
         run(
             null,
@@ -342,8 +344,8 @@ async function getWeeklyStats(discordId, now = new Date()) {
             `SELECT COUNT(DISTINCT l.id) AS lists_open,
                     COUNT(DISTINCT CASE WHEN l.deadline < ? THEN l.id END) AS lists_overdue
              FROM lists l JOIN items i ON i.list_id = l.id AND i.completed = 0
-             WHERE l.discord_id = ?`,
-            [today, id]
+             WHERE ${acc.sql}`,
+            [today, ...acc.params]
         )
     ]);
     return {
@@ -361,9 +363,10 @@ async function resetProgress(discordId) {
     const id = String(discordId);
     return withTransaction(async (conn) => {
         await lockUser(conn, id);
-        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates', 'user_cosmetics']) {
+        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates', 'user_cosmetics', 'list_members']) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }
+        await conn.query('DELETE FROM list_invites WHERE invitee_discord_id = ?', [id]);
         await conn.query(
             `UPDATE users SET player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,

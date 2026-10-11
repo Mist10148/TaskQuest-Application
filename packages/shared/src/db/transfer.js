@@ -13,13 +13,14 @@ const { lockUser } = require('./users');
 const { errors } = require('../errors');
 const v = require('../validation');
 const { LIMITS: USER_LIMITS } = require('../constants');
+const access = require('./access');
 
 const LIMITS = { LISTS: 100, ITEMS_PER_LIST: 500, ITEMS_TOTAL: 1000 };
 const FORMAT_VERSION = 1;
 
 const isoDate = (value) => (value ? String(value).slice(0, 10) : null);
 
-/** Everything the user owns, in a portable shape. */
+/** Everything the user OWNS, in a portable shape. Lists shared with them are not theirs to export. */
 async function exportAll(discordId) {
     const id = String(discordId);
     const [lists] = await getPool().query('SELECT * FROM lists WHERE discord_id = ? ORDER BY id', [id]);
@@ -177,9 +178,9 @@ async function importAll(discordId, data) {
                 // Subtasks are one level deep (the same rule assertValidParent enforces elsewhere).
                 if (parentId !== null && subtaskRefs.has(it.parentRef)) throw errors.validation('Subtasks can only be one level deep.');
                 const [ir] = await conn.query(
-                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, position, due_date, priority, tags, recurrence, parent_id, counts_for_quests)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-                    [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, position++, it.due_date, it.priority, it.tags, it.recurrence, parentId]
+                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, completed_by, position, due_date, priority, tags, recurrence, parent_id, counts_for_quests, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+                    [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, it.completed ? user.discord_id : null, position++, it.due_date, it.priority, it.tags, it.recurrence, parentId, user.discord_id]
                 );
                 if (it.ref !== undefined && it.ref !== null) {
                     idByRef.set(it.ref, ir.insertId);
@@ -219,19 +220,19 @@ async function findUserByCalendarToken(token) {
     return rows[0] ? rows[0].discord_id : null;
 }
 
-/** Lists with a deadline and tasks with a due date, for buildIcs(). */
+/** Lists with a deadline and tasks with a due date, for buildIcs(): the user's own lists and the ones shared with them. */
 async function getCalendarData(discordId) {
-    const id = String(discordId);
+    const acc = access.accessSql('l', discordId);
     const [lists] = await getPool().query(
         `SELECT l.id, l.name, l.description, l.category, l.deadline,
                 (SELECT COUNT(*) > 0 AND SUM(i.completed) = COUNT(*) FROM items i WHERE i.list_id = l.id) AS completed
-         FROM lists l WHERE l.discord_id = ? AND l.deadline IS NOT NULL`,
-        [id]
+         FROM lists l WHERE ${acc.sql} AND l.deadline IS NOT NULL`,
+        acc.params
     );
     const [items] = await getPool().query(
         `SELECT i.id, i.name, i.description, i.due_date, i.completed, l.name AS list_name
-         FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ? AND i.due_date IS NOT NULL`,
-        [id]
+         FROM items i JOIN lists l ON l.id = i.list_id WHERE ${acc.sql} AND i.due_date IS NOT NULL`,
+        acc.params
     );
     return {
         lists: lists.map((l) => ({ ...l, deadline: isoDate(l.deadline), completed: Boolean(Number(l.completed)) })),

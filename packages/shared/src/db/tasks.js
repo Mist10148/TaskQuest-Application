@@ -1,7 +1,10 @@
 /**
- * Lists and items. Every function takes the acting user's Discord ID and
- * only ever touches rows that belong to that user — ownership is part of
- * each SQL statement, never a separate check that could be forgotten.
+ * Lists and items. Every function takes the acting user's Discord ID and only ever touches lists that user
+ * owns or has been given a role on. That rule lives in ./access (forList, forItem, accessSql): nothing in
+ * this file decides ownership on its own, so a stranger gets NOT_FOUND from every function here.
+ *
+ * XP, daily caps, quests and stats belong to the ACTOR (the person who adds or completes a task), never to the list's owner.
+ * Items record who created them, who completed them and who completed them first (see migration 018).
  */
 
 'use strict';
@@ -13,6 +16,7 @@ const { errors } = require('../errors');
 const { REWARDS, LIMITS, BONUS_LABELS, HABIT_PERIOD_DAYS } = require('../constants');
 const v = require('../validation');
 const { nextDueOnOrAfter, todayInZone, daysBetween } = require('../dates');
+const access = require('./access');
 
 const run = async (sql, params = []) => (await getPool().query(sql, params))[0];
 
@@ -44,28 +48,72 @@ function isDuplicate(err) {
 
 // ─── Lists ───────────────────────────────────────────────────────────────────
 
-/** Lists with item counts, in one query. */
-async function getLists(discordId, { sortBy = 'created_at', order = 'DESC' } = {}) {
-    return run(
-        `SELECT l.*, COUNT(i.id) AS items_total, COALESCE(SUM(i.completed), 0) AS items_completed
-         FROM lists l LEFT JOIN items i ON i.list_id = l.id
-         WHERE l.discord_id = ?
-         GROUP BY l.id
-         ORDER BY ${orderClause(LIST_SORTS, sortBy, order, 'created_at')}`,
-        [String(discordId)]
-    ).then((rows) => rows.map((r) => ({ ...r, items_total: Number(r.items_total), items_completed: Number(r.items_completed) })));
+/** Columns that hold other people's Discord IDs never leave this module. */
+const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by'];
+
+function shapeItem(row) {
+    if (!row) return row;
+    const out = { ...row };
+    for (const c of HIDDEN_ITEM_COLUMNS) delete out[c];
+    return out;
 }
 
+/** A list row as the caller may see it: no internal marker, and no owner ID unless the caller is the owner. */
+function shapeList(row, me) {
+    if (!row) return row;
+    const { cleared_by: clearedBy, owner_id: ownerId, member_role: memberRole, ...out } = row; // eslint-disable-line no-unused-vars
+    if (String(out.discord_id) !== String(me)) delete out.discord_id;
+    return out;
+}
+
+/**
+ * The columns that describe how a list is shared with `me`. The owner is an implicit manager; member_count
+ * counts people (the owner plus members). owner_name is a display name only.
+ */
+const SHARE_COLUMNS = `IF(l.discord_id = ?, 'manager', me.role) AS role,
+        (l.discord_id = ?) AS is_owner,
+        ou.discord_username AS owner_name,
+        1 + (SELECT COUNT(*) FROM list_members cm WHERE cm.list_id = l.id) AS member_count`;
+const SHARE_JOINS = `LEFT JOIN list_members me ON me.list_id = l.id AND me.discord_id = ?
+         JOIN users ou ON ou.discord_id = l.discord_id`;
+
+function shareFields(row) {
+    const memberCount = Number(row.member_count);
+    return { ...row, is_owner: Boolean(Number(row.is_owner)), member_count: memberCount, shared: memberCount > 1 };
+}
+
+/** Lists the user owns plus lists shared with them, with item counts and how each is shared, in one query. */
+async function getLists(discordId, { sortBy = 'created_at', order = 'DESC' } = {}) {
+    const me = String(discordId);
+    const acc = access.accessSql('l', me);
+    const rows = await run(
+        `SELECT l.*, COUNT(i.id) AS items_total, COALESCE(SUM(i.completed), 0) AS items_completed, ${SHARE_COLUMNS}
+         FROM lists l LEFT JOIN items i ON i.list_id = l.id
+         ${SHARE_JOINS}
+         WHERE ${acc.sql}
+         GROUP BY l.id, me.role, ou.discord_username
+         ORDER BY ${orderClause(LIST_SORTS, sortBy, order, 'created_at')}`,
+        [me, me, me, ...acc.params]
+    );
+    return rows.map((r) => shapeList({ ...shareFields(r), items_total: Number(r.items_total), items_completed: Number(r.items_completed) }, me));
+}
+
+/** One list the user owns or is a member of (with how it is shared), or null. */
 async function getList(discordId, listId) {
     const id = v.id(listId);
     if (!id.ok) return null;
-    const [row] = await run('SELECT * FROM lists WHERE id = ? AND discord_id = ?', [id.value, String(discordId)]);
-    return row || null;
+    const me = String(discordId);
+    const acc = access.accessSql('l', me);
+    const [row] = await run(`SELECT l.*, ${SHARE_COLUMNS} FROM lists l ${SHARE_JOINS} WHERE l.id = ? AND ${acc.sql}`, [me, me, me, id.value, ...acc.params]);
+    return row ? shapeList(shareFields(row), me) : null;
 }
 
+/** A list by name: the user's own list first, then one shared with them (the oldest share if several have that name). */
 async function getListByName(discordId, name) {
-    const [row] = await run('SELECT * FROM lists WHERE discord_id = ? AND name = ?', [String(discordId), String(name)]);
-    return row || null;
+    const me = String(discordId);
+    const acc = access.accessSql('l', me);
+    const [row] = await run(`SELECT l.id FROM lists l WHERE l.name = ? AND ${acc.sql} ORDER BY (l.discord_id = ?) DESC, l.id LIMIT 1`, [String(name), ...acc.params, me]);
+    return row ? getList(me, row.id) : null;
 }
 
 function parseListInput(input, { partial = false } = {}) {
@@ -125,7 +173,7 @@ async function createListIn(conn, discordId, fields) {
     });
     const achievements = await unlockAchievements(conn, user);
     const [[list]] = await conn.query('SELECT * FROM lists WHERE id = ?', [insertId]);
-    return { list, xp, achievements };
+    return { list: shapeList(list, user.discord_id), xp, achievements };
 }
 
 async function updateList(discordId, listId, input) {
@@ -139,22 +187,27 @@ async function updateList(discordId, listId, input) {
         keys.push('deadline_notified', 'overdue_notified', 'remind_at');
     }
     try {
-        const [res] = await getPool().query(
-            `UPDATE lists SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND discord_id = ?`,
-            [...keys.map((k) => fields[k]), id, String(discordId)]
-        );
-        if (!res.affectedRows) throw errors.notFound('List not found.');
+        await withTransaction(async (conn) => {
+            await access.forList(conn, discordId, id, 'manager', { lock: true });
+            await conn.query(`UPDATE lists SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map((k) => fields[k]), id]);
+            // Every member's reminders are re-armed along with the owner's.
+            if (keys.includes('deadline')) await conn.query('DELETE FROM list_reminders WHERE list_id = ?', [id]);
+        });
     } catch (err) {
-        if (isDuplicate(err)) throw errors.conflict(`You already have a list called "${fields.name}".`);
+        if (isDuplicate(err)) throw errors.conflict(`A list called "${fields.name}" already exists.`);
         throw err;
     }
     return getList(discordId, id);
 }
 
+/** Delete a list and everything on it. Only the owner can: a manager may edit and invite, not destroy. */
 async function deleteList(discordId, listId) {
     const id = unwrap(v.id(listId));
-    const [res] = await getPool().query('DELETE FROM lists WHERE id = ? AND discord_id = ?', [id, String(discordId)]);
-    if (!res.affectedRows) throw errors.notFound('List not found.');
+    await withTransaction(async (conn) => {
+        const { isOwner } = await access.forList(conn, discordId, id, 'viewer', { lock: true });
+        if (!isOwner) throw errors.forbidden('Only the owner can delete this list. You can leave it instead.');
+        await conn.query('DELETE FROM lists WHERE id = ?', [id]);
+    });
     return true;
 }
 
@@ -166,25 +219,28 @@ const likeTerm = (query) => `%${v.escapeLike(v.cleanText(query).slice(0, 100))}%
 
 async function searchLists(discordId, query) {
     const term = likeTerm(query);
-    return run(
-        `SELECT * FROM lists WHERE discord_id = ?
-           AND (name LIKE ? ESCAPE '\\\\' OR category LIKE ? ESCAPE '\\\\' OR description LIKE ? ESCAPE '\\\\')
-         ORDER BY name
+    const acc = access.accessSql('l', discordId);
+    const rows = await run(
+        `SELECT l.* FROM lists l WHERE ${acc.sql}
+           AND (l.name LIKE ? ESCAPE '\\\\' OR l.category LIKE ? ESCAPE '\\\\' OR l.description LIKE ? ESCAPE '\\\\')
+         ORDER BY l.name
          LIMIT ${SEARCH_LIMIT * 2}`,
-        [String(discordId), term, term, term]
+        [...acc.params, term, term, term]
     );
+    return rows.map((r) => shapeList(r, discordId));
 }
 
 /** Tasks (name or description) of the user's lists, each with its quest, at most SEARCH_LIMIT. */
 async function searchItems(discordId, query) {
     const term = likeTerm(query);
+    const acc = access.accessSql('l', discordId);
     const rows = await run(
         `SELECT i.id, i.name, i.description, i.completed, i.parent_id, i.due_date, i.list_id, l.name AS list_name
          FROM items i JOIN lists l ON l.id = i.list_id
-         WHERE l.discord_id = ? AND (i.name LIKE ? ESCAPE '\\\\' OR i.description LIKE ? ESCAPE '\\\\')
+         WHERE ${acc.sql} AND (i.name LIKE ? ESCAPE '\\\\' OR i.description LIKE ? ESCAPE '\\\\')
          ORDER BY i.completed, l.name, i.position, i.id
          LIMIT ${SEARCH_LIMIT}`,
-        [String(discordId), term, term]
+        [...acc.params, term, term]
     );
     return rows.map((r) => ({ ...r, completed: Boolean(r.completed), due_date: v.formatDate(r.due_date) }));
 }
@@ -210,22 +266,21 @@ async function search(discordId, query, { scope = 'lists' } = {}) {
 async function getItems(discordId, listId, { sortBy = 'position', order = 'ASC' } = {}) {
     const list = await getList(discordId, listId);
     if (!list) return null;
-    return run(`SELECT i.* FROM items i WHERE i.list_id = ? ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`, [
-        list.id
-    ]);
+    // On a shared list each task also says who finished it (a display name, never an ID).
+    const names = list.shared ? ', cu.discord_username AS completed_by_name' : '';
+    const join = list.shared ? 'LEFT JOIN users cu ON cu.discord_id = i.completed_by' : '';
+    const rows = await run(`SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ? ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`, [list.id]);
+    return rows.map(shapeItem);
 }
 
-/** One item (with its list's name/priority) if it belongs to the user. */
+/** One item (with its list's name/priority) if it is on a list the user owns or is a member of. */
 async function getItem(discordId, itemId) {
-    const id = v.id(itemId);
-    if (!id.ok) return null;
-    const [row] = await run(
-        `SELECT i.*, l.name AS list_name, l.priority AS list_priority
-         FROM items i JOIN lists l ON l.id = i.list_id
-         WHERE i.id = ? AND l.discord_id = ?`,
-        [id.value, String(discordId)]
-    );
-    return row || null;
+    try {
+        return shapeItem((await access.forItem(getPool(), discordId, itemId)).item);
+    } catch (err) {
+        if (err.code === 'NOT_FOUND') return null;
+        throw err;
+    }
 }
 
 /** Validate the optional per-task fields (due date, priority, tags, repeat). */
@@ -276,7 +331,7 @@ async function addItem(discordId, listId, input) {
 }
 
 /**
- * Break a task down: create several subtasks under an owned top-level task in one transaction
+ * Break a task down: create several subtasks under a top-level task of a list the user can edit, in one transaction
  * (all or none). Subtasks nest one level only, and each one counts as an added task for XP like
  * any other (with the usual daily cap).
  * @returns {Promise<{ parent: object, items: Array<{ item: object, xp: object, achievements: Array }> }>}
@@ -286,21 +341,16 @@ async function addSubtasks(discordId, parentId, names) {
     if (!Array.isArray(names) || !names.length || names.length > 20) throw errors.validation('Give between 1 and 20 subtask names.');
     const parsed = names.map((name) => parseItemInput(0, { name }));
     return withTransaction(async (conn) => {
-        const [[parent]] = await conn.query(
-            `SELECT i.* FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
-            [pid, String(discordId)]
-        );
-        if (!parent) throw errors.notFound('Task not found.');
+        const { item: parent } = await access.forItem(conn, discordId, pid, 'editor', { lock: true });
         if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
         const items = [];
         for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid }));
-        return { parent, items };
+        return { parent: shapeItem(parent), items };
     });
 }
 
 /**
- * Add several tasks to an owned list in ONE transaction (all or nothing), each one rewarded like a normal addItem.
+ * Add several tasks to a list the user can edit in ONE transaction (all or nothing), each one rewarded like a normal addItem.
  * @returns {Promise<Array<{ item: object, xp: object|null, achievements: object[] }>>}
  */
 async function addItems(discordId, listId, inputs) {
@@ -314,15 +364,14 @@ async function addItems(discordId, listId, inputs) {
 
 async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }) {
     const user = await lockUser(conn, discordId);
-    const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, user.discord_id]);
-    if (!list) throw errors.notFound('List not found.');
+    await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
     await assertValidParent(conn, lid, parentId);
 
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [lid, name, description, Number(pos.next), extras.due_date, extras.priority, extras.tags, extras.recurrence, parentId]
+        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [lid, name, description, Number(pos.next), extras.due_date, extras.priority, extras.tags, extras.recurrence, parentId, user.discord_id]
     );
     await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
     user.total_items_added = Number(user.total_items_added) + 1;
@@ -333,7 +382,7 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
     });
     const achievements = await unlockAchievements(conn, user);
     const [[item]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    return { item, xp, achievements };
+    return { item: shapeItem(item), xp, achievements };
 }
 
 async function updateItem(discordId, itemId, input) {
@@ -354,18 +403,14 @@ async function updateItem(discordId, itemId, input) {
 
     if (keys.length) {
         await withTransaction(async (conn) => {
-            const [[item]] = await conn.query(
-                `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
-                [id, String(discordId)]
-            );
-            if (!item) throw errors.notFound('Task not found.');
+            const { item } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
             if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
             // A new due date or rule starts a new monthly anchor.
             // A new due date also re-arms the task's reminder (due-day DM and any snooze).
             let cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
             if (keys.includes('due_date')) cols = [...cols, 'reminded_at', 'remind_at'];
             await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
+            if (keys.includes('due_date')) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
         });
     }
     if (position !== undefined) await moveItem(discordId, id, position);
@@ -389,12 +434,7 @@ async function moveItem(discordId, itemId, position) {
     const id = unwrap(v.id(itemId));
     if (!Number.isSafeInteger(position) || position < 0) throw errors.validation('Position must be a non-negative integer.');
     return withTransaction(async (conn) => {
-        const [[item]] = await conn.query(
-            `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
-            [id, String(discordId)]
-        );
-        if (!item) throw errors.notFound('Task not found.');
+        const { item } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
         const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
         const ids = rows.map((r) => r.id).filter((x) => x !== id);
         ids.splice(Math.min(position, ids.length), 0, id);
@@ -403,14 +443,13 @@ async function moveItem(discordId, itemId, position) {
     });
 }
 
-/** Apply a full new order to an owned list. `orderedIds` must be exactly the list's item ids. */
+/** Apply a full new order to a list the user can edit. `orderedIds` must be exactly the list's item ids. */
 async function reorderItems(discordId, listId, orderedIds) {
     const lid = unwrap(v.id(listId));
     if (!Array.isArray(orderedIds) || orderedIds.length > 5000) throw errors.validation('Provide the task ids in their new order.');
     const wanted = orderedIds.map((x) => unwrap(v.id(x)));
     return withTransaction(async (conn) => {
-        const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, String(discordId)]);
-        if (!list) throw errors.notFound('List not found.');
+        await access.forList(conn, discordId, lid, 'editor', { lock: true });
         const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? FOR UPDATE', [lid]);
         const have = new Set(rows.map((r) => r.id));
         if (wanted.length !== have.size || new Set(wanted).size !== wanted.length || !wanted.every((x) => have.has(x))) {
@@ -423,11 +462,10 @@ async function reorderItems(discordId, listId, orderedIds) {
 
 async function deleteItem(discordId, itemId) {
     const id = unwrap(v.id(itemId));
-    const [res] = await getPool().query(
-        'DELETE i FROM items i JOIN lists l ON l.id = i.list_id WHERE i.id = ? AND l.discord_id = ?',
-        [id, String(discordId)]
-    );
-    if (!res.affectedRows) throw errors.notFound('Task not found.');
+    await withTransaction(async (conn) => {
+        await access.forItem(conn, discordId, id, 'editor', { lock: true });
+        await conn.query('DELETE FROM items WHERE id = ?', [id]);
+    });
     return true;
 }
 
@@ -445,12 +483,12 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0) {
     if (!due) return null;
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests, habit_streak)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak]
+        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    return created;
+    return shapeItem(created);
 }
 
 /**
@@ -495,7 +533,7 @@ async function completionBonuses(conn, user, item, ctx) {
 
     if (ctx.listCleared) {
         // Marking the list first makes the payout once per list; the daily limit still applies on top.
-        const [mark] = await conn.query('UPDATE lists SET cleared_at = ?, updated_at = updated_at WHERE id = ? AND cleared_at IS NULL', [new Date(), item.list_id]);
+        const [mark] = await conn.query('UPDATE lists SET cleared_at = ?, cleared_by = ?, updated_at = updated_at WHERE id = ? AND cleared_at IS NULL', [new Date(), user.discord_id, item.list_id]);
         if (mark.affectedRows === 1 && (await countToday(conn, user, 'list_cleared')) < LIMITS.LIST_CLEARED_PER_DAY) {
             await pay('list_cleared', REWARDS.LIST_CLEARED, { referenceId: item.list_id });
         }
@@ -542,16 +580,11 @@ async function setItemCompleted(discordId, itemId, completed) {
     const id = unwrap(v.id(itemId));
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
-        const [[item]] = await conn.query(
-            `SELECT i.*, l.priority AS list_priority FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
-            [id, user.discord_id]
-        );
-        if (!item) throw errors.notFound('Task not found.');
+        const { item } = await access.forItem(conn, user.discord_id, id, 'editor', { lock: true });
 
         const target = completed === undefined ? !item.completed : Boolean(completed);
         const now = new Date();
-        await conn.query('UPDATE items SET completed = ?, completed_at = ? WHERE id = ?', [target ? 1 : 0, target ? now : null, id]);
+        await conn.query('UPDATE items SET completed = ?, completed_at = ?, completed_by = ? WHERE id = ?', [target ? 1 : 0, target ? now : null, target ? user.discord_id : null, id]);
 
         let xp = null;
         let achievements = [];
@@ -562,9 +595,9 @@ async function setItemCompleted(discordId, itemId, completed) {
             const dueOn = item.due_date ? String(item.due_date).slice(0, 10) : null;
             const todayLocal = todayInZone(user.timezone);
             await conn.query(
-                `UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_high = ?,
+                `UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_by = ?, first_completed_high = ?,
                         first_completed_early = ?, first_completed_overdue = ? WHERE id = ?`,
-                [now, (item.priority || item.list_priority) === 'HIGH' ? 1 : 0, dueOn ? (dueOn > todayLocal ? 1 : 0) : null, dueOn ? (dueOn < todayLocal ? 1 : 0) : null, id]
+                [now, user.discord_id, (item.priority || item.list_priority) === 'HIGH' ? 1 : 0, dueOn ? (dueOn > todayLocal ? 1 : 0) : null, dueOn ? (dueOn < todayLocal ? 1 : 0) : null, id]
             );
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
@@ -589,21 +622,19 @@ async function setItemCompleted(discordId, itemId, completed) {
             if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user, habit.streak);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
-        return { item: updated, completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
+        return { item: shapeItem(updated), completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }
 
-/** Swap two items of the same owned list (works even on legacy lists with duplicate positions). */
+/** Swap two items of the same list (the user must be able to edit it) (works even on legacy lists with duplicate positions). */
 async function swapItemPositions(discordId, itemIdA, itemIdB) {
     const a = unwrap(v.id(itemIdA));
     const b = unwrap(v.id(itemIdB));
     return withTransaction(async (conn) => {
-        const [rows] = await conn.query(
-            `SELECT i.id, i.list_id FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE i.id IN (?, ?) AND l.discord_id = ? FOR UPDATE`,
-            [a, b, String(discordId)]
-        );
-        if (rows.length !== 2 || rows[0].list_id !== rows[1].list_id) throw errors.notFound('Tasks not found.');
+        const first = await access.forItem(conn, discordId, a, 'editor', { lock: true });
+        const second = await access.forItem(conn, discordId, b, 'editor', { lock: true });
+        const rows = [first.item, second.item];
+        if (rows[0].list_id !== rows[1].list_id) throw errors.notFound('Tasks not found.');
         const [all] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [rows[0].list_id]);
         const ids = all.map((r) => r.id);
         const [ia, ib] = [ids.indexOf(a), ids.indexOf(b)];
@@ -625,9 +656,11 @@ async function getListsDueOn(date) {
 }
 
 /**
- * Lists that might need a reminder right now, with their owner's time zone and
- * reminder hour. This is a deliberately wide net (a day either side covers every
- * time zone); the bot decides per user, in their own local time, what to send.
+ * Lists that might need a reminder right now, one row per person who should hear about it: the owner (whose
+ * state lives on the list) and every member with automation on (whose state lives in list_reminders, so each
+ * member is reminded once). `discord_id` is the recipient, `owner_id` the list's owner, and the time zone and
+ * reminder hour are the recipient's. This is a deliberately wide net (a day either side covers every time
+ * zone); the bot decides per user, in their own local time, what to send.
  *   - snoozed lists whose snooze has ended
  *   - lists due in the next day or the last 14 days that still owe a due or overdue notice
  */
@@ -636,10 +669,10 @@ async function getReminderCandidates(now = new Date()) {
         const d = new Date(now.getTime() + offset * 86400e3);
         return d.toISOString().slice(0, 10);
     };
-    return run(
-        `SELECT l.*, u.timezone, u.reminder_hour,
-                (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id) AS items_total,
-                (SELECT COALESCE(SUM(i.completed), 0) FROM items i WHERE i.list_id = l.id) AS items_done
+    const counts = `(SELECT COUNT(*) FROM items i WHERE i.list_id = l.id) AS items_total,
+                (SELECT COALESCE(SUM(i.completed), 0) FROM items i WHERE i.list_id = l.id) AS items_done`;
+    const owners = await run(
+        `SELECT l.*, l.discord_id AS owner_id, u.timezone, u.reminder_hour, ${counts}
          FROM lists l JOIN users u ON u.discord_id = l.discord_id
          WHERE u.automation_enabled = TRUE AND (
              (l.remind_at IS NOT NULL AND l.remind_at <= ?)
@@ -647,51 +680,94 @@ async function getReminderCandidates(now = new Date()) {
                  AND (l.deadline_notified = FALSE OR l.overdue_notified = FALSE))
          )`,
         [now, day(-14), day(1)]
-    ).then((rows) => rows.map((r) => ({ ...r, items_total: Number(r.items_total), items_done: Number(r.items_done) })));
+    );
+    const members = await run(
+        `SELECT l.*, l.discord_id AS owner_id, m.discord_id AS recipient_id, u.timezone, u.reminder_hour,
+                COALESCE(r.deadline_notified, 0) AS member_deadline_notified, COALESCE(r.overdue_notified, 0) AS member_overdue_notified,
+                r.remind_at AS member_remind_at, ${counts}
+         FROM list_members m
+         JOIN lists l ON l.id = m.list_id
+         JOIN users u ON u.discord_id = m.discord_id
+         LEFT JOIN list_reminders r ON r.list_id = m.list_id AND r.discord_id = m.discord_id
+         WHERE u.automation_enabled = TRUE AND (
+             (r.remind_at IS NOT NULL AND r.remind_at <= ?)
+             OR (l.deadline IS NOT NULL AND l.deadline >= ? AND l.deadline <= ?
+                 AND (COALESCE(r.deadline_notified, 0) = 0 OR COALESCE(r.overdue_notified, 0) = 0))
+         )`,
+        [now, day(-14), day(1)]
+    );
+    const memberRows = members.map(
+        ({ recipient_id: recipient, member_deadline_notified: dn, member_overdue_notified: on, member_remind_at: remindAt, ...row }) => ({
+            ...row,
+            discord_id: recipient,
+            deadline_notified: Number(dn),
+            overdue_notified: Number(on),
+            remind_at: remindAt
+        })
+    );
+    return [...owners, ...memberRows].map((r) => ({ ...r, items_total: Number(r.items_total), items_done: Number(r.items_done) }));
 }
 
 /**
  * Record that a reminder went out. `kind`: 'due' | 'overdue' | 'snooze'. Keeps updated_at: it is not an edit.
  * `late`: the deadline day is over; `pastDeadline`: the deadline is today or earlier.
+ * `recipientId`: who it went to. A member's state is kept apart (list_reminders); the owner's stays on the list.
  */
-async function markReminderSent(listId, kind, { late = false, pastDeadline = late } = {}) {
-    const sets = {
-        due: late ? 'deadline_notified = TRUE, overdue_notified = TRUE' : 'deadline_notified = TRUE',
-        overdue: 'deadline_notified = TRUE, overdue_notified = TRUE',
+async function markReminderSent(listId, kind, { late = false, pastDeadline = late, recipientId } = {}) {
+    const flags = {
+        due: late ? { deadline: 1, overdue: 1 } : { deadline: 1 },
+        overdue: { deadline: 1, overdue: 1 },
         // A snooze that fires on/after the deadline counts as the due (and, once the day is over,
         // the overdue) notice, so another DM does not follow within the hour.
-        snooze: late
-            ? 'remind_at = NULL, deadline_notified = TRUE, overdue_notified = TRUE'
-            : pastDeadline
-              ? 'remind_at = NULL, deadline_notified = TRUE'
-              : 'remind_at = NULL'
+        snooze: late ? { deadline: 1, overdue: 1, clearSnooze: true } : pastDeadline ? { deadline: 1, clearSnooze: true } : { clearSnooze: true }
     }[kind];
-    if (!sets) throw new Error(`Unknown reminder kind ${kind}`);
-    await run(`UPDATE lists SET ${sets}, updated_at = updated_at WHERE id = ?`, [listId]);
+    if (!flags) throw new Error(`Unknown reminder kind ${kind}`);
+    const owner = recipientId === undefined ? null : (await run('SELECT discord_id FROM lists WHERE id = ?', [listId]))[0];
+    if (recipientId !== undefined && owner && String(owner.discord_id) !== String(recipientId)) {
+        await run(
+            `INSERT INTO list_reminders (list_id, discord_id, deadline_notified, overdue_notified, remind_at) VALUES (?, ?, ?, ?, NULL)
+             ON DUPLICATE KEY UPDATE deadline_notified = GREATEST(deadline_notified, VALUES(deadline_notified)),
+                 overdue_notified = GREATEST(overdue_notified, VALUES(overdue_notified)),
+                 remind_at = IF(? = 1, NULL, remind_at)`,
+            [listId, String(recipientId), flags.deadline ? 1 : 0, flags.overdue ? 1 : 0, flags.clearSnooze ? 1 : 0]
+        );
+        return;
+    }
+    const sets = [];
+    if (flags.deadline) sets.push('deadline_notified = TRUE');
+    if (flags.overdue) sets.push('overdue_notified = TRUE');
+    if (flags.clearSnooze) sets.push('remind_at = NULL');
+    await run(`UPDATE lists SET ${sets.join(', ')}, updated_at = updated_at WHERE id = ?`, [listId]);
 }
 
-/** Remind the owner about a list again at `until`. */
+/** Remind the user (owner or member) about a list again at `until`. Each person's snooze is their own. */
 async function snoozeList(discordId, listId, until) {
     const id = unwrap(v.id(listId));
-    const [res] = await getPool().query('UPDATE lists SET remind_at = ?, updated_at = updated_at WHERE id = ? AND discord_id = ?', [
-        until,
-        id,
-        String(discordId)
-    ]);
-    if (!res.affectedRows) throw errors.notFound('List not found.');
+    await withTransaction(async (conn) => {
+        const { isOwner } = await access.forList(conn, discordId, id, 'viewer', { lock: true });
+        if (isOwner) {
+            await conn.query('UPDATE lists SET remind_at = ?, updated_at = updated_at WHERE id = ?', [until, id]);
+        } else {
+            await conn.query(
+                'INSERT INTO list_reminders (list_id, discord_id, remind_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE remind_at = VALUES(remind_at)',
+                [id, String(discordId), until]
+            );
+        }
+    });
     return true;
 }
 
 /**
- * Open tasks with their own due date that might need a reminder right now, with the
- * owner's time zone and reminder hour (a wide net; the bot decides in local time).
+ * Open tasks with their own due date that might need a reminder right now, one row per person who should hear
+ * about it (the owner, and every member with automation on), with the recipient's time zone and reminder hour
+ * (a wide net; the bot decides in local time). `discord_id` is the recipient. A member's state lives in item_reminders.
  * A task due on the same day as its list's deadline is left to the list reminder.
  *   - snoozed tasks whose snooze has ended
  *   - tasks due in the next day or the last 14 days that have not been reminded yet
  */
 async function getTaskReminderCandidates(now = new Date()) {
     const day = (offset) => new Date(now.getTime() + offset * 86400e3).toISOString().slice(0, 10);
-    return run(
+    const owners = await run(
         `SELECT i.id, i.name, i.list_id, i.due_date, i.priority, i.remind_at, i.reminded_at, i.parent_id,
                 l.name AS list_name, l.discord_id, u.timezone, u.reminder_hour
          FROM items i JOIN lists l ON l.id = i.list_id JOIN users u ON u.discord_id = l.discord_id
@@ -702,22 +778,54 @@ async function getTaskReminderCandidates(now = new Date()) {
          )`,
         [now, day(-14), day(1)]
     );
+    const members = await run(
+        `SELECT i.id, i.name, i.list_id, i.due_date, i.priority, r.remind_at AS remind_at, r.reminded_at AS reminded_at, i.parent_id,
+                l.name AS list_name, m.discord_id, u.timezone, u.reminder_hour
+         FROM list_members m
+         JOIN lists l ON l.id = m.list_id
+         JOIN items i ON i.list_id = l.id
+         JOIN users u ON u.discord_id = m.discord_id
+         LEFT JOIN item_reminders r ON r.item_id = i.id AND r.discord_id = m.discord_id
+         WHERE u.automation_enabled = TRUE AND i.completed = FALSE AND i.due_date IS NOT NULL AND (
+             (r.remind_at IS NOT NULL AND r.remind_at <= ?)
+             OR (r.reminded_at IS NULL AND r.remind_at IS NULL AND i.due_date >= ? AND i.due_date <= ?
+                 AND (l.deadline IS NULL OR l.deadline <> i.due_date))
+         )`,
+        [now, day(-14), day(1)]
+    );
+    return [...owners, ...members];
 }
 
-/** Record that a task's reminder went out (also ends a snooze). */
-async function markTaskReminderSent(itemId, now = new Date()) {
+/** Record that a task's reminder went out (also ends a snooze). `recipientId` is who it went to (a member keeps their own state). */
+async function markTaskReminderSent(itemId, now = new Date(), recipientId) {
+    if (recipientId !== undefined) {
+        const [row] = await run('SELECT l.discord_id FROM items i JOIN lists l ON l.id = i.list_id WHERE i.id = ?', [itemId]);
+        if (row && String(row.discord_id) !== String(recipientId)) {
+            await run(
+                `INSERT INTO item_reminders (item_id, discord_id, reminded_at, remind_at) VALUES (?, ?, ?, NULL)
+                 ON DUPLICATE KEY UPDATE reminded_at = VALUES(reminded_at), remind_at = NULL`,
+                [itemId, String(recipientId), now]
+            );
+            return;
+        }
+    }
     await run('UPDATE items SET reminded_at = ?, remind_at = NULL WHERE id = ?', [now, itemId]);
 }
 
-/** Remind the owner about a task again at `until`. */
+/** Remind the user (owner or member) about a task again at `until`. */
 async function snoozeTask(discordId, itemId, until) {
     const id = unwrap(v.id(itemId));
-    const [res] = await getPool().query('UPDATE items i JOIN lists l ON l.id = i.list_id SET i.remind_at = ? WHERE i.id = ? AND l.discord_id = ?', [
-        until,
-        id,
-        String(discordId)
-    ]);
-    if (!res.affectedRows) throw errors.notFound('Task not found.');
+    await withTransaction(async (conn) => {
+        const { isOwner } = await access.forItem(conn, discordId, id, 'viewer', { lock: true });
+        if (isOwner) {
+            await conn.query('UPDATE items SET remind_at = ? WHERE id = ?', [until, id]);
+        } else {
+            await conn.query(
+                'INSERT INTO item_reminders (item_id, discord_id, remind_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE remind_at = VALUES(remind_at)',
+                [id, String(discordId), until]
+            );
+        }
+    });
     return true;
 }
 
@@ -729,12 +837,14 @@ async function markDeadlineNotified(listId) {
 /**
  * Delete lists for users with auto_delete_old_lists on once every item is completed
  * and the last change was 5+ days ago. Unfinished lists are never deleted, even when
- * their deadline is long gone: they stay visible as overdue.
+ * their deadline is long gone: they stay visible as overdue. A list that is shared with anyone is never
+ * deleted automatically: other people's work lives there too.
  * @returns {Promise<Array<{ id: number, discord_id: string }>>} the lists that were deleted
  */
 async function cleanupOldLists(days = 5, { onCandidates } = {}) {
     const eligible = `u.auto_delete_old_lists = TRUE
-         AND s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY)`;
+         AND s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY)
+         AND NOT EXISTS (SELECT 1 FROM list_members sm WHERE sm.list_id = l.id)`;
     const from = `FROM lists l
          JOIN users u ON u.discord_id = l.discord_id
          LEFT JOIN (
@@ -760,7 +870,38 @@ async function cleanupOldLists(days = 5, { onCandidates } = {}) {
     return deleted;
 }
 
+/**
+ * The writing services restricted to lists the user OWNS, for callers that must never reach a list the user merely belongs to:
+ * the AI service's tools (routes/internal.js) use these, so sharing never widens what the AI can read or change. A member's
+ * call on someone else's list is NOT_FOUND, exactly like a stranger's.
+ */
+async function requireOwnedList(discordId, listId) {
+    const { isOwner } = await access.forList(getPool(), discordId, listId);
+    if (!isOwner) throw errors.notFound('List not found.');
+}
+async function requireOwnedItem(discordId, itemId) {
+    const { isOwner } = await access.forItem(getPool(), discordId, itemId);
+    if (!isOwner) throw errors.notFound('Task not found.');
+}
+const ownedList = (fn) => async (discordId, listId, ...rest) => {
+    await requireOwnedList(discordId, listId);
+    return fn(discordId, listId, ...rest);
+};
+const ownedItem = (fn) => async (discordId, itemId, ...rest) => {
+    await requireOwnedItem(discordId, itemId);
+    return fn(discordId, itemId, ...rest);
+};
+const asOwner = {
+    createListWithItems: (...args) => createListWithItems(...args),
+    addItem: ownedList(addItem),
+    updateList: ownedList(updateList),
+    updateItem: ownedItem(updateItem),
+    setItemCompleted: ownedItem(setItemCompleted),
+    addSubtasks: ownedItem(addSubtasks)
+};
+
 module.exports = {
+    asOwner,
     getLists,
     getList,
     getListByName,

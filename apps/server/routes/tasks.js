@@ -12,7 +12,9 @@ import { idParam, listIdParam, searchQuery, saveTemplateBody, createListBody, up
 export const listsRouter = Router();
 export const itemsRouter = Router();
 
-const listWithCounts = (l) => ({ ...l, itemsTotal: l.items_total, itemsCompleted: l.items_completed });
+// Sharing fields are camelCased for the client; the owner's Discord ID is already stripped from lists the caller does not own.
+const sharing = ({ is_owner: isOwner, owner_name: ownerName, member_count: memberCount, ...l }) => ({ ...l, isOwner, ownerName, memberCount });
+const listWithCounts = (l) => sharing({ ...l, itemsTotal: l.items_total, itemsCompleted: l.items_completed });
 
 listsRouter.get(
     '/',
@@ -47,7 +49,7 @@ listsRouter.get(
         const list = await db.tasks.getList(uid(req), id);
         if (!list) return res.status(404).json({ error: 'List not found', code: 'NOT_FOUND' });
         const items = await db.tasks.getItems(uid(req), id);
-        res.json({ ...list, items });
+        res.json({ ...sharing(list), items });
     })
 );
 
@@ -57,7 +59,7 @@ listsRouter.patch(
         const { id } = parse(idParam, req.params);
         const updated = await db.tasks.updateList(uid(req), id, parse(updateListBody, req.body));
         aiClient.reindex(uid(req), id);
-        res.json(updated);
+        res.json(sharing(updated));
     })
 );
 

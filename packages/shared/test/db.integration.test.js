@@ -2128,5 +2128,402 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await db.push.countSubscriptions(P), 0, 'subscriptions go with the user');
     });
 
+    // ─── Shared lists: access matrix ──────────────────────────────────────────────
+
+    const SL = { owner: '200000000000000301', viewer: '200000000000000302', editor: '200000000000000303', manager: '200000000000000304', stranger: '200000000000000305', other: '200000000000000306' };
+    const addMember = (listId, userId, role) =>
+        db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, require('crypto').randomBytes(6).toString('hex')]);
+    let slFixture;
+    async function sharedFixture() {
+        if (slFixture) return slFixture;
+        for (const [name, id] of Object.entries(SL)) await db.users.ensureUser(id, { username: `sl_${name}`, avatar: null });
+        const { list } = await db.tasks.createList(SL.owner, { name: 'Household', priority: 'HIGH' });
+        const a = (await db.tasks.addItem(SL.owner, list.id, { name: 'Bins' })).item;
+        const b = (await db.tasks.addItem(SL.owner, list.id, { name: 'Dishes', due_date: '2031-01-05' })).item;
+        await addMember(list.id, SL.viewer, 'viewer');
+        await addMember(list.id, SL.editor, 'editor');
+        await addMember(list.id, SL.manager, 'manager');
+        const template = await db.templates.createTemplate(SL.owner, { name: 'Weekly', items: [{ name: 'Plan' }] });
+        slFixture = { list, a, b, template };
+        return slFixture;
+    }
+
+    await t.test('migration 018 is idempotent and backfills the actor of existing tasks', async () => {
+        const f = await sharedFixture();
+        await pool.query("DELETE FROM schema_migrations WHERE id = '018_list_members'");
+        await pool.query('UPDATE items SET created_by = NULL, completed_by = NULL, first_completed_by = NULL WHERE list_id = ?', [f.list.id]);
+        await db.tasks.setItemCompleted(SL.owner, f.a.id);
+        await pool.query('UPDATE items SET completed_by = NULL, first_completed_by = NULL WHERE id = ?', [f.a.id]);
+        const again = await db.runMigrations({ log: () => {} });
+        assert.ok(again.includes('018_list_members'));
+        const [[row]] = await pool.query('SELECT created_by, completed_by, first_completed_by FROM items WHERE id = ?', [f.a.id]);
+        assert.deepEqual({ ...row }, { created_by: SL.owner, completed_by: SL.owner, first_completed_by: SL.owner });
+        const [[open]] = await pool.query('SELECT completed_by, first_completed_by FROM items WHERE id = ?', [f.b.id]);
+        assert.deepEqual({ ...open }, { completed_by: null, first_completed_by: null }, 'open tasks have no completer');
+        await db.tasks.setItemCompleted(SL.owner, f.a.id, false); // leave the fixture as it was
+        await db.tasks.setItemCompleted(SL.owner, f.a.id, false);
+    });
+
+    await t.test('access: owner, each role and a stranger on one list', async () => {
+        const f = await sharedFixture();
+        const conn = db.getPool();
+        const as = (user, min) => db.access.forList(conn, SL[user], f.list.id, min);
+        for (const [user, role, isOwner] of [['owner', 'manager', true], ['manager', 'manager', false], ['editor', 'editor', false], ['viewer', 'viewer', false]]) {
+            const r = await as(user, 'viewer');
+            assert.equal(r.role, role, user);
+            assert.equal(r.isOwner, isOwner, user);
+            assert.equal(r.list.id, f.list.id);
+        }
+        await assert.rejects(as('stranger', 'viewer'), { code: 'NOT_FOUND' });
+        await assert.rejects(as('stranger', 'manager'), { code: 'NOT_FOUND' }, 'a stranger never learns the list exists, whatever role is asked for');
+        await assert.rejects(as('viewer', 'editor'), { code: 'FORBIDDEN', message: /view access/ });
+        await assert.rejects(as('editor', 'manager'), { code: 'FORBIDDEN' });
+        assert.equal((await as('editor', 'editor')).role, 'editor');
+        await assert.rejects(db.access.forList(conn, SL.owner, 99999999, 'viewer'), { code: 'NOT_FOUND' });
+        await assert.rejects(db.access.forList(conn, SL.owner, 'abc', 'viewer'), { code: 'NOT_FOUND' });
+        await assert.rejects(db.access.forItem(conn, SL.stranger, f.a.id), { code: 'NOT_FOUND' });
+        assert.equal((await db.access.forItem(conn, SL.viewer, f.a.id)).item.list_name, 'Household');
+        assert.equal(await db.access.roleOn(conn, SL.stranger, f.list.id), null);
+        assert.equal(await db.access.roleOn(conn, SL.editor, f.list.id), 'editor');
+    });
+
+    await t.test('shared lists: role matrix over every task and list operation', async () => {
+        const f = await sharedFixture();
+        const T = db.tasks;
+        // viewer: reads everything, writes nothing
+        assert.equal((await T.getList(SL.viewer, f.list.id)).role, 'viewer');
+        assert.equal((await T.getItems(SL.viewer, f.list.id)).length, 2);
+        assert.equal((await T.getItem(SL.viewer, f.a.id)).name, 'Bins');
+        assert.equal((await T.getListByName(SL.viewer, 'Household')).id, f.list.id);
+        assert.equal((await T.search(SL.viewer, 'Bins', { scope: 'all' })).tasks.length, 1);
+        assert.equal((await T.search(SL.viewer, 'Household')).lists.length, 1);
+        for (const [what, call] of [
+            ['addItem', () => T.addItem(SL.viewer, f.list.id, { name: 'x' })],
+            ['addItems', () => T.addItems(SL.viewer, f.list.id, [{ name: 'x' }])],
+            ['addSubtasks', () => T.addSubtasks(SL.viewer, f.a.id, ['x'])],
+            ['updateItem', () => T.updateItem(SL.viewer, f.a.id, { name: 'x' })],
+            ['updateItem position', () => T.updateItem(SL.viewer, f.a.id, { position: 1 })],
+            ['deleteItem', () => T.deleteItem(SL.viewer, f.a.id)],
+            ['setItemCompleted', () => T.setItemCompleted(SL.viewer, f.a.id)],
+            ['moveItem', () => T.moveItem(SL.viewer, f.a.id, 1)],
+            ['swapItemPositions', () => T.swapItemPositions(SL.viewer, f.a.id, f.b.id)],
+            ['reorderItems', () => T.reorderItems(SL.viewer, f.list.id, [f.b.id, f.a.id])],
+            ['updateList', () => T.updateList(SL.viewer, f.list.id, { name: 'x' })],
+            ['deleteList', () => T.deleteList(SL.viewer, f.list.id)],
+            ['saveFromList', () => db.templates.saveFromList(SL.viewer, f.list.id)]
+        ]) {
+            await assert.rejects(call(), { code: 'FORBIDDEN' }, `viewer: ${what}`);
+        }
+        // editor: tasks yes, list settings no
+        for (const [what, call] of [
+            ['updateList', () => T.updateList(SL.editor, f.list.id, { name: 'x' })],
+            ['deleteList', () => T.deleteList(SL.editor, f.list.id)]
+        ]) {
+            await assert.rejects(call(), { code: 'FORBIDDEN' }, `editor: ${what}`);
+        }
+        const added = await T.addItem(SL.editor, f.list.id, { name: 'Recycling' });
+        assert.ok(added.item.id);
+        assert.equal(added.item.created_by, undefined, 'IDs of other people never come back');
+        await T.updateItem(SL.editor, added.item.id, { name: 'Recycling day' });
+        await T.moveItem(SL.editor, added.item.id, 0);
+        await T.swapItemPositions(SL.editor, added.item.id, f.a.id);
+        await T.reorderItems(SL.editor, f.list.id, [f.a.id, f.b.id, added.item.id]);
+        const sub = await T.addSubtasks(SL.editor, added.item.id, ['Glass']);
+        assert.equal(sub.items.length, 1);
+        assert.ok((await db.templates.saveFromList(SL.editor, f.list.id, { name: 'From the house' })).id);
+        await T.deleteItem(SL.editor, sub.items[0].item.id);
+        await T.deleteItem(SL.editor, added.item.id);
+        // manager: list settings yes, delete no (the owner alone destroys a list)
+        assert.equal((await T.updateList(SL.manager, f.list.id, { description: 'Chores' })).description, 'Chores');
+        await assert.rejects(T.deleteList(SL.manager, f.list.id), { code: 'FORBIDDEN', message: /owner/ });
+        // the list the manager gets back never carries the owner's Discord ID; the owner's own copy does
+        assert.equal((await T.getList(SL.manager, f.list.id)).discord_id, undefined);
+        assert.equal((await T.getList(SL.owner, f.list.id)).discord_id, SL.owner);
+        assert.equal((await T.getList(SL.manager, f.list.id)).owner_name, 'sl_owner');
+    });
+
+    await t.test('shared lists: list overviews carry sharing fields, owned and shared side by side', async () => {
+        const f = await sharedFixture();
+        const own = (await db.tasks.createList(SL.editor, { name: 'Household' })).list; // same name as the shared one, different owner
+        const mine = await db.tasks.getLists(SL.editor);
+        const shared = mine.find((l) => l.id === f.list.id);
+        const owned = mine.find((l) => l.id === own.id);
+        assert.deepEqual([shared.shared, shared.role, shared.is_owner, shared.owner_name, shared.member_count], [true, 'editor', false, 'sl_owner', 4]);
+        assert.deepEqual([owned.shared, owned.role, owned.is_owner, owned.member_count], [false, 'manager', true, 1]);
+        assert.equal(shared.discord_id, undefined, 'a shared list does not reveal its owner\'s Discord ID');
+        assert.equal((await db.tasks.getListByName(SL.editor, 'Household')).id, own.id, 'an own list wins a name clash');
+        assert.equal((await db.tasks.getLists(SL.stranger)).length, 0);
+        const ownerView = (await db.tasks.getLists(SL.owner)).find((l) => l.id === f.list.id);
+        assert.deepEqual([ownerView.shared, ownerView.role, ownerView.is_owner, ownerView.member_count], [true, 'manager', true, 4]);
+        await db.tasks.deleteList(SL.editor, own.id);
+    });
+
+    await t.test('shared lists: a member removed while the list is open gets NOT_FOUND on the next call', async () => {
+        const f = await sharedFixture();
+        await addMember(f.list.id, SL.other, 'editor');
+        assert.equal((await db.tasks.getItems(SL.other, f.list.id)).length, 2);
+        const read = await db.tasks.getItem(SL.other, f.a.id);
+        assert.ok(read);
+        await db.query('DELETE FROM list_members WHERE list_id = ? AND discord_id = ?', [f.list.id, SL.other]);
+        assert.equal(await db.tasks.getItems(SL.other, f.list.id), null);
+        assert.equal(await db.tasks.getItem(SL.other, f.a.id), null);
+        assert.equal(await db.tasks.getList(SL.other, f.list.id), null);
+        await assert.rejects(db.tasks.addItem(SL.other, f.list.id, { name: 'late' }), { code: 'NOT_FOUND' });
+        await assert.rejects(db.tasks.setItemCompleted(SL.other, f.a.id), { code: 'NOT_FOUND' });
+        assert.equal((await db.tasks.search(SL.other, 'Bins', { scope: 'all' })).tasks.length, 0);
+    });
+
+    await t.test('stranger test: every id-taking function of tasks, templates, transfer and quests refuses a non-member and changes nothing', async () => {
+        const f = await sharedFixture();
+        const S = SL.stranger;
+        const later = new Date('2031-01-01T09:00:00Z');
+        // name -> [args after the user, expected]. 'null' = the lookup returns null, 'rejects' = NOT_FOUND.
+        const withId = {
+            tasks: {
+                getList: [[f.list.id], 'null'],
+                getListByName: [['Household'], 'null'],
+                getItems: [[f.list.id], 'null'],
+                getItem: [[f.a.id], 'null'],
+                updateList: [[f.list.id, { name: 'pwned' }], 'rejects'],
+                deleteList: [[f.list.id], 'rejects'],
+                addItem: [[f.list.id, { name: 'pwned' }], 'rejects'],
+                addItems: [[f.list.id, [{ name: 'pwned' }]], 'rejects'],
+                addSubtasks: [[f.a.id, ['pwned']], 'rejects'],
+                updateItem: [[f.a.id, { name: 'pwned' }], 'rejects'],
+                deleteItem: [[f.a.id], 'rejects'],
+                setItemCompleted: [[f.a.id], 'rejects'],
+                swapItemPositions: [[f.a.id, f.b.id], 'rejects'],
+                moveItem: [[f.a.id, 0], 'rejects'],
+                reorderItems: [[f.list.id, [f.b.id, f.a.id]], 'rejects'],
+                snoozeList: [[f.list.id, later], 'rejects'],
+                snoozeTask: [[f.b.id, later], 'rejects']
+            },
+            templates: {
+                getTemplate: [[f.template.id], 'rejects'],
+                deleteTemplate: [[f.template.id], 'rejects'],
+                saveFromList: [[f.list.id], 'rejects'],
+                applyTemplate: [[f.template.id], 'rejects']
+            }
+        };
+        // Functions that take no list or task id: they read or write only the caller's own data (checked below), or are not per-user at all.
+        const withoutId = {
+            tasks: ['getLists', 'createList', 'createListWithItems', 'searchLists', 'searchItems', 'search', 'SEARCH_LIMIT', 'getListsDueOn', 'getReminderCandidates', 'markReminderSent', 'getTaskReminderCandidates', 'markTaskReminderSent', 'markDeadlineNotified', 'cleanupOldLists', 'asOwner'],
+            templates: ['MAX_TEMPLATES', 'MAX_ITEMS', 'parseTemplateInput', 'listTemplates', 'createTemplate'],
+            transfer: ['LIMITS', 'exportAll', 'toCsv', 'importAll', 'parseImport', 'regenerateCalendarToken', 'getCalendarToken', 'clearCalendarToken', 'findUserByCalendarToken', 'getCalendarData'],
+            quests: ['getQuests', 'claimQuest']
+        };
+        for (const mod of ['tasks', 'templates', 'transfer', 'quests']) {
+            const classified = new Set([...Object.keys(withId[mod] || {}), ...(withoutId[mod] || [])]);
+            const exported = Object.keys(db[mod]);
+            const unclassified = exported.filter((n) => !classified.has(n));
+            assert.deepEqual(unclassified, [], `db.${mod}: classify new exports in the stranger test (id-taking functions need a case)`);
+            assert.deepEqual([...classified].filter((n) => !exported.includes(n)), [], `db.${mod}: stale entries`);
+        }
+
+        const snapshot = async () => {
+            const out = {};
+            for (const table of ['lists', 'items', 'list_members', 'list_reminders', 'item_reminders', 'task_templates']) {
+                out[table] = JSON.stringify((await pool.query(`SELECT * FROM ${table} ORDER BY 1, 2`))[0]);
+            }
+            out.stranger = JSON.stringify((await pool.query('SELECT player_xp, total_items_added, total_items_completed, total_lists_created FROM users WHERE discord_id = ?', [S]))[0]);
+            out.xp = JSON.stringify((await pool.query('SELECT COUNT(*) AS n FROM xp_transactions'))[0]);
+            return out;
+        };
+        const ownTemplate = await db.templates.createTemplate(S, { name: 'Mine', items: [{ name: 't' }] });
+        const before = await snapshot();
+        for (const [mod, fns] of Object.entries(withId)) {
+            for (const [name, [args, expected]] of Object.entries(fns)) {
+                const call = () => db[mod][name](S, ...args);
+                if (expected === 'null') assert.equal(await call(), null, `${mod}.${name} returns null for a stranger`);
+                else await assert.rejects(call(), { code: 'NOT_FOUND' }, `${mod}.${name} throws NOT_FOUND for a stranger`);
+            }
+        }
+        await assert.rejects(db.templates.applyTemplate(S, ownTemplate.id, { listId: f.list.id }), { code: 'NOT_FOUND' }, 'a stranger cannot apply even their own template to another list');
+        assert.deepEqual(await db.tasks.searchLists(S, 'Household'), []);
+        assert.deepEqual(await db.tasks.searchItems(S, 'Bins'), []);
+        // The id-less readers see only the stranger's own (empty) world.
+        assert.deepEqual(await db.tasks.getLists(S), []);
+        assert.deepEqual(await db.tasks.search(S, 'Bins', { scope: 'all' }), { lists: [], tasks: [] });
+        assert.deepEqual((await db.templates.listTemplates(S)).map((x) => x.name), ['Mine'], 'only their own template');
+        assert.deepEqual((await db.transfer.exportAll(S)).lists, []);
+        assert.deepEqual(await db.transfer.getCalendarData(S), { lists: [], items: [] });
+        assert.deepEqual(await snapshot(), before, 'nothing was written by any refused call');
+    });
+
+    await t.test('shared lists: the export holds only what the exporter owns, the calendar also what is shared with them', async () => {
+        const f = await sharedFixture();
+        assert.equal((await db.transfer.exportAll(SL.editor)).lists.some((l) => l.name === 'Household'), false);
+        assert.equal((await db.transfer.exportAll(SL.owner)).lists.some((l) => l.name === 'Household'), true);
+        const cal = await db.transfer.getCalendarData(SL.viewer);
+        assert.ok(cal.items.some((i) => i.id === f.b.id), 'a task with a due date on a shared list is in a member\'s calendar');
+        assert.equal((await db.transfer.getCalendarData(SL.stranger)).items.length, 0);
+    });
+
+
+    // ─── Shared lists: the actor gets the rewards ─────────────────────────────────
+
+    await t.test('shared lists: completions, XP, caps, quests, review and stats belong to the person who acted', async () => {
+        const AC = { owner: '200000000000000311', editor: '200000000000000312' };
+        for (const [k, id] of Object.entries(AC)) await db.users.ensureUser(id, { username: `ac_${k}`, avatar: null });
+        const { list } = await db.tasks.createList(AC.owner, { name: 'Team board' });
+        await addMember(list.id, AC.editor, 'editor');
+        const ids = [];
+        for (const n of ['one', 'two', 'three']) ids.push((await db.tasks.addItem(AC.owner, list.id, { name: n, priority: 'HIGH' })).item.id);
+        const xpBefore = async (id) => Number((await db.users.getUser(id)).player_xp);
+        const [ownerXp, editorXp] = [await xpBefore(AC.owner), await xpBefore(AC.editor)];
+
+        const done = await db.tasks.setItemCompleted(AC.editor, ids[0]);
+        assert.equal(done.firstCompletion, true);
+        assert.ok(done.xp.finalXP > 0, 'the editor was paid');
+        assert.equal(await xpBefore(AC.owner), ownerXp, 'the owner got nothing for the editor\'s work');
+        assert.ok((await xpBefore(AC.editor)) > editorXp);
+        assert.equal(Number((await db.users.getUser(AC.owner)).total_items_completed), 0);
+        assert.equal(Number((await db.users.getUser(AC.editor)).total_items_completed), 1);
+        const [[row]] = await pool.query('SELECT completed_by, first_completed_by, created_by FROM items WHERE id = ?', [ids[0]]);
+        assert.deepEqual({ ...row }, { completed_by: AC.editor, first_completed_by: AC.editor, created_by: AC.owner });
+        assert.equal((await db.tasks.getItems(AC.owner, list.id)).find((i) => i.id === ids[0]).completed_by_name, 'ac_editor', 'a display name, never an ID');
+        assert.equal(JSON.stringify(await db.tasks.getItems(AC.owner, list.id)).includes(AC.editor), false, 'no Discord ID in the items');
+
+        // Un-checking by the owner and re-checking pays nobody again and keeps the first completer.
+        await db.tasks.setItemCompleted(AC.owner, ids[0], false);
+        const again = await db.tasks.setItemCompleted(AC.owner, ids[0], true);
+        assert.equal(again.firstCompletion, false);
+        assert.equal(again.xp, null);
+        assert.equal((await pool.query('SELECT first_completed_by FROM items WHERE id = ?', [ids[0]]))[0][0].first_completed_by, AC.editor);
+        assert.equal((await pool.query('SELECT completed_by FROM items WHERE id = ?', [ids[0]]))[0][0].completed_by, AC.owner, 'the current completer follows the last toggle');
+
+        // Quests: the editor finished a high-priority task, the owner did not (and the owner added all three).
+        const prog = async (id, key) => (await db.quests.getQuests(id)).find((q) => q.key === key).progress;
+        assert.equal(await prog(AC.editor, 'DAILY_HIGH_1'), 1);
+        assert.equal(await prog(AC.owner, 'DAILY_HIGH_1'), 0);
+        assert.equal(await prog(AC.editor, 'DAILY_ADD_3'), 0, 'adding counts for whoever added');
+        assert.equal(await prog(AC.owner, 'DAILY_ADD_3'), 3);
+        assert.equal((await db.review.getReview(AC.editor)).completed, 1);
+        assert.equal((await db.review.getReview(AC.owner)).completed, 0);
+        assert.equal((await db.stats.getStatsSummary(AC.editor)).tasksCompleted7d, 1);
+        assert.equal((await db.stats.getStatsSummary(AC.owner)).tasksCompleted7d, 0);
+        assert.equal((await db.stats.getXPHistory(AC.editor, 7)).reduce((n, d) => n + d.tasksCompleted, 0), 1);
+        assert.equal((await db.users.getWeeklyStats(AC.editor)).completed, 0, 'the digest counts the current completer, and the owner re-checked it');
+        assert.equal((await db.users.getWeeklyStats(AC.owner)).completed, 1, 'the owner\'s last toggle was theirs');
+        assert.equal((await db.users.getWeeklyStats(AC.editor)).listsOpen, 1, 'a shared list with open tasks is open for the member too');
+
+        // Clearing the list pays the person who finished it, and the "clear lists" quest counts them.
+        await db.tasks.setItemCompleted(AC.editor, ids[1]);
+        const last = await db.tasks.setItemCompleted(AC.editor, ids[2]);
+        assert.ok(last.bonuses.some((b) => b.key === 'list_cleared'), 'the editor earned the cleared bonus');
+        assert.equal((await pool.query('SELECT cleared_by FROM lists WHERE id = ?', [list.id]))[0][0].cleared_by, AC.editor);
+        assert.equal((await pool.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'list_cleared'", [AC.owner]))[0][0].n, 0);
+        assert.equal((await pool.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'list_cleared'", [AC.editor]))[0][0].n, 1);
+    });
+
+    await t.test('shared lists: daily completion caps count the actor, not the list owner', async () => {
+        const CAP = { owner: '200000000000000321', editor: '200000000000000322' };
+        for (const [k, id] of Object.entries(CAP)) await db.users.ensureUser(id, { username: `cap_${k}`, avatar: null });
+        const { list } = await db.tasks.createList(CAP.owner, { name: 'Cap board' });
+        await addMember(list.id, CAP.editor, 'editor');
+        const { LIMITS } = require('../src');
+        const ids = [];
+        // Fill the OWNER's completion cap on their own list...
+        const { list: mine } = await db.tasks.createList(CAP.owner, { name: 'Owner own' });
+        await db.query(
+            `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, created_at)
+             SELECT ?, 1, 'item_complete', 0, 1, UTC_TIMESTAMP() FROM information_schema.COLUMNS LIMIT ${LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY}`,
+            [CAP.owner]
+        );
+        const own = (await db.tasks.addItem(CAP.owner, mine.id, { name: 'capped' })).item;
+        const capped = await db.tasks.setItemCompleted(CAP.owner, own.id);
+        assert.ok(!capped.xp || capped.xp.finalXP === 0 || capped.xp.capped, 'the owner is at the cap');
+        // ...the editor, who has done nothing today, is still paid on the owner's shared list.
+        ids.push((await db.tasks.addItem(CAP.owner, list.id, { name: 'fresh' })).item.id);
+        const paid = await db.tasks.setItemCompleted(CAP.editor, ids[0]);
+        assert.ok(paid.xp && paid.xp.finalXP > 0 && !paid.xp.capped, 'the editor\'s own counter decides');
+    });
+
+    await t.test('shared lists: the AI-facing owner-only services refuse a member and never widen access', async () => {
+        const f = await sharedFixture();
+        const O = db.tasks.asOwner;
+        const before = (await pool.query('SELECT COUNT(*) AS n FROM items WHERE list_id = ?', [f.list.id]))[0][0].n;
+        await assert.rejects(O.addItem(SL.editor, f.list.id, { name: 'ai' }), { code: 'NOT_FOUND' }, 'even an editor');
+        await assert.rejects(O.addItem(SL.manager, f.list.id, { name: 'ai' }), { code: 'NOT_FOUND' });
+        await assert.rejects(O.updateItem(SL.editor, f.a.id, { name: 'ai' }), { code: 'NOT_FOUND' });
+        await assert.rejects(O.setItemCompleted(SL.editor, f.a.id), { code: 'NOT_FOUND' });
+        await assert.rejects(O.addSubtasks(SL.editor, f.a.id, ['ai']), { code: 'NOT_FOUND' });
+        await assert.rejects(O.updateList(SL.manager, f.list.id, { name: 'ai' }), { code: 'NOT_FOUND' });
+        await assert.rejects(O.addItem(SL.stranger, f.list.id, { name: 'ai' }), { code: 'NOT_FOUND' });
+        assert.equal((await pool.query('SELECT COUNT(*) AS n FROM items WHERE list_id = ?', [f.list.id]))[0][0].n, before);
+        assert.ok((await O.addItem(SL.owner, f.list.id, { name: 'ai ok' })).item.id, 'the owner is served');
+        const created = await O.createListWithItems(SL.owner, { name: 'AI made' }, ['x']);
+        assert.equal(created.items.length, 1);
+    });
+
+    await t.test('shared lists: auto-delete never removes a list that has members', async () => {
+        const CL = { owner: '200000000000000331', member: '200000000000000332' };
+        for (const [k, id] of Object.entries(CL)) await db.users.ensureUser(id, { username: `cl_${k}`, avatar: null });
+        const mk = async (name, shared) => {
+            const { list } = await db.tasks.createList(CL.owner, { name });
+            const { item } = await db.tasks.addItem(CL.owner, list.id, { name: 'only' });
+            await db.tasks.setItemCompleted(CL.owner, item.id);
+            await db.query('UPDATE items SET updated_at = UTC_TIMESTAMP() - INTERVAL 30 DAY WHERE list_id = ?', [list.id]);
+            if (shared) await addMember(list.id, CL.member, 'viewer');
+            return list.id;
+        };
+        const solo = await mk('Solo old', false);
+        const withMember = await mk('Shared old', true);
+        const deleted = (await db.tasks.cleanupOldLists(5)).map((d) => d.id);
+        assert.ok(deleted.includes(solo));
+        assert.ok(!deleted.includes(withMember));
+        assert.ok(await db.tasks.getList(CL.member, withMember));
+    });
+
+    await t.test('shared lists: reminders go to every member with automation on, once each, with their own snooze', async () => {
+        const RM = { owner: '200000000000000341', viewer: '200000000000000342', editor: '200000000000000343', quiet: '200000000000000344' };
+        for (const [k, id] of Object.entries(RM)) await db.users.ensureUser(id, { username: `rm_${k}`, avatar: null });
+        await db.users.updateSettings(RM.quiet, { automation_enabled: false });
+        const today = new Date().toISOString().slice(0, 10);
+        const { list } = await db.tasks.createList(RM.owner, { name: 'Due today', deadline: today });
+        const { item } = await db.tasks.addItem(RM.owner, list.id, { name: 'Ship it', due_date: today });
+        const { list: l2 } = await db.tasks.createList(RM.owner, { name: 'No deadline' });
+        const { item: due } = await db.tasks.addItem(RM.owner, l2.id, { name: 'Own due', due_date: today });
+        for (const [id, role] of [[RM.viewer, 'viewer'], [RM.editor, 'editor'], [RM.quiet, 'viewer']]) {
+            await addMember(list.id, id, role);
+            await addMember(l2.id, id, role);
+        }
+        const rows = async () => (await db.tasks.getReminderCandidates()).filter((r) => r.id === list.id);
+        const who = (rs) => rs.map((r) => r.discord_id).sort();
+        assert.deepEqual(who(await rows()), [RM.owner, RM.viewer, RM.editor].sort(), 'the member with automation off is skipped');
+        assert.ok((await rows()).every((r) => r.owner_id === RM.owner));
+
+        await db.tasks.markReminderSent(list.id, 'due', { late: false, recipientId: RM.viewer });
+        const flags = Object.fromEntries((await rows()).map((r) => [r.discord_id, Number(r.deadline_notified)]));
+        assert.deepEqual(flags, { [RM.owner]: 0, [RM.viewer]: 1, [RM.editor]: 0 }, 'one member\'s reminder is not another\'s');
+        await db.tasks.markReminderSent(list.id, 'due', { late: false }); // the owner (old call shape)
+        assert.equal(Number((await rows()).find((r) => r.discord_id === RM.owner).deadline_notified), 1);
+
+        // Each person's snooze is their own.
+        await db.tasks.snoozeList(RM.editor, list.id, new Date(Date.now() - 1000));
+        assert.equal((await db.query('SELECT remind_at FROM lists WHERE id = ?', [list.id]))[0].remind_at, null, 'a member\'s snooze does not touch the owner\'s');
+        assert.ok((await rows()).find((r) => r.discord_id === RM.editor).remind_at);
+        await db.tasks.markReminderSent(list.id, 'snooze', { late: false, pastDeadline: true, recipientId: RM.editor });
+        assert.equal((await rows()).find((r) => r.discord_id === RM.editor).remind_at, null);
+        await assert.rejects(db.tasks.snoozeList('200000000000000349', list.id, new Date()), { code: 'NOT_FOUND' });
+
+        // A new deadline re-arms everyone.
+        await db.tasks.updateList(RM.owner, list.id, { deadline: today });
+        assert.deepEqual((await rows()).map((r) => Number(r.deadline_notified)), [0, 0, 0]);
+
+        // Task reminders: the same per-person state.
+        const taskRows = async (id) => (await db.tasks.getTaskReminderCandidates()).filter((r) => r.id === id);
+        assert.deepEqual(who(await taskRows(due.id)), [RM.owner, RM.viewer, RM.editor].sort());
+        await db.tasks.markTaskReminderSent(due.id, new Date(), RM.viewer);
+        assert.deepEqual(who(await taskRows(due.id)), [RM.owner, RM.editor].sort(), 'the viewer was reminded once');
+        await db.tasks.markTaskReminderSent(due.id, new Date());
+        assert.deepEqual(who(await taskRows(due.id)), [RM.editor]);
+        await db.tasks.snoozeTask(RM.viewer, due.id, new Date(Date.now() - 1000));
+        assert.deepEqual(who(await taskRows(due.id)), [RM.viewer, RM.editor].sort());
+        assert.equal(item.list_id, list.id);
+        // A task due on the list's deadline day is left to the list reminder, for members as well.
+        assert.deepEqual(await taskRows(item.id), []);
+    });
+
     await db.closePool();
 });

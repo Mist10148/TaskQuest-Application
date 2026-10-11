@@ -9,6 +9,7 @@
 const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const tasks = require('./tasks');
+const access = require('./access');
 const { errors } = require('../errors');
 const v = require('../validation');
 const { LIMITS } = require('../constants');
@@ -108,8 +109,8 @@ async function deleteTemplate(discordId, templateId) {
 
 /** Save a quest's tasks as a template (top-level and sub tasks become a flat list; completion and due dates are dropped). */
 async function saveFromList(discordId, listId, { name } = {}) {
-    const list = await tasks.getList(discordId, listId);
-    if (!list) throw errors.notFound('List not found.');
+    // Saving copies a list's contents into the user's own template, so a shared list needs the editor role (a viewer may only look).
+    const { list } = await access.forList(getPool(), discordId, listId, 'editor');
     const items = await tasks.getItems(discordId, list.id);
     if (!items.length) throw errors.validation('That quest has no tasks to save.');
     if (items.length > MAX_ITEMS) throw errors.validation(`A template can hold at most ${MAX_ITEMS} tasks, and this quest has ${items.length}.`);

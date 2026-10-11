@@ -8,6 +8,7 @@
 const { getPool } = require('./pool');
 const { userZone } = require('./progression');
 const tz = require('../tz');
+const { actorSql } = require('./access');
 const { WEEKLY_XP_SOURCES } = require('../constants');
 
 /** Ranges the API accepts (also the cap: nothing larger is ever queried). */
@@ -86,10 +87,10 @@ async function getXPHistory(discordId, days = 30, now = new Date()) {
         ),
         pool.query(
             `SELECT ${bucketSql('i.first_completed_at')} AS b, COUNT(*) AS n
-             FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE l.discord_id = ? AND i.first_completed_at >= ? AND i.first_completed_at < ?
+             FROM items i
+             WHERE ${actorSql('first_completed_by')} AND i.first_completed_at >= ? AND i.first_completed_at < ?
              GROUP BY b`,
-            [id, from, end]
+            [id, id, from, end]
         )
     ]);
     const sumByDay = (rows, field) => {
@@ -121,9 +122,9 @@ async function getStatsSummary(discordId, now = new Date()) {
     const [[[user]], [[done]], [sources], [weekdayRows]] = await Promise.all([
         pool.query('SELECT streak_count FROM users WHERE discord_id = ?', [id]),
         pool.query(
-            `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE l.discord_id = ? AND i.first_completed_at >= ? AND i.first_completed_at < ?`,
-            [id, since(7), end]
+            `SELECT COUNT(*) AS n FROM items i
+             WHERE ${actorSql('first_completed_by')} AND i.first_completed_at >= ? AND i.first_completed_at < ?`,
+            [id, id, since(7), end]
         ),
         pool.query(
             `SELECT source, SUM(amount) AS xp FROM xp_transactions
@@ -133,10 +134,10 @@ async function getStatsSummary(discordId, now = new Date()) {
         ),
         pool.query(
             `SELECT ${bucketSql('i.first_completed_at')} AS b, COUNT(*) AS n
-             FROM items i JOIN lists l ON l.id = i.list_id
-             WHERE l.discord_id = ? AND i.first_completed_at >= ? AND i.first_completed_at < ?
+             FROM items i
+             WHERE ${actorSql('first_completed_by')} AND i.first_completed_at >= ? AND i.first_completed_at < ?
              GROUP BY b`,
-            [id, since(90), end]
+            [id, id, since(90), end]
         )
     ]);
     const perWeekday = new Array(7).fill(0); // 0 = Sunday

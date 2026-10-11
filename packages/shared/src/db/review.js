@@ -12,13 +12,14 @@ const { awardFlat, requireGamification, unlockAchievements } = require('./progre
 const { errors } = require('../errors');
 const { REWARDS, LIMITS, WEEKLY_REVIEW_KEY, WEEKLY_XP_SOURCES } = require('../constants');
 const { questPeriod } = require('../quests');
+const { actorSql } = require('./access');
 
-/** Tasks first completed (and paid) in the week, never imported or auto-spawned copies. */
+/** Tasks the user first completed (and was paid for) in the week, on any list they can use, never imported or auto-spawned copies. */
 async function completedThisWeek(conn, discordId, period) {
     const [[row]] = await conn.query(
-        `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-         WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?`,
-        [discordId, period.startsAt, period.endsAt]
+        `SELECT COUNT(*) AS n FROM items i
+         WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?`,
+        [discordId, discordId, period.startsAt, period.endsAt]
     );
     return Number(row.n);
 }

@@ -13,6 +13,7 @@ const { applyXP, requireGamification, unlockAchievements, userZone } = require('
 const { errors } = require('../errors');
 const { QUESTS, ROTATING_QUESTS } = require('../constants');
 const { questPeriod, activeRotatingQuest } = require('../quests');
+const { actorSql } = require('./access');
 
 const PERIOD_NOUN = { daily: 'day', weekly: 'week', monthly: 'month' };
 
@@ -24,50 +25,51 @@ function liveQuests(now, zone) {
 
 /** How far along a user is on one metric within [from, to). */
 async function metricProgress(conn, discordId, metric, from, to) {
-    const params = [discordId, from, to];
-    const count = async (sql) => Number((await conn.query(sql, params))[0][0].n);
+    const params = [discordId, discordId, from, to];
+    const count = async (sql, p = params) => Number((await conn.query(sql, p))[0][0].n);
     switch (metric) {
-        // Quests count what was recorded at the moment of first (XP-paid) completion or creation,
-        // never query-time state, so re-checking, editing priority, importing or recurring copies can't farm them.
+        // Quests count what the user themselves did (items.first_completed_by / created_by, lists.cleared_by), whoever owns the list,
+        // recorded at the moment of first (XP-paid) completion or creation, never query-time state, so re-checking, editing priority, importing or recurring copies can't farm them.
         case 'completions':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?`
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?`
             );
         case 'high_completions':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
                    AND i.first_completed_high = 1`
             );
         case 'adds':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.created_at >= ? AND i.created_at < ?`
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('created_by')} AND i.counts_for_quests = 1 AND i.created_at >= ? AND i.created_at < ?`
             );
         case 'early_completions':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
                    AND i.first_completed_early = 1`
             );
         case 'overdue_completions':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
                    AND i.first_completed_overdue = 1`
             );
         case 'lists_cleared':
-            return count('SELECT COUNT(*) AS n FROM lists WHERE discord_id = ? AND cleared_at >= ? AND cleared_at < ?');
+            return count('SELECT COUNT(*) AS n FROM lists WHERE (cleared_by = ? OR (cleared_by IS NULL AND discord_id = ?)) AND cleared_at >= ? AND cleared_at < ?');
         case 'dated_adds':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.due_date IS NOT NULL AND i.created_at >= ? AND i.created_at < ?`
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('created_by')} AND i.counts_for_quests = 1 AND i.due_date IS NOT NULL AND i.created_at >= ? AND i.created_at < ?`
             );
         case 'daily_claims':
             return count(
                 `SELECT COUNT(*) AS n FROM xp_transactions
-                 WHERE discord_id = ? AND source = 'daily' AND created_at >= ? AND created_at < ?`
+                 WHERE discord_id = ? AND source = 'daily' AND created_at >= ? AND created_at < ?`,
+                [discordId, from, to]
             );
         default:
             return 0;

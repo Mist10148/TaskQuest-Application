@@ -1,8 +1,9 @@
 /**
  * Deadline reminder DMs. Kept apart from index.js so the timing and retry rules can be tested.
  *
- * Each hour the job looks at lists that might need a message and decides, in the
- * owner's own time zone and at their chosen reminder hour, whether to send one:
+ * Each hour the job looks at lists that might need a message (one candidate per person who should hear about it: the owner
+ * and every member of a shared list with automation on, each with their own marker) and decides, in the
+ * recipient's own time zone and at their chosen reminder hour, whether to send one:
  *
  *   due      the deadline is today (or the bot missed it, up to 3 days ago)
  *   overdue  one notice, the day after the deadline, if tasks are still open
@@ -147,7 +148,7 @@ async function sendTaskReminders({ db, client, log, push, now = new Date() }) {
             }
         }
         await pushReminder(push, task.discord_id, pushForTask(task, kind, now));
-        await db.tasks.markTaskReminderSent(task.id, now);
+        await db.tasks.markTaskReminderSent(task.id, now, task.discord_id);
     }
     return result;
 }
@@ -207,7 +208,7 @@ async function sendDeadlineReminders({ db, client, log, push, now = new Date() }
         const pastDeadline = Boolean(list.deadline) && String(list.deadline).slice(0, 10) <= today;
         if (kind.endsWith('_done')) {
             // Everything is finished: no DM, but stop the list from being picked up again.
-            await db.tasks.markReminderSent(list.id, kind === 'due_done' ? 'due' : 'snooze', { late, pastDeadline });
+            await db.tasks.markReminderSent(list.id, kind === 'due_done' ? 'due' : 'snooze', { late, pastDeadline, recipientId: list.discord_id });
             result.skipped++;
             continue;
         }
@@ -226,7 +227,7 @@ async function sendDeadlineReminders({ db, client, log, push, now = new Date() }
             }
         }
         await pushReminder(push, list.discord_id, pushForList(list, kind, now));
-        await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline });
+        await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, recipientId: list.discord_id });
     }
     return result;
 }

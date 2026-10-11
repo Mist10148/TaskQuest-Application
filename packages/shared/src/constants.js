@@ -519,8 +519,24 @@ const LIMITS = {
     MAX_ITEMS_PER_USER: 5000,
     /** Task templates: how many a user can keep, and how many tasks one template can hold. */
     MAX_TEMPLATES_PER_USER: 20,
-    MAX_TEMPLATE_ITEMS: 30
+    MAX_TEMPLATE_ITEMS: 30,
+    /** Shared lists: people besides the owner (members plus pending invites), how long an invite lives, and how many a person may send a day. */
+    MAX_LIST_MEMBERS: 10,
+    INVITE_TTL_DAYS: 7,
+    INVITES_PER_DAY: 30,
+    /** Parties: members including the owner. A user is in at most one party. */
+    MAX_PARTY_MEMBERS: 6,
+    MAX_PARTY_NAME: 40
 };
+
+/** Roles on a shared list, weakest first. The owner is an implicit manager. */
+const LIST_ROLES = ['viewer', 'editor', 'manager'];
+
+/**
+ * The party weekly quest: one global ISO week (UTC) for everyone in the party; the target scales with the member count,
+ * and every member claims the reward once per week (quest_claims key PARTY_<partyId>).
+ */
+const PARTY_QUEST = { PER_MEMBER_TARGET: 12, REWARD: 60, KEY_PREFIX: 'PARTY_' };
 
 const DAILY = {
     COOLDOWN_MS: 24 * 60 * 60 * 1000,
@@ -608,6 +624,8 @@ module.exports = {
     LEADERBOARDS,
     WEEKLY_XP_SOURCES,
     LIMITS,
+    LIST_ROLES,
+    PARTY_QUEST,
     DAILY,
     TEXT_LIMITS,
     PRIORITIES,

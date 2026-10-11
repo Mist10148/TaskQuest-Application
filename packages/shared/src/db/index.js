@@ -21,5 +21,6 @@ const templates = require('./templates');
 const stats = require('./stats');
 const cosmetics = require('./cosmetics');
 const push = require('./push');
+const access = require('./access');
 
-module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates, cosmetics, push };
+module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates, cosmetics, push, access };

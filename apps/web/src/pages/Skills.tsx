@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSkills, useUnlockSkill } from "@/hooks/useApi";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
+import { nextTabIndex } from "@/lib/tabs";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 
@@ -65,13 +66,8 @@ const Skills = () => {
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const keys: string[] = skillTrees.map((t: SkillTree) => t.classKey);
     if (keys.length === 0) return;
-    const i = keys.indexOf(selectedTreeKey);
-    let next = -1;
-    if (e.key === 'ArrowRight') next = (i + 1) % keys.length;
-    else if (e.key === 'ArrowLeft') next = (i - 1 + keys.length) % keys.length;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = keys.length - 1;
-    if (next < 0) return;
+    const next = nextTabIndex(e.key, keys.indexOf(selectedTreeKey), keys.length);
+    if (next === null) return;
     e.preventDefault();
     setPickedTreeKey(keys[next]);
     document.getElementById(`skill-tab-${keys[next]}`)?.focus();

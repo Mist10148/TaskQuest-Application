@@ -3,7 +3,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Trophy, Sparkles, Flame, Target, Crown, Medal, Zap } from "lucide-react";
-import { useLeaderboard, useMyRank } from "@/hooks/useApi";
+import { useClasses, useLeaderboard, useMyRank } from "@/hooks/useApi";
+import { nextTabIndex } from "@/lib/tabs";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import type { LeaderboardBoard } from "@/lib/api";
 import { useState } from "react";
@@ -12,15 +13,13 @@ const CLASS_EMOJIS: Record<string, string> = {
   DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️',
 };
 
-const CLASS_COLORS: Record<string, string> = {
-  DEFAULT: 'bg-gray-500', HERO: 'bg-yellow-500', GAMBLER: 'bg-purple-500', ASSASSIN: 'bg-slate-700', WIZARD: 'bg-blue-500', ARCHER: 'bg-green-500', TANK: 'bg-red-500',
-};
-
 // Better Avatar component with multiple fallbacks
 const PlayerAvatar = ({ avatarUrl, username, size = 'md', rank }: {
   avatarUrl: string | null; username: string | null; size?: 'sm' | 'md' | 'lg' | 'xl'; rank?: number
 }) => {
-  const [imgError, setImgError] = useState(false);
+  // Remember which URL failed, so a different player in the same slot gets a fresh try.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imgError = failedUrl !== null && failedUrl === avatarUrl;
   const sizeClasses = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-12 h-12 text-base', xl: 'w-16 h-16 text-xl' };
   const ringColors: Record<number, string> = { 1: 'ring-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]', 2: 'ring-gray-400 shadow-[0_0_10px_rgba(156,163,175,0.4)]', 3: 'ring-amber-600 shadow-[0_0_10px_rgba(217,119,6,0.4)]' };
   
@@ -59,7 +58,7 @@ const PlayerAvatar = ({ avatarUrl, username, size = 'md', rank }: {
       src={avatarUrl} 
       alt={username || 'Player'} 
       className={cn(sizeClasses[size], "rounded-full object-cover ring-2", ringColor)}
-      onError={() => setImgError(true)}
+      onError={() => setFailedUrl(avatarUrl)}
     />
   );
 };
@@ -71,7 +70,23 @@ const BOARDS: Array<{ value: LeaderboardBoard; label: string; blurb: string; uni
   { value: "xp", label: "Balance", blurb: "Current spendable XP.", unit: "XP" },
 ];
 
-const CLASS_FILTERS = ["ALL", "DEFAULT", "HERO", "GAMBLER", "ASSASSIN", "WIZARD", "ARCHER", "TANK"];
+/** Shown until the classes API answers; the real list (including classes added later) comes from the server. */
+const FALLBACK_CLASS_FILTERS = ["DEFAULT", "HERO", "GAMBLER", "ASSASSIN", "WIZARD", "ARCHER", "TANK"];
+
+/** Three small tiles (2nd, 1st, 3rd) for phones, where the full podium does not fit. */
+const CompactPodium = ({ entries, unit, nameOf, emojiOf }: { entries: LeaderboardEntry[]; unit: string; nameOf: (e: LeaderboardEntry) => string; emojiOf: (e: LeaderboardEntry) => string }) => (
+  <div className="sm:hidden mb-6 grid grid-cols-3 gap-2" aria-label="Top three players">
+    {[entries[1], entries[0], entries[2]].map((e) => (
+      <div key={`${e.username}-${e.rank}`} className={cn("rounded-xl border p-2 text-center", e.rank === 1 ? "border-yellow-500/40 bg-yellow-500/10" : "border-border bg-card")}>
+        {e.rank === 1 ? <Crown className="h-4 w-4 mx-auto text-yellow-500" aria-hidden /> : <Medal className={cn("h-4 w-4 mx-auto", e.rank === 2 ? "text-gray-400" : "text-amber-600")} aria-hidden />}
+        <div className="flex justify-center my-1"><PlayerAvatar avatarUrl={e.avatarUrl ?? null} username={e.username} size={e.rank === 1 ? "lg" : "md"} rank={e.rank} /></div>
+        <p className="text-xs font-semibold truncate">{nameOf(e)}</p>
+        <p className="text-xs font-bold text-xp truncate">{e.score.toLocaleString()} {unit}</p>
+        <p className="text-[10px] text-foreground-muted">Lv.{e.level} {emojiOf(e)}</p>
+      </div>
+    ))}
+  </div>
+);
 
 const Leaderboard = () => {
   const [by, setBy] = useState<LeaderboardBoard>("lifetime");
@@ -79,7 +94,20 @@ const Leaderboard = () => {
   const board = BOARDS.find((b) => b.value === by) ?? BOARDS[0];
   const { data: leaderboard, isLoading, isError, error, refetch, isFetching } = useLeaderboard(by, classFilter);
   const { data: mine, isLoading: mineLoading, isError: mineFailed } = useMyRank(by, classFilter);
+  const { data: classData } = useClasses();
+  const classOptions: Array<{ key: string; emoji: string; name: string }> = classData?.classes?.length
+    ? classData.classes.map((c) => ({ key: c.key, emoji: c.emoji, name: c.name }))
+    : FALLBACK_CLASS_FILTERS.map((k) => ({ key: k, emoji: CLASS_EMOJIS[k] ?? "", name: k.charAt(0) + k.slice(1).toLowerCase() }));
+  const emojiOf = (e: { playerClass: string }) => classOptions.find((c) => c.key === e.playerClass)?.emoji || CLASS_EMOJIS[e.playerClass] || '⚪';
   const entries = leaderboard || [];
+  const showStreakColumn = by !== "streak"; // on the Streak board the score already is the streak
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const next = nextTabIndex(e.key, BOARDS.findIndex((b) => b.value === by), BOARDS.length);
+    if (next === null) return;
+    e.preventDefault();
+    setBy(BOARDS[next].value);
+    document.getElementById(`board-tab-${BOARDS[next].value}`)?.focus();
+  };
   const scoreText = (entry: LeaderboardEntry | undefined) => (entry ? entry.score.toLocaleString() : "");
   const youInList = entries.some((e) => e.isYou);
 
@@ -104,12 +132,16 @@ const Leaderboard = () => {
       </div>
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div role="tablist" aria-label="Leaderboard" className="flex flex-wrap gap-1 rounded-lg bg-background-secondary p-1 w-fit max-w-full">
+        <div role="tablist" aria-label="Leaderboard" onKeyDown={onTabKeyDown} className="flex flex-wrap gap-1 rounded-lg bg-background-secondary p-1 w-fit max-w-full">
           {BOARDS.map((b) => (
             <button
               key={b.value}
+              id={`board-tab-${b.value}`}
+              type="button"
               role="tab"
               aria-selected={by === b.value}
+              aria-controls="board-tabpanel"
+              tabIndex={by === b.value ? 0 : -1}
               onClick={() => setBy(b.value)}
               className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", by === b.value ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground")}
             >
@@ -125,13 +157,15 @@ const Leaderboard = () => {
             onChange={(e) => setClassFilter(e.target.value)}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {CLASS_FILTERS.map((c) => (
-              <option key={c} value={c}>{c === "ALL" ? "All classes" : `${CLASS_EMOJIS[c] ?? ""} ${c.charAt(0)}${c.slice(1).toLowerCase()}`}</option>
+            <option value="ALL">All classes</option>
+            {classOptions.map((c) => (
+              <option key={c.key} value={c.key}>{`${c.emoji} ${c.name}`.trim()}</option>
             ))}
           </select>
         </div>
       </div>
 
+      <div id="board-tabpanel" role="tabpanel" aria-labelledby={`board-tab-${by}`}>
       {mineLoading && <p className="mb-4 text-sm text-foreground-muted" aria-busy="true">Checking your rank…</p>}
       {mineFailed && <p className="mb-4 text-sm text-destructive-text" role="alert">Couldn't load your rank.</p>}
       {mine && (
@@ -144,6 +178,8 @@ const Leaderboard = () => {
         </p>
       )}
 
+      {entries.length >= 3 && <CompactPodium entries={entries} unit={board.unit} nameOf={(e) => getDisplayName(e, e.isYou)} emojiOf={emojiOf} />}
+
       {/* Top 3 Podium */}
       {entries.length >= 3 && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="hidden sm:grid grid-cols-3 gap-4 mb-8">
@@ -154,11 +190,11 @@ const Leaderboard = () => {
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-gray-400 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar avatarUrl={entries[1]?.avatarUrl ?? null} username={entries[1]?.username} size="lg" rank={2} />
+                  <PlayerAvatar key={`${entries[1]?.username}-2`} avatarUrl={entries[1]?.avatarUrl ?? null} username={entries[1]?.username} size="lg" rank={2} />
                 </div>
                 <p className="font-heading font-semibold truncate">{getDisplayName(entries[1], Boolean(entries[1]?.isYou))}</p>
                 <p className="text-xp font-bold text-lg">{scoreText(entries[1])} {board.unit}</p>
-                <p className="text-xs text-foreground-muted">Level {entries[1]?.level} • {CLASS_EMOJIS[entries[1]?.playerClass] || '⚪'}</p>
+                <p className="text-xs text-foreground-muted">Level {entries[1]?.level} • {emojiOf(entries[1])}</p>
               </div>
             </motion.div>
           </div>
@@ -171,11 +207,11 @@ const Leaderboard = () => {
               <div className="relative">
                 <Crown className="h-10 w-10 mx-auto text-yellow-500 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar avatarUrl={entries[0]?.avatarUrl ?? null} username={entries[0]?.username} size="xl" rank={1} />
+                  <PlayerAvatar key={`${entries[0]?.username}-1`} avatarUrl={entries[0]?.avatarUrl ?? null} username={entries[0]?.username} size="xl" rank={1} />
                 </div>
                 <p className="font-heading font-bold text-lg truncate">{getDisplayName(entries[0], Boolean(entries[0]?.isYou))}</p>
                 <p className="text-xp font-bold text-2xl">{scoreText(entries[0])} {board.unit}</p>
-                <p className="text-sm text-foreground-muted">Level {entries[0]?.level} • {CLASS_EMOJIS[entries[0]?.playerClass] || '⚪'}</p>
+                <p className="text-sm text-foreground-muted">Level {entries[0]?.level} • {emojiOf(entries[0])}</p>
               </div>
             </motion.div>
           </div>
@@ -187,11 +223,11 @@ const Leaderboard = () => {
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-amber-600 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar avatarUrl={entries[2]?.avatarUrl ?? null} username={entries[2]?.username} size="lg" rank={3} />
+                  <PlayerAvatar key={`${entries[2]?.username}-3`} avatarUrl={entries[2]?.avatarUrl ?? null} username={entries[2]?.username} size="lg" rank={3} />
                 </div>
                 <p className="font-heading font-semibold truncate">{getDisplayName(entries[2], Boolean(entries[2]?.isYou))}</p>
                 <p className="text-xp font-bold text-lg">{scoreText(entries[2])} {board.unit}</p>
-                <p className="text-xs text-foreground-muted">Level {entries[2]?.level} • {CLASS_EMOJIS[entries[2]?.playerClass] || '⚪'}</p>
+                <p className="text-xs text-foreground-muted">Level {entries[2]?.level} • {emojiOf(entries[2])}</p>
               </div>
             </motion.div>
           </div>
@@ -204,8 +240,8 @@ const Leaderboard = () => {
           <div className="col-span-1">Rank</div>
           <div className="col-span-4">Player</div>
           <div className="col-span-2 text-center">Level</div>
-          <div className="col-span-2 text-center">{board.unit}</div>
-          <div className="col-span-1 text-center">Streak</div>
+          <div className={cn("text-center", showStreakColumn ? "col-span-2" : "col-span-3")}>{board.unit}</div>
+          {showStreakColumn && <div className="col-span-1 text-center">Streak</div>}
           <div className="col-span-2 text-center">Tasks</div>
         </div>
 
@@ -247,14 +283,14 @@ const Leaderboard = () => {
                         {getDisplayName(entry, isCurrentUser)}
                       </p>
                       <p className="text-xs text-foreground-muted flex items-center gap-1">
-                        <span>{CLASS_EMOJIS[entry.playerClass] || '⚪'}</span>
+                        <span>{emojiOf(entry)}</span>
                         <span>Lv.{entry.level}</span>
                       </p>
                     </div>
                     <div className="text-right">
                       <span className="text-xp font-bold text-sm flex items-center gap-1"><Sparkles className="h-3 w-3" />{scoreText(entry)}</span>
                       <div className="flex items-center gap-2 text-xs text-foreground-muted mt-1">
-                        <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400"><Flame className="h-3 w-3" />{entry.streak}</span>
+                        {showStreakColumn && <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400"><Flame className="h-3 w-3" />{entry.streak}</span>}
                         <span className="flex items-center gap-1"><Target className="h-3 w-3" />{entry.tasksCompleted}</span>
                       </div>
                     </div>
@@ -276,7 +312,7 @@ const Leaderboard = () => {
                         {getDisplayName(entry, isCurrentUser)}
                       </p>
                       <p className="text-xs text-foreground-muted flex items-center gap-1">
-                        <span>{CLASS_EMOJIS[entry.playerClass] || '⚪'}</span>
+                        <span>{emojiOf(entry)}</span>
                         <span>{entry.playerClass || 'Default'}</span>
                       </p>
                     </div>
@@ -284,16 +320,18 @@ const Leaderboard = () => {
                   <div className="col-span-2 text-center">
                     <span className="px-3 py-1 rounded-full bg-background-secondary text-sm font-medium">Lv.{entry.level}</span>
                   </div>
-                  <div className="col-span-2 text-center">
+                  <div className={cn("text-center", showStreakColumn ? "col-span-2" : "col-span-3")}>
                     <span className="text-xp font-bold flex items-center justify-center gap-1">
                       <Sparkles className="h-4 w-4" />{scoreText(entry)}
                     </span>
                   </div>
-                  <div className="col-span-1 text-center">
-                    <span className="flex items-center justify-center gap-1 text-orange-700 dark:text-orange-400">
-                      <Flame className="h-4 w-4" />{entry.streak}
-                    </span>
-                  </div>
+                  {showStreakColumn && (
+                    <div className="col-span-1 text-center">
+                      <span className="flex items-center justify-center gap-1 text-orange-700 dark:text-orange-400">
+                        <Flame className="h-4 w-4" />{entry.streak}
+                      </span>
+                    </div>
+                  )}
                   <div className="col-span-2 text-center">
                     <span className="flex items-center justify-center gap-1 text-foreground-muted">
                       <Target className="h-4 w-4" />{entry.tasksCompleted}
@@ -305,6 +343,7 @@ const Leaderboard = () => {
           })
         )}
       </motion.div>
+      </div>
     </DashboardLayout>
   );
 };

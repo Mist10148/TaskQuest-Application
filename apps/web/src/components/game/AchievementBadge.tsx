@@ -54,7 +54,7 @@ export const AchievementBadge = ({
         sizes.container,
         unlocked
           ? "bg-card border-xp/50 shadow-lg shadow-xp/10 cursor-pointer"
-          : "bg-background-secondary border-border grayscale opacity-60",
+          : "bg-background-secondary border-border grayscale",
         className
       )}
     >

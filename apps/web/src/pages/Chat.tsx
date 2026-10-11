@@ -11,6 +11,7 @@ import { useSlow } from "@/components/ai/useSlow";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/hooks/useChat";
 import { showError, useChatThreads, useDeleteThread } from "@/hooks/useApi";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = ["What should I do first today?", "What is due this week?", "How do I earn XP?", "Add a task to my newest quest"];
@@ -20,7 +21,7 @@ const Chat = () => {
   const { threadId: routeThreadId } = useParams();
   const navigate = useNavigate();
   const enabled = Boolean(user?.features?.ai);
-  const { data: threadData } = useChatThreads(enabled);
+  const { data: threadData, isLoading: threadsLoading, isError: threadsFailed, refetch: refetchThreads, isFetching: threadsFetching } = useChatThreads(enabled);
   const deleteThread = useDeleteThread();
   const chat = useChat(routeThreadId ?? null);
   // /chat?q=... pre-fills the box (used by the quick-add "Ask AI" button); it is never sent automatically.
@@ -31,6 +32,8 @@ const Chat = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const waiting = chat.isStreaming && !chat.messages[chat.messages.length - 1]?.text;
   const slow = useSlow(waiting);
+  const lastMessage = chat.messages[chat.messages.length - 1];
+  const announcement = lastMessage && lastMessage.role === "assistant" && !chat.isStreaming ? lastMessage.text : "";
 
   // A brand-new conversation gets its id when the first turn ends; reflect it in the URL.
   useEffect(() => {
@@ -66,13 +69,15 @@ const Chat = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex gap-4 h-[calc(100vh-7rem)] min-h-[480px]">
-        <aside className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-x-4 top-20 bottom-4 w-auto lg:static" : "hidden lg:flex")}>
+      <div className="relative flex gap-4 h-[calc(100vh-7rem)] min-h-[480px]">
+        <aside className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-0 w-auto lg:static" : "hidden lg:flex")}>
           <Button size="sm" variant="glow" className="gap-1" onClick={() => { navigate("/chat"); setShowThreads(false); }}>
             <MessageSquarePlus className="h-4 w-4" /> New chat
           </Button>
           <div className="flex-1 overflow-y-auto space-y-1">
-            {threads.length === 0 && <p className="text-xs text-foreground-muted p-2">Your conversations will show up here.</p>}
+            {threadsLoading && <p className="text-xs text-foreground-muted p-2 flex items-center gap-2" aria-busy="true"><Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Loading conversations…</p>}
+            {threadsFailed && <ErrorCard what="your conversations" onRetry={() => void refetchThreads()} retrying={threadsFetching} />}
+            {!threadsLoading && !threadsFailed && threads.length === 0 && <p className="text-xs text-foreground-muted p-2">Your conversations will show up here.</p>}
             {threads.map((t) => (
               <div key={t.id} className={cn("group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm hover:bg-background-secondary", t.id === routeThreadId && "bg-background-secondary")}>
                 <button type="button" className="flex-1 truncate text-left" onClick={() => { navigate(`/chat/${t.id}`); setShowThreads(false); }}>{t.title}</button>
@@ -97,7 +102,9 @@ const Chat = () => {
             <span className="ml-auto text-[11px] text-foreground-muted hidden sm:inline">AI-generated. Changes always ask first.</span>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4" aria-live="polite">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Screen readers hear a reply once it is complete, not every streamed token. */}
+            <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
             {chat.messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-4">
                 <Bot className="h-10 w-10 text-primary-text" />
@@ -125,7 +132,7 @@ const Chat = () => {
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
               placeholder={chat.pending.length ? "Approve or cancel the change above first" : "Ask anything about your quests…"}
               rows={1}
               maxLength={2000}

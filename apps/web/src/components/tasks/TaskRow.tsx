@@ -53,7 +53,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       className={cn(
         "group flex items-start gap-2 sm:gap-3 rounded-lg border bg-card p-3 sm:p-4 transition-all duration-200 focus-within:border-primary/50",
         isSubtask && "ml-6 sm:ml-10 p-2.5 sm:p-3",
-        completed && "opacity-60",
+        completed && "bg-card/60",
         selected && "border-primary bg-primary/5",
         drag?.isDragOver ? "border-primary bg-primary/10" : !selected && "border-border hover:border-primary/30",
         drag?.isDragging && "opacity-50 scale-[0.98]"
@@ -105,7 +105,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         <p className={cn("font-medium text-sm sm:text-base break-words", completed && "line-through text-foreground-muted")}>
           {priority && (
             <>
-              <span className={cn("inline-block h-2 w-2 rounded-full mr-2 align-middle", DOT[priority])} aria-hidden />
+              <span className={cn("inline-block h-2 w-2 rounded-full mr-2 align-middle", DOT[priority], completed && "opacity-40")} aria-hidden />
               <span className="sr-only">{priority.toLowerCase()} priority: </span>
             </>
           )}

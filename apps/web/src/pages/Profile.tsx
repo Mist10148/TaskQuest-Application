@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { User, UserData } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { XPProgressBar } from "@/components/game/XPProgressBar";
@@ -6,6 +8,9 @@ import { Sparkles, Flame, Target, ListTodo, Trophy, Gamepad2, TrendingUp } from 
 import { useAuth, getAvatarUrl } from "@/contexts/AuthContext";
 import { classColor } from "@/lib/classColors";
 import { StreakFreezeCard } from "@/components/game/StreakFreezeCard";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
+import { Button } from "@/components/ui/button";
+import { useClasses } from "@/hooks/useApi";
 
 const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   DEFAULT: { name: 'Default', emoji: '⚪' },
@@ -28,14 +33,18 @@ const STAT_TONES: Record<string, { bg: string; icon: string }> = {
 };
 
 const Profile = () => {
-  const { user } = useAuth();
+  const { user, error: authError, refresh } = useAuth();
+  const classesQuery = useClasses();
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const discord = user?.discord || { username: 'Adventurer', globalName: 'Adventurer', discordId: '0', avatar: null };
   const dbUser: Partial<User> = user?.user ?? {};
   const stats: Partial<UserData> = user ?? {};
 
-  const classKey = CLASS_INFO[dbUser.player_class || 'DEFAULT'] ? dbUser.player_class || 'DEFAULT' : 'DEFAULT';
-  const playerClass = CLASS_INFO[classKey];
+  // A class the page does not list (added on the server) takes its name and emoji from the classes API.
+  const classKey: string = dbUser.player_class || 'DEFAULT';
+  const apiClass = classesQuery.data?.classes.find((c) => c.key === classKey);
+  const playerClass = CLASS_INFO[classKey] ?? (apiClass ? { name: apiClass.name, emoji: apiClass.emoji } : { name: classKey.charAt(0) + classKey.slice(1).toLowerCase(), emoji: '⚪' });
   const level = dbUser.player_level || 1;
   const totalXP = Number(dbUser.player_xp) || 0;
   const lifetimeXP = Number(dbUser.lifetime_xp ?? totalXP) || 0;
@@ -51,6 +60,16 @@ const Profile = () => {
   const winRate = gamesPlayed > 0 ? Math.round((gamesWon / gamesPlayed) * 100) : 0;
 
   const avatarUrl = getAvatarUrl(discord.discordId || '0', discord.avatar || null, 256);
+
+  if (!user) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto">
+          <ErrorCard what="your profile" error={authError ? new Error(authError) : undefined} onRetry={() => void refresh()} />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -73,7 +92,13 @@ const Profile = () => {
             <div className="flex flex-col sm:flex-row items-center sm:items-end gap-3 sm:gap-4">
               {/* Avatar */}
               <div className="relative">
-                <img src={avatarUrl} alt="Avatar" className="h-20 w-20 sm:h-24 sm:w-24 rounded-full border-4 border-card" />
+                {avatarFailed ? (
+                  <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full border-4 border-card bg-background-tertiary flex items-center justify-center text-2xl font-bold" role="img" aria-label="Avatar">
+                    {(discord.globalName || discord.username || '?').slice(0, 2).toUpperCase()}
+                  </div>
+                ) : (
+                  <img src={avatarUrl} alt="Avatar" onError={() => setAvatarFailed(true)} className="h-20 w-20 sm:h-24 sm:w-24 rounded-full border-4 border-card" />
+                )}
                 <div 
                   className="absolute -bottom-1 -right-1 h-7 w-7 sm:h-8 sm:w-8 rounded-full flex items-center justify-center text-base sm:text-lg border-2 border-card"
                   style={{ backgroundColor: classColor(classKey) }}
@@ -112,6 +137,11 @@ const Profile = () => {
             </div>
           </div>
         </motion.div>
+
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm"><Link to="/classes">Change class</Link></Button>
+          <Button asChild variant="outline" size="sm"><Link to="/skills">Skill trees</Link></Button>
+        </div>
 
         <StreakFreezeCard freezes={Number(dbUser.streak_freezes) || 0} balance={totalXP} gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
 

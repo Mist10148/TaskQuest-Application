@@ -129,7 +129,7 @@ const Achievements = () => {
                         "relative rounded-xl border p-3 sm:p-4 transition-all overflow-hidden group",
                         ach.unlocked 
                           ? "border-xp/50 bg-gradient-to-br " + categoryInfo.color 
-                          : "border-border bg-card/30 opacity-60"
+                          : "border-border bg-card/30"
                       )}
                     >
                       {/* Glow effect for unlocked */}
@@ -140,7 +140,7 @@ const Achievements = () => {
                       <div className="relative flex items-start gap-2 sm:gap-3">
                         <div className={cn(
                           "h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl flex-shrink-0 transition-transform",
-                          ach.unlocked ? "bg-xp/20 group-hover:scale-110" : "bg-background-secondary"
+                          ach.unlocked ? "bg-xp/20 group-hover:scale-110" : "bg-background-secondary opacity-70"
                         )}>
                           {ach.unlocked ? ach.emoji : <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-foreground-muted" />}
                         </div>

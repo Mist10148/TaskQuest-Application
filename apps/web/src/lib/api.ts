@@ -182,6 +182,43 @@ export const classesApi = {
     equip: (classKey: string) => post<{ success: boolean; user: User }>(`/api/classes/${classKey}/equip`),
 };
 
+export type CosmeticKind = 'title' | 'frame' | 'accent';
+
+export interface EquippedCosmetics {
+    title: string | null;
+    frame: { id: string; name: string; color: string } | null;
+    accent: { id: string; name: string; color: string; colorDark?: string } | null;
+}
+
+export interface CosmeticItem {
+    id: string;
+    kind: CosmeticKind;
+    name: string;
+    cost: number;
+    /** Frames: a CSS background for the ring. Accents: the colour on light surfaces. */
+    color?: string;
+    /** Accents: the colour on dark surfaces. */
+    colorDark?: string;
+    owned: boolean;
+    equipped: boolean;
+    locked: boolean;
+    lockedReason: string | null;
+    affordable: boolean;
+}
+
+export interface CosmeticsData {
+    balance: number;
+    items: CosmeticItem[];
+    equipped: EquippedCosmetics;
+    gamificationEnabled: boolean;
+}
+
+export const cosmeticsApi = {
+    getAll: () => apiFetch<CosmeticsData>('/api/cosmetics'),
+    buy: (id: string) => post<{ success: boolean; balance: number; name: string; newAchievements?: AchievementUnlock[] }>(`/api/cosmetics/${id}/buy`),
+    equip: (kind: CosmeticKind, id: string | null) => post<{ success: boolean; equipped: EquippedCosmetics }>('/api/cosmetics/equip', { kind, id }),
+};
+
 export const skillsApi = {
     getAll: () => apiFetch<SkillsData>('/api/skills'),
     unlock: (skillId: string) => post<{ success: boolean; skill: { skill_id: string; skill_level: number }; balance: number }>(`/api/skills/${skillId}/unlock`),
@@ -294,6 +331,8 @@ export interface User {
     reminder_hour?: number;
     weekly_digest?: boolean | number;
     has_calendar_token?: boolean;
+    /** What the player has equipped from the shop (titles, avatar frames, profile accents). */
+    cosmetics?: EquippedCosmetics;
 }
 
 export interface DiscordUser {
@@ -497,6 +536,7 @@ export interface AchievementsData {
 
 export interface LeaderboardEntry {
     rank: number;
+    cosmetics?: EquippedCosmetics;
     username: string;
     avatarUrl: string | null;
     xp: number;

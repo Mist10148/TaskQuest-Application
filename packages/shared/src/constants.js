@@ -471,7 +471,7 @@ const COSMETICS = {
     frame_ember: { kind: 'frame', name: 'Ember ring', cost: 800, requires: { achievement: 'FIFTY_COMPLETE' }, color: 'linear-gradient(135deg, #ef4444, #f59e0b)' },
     frame_prestige: { kind: 'frame', name: 'Ascendant ring', cost: 1000, requires: { prestige: 1 }, color: 'linear-gradient(135deg, #7c3aed, #f0abfc, #7c3aed)' },
     accent_ocean: { kind: 'accent', name: 'Ocean', cost: 200, color: '#1d6fa5', colorDark: '#5bb0e6' },
-    accent_forest: { kind: 'accent', name: 'Forest', cost: 200, color: '#2f7d4a', colorDark: '#5fc283' },
+    accent_forest: { kind: 'accent', name: 'Forest', cost: 200, color: '#2a7343', colorDark: '#5fc283' },
     accent_plum: { kind: 'accent', name: 'Plum', cost: 300, color: '#8a3fa0', colorDark: '#c58ad9' },
     accent_ember: { kind: 'accent', name: 'Ember', cost: 300, color: '#b8460f', colorDark: '#ee8a52' },
     accent_rose: { kind: 'accent', name: 'Rose', cost: 400, requires: { level: 5 }, color: '#b8305f', colorDark: '#ee7aa0' },

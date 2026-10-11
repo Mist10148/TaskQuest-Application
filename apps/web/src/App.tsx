@@ -18,6 +18,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Tasks = lazy(() => import("./pages/Tasks"));
 const Classes = lazy(() => import("./pages/Classes"));
 const Skills = lazy(() => import("./pages/Skills"));
+const Shop = lazy(() => import("./pages/Shop"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const Games = lazy(() => import("./pages/Games"));
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/games" element={<Games />} />
             <Route path="/classes" element={<Classes />} />
             <Route path="/skills" element={<Skills />} />
+            <Route path="/shop" element={<Shop />} />
             <Route path="/achievements" element={<Achievements />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/focus" element={<Focus />} />

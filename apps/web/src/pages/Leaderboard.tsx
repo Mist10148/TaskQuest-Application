@@ -1,5 +1,6 @@
 import { PrestigeTag } from "@/components/game/PrestigeTag";
-import type { LeaderboardEntry } from "@/lib/api";
+import { AvatarFrame, EquippedTitle } from "@/components/game/AvatarFrame";
+import type { EquippedCosmetics, LeaderboardEntry } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,13 @@ const CLASS_EMOJIS: Record<string, string> = {
 };
 
 // Better Avatar component with multiple fallbacks
-const PlayerAvatar = ({ avatarUrl, username, size = 'md', rank }: {
+const PlayerAvatar = ({ avatarUrl, username, size = 'md', rank, frame }: {
+  avatarUrl: string | null; username: string | null; size?: 'sm' | 'md' | 'lg' | 'xl'; rank?: number; frame?: EquippedCosmetics['frame']
+}) => {
+  return <AvatarFrame frame={frame}><PlayerAvatarImage avatarUrl={avatarUrl} username={username} size={size} rank={rank} /></AvatarFrame>;
+};
+
+const PlayerAvatarImage = ({ avatarUrl, username, size = 'md', rank }: {
   avatarUrl: string | null; username: string | null; size?: 'sm' | 'md' | 'lg' | 'xl'; rank?: number
 }) => {
   // Remember which URL failed, so a different player in the same slot gets a fresh try.
@@ -80,7 +87,7 @@ const CompactPodium = ({ entries, unit, nameOf, emojiOf }: { entries: Leaderboar
     {[entries[1], entries[0], entries[2]].map((e) => (
       <div key={`${e.username}-${e.rank}`} className={cn("rounded-xl border p-2 text-center", e.rank === 1 ? "border-yellow-500/40 bg-yellow-500/10" : "border-border bg-card")}>
         {e.rank === 1 ? <Crown className="h-4 w-4 mx-auto text-yellow-500" aria-hidden /> : <Medal className={cn("h-4 w-4 mx-auto", e.rank === 2 ? "text-gray-400" : "text-amber-600")} aria-hidden />}
-        <div className="flex justify-center my-1"><PlayerAvatar avatarUrl={e.avatarUrl ?? null} username={e.username} size={e.rank === 1 ? "lg" : "md"} rank={e.rank} /></div>
+        <div className="flex justify-center my-1"><PlayerAvatar avatarUrl={e.avatarUrl ?? null} frame={e?.cosmetics?.frame} username={e.username} size={e.rank === 1 ? "lg" : "md"} rank={e.rank} /></div>
         <p className="text-xs font-semibold truncate">{nameOf(e)}</p>
         <div className="flex justify-center"><PrestigeTag prestige={e.prestige} title={e.prestigeTitle} /></div>
         <p className="text-xs font-bold text-xp truncate">{e.score.toLocaleString()} {unit}</p>
@@ -192,7 +199,7 @@ const Leaderboard = () => {
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-gray-400 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar key={`${entries[1]?.username}-2`} avatarUrl={entries[1]?.avatarUrl ?? null} username={entries[1]?.username} size="lg" rank={2} />
+                  <PlayerAvatar key={`${entries[1]?.username}-2`} avatarUrl={entries[1]?.avatarUrl ?? null} frame={entries[1]?.cosmetics?.frame} username={entries[1]?.username} size="lg" rank={2} />
                 </div>
                 <p className="font-heading font-semibold truncate">{getDisplayName(entries[1], Boolean(entries[1]?.isYou))}</p>
                 <div className="flex justify-center"><PrestigeTag prestige={entries[1]?.prestige} title={entries[1]?.prestigeTitle} /></div>
@@ -210,7 +217,7 @@ const Leaderboard = () => {
               <div className="relative">
                 <Crown className="h-10 w-10 mx-auto text-yellow-500 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar key={`${entries[0]?.username}-1`} avatarUrl={entries[0]?.avatarUrl ?? null} username={entries[0]?.username} size="xl" rank={1} />
+                  <PlayerAvatar key={`${entries[0]?.username}-1`} avatarUrl={entries[0]?.avatarUrl ?? null} frame={entries[0]?.cosmetics?.frame} username={entries[0]?.username} size="xl" rank={1} />
                 </div>
                 <p className="font-heading font-bold text-lg truncate">{getDisplayName(entries[0], Boolean(entries[0]?.isYou))}</p>
                 <div className="flex justify-center"><PrestigeTag prestige={entries[0]?.prestige} title={entries[0]?.prestigeTitle} /></div>
@@ -227,7 +234,7 @@ const Leaderboard = () => {
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-amber-600 mb-2" />
                 <div className="flex justify-center mb-2">
-                  <PlayerAvatar key={`${entries[2]?.username}-3`} avatarUrl={entries[2]?.avatarUrl ?? null} username={entries[2]?.username} size="lg" rank={3} />
+                  <PlayerAvatar key={`${entries[2]?.username}-3`} avatarUrl={entries[2]?.avatarUrl ?? null} frame={entries[2]?.cosmetics?.frame} username={entries[2]?.username} size="lg" rank={3} />
                 </div>
                 <p className="font-heading font-semibold truncate">{getDisplayName(entries[2], Boolean(entries[2]?.isYou))}</p>
                 <div className="flex justify-center"><PrestigeTag prestige={entries[2]?.prestige} title={entries[2]?.prestigeTitle} /></div>
@@ -282,11 +289,12 @@ const Leaderboard = () => {
                        entry.rank === 3 ? <Medal className="h-5 w-5 text-amber-600" /> : 
                        <span className="font-heading font-bold text-foreground-muted">#{entry.rank}</span>}
                     </div>
-                    <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} username={entry.username} size="sm" rank={entry.rank} />
+                    <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} frame={entry?.cosmetics?.frame} username={entry.username} size="sm" rank={entry.rank} />
                     <div className="flex-1 min-w-0">
                       <p className={cn("font-medium text-sm truncate flex items-center gap-1.5", isCurrentUser && "text-primary-text")}>
                         <span className="truncate">{getDisplayName(entry, isCurrentUser)}</span>
                         <PrestigeTag prestige={entry.prestige} title={entry.prestigeTitle} />
+                        <EquippedTitle title={entry.cosmetics?.title} className="truncate" />
                       </p>
                       <p className="text-xs text-foreground-muted flex items-center gap-1">
                         <span>{emojiOf(entry)}</span>
@@ -312,11 +320,12 @@ const Leaderboard = () => {
                      <span className="font-heading font-bold text-foreground-muted">#{entry.rank}</span>}
                   </div>
                   <div className="col-span-4 flex items-center gap-3">
-                    <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} username={entry.username} size="md" rank={entry.rank} />
+                    <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} frame={entry?.cosmetics?.frame} username={entry.username} size="md" rank={entry.rank} />
                     <div className="min-w-0">
                       <p className={cn("font-medium truncate flex items-center gap-1.5", isCurrentUser && "text-primary-text")}>
                         <span className="truncate">{getDisplayName(entry, isCurrentUser)}</span>
                         <PrestigeTag prestige={entry.prestige} title={entry.prestigeTitle} />
+                        <EquippedTitle title={entry.cosmetics?.title} className="truncate" />
                       </p>
                       <p className="text-xs text-foreground-muted flex items-center gap-1">
                         <span>{emojiOf(entry)}</span>

@@ -18,6 +18,7 @@ import {
     listsApi,
     itemsApi,
     classesApi,
+    cosmeticsApi,
     skillsApi,
     achievementsApi,
     leaderboardApi,
@@ -28,6 +29,7 @@ import {
     reviewApi,
     aiApi,
     type AchievementUnlock,
+    type CosmeticKind,
     type CreateListData,
     type HistoryRange,
     type ItemInput,
@@ -68,6 +70,7 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['user'] });
     qc.invalidateQueries({ queryKey: ['auth'] });
     qc.invalidateQueries({ queryKey: ['classes'] });
+    qc.invalidateQueries({ queryKey: ['cosmetics'] });
     qc.invalidateQueries({ queryKey: ['skills'] });
     qc.invalidateQueries({ queryKey: ['leaderboard'] });
     qc.invalidateQueries({ queryKey: ['quests'] });
@@ -364,6 +367,31 @@ export function useEquipClass() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (classKey: string) => classesApi.equip(classKey),
+        onSuccess: () => invalidateProgress(qc),
+        onError: showError,
+    });
+}
+
+export function useCosmetics() {
+    return useQuery({ queryKey: ['cosmetics'], queryFn: cosmeticsApi.getAll });
+}
+
+export function useBuyCosmetic() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => cosmeticsApi.buy(id),
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
+export function useEquipCosmetic() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ kind, id }: { kind: CosmeticKind; id: string | null }) => cosmeticsApi.equip(kind, id),
         onSuccess: () => invalidateProgress(qc),
         onError: showError,
     });

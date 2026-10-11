@@ -842,3 +842,18 @@
 
 /* Gamer Vibes - Additional Effects */
 
+
+/* Profile accent (a cosmetic bought in the Shop). The page sets --cos-accent-light and --cos-accent-dark;
+   both colours are held to 4.5:1 on the card surfaces by lib/theme.test.ts. */
+.cos-accent {
+  --cos-accent: var(--cos-accent-dark, currentColor);
+}
+.light .cos-accent {
+  --cos-accent: var(--cos-accent-light, currentColor);
+}
+.cos-accent-text {
+  color: var(--cos-accent);
+}
+.cos-accent-bar {
+  background: var(--cos-accent);
+}

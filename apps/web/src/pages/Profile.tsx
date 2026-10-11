@@ -14,6 +14,8 @@ import { useClasses } from "@/hooks/useApi";
 import { classCounter, freezeLimits } from "@/lib/classInfo";
 import { PrestigeCard } from "@/components/game/PrestigeCard";
 import { PrestigeTag } from "@/components/game/PrestigeTag";
+import { AvatarFrame, EquippedTitle } from "@/components/game/AvatarFrame";
+import { cn } from "@/lib/utils";
 import { lifetimeTotal } from "@/lib/prestige";
 
 const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
@@ -72,6 +74,10 @@ const Profile = () => {
   const winRate = gamesPlayed > 0 ? Math.round((gamesWon / gamesPlayed) * 100) : 0;
 
   const avatarUrl = getAvatarUrl(discord.discordId || '0', discord.avatar || null, 256);
+  const cosmetics = dbUser.cosmetics;
+  const accentStyle = cosmetics?.accent
+    ? ({ "--cos-accent-light": cosmetics.accent.color, "--cos-accent-dark": cosmetics.accent.colorDark ?? cosmetics.accent.color } as React.CSSProperties)
+    : undefined;
 
   if (!user) {
     return (
@@ -85,13 +91,14 @@ const Profile = () => {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto">
+      <div className={cn("max-w-4xl mx-auto", cosmetics?.accent && "cos-accent")} style={accentStyle}>
         {/* Profile Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-2xl bg-card border border-border overflow-hidden mb-6 sm:mb-8"
         >
+          {cosmetics?.accent && <div className="cos-accent-bar h-1" aria-hidden />}
           {/* Banner */}
           <div 
             className="h-24 sm:h-32 relative"
@@ -104,6 +111,7 @@ const Profile = () => {
             <div className="flex flex-col sm:flex-row items-center sm:items-end gap-3 sm:gap-4">
               {/* Avatar */}
               <div className="relative">
+                <AvatarFrame frame={cosmetics?.frame} className="p-1">
                 {avatarFailed ? (
                   <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full border-4 border-card bg-background-tertiary flex items-center justify-center text-2xl font-bold" role="img" aria-label="Avatar">
                     {(discord.globalName || discord.username || '?').slice(0, 2).toUpperCase()}
@@ -111,6 +119,7 @@ const Profile = () => {
                 ) : (
                   <img src={avatarUrl} alt="Avatar" onError={() => setAvatarFailed(true)} className="h-20 w-20 sm:h-24 sm:w-24 rounded-full border-4 border-card" />
                 )}
+                </AvatarFrame>
                 <div 
                   className="absolute -bottom-1 -right-1 h-7 w-7 sm:h-8 sm:w-8 rounded-full flex items-center justify-center text-base sm:text-lg border-2 border-card"
                   style={{ backgroundColor: classColor(classKey) }}
@@ -122,8 +131,9 @@ const Profile = () => {
               {/* Info */}
               <div className="flex-1 text-center sm:text-left">
                 <h1 className="text-xl sm:text-2xl font-heading font-bold flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                  {discord.globalName || discord.username}
+                  <span className={cn(cosmetics?.accent && "cos-accent-text")}>{discord.globalName || discord.username}</span>
                   <PrestigeTag prestige={dbUser.prestige} title={dbUser.prestige_title} className="text-xs" />
+                  <EquippedTitle title={cosmetics?.title} className="text-sm" />
                 </h1>
                 <p className="text-foreground-muted text-sm">@{discord.username}</p>
                 <div className="flex items-center gap-2 mt-1 justify-center sm:justify-start">

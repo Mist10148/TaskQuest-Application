@@ -19,6 +19,7 @@ const aiCommands = require('./commands/ai');
 const questCommands = require('./commands/quests');
 const reviewCommand = require('./commands/review');
 const prestigeCommand = require('./commands/prestige');
+const shopCommand = require('./commands/shop');
 const timezoneCommand = require('./commands/timezone');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
@@ -32,6 +33,7 @@ const commands = [
     questCommands.data,
     reviewCommand.data,
     prestigeCommand.data,
+    shopCommand.data,
     timezoneCommand.data,
     weeklyCommand.data,
     quickCommand.data,

@@ -18,7 +18,7 @@
 
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { users, progression } = require('@taskquest/shared/db');
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress } = require('@taskquest/shared');
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress, describeEquipped } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -265,6 +265,7 @@ async function profile(interaction) {
     // ─────────────────────────────────────────────────────────────────
     embed.setDescription([
         `### ${classInfo.emoji} ${classInfo.name} · Level ${user.player_level}${ui.prestigeTitle(user) ? ` · ${ui.prestigeTitle(user)} ✦${user.prestige}` : ''}`,
+        ...(describeEquipped(user).title ? [`*${describeEquipped(user).title}*`] : []),
         `-# ${classInfo.desc}`,
         ...(counterLine ? [counterLine] : []),
         ``

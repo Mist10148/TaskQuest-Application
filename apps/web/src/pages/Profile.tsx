@@ -54,7 +54,7 @@ const Profile = () => {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-0">
+      <div className="max-w-4xl mx-auto">
         {/* Profile Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

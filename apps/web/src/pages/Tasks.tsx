@@ -196,13 +196,13 @@ const Tasks = () => {
         />
       ) : selectedListId ? (
         listLoading ? (
-          <div className="px-4 sm:px-0 space-y-4" aria-busy="true" aria-live="polite">
+          <div className="space-y-4" aria-busy="true" aria-live="polite">
             <div className="h-8 w-64 rounded-lg bg-background-secondary animate-pulse" />
             <div className="h-20 rounded-xl bg-background-secondary animate-pulse" />
             {[0, 1, 2].map((n) => <div key={n} className="h-14 rounded-xl bg-background-secondary animate-pulse" />)}
           </div>
         ) : (
-          <div className="px-4 sm:px-0 space-y-4">
+          <div className="space-y-4">
             <ErrorCard what="this quest" error={listFailed ? listError : new Error("Quest not found.")} onRetry={() => void refetchList()} retrying={listFetching} />
             <div className="text-center"><Button variant="outline" size="sm" onClick={() => setSelectedListId(null)}>Back to Quests</Button></div>
           </div>

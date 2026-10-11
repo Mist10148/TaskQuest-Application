@@ -208,7 +208,7 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
   const net = hand?.settlement?.net ?? 0;
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
         <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
@@ -299,7 +299,7 @@ const RPSGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () => v
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
         <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
@@ -480,7 +480,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
   const xpGained = game && 'xpGained' in game ? game.xpGained : 0;
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
         <button onClick={leave} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
@@ -773,7 +773,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
   }, [gameState, endGame]);
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
         <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
@@ -1170,7 +1170,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
   }, [gameState, jump, endGame]);
 
   return (
-    <div className="max-w-3xl mx-auto px-4">
+    <div className="max-w-3xl mx-auto">
       <div className="flex justify-between mb-6">
         <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
@@ -1485,7 +1485,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
   }, [gameState, endGame]);
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
         <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
@@ -1646,7 +1646,7 @@ const Games = () => {
 
   return (
     <DashboardLayout>
-      <div className="px-4 sm:px-0">
+      <div>
         {/* Header with neon glow */}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-1 flex items-center gap-3">
@@ -1747,7 +1747,7 @@ const Games = () => {
                 </div>
                 <div className={cn("text-xs px-2 py-1 rounded-full border", g.risk === "Risk-free" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : g.risk === "Free play" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : "bg-background-secondary text-foreground-muted border-border")}>{g.risk}</div>
               </div>
-              <div className="flex items-center justify-end mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center justify-end mt-3 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <span className="text-sm text-primary font-medium flex items-center gap-1">Play <Zap className="h-4 w-4" /></span>
               </div>
             </motion.div>

@@ -40,7 +40,7 @@ const Achievements = () => {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 sm:mb-8 px-4 sm:px-0">
+      <div className="mb-6 sm:mb-8">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-2 flex items-center gap-3">
             <div className="relative">
@@ -56,7 +56,7 @@ const Achievements = () => {
       </div>
 
       {/* Progress Card */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6 sm:mb-8 p-4 sm:p-6 rounded-xl bg-gradient-to-br from-card to-card/50 border border-border mx-4 sm:mx-0 relative overflow-hidden">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6 sm:mb-8 p-4 sm:p-6 rounded-xl bg-gradient-to-br from-card to-card/50 border border-border relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-xp/5 via-transparent to-transparent" />
         <div className="relative">
           <div className="flex items-center justify-between mb-3">
@@ -92,7 +92,7 @@ const Achievements = () => {
         </div>
       </motion.div>
 
-      <div className="px-4 sm:px-0">
+      <div>
         {isError ? (
           <ErrorCard what="your achievements" error={error} onRetry={() => void refetch()} retrying={isFetching} />
         ) : isLoading ? (

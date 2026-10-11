@@ -90,7 +90,7 @@ const Leaderboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 sm:mb-8 px-4 sm:px-0">
+      <div className="mb-6 sm:mb-8">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-2 flex items-center gap-3">
             <div className="relative">
@@ -103,7 +103,7 @@ const Leaderboard = () => {
         </motion.div>
       </div>
 
-      <div className="mb-6 flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-0">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div role="tablist" aria-label="Leaderboard" className="flex flex-wrap gap-1 rounded-lg bg-background-secondary p-1 w-fit max-w-full">
           {BOARDS.map((b) => (
             <button
@@ -132,10 +132,10 @@ const Leaderboard = () => {
         </div>
       </div>
 
-      {mineLoading && <p className="mb-4 px-4 text-sm text-foreground-muted sm:px-0" aria-busy="true">Checking your rank…</p>}
-      {mineFailed && <p className="mb-4 px-4 text-sm text-destructive sm:px-0" role="alert">Couldn't load your rank.</p>}
+      {mineLoading && <p className="mb-4 text-sm text-foreground-muted" aria-busy="true">Checking your rank…</p>}
+      {mineFailed && <p className="mb-4 text-sm text-destructive" role="alert">Couldn't load your rank.</p>}
       {mine && (
-        <p className="mb-4 px-4 text-sm text-foreground-muted sm:px-0" aria-live="polite">
+        <p className="mb-4 text-sm text-foreground-muted" aria-live="polite">
           {mine.rank
             ? <>Your rank: <span className="font-heading font-bold text-primary">#{mine.rank}</span>{!youInList ? " (outside the top 10)" : ""}</>
             : by === "weekly" || by === "streak"
@@ -146,7 +146,7 @@ const Leaderboard = () => {
 
       {/* Top 3 Podium */}
       {entries.length >= 3 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="hidden sm:grid grid-cols-3 gap-4 mb-8 px-4 sm:px-0">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="hidden sm:grid grid-cols-3 gap-4 mb-8">
           {/* 2nd Place */}
           <div className="mt-8">
             <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-gradient-to-b from-gray-400/20 to-gray-400/5 border border-gray-400/30 p-5 text-center relative overflow-hidden group">
@@ -199,7 +199,7 @@ const Leaderboard = () => {
       )}
 
       {/* Full Leaderboard */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-xl border border-border bg-card overflow-hidden mx-4 sm:mx-0">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="hidden sm:grid grid-cols-12 gap-4 p-4 border-b border-border text-sm font-medium text-foreground-muted bg-gradient-to-r from-background-secondary/50 to-transparent">
           <div className="col-span-1">Rank</div>
           <div className="col-span-4">Player</div>

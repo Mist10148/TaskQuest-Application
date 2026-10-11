@@ -72,7 +72,7 @@ const Settings = () => {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto px-4">
+      <div className="max-w-2xl mx-auto">
         <div className="mb-8">
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
             <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-2">Settings</h1>

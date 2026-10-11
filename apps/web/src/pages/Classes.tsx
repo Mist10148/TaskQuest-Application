@@ -41,7 +41,7 @@ const Classes = () => {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 sm:mb-8 px-4 sm:px-0">
+      <div className="mb-6 sm:mb-8">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-2">Choose Your Path</h1>
           <p className="text-foreground-muted text-sm sm:text-base">Select a class to customize your XP bonuses and playstyle</p>
@@ -49,13 +49,13 @@ const Classes = () => {
       </div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-        className="mb-6 sm:mb-8 p-3 sm:p-4 rounded-xl bg-card border border-border inline-flex items-center gap-2 sm:gap-3 mx-4 sm:mx-0">
+        className="mb-6 sm:mb-8 p-3 sm:p-4 rounded-xl bg-card border border-border inline-flex items-center gap-2 sm:gap-3">
         <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-xp" />
         <span className="text-foreground-muted text-sm">Available XP:</span>
         <span className="font-heading font-bold text-lg sm:text-xl text-xp">{playerXP.toLocaleString()}</span>
       </motion.div>
 
-      <div className="px-4 sm:px-0">
+      <div>
         {isError ? (
           <ErrorCard what="the class shop" error={error} onRetry={() => void refetch()} retrying={isFetching} />
         ) : isLoading ? (

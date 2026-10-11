@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-
 import { Bot, Loader2, MessageSquarePlus, PanelLeft, Send, Square, Trash2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ChatMessage } from "@/components/ai/ChatMessage";
 import { ConfirmActionCard } from "@/components/ai/ConfirmActionCard";
@@ -26,6 +27,7 @@ const Chat = () => {
   const [searchParams] = useSearchParams();
   const [input, setInput] = useState(() => (routeThreadId ? "" : (searchParams.get("q") ?? "").slice(0, 2000)));
   const [showThreads, setShowThreads] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const waiting = chat.isStreaming && !chat.messages[chat.messages.length - 1]?.text;
   const slow = useSlow(waiting);
@@ -50,9 +52,21 @@ const Chat = () => {
 
   const threads = threadData?.threads ?? [];
 
+  const confirmDelete = async () => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
+    try {
+      await deleteThread.mutateAsync(target.id);
+      if (String(target.id) === String(routeThreadId)) navigate("/chat");
+    } catch (err) {
+      showError(err);
+    }
+  };
+
   return (
     <DashboardLayout>
-      <div className="px-4 sm:px-0 flex gap-4 h-[calc(100vh-7rem)] min-h-[480px]">
+      <div className="flex gap-4 h-[calc(100vh-7rem)] min-h-[480px]">
         <aside className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-x-4 top-20 bottom-4 w-auto lg:static" : "hidden lg:flex")}>
           <Button size="sm" variant="glow" className="gap-1" onClick={() => { navigate("/chat"); setShowThreads(false); }}>
             <MessageSquarePlus className="h-4 w-4" /> New chat
@@ -65,15 +79,8 @@ const Chat = () => {
                 <button
                   type="button"
                   aria-label={`Delete ${t.title}`}
-                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-foreground-muted hover:text-destructive"
-                  onClick={async () => {
-                    try {
-                      await deleteThread.mutateAsync(t.id);
-                      if (t.id === routeThreadId) navigate("/chat");
-                    } catch (err) {
-                      showError(err);
-                    }
-                  }}
+                  className="p-1 text-foreground-muted hover:text-destructive [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100"
+                  onClick={() => setPendingDelete({ id: t.id, title: t.title })}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -134,6 +141,14 @@ const Chat = () => {
           </form>
         </section>
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => { if (!open) setPendingDelete(null); }}
+        title="Delete this conversation?"
+        description={<p>"{pendingDelete?.title}" and its messages will be removed. This can't be undone.</p>}
+        confirmLabel="Delete"
+        onConfirm={() => void confirmDelete()}
+      />
     </DashboardLayout>
   );
 };

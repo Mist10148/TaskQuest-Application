@@ -31,7 +31,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
     "?": () => setShowHelp(true),
   });
   return (
-  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-4 sm:px-0">
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
       <div>
         <h1 className="text-2xl sm:text-3xl font-heading font-bold flex items-center gap-2">

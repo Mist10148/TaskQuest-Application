@@ -148,6 +148,15 @@ A server-timed work timer. The server measures the time; the client only says st
 | GET 🔒 | `/api/review` | — | `{weekStart, resetsAt, completed, xpEarned, claimed, claimable, streak, reward}` for the current UTC week |
 | POST 🔒 | `/api/review/claim` | — | `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. Once per week (`409`); `400` unless you finished at least one task this week; `403` when XP is off. |
 
+## Statistics
+
+Read-only numbers for the web Stats page. Days are UTC days; only your own data is ever read.
+
+| Method | Path | Query | Response |
+|---|---|---|---|
+| GET 🔒 | `/api/stats/xp-history` | `days` = `7`, `30` (default) or `90`; anything else is `400` | `[{date: "YYYY-MM-DD", xp, tasksCompleted}]`, oldest first, today last, one entry per day (zeros for quiet days). `xp` sums earning sources only (spending never lowers a day); `tasksCompleted` counts tasks by the day they were first completed. |
+| GET 🔒 | `/api/stats/summary` | — | `{streak, tasksCompleted7d, xpBySource30d: [{source, label, xp}], busiestWeekday: {index (0 = Sunday), name, count} \| null}`. `xpBySource30d` covers the last 30 days, largest first. `busiestWeekday` looks at completions over the last 90 days. |
+
 ## Calendar feed
 
 | Method | Path | Auth | Description |

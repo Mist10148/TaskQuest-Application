@@ -37,6 +37,9 @@ export const settingsBody = z
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
+/** A spreadsheet import: the CSV text itself (1 MB), optionally just checked without writing. */
+export const csvImportBody = z.object({ csv: z.string().min(1).max(1_000_000), dryRun: z.boolean().optional() }).strict();
+
 export const resetBody = z.object({ confirm: z.literal('RESET') }).strict();
 export const prestigeBody = z.object({ confirm: z.literal('PRESTIGE') }).strict();
 
@@ -99,6 +102,8 @@ export const quitParam = z.object({ type: z.enum(GAME_TYPES) });
 
 export const focusStartBody = z.object({ minutes: z.number().int().min(shared.LIMITS.FOCUS_MIN_MINUTES).max(shared.LIMITS.FOCUS_MAX_MINUTES) }).strict();
 export const focusFinishBody = z.object({ sessionId: z.number().int().positive() }).strict();
+
+export const statsHistoryQuery = z.object({ days: z.coerce.number().int().refine((n) => [7, 30, 90].includes(n), 'days must be 7, 30 or 90').default(30) }).strip();
 
 // ── AI ───────────────────────────────────────────────────────────────────────
 export const uuidParam = z.object({ threadId: z.string().uuid() });

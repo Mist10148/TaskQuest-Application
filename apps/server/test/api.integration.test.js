@@ -365,6 +365,78 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.ok(me.lifetimeXp >= 3000, 'the board shows the never-reset total');
     });
 
+    await t.test('stats endpoints: auth, range validation and shapes', async () => {
+        assert.equal((await call('GET', '/api/stats/xp-history')).status, 401);
+        assert.equal((await call('GET', '/api/stats/summary')).status, 401);
+        for (const days of ['0', '8', '365', 'abc', '30.5']) {
+            assert.equal((await call('GET', `/api/stats/xp-history?days=${days}`, { cookie: alice })).status, 400, days);
+        }
+        const dflt = await (await call('GET', '/api/stats/xp-history', { cookie: alice })).json();
+        assert.equal(dflt.length, 30);
+        const week = await (await call('GET', '/api/stats/xp-history?days=7', { cookie: alice })).json();
+        assert.equal(week.length, 7);
+        assert.deepEqual(Object.keys(week[0]), ['date', 'xp', 'tasksCompleted']);
+        assert.ok(week.reduce((n, d) => n + d.xp, 0) > 0, 'alice earned XP earlier in this run');
+        const summary = await (await call('GET', '/api/stats/summary', { cookie: alice })).json();
+        assert.deepEqual(Object.keys(summary).sort(), ['busiestWeekday', 'streak', 'tasksCompleted7d', 'xpBySource30d']);
+        assert.ok(summary.tasksCompleted7d >= 1);
+    });
+
+    await t.test('CSV import: auth, dry run, row errors, no rewards, quota and size', async () => {
+        const csv = 'list,task,due,priority,done
+Groceries,Milk,2030-01-05,high,no
+Groceries,Bread,,,yes
+Other,"Line one
+still one",,,
+';
+        assert.equal((await call('POST', '/api/import/csv', { body: { csv } })).status, 401);
+        assert.equal((await call('POST', '/api/import/csv', { cookie: alice, body: { csv }, origin: 'https://evil.example' })).status, 403);
+        assert.equal((await call('POST', '/api/import/csv', { cookie: alice, body: {} })).status, 400);
+        assert.equal((await call('POST', '/api/import/csv', { cookie: alice, body: { csv, extra: 1 } })).status, 400);
+
+        const C = await login(db, '200000000000000020');
+        const before = await (await call('GET', '/api/user', { cookie: C })).json();
+        const dry = await (await call('POST', '/api/import/csv', { cookie: C, body: { csv, dryRun: true } })).json();
+        assert.deepEqual([dry.ok, dry.rows, dry.lists, dry.items], [true, 3, 2, 3]);
+        assert.equal(dry.preview.length, 3);
+        assert.equal((await (await call('GET', '/api/lists', { cookie: C })).json()).length, 0, 'a dry run writes nothing');
+
+        const bad = await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task,due
+A,ok,
+A,bad,2030-02-30
+A,,x
+' } });
+        assert.equal(bad.status, 400);
+        const badBody = await bad.json();
+        assert.equal(badBody.details.errorCount, 2);
+        assert.deepEqual(badBody.details.errors.map((e) => e.row), [3, 4]);
+        assert.equal((await (await call('GET', '/api/lists', { cookie: C })).json()).length, 0, 'any bad row imports nothing');
+
+        const done = await call('POST', '/api/import/csv', { cookie: C, body: { csv } });
+        assert.equal(done.status, 201);
+        assert.deepEqual(await done.json(), { success: true, rows: 3, lists: 2, items: 3 });
+        const lists = await (await call('GET', '/api/lists', { cookie: C })).json();
+        assert.deepEqual(lists.map((l) => l.name).sort(), ['Groceries', 'Other']);
+        const groceries = await (await call('GET', `/api/lists/${lists.find((l) => l.name === 'Groceries').id}`, { cookie: C })).json();
+        assert.deepEqual(groceries.items.map((i) => [i.name, i.priority, Boolean(i.completed), Boolean(i.xp_awarded)]), [['Milk', 'HIGH', false, false], ['Bread', null, true, true]]);
+        const after = await (await call('GET', '/api/user', { cookie: C })).json();
+        assert.equal(after.user.player_xp, before.user.player_xp, 'imports never pay XP');
+        assert.equal(after.user.total_items_added, before.user.total_items_added);
+        const again = await (await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'task
+x
+' } })).json();
+        assert.equal(again.lists, 1, 'rows without a list go to "Imported"');
+
+        // The per-user quota applies to CSV too.
+        await db.query("INSERT INTO lists (discord_id, name) SELECT '200000000000000020', CONCAT('filler', seq) FROM (SELECT @r := @r + 1 AS seq FROM information_schema.columns, (SELECT @r := 0) z LIMIT 200) n");
+        assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task
+One more,x
+' } })).status, 400);
+        // Over the body limit.
+        const huge = await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'a'.repeat(1_000_001) } });
+        assert.equal(huge.status, 400);
+    });
+
     await t.test('logout destroys the session', async () => {
         const res = await call('POST', '/api/auth/logout', { cookie: mallory });
         assert.equal(res.status, 200);

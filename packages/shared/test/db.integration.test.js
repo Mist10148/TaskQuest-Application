@@ -46,10 +46,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await db.users.ensureUser(ALICE, { username: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
-    await t.test('migrations 007-012 are idempotent and add the new columns', async () => {
+    await t.test('migrations 007-013 are idempotent and add the new columns', async () => {
         await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
         const again = await db.runMigrations({ log: () => {} });
-        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources']);
+        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources', '013_task_reminders']);
         const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
@@ -206,6 +206,56 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // Changing the deadline re-arms everything.
         await db.tasks.updateList(FRANK, today.id, { deadline: '2030-06-10' });
         assert.ok((await ids()).includes(today.id));
+    });
+
+    await t.test('task reminders: candidates, list-day overlap, completion, snooze, re-arm', async () => {
+        const FRANK = '100000000000000094';
+        await db.users.ensureUser(FRANK);
+        await db.users.updateSettings(FRANK, { reminder_hour: 7 });
+        const now = new Date('2030-07-10T12:00:00Z');
+        const { list } = await db.tasks.createList(FRANK, { name: 'task reminders', deadline: '2030-07-10' });
+        const add = async (name, extra) => (await db.tasks.addItem(FRANK, list.id, { name, ...extra })).item;
+        const dueToday = await add('due today', { due_date: '2030-07-10' });
+        const sameAsList = await add('same day as list', { due_date: '2030-07-10' });
+        const early = await add('earlier than list', { due_date: '2030-07-09' });
+        const noDate = await add('no date');
+        const far = await add('far away', { due_date: '2030-08-30' });
+        await db.tasks.updateList(FRANK, list.id, { deadline: '2030-07-12' });
+        const ids = async (at = now) => (await db.tasks.getTaskReminderCandidates(at)).map((r) => r.id);
+        let found = await ids();
+        assert.ok(found.includes(dueToday.id) && found.includes(early.id));
+        assert.ok(!found.includes(noDate.id) && !found.includes(far.id));
+        assert.equal((await db.tasks.getTaskReminderCandidates(now)).find((r) => r.id === dueToday.id).reminder_hour, 7);
+
+        // A task due on its list's deadline day is covered by the list reminder.
+        await db.tasks.updateList(FRANK, list.id, { deadline: '2030-07-10' });
+        found = await ids();
+        assert.ok(!found.includes(dueToday.id) && !found.includes(sameAsList.id) && found.includes(early.id));
+        await db.tasks.updateList(FRANK, list.id, { deadline: null });
+
+        await db.tasks.markTaskReminderSent(dueToday.id, now);
+        assert.ok(!(await ids()).includes(dueToday.id), 'sent once');
+
+        await db.tasks.setItemCompleted(FRANK, early.id, true);
+        assert.ok(!(await ids()).includes(early.id), 'completed tasks are skipped');
+
+        // Snooze is owner-scoped, hides the task until it ends, then fires again.
+        await assert.rejects(db.tasks.snoozeTask(BOB, dueToday.id, new Date('2030-07-11T09:00:00Z')), { code: 'NOT_FOUND' });
+        await db.tasks.snoozeTask(FRANK, dueToday.id, new Date('2030-07-11T09:00:00Z'));
+        assert.ok(!(await ids()).includes(dueToday.id));
+        const later = new Date('2030-07-11T10:00:00Z');
+        assert.ok((await ids(later)).includes(dueToday.id));
+        await db.tasks.markTaskReminderSent(dueToday.id, later);
+        assert.ok(!(await ids(later)).includes(dueToday.id));
+
+        // Moving the due date re-arms the reminder.
+        await db.tasks.updateItem(FRANK, dueToday.id, { due_date: '2030-07-10' });
+        assert.ok((await ids()).includes(dueToday.id));
+
+        // Automation off: nothing is a candidate.
+        await db.users.updateSettings(FRANK, { automation_enabled: false });
+        assert.deepEqual(await ids(), []);
+        await db.users.updateSettings(FRANK, { automation_enabled: true });
     });
 
     await t.test('weekly digest: opt-in, once a week, real numbers', async () => {
@@ -1551,6 +1601,49 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.resetProgress(U);
         const wiped = await db.users.getUser(U);
         assert.deepEqual([Number(wiped.prestige), Number(wiped.lifetime_xp_total), Number(wiped.lifetime_xp)], [0, 0, 0]);
+    });
+
+    await t.test('stats: per-day history fills gaps, only earning XP counts, other users never leak', async () => {
+        const U = '100000000000000181';
+        const O = '100000000000000182';
+        await db.users.ensureUser(U);
+        await db.users.ensureUser(O);
+        const empty = await db.stats.getXPHistory(U, 7);
+        assert.equal(empty.length, 7);
+        assert.ok(empty.every((d) => d.xp === 0 && d.tasksCompleted === 0 && /^\d{4}-\d{2}-\d{2}$/.test(d.date)));
+        assert.equal(empty[6].date, new Date().toISOString().slice(0, 10), 'the last day is today (UTC)');
+        await assert.rejects(db.stats.getXPHistory(U, 8), RangeError);
+        await assert.rejects(db.stats.getXPHistory(U, '1; DROP TABLE users'), RangeError);
+
+        const { list } = await db.tasks.createList(U, { name: 'Stats' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'one' });
+        await db.tasks.setItemCompleted(U, item.id);
+        const { list: otherList } = await db.tasks.createList(O, { name: 'Other' });
+        const { item: otherItem } = await db.tasks.addItem(O, otherList.id, { name: 'theirs' });
+        await db.tasks.setItemCompleted(O, otherItem.id);
+        // A spend must not lower the day; an old completion lands on its own day.
+        await db.query("INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after) VALUES (?, -50, 'class_purchase', 100, 50)", [U]);
+        const old = await db.tasks.addItem(U, list.id, { name: 'old' });
+        await db.tasks.setItemCompleted(U, old.item.id);
+        await db.query('UPDATE items SET first_completed_at = first_completed_at - INTERVAL 3 DAY WHERE id = ?', [old.item.id]);
+
+        const hist = await db.stats.getXPHistory(U, 7);
+        assert.equal(hist[6].tasksCompleted, 1);
+        assert.equal(hist[3].tasksCompleted, 1, 'three days ago');
+        assert.ok(hist[6].xp > 0);
+        const total = hist.reduce((n, d) => n + d.xp, 0);
+        const [[earned]] = await db.getPool().query('SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND amount > 0', [U]);
+        assert.equal(total, Number(earned.n), 'spending is not counted and nothing is lost');
+        assert.equal((await db.stats.getXPHistory(U, 90)).length, 90);
+
+        const summary = await db.stats.getStatsSummary(U);
+        assert.equal(summary.tasksCompleted7d, 2);
+        assert.ok(summary.xpBySource30d.length >= 1 && summary.xpBySource30d.every((r) => r.xp > 0 && r.label));
+        assert.ok(summary.xpBySource30d.every((r, i, a) => i === 0 || a[i - 1].xp >= r.xp), 'largest first');
+        assert.ok(!summary.xpBySource30d.some((r) => r.source === 'class_purchase'));
+        assert.ok(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].includes(summary.busiestWeekday.name));
+        const none = await db.stats.getStatsSummary('100000000000000199');
+        assert.deepEqual([none.streak, none.tasksCompleted7d, none.xpBySource30d.length, none.busiestWeekday], [0, 0, 0, null]);
     });
 
     await db.closePool();

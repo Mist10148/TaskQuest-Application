@@ -9,12 +9,14 @@ import config from './config.js';
 import { asyncRoute, requireAuth, uid, notFound, errorHandler } from './lib/http.js';
 import authRouter from './routes/auth.js';
 import userRouter from './routes/user.js';
+import importRouter from './routes/import.js';
 import { listsRouter, itemsRouter } from './routes/tasks.js';
 import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } from './routes/progression.js';
 import gamesRouter from './routes/games.js';
 import questsRouter from './routes/quests.js';
 import focusRouter from './routes/focus.js';
 import reviewRouter from './routes/review.js';
+import statsRouter from './routes/stats.js';
 import calendarRouter from './routes/calendar.js';
 import aiRouter from './routes/ai.js';
 import internalRouter, { requireInternalToken } from './routes/internal.js';
@@ -35,6 +37,8 @@ export function createApp() {
     app.use('/internal', express.json({ limit: '16kb' }), requireInternalToken, internalRouter);
     // Imports carry whole lists, so that one route gets a bigger body limit (the shared service caps its size).
     app.use('/api/user/import', express.json({ limit: '1mb' }));
+    // A CSV of up to 1 MB of text grows a little once its line breaks and quotes are escaped as JSON.
+    app.use('/api/import', express.json({ limit: '2mb' }));
     app.use(express.json({ limit: '16kb' }));
     app.use(sessionMiddleware(SESSION_COOKIE));
     app.use('/api', apiLimiter, csrfProtection);
@@ -61,6 +65,7 @@ export function createApp() {
 
     // ── Authenticated endpoints ──────────────────────────────────────────────
     app.use('/api/user', requireAuth, userRouter);
+    app.use('/api/import', requireAuth, importRouter);
     app.use('/api/lists', requireAuth, listsRouter);
     app.use('/api/items', requireAuth, itemsRouter);
     app.use('/api/classes', requireAuth, classesRouter);
@@ -70,6 +75,7 @@ export function createApp() {
     app.use('/api/quests', requireAuth, questsRouter);
     app.use('/api/focus', requireAuth, focusRouter);
     app.use('/api/review', requireAuth, reviewRouter);
+    app.use('/api/stats', requireAuth, statsRouter);
     app.use('/api/ai', requireAuth, aiLimiter, aiRouter);
     app.get('/api/xp/history', requireAuth, asyncRoute(async (req, res) => res.json(await db.users.getXPHistory(uid(req), 50))));
 

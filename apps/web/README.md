@@ -1,6 +1,6 @@
 # @taskquest/web
 
-The TaskQuest web app: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui and TanStack Query.
+The TaskQuest web app: React 18, TypeScript, Vite, Tailwind CSS 4 (configured in CSS, in `src/index.css`), shadcn/ui and TanStack Query.
 
 In development, Vite runs on <http://localhost:8080> and proxies `/api` to the Express server
 ([`apps/server`](../server)) on port 3001. In production, the server serves `dist/` itself, so the

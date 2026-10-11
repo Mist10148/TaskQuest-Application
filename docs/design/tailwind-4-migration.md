@@ -1,12 +1,22 @@
-# Plan: migrating the web app to Tailwind CSS 4
+# Migrating the web app to Tailwind CSS 4 (done)
 
 | | |
 |---|---|
-| **Status** | Plan, not started |
+| **Status** | Done: Tailwind 4.3.3 via `@tailwindcss/vite`, CSS-first config in `apps/web/src/index.css` |
 | **Why a plan and not a change** | It touches every component's styling and the build pipeline, and the benefit is mostly build-time. It should be its own PR with visual comparison, not mixed into feature work. |
-| **Related** | [KNOWN_ISSUES #23](../KNOWN_ISSUES.md), `apps/web/tailwind.config.ts`, `apps/web/postcss.config.js`, `apps/web/src/index.css` |
+| **Related** | `apps/web/src/index.css`, `apps/web/vite.config.ts` (`tailwind.config.ts` and `postcss.config.js` were removed) |
 
-## Why
+## Outcome
+
+- `npm audit` (full tree) went from 8 advisories (5 high) to 0; the dev-only row is gone from KNOWN_ISSUES.
+- Tokens stay as bare `H S% L%` triples in `:root` / `.light`; `@theme` maps them to `--color-*`, so `theme.test.ts` is unchanged.
+- `tailwindcss-animate` is replaced by `tw-animate-css`; the unused `@tailwindcss/typography`, `autoprefixer` and `postcss` dependencies are removed.
+- Custom classes in `index.css` are `@utility` blocks, so only the ones used in `src/` are emitted (as with Tailwind 3's purge).
+- Renames applied: `bg-gradient-*` to `bg-linear-*`, `flex-shrink-0` to `shrink-0`, `outline-none` to `outline-hidden`, `shadow-sm` to `shadow-xs`, `backdrop-blur[-sm]` one step down the scale, `data-[x]` to `data-x`, `var(--x)` arbitrary values to `(--x)`. `rounded-sm/md/lg` keep the shadcn radius scale defined in `@theme`.
+- Known deltas: the built CSS is about 4 kB larger gzipped (about 16.5 kB to 20.9 kB) because Tailwind 4 emits `@property` registrations and `color-mix()` fallbacks for every opacity modifier; the default palette (`red-500`, `cyan-400`, ...) is now OKLCH, so those few colours shift slightly; buttons get an explicit `cursor: pointer` rule because Tailwind 4 stopped doing it.
+- The screenshot comparison in step 1 and 7 below was not done by a human; the Playwright smoke suite, contrast tests and a before/after diff of the compiled class list were used instead. Eyeball the app in both themes before release.
+
+## Why (original plan)
 
 - The Tailwind 3 toolchain pulls in dev-only packages that carry advisories (`braces`, `micromatch`, `chokidar`, `postcss-selector-parser`). They never reach production, but they show up in `npm audit` for the whole tree.
 - Tailwind 4 ships a faster engine, configures through CSS, and removes the PostCSS plugin chain we maintain by hand.

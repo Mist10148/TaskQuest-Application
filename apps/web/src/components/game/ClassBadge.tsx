@@ -100,7 +100,9 @@ export const ClassBadge = ({
   showGlow = false,
   className,
 }: ClassBadgeProps) => {
-  const config = classConfig[playerClass];
+  // A class the UI does not know yet (added server-side) renders as the neutral default.
+  const known = playerClass in classConfig;
+  const config = classConfig[known ? playerClass : "DEFAULT"];
   const Icon = config.icon;
 
   const sizeClasses = {
@@ -140,12 +142,12 @@ export const ClassBadge = ({
         className
       )}
       style={showGlow ? {
-        boxShadow: `0 0 15px hsl(var(--class-${playerClass.toLowerCase()}) / 0.4)`,
+        boxShadow: `0 0 15px hsl(var(--class-${(known ? playerClass : "DEFAULT").toLowerCase()}) / 0.4)`,
       } : undefined}
     >
       <Icon className={sizes.icon} />
       {showName && (
-        <span className={sizes.text}>{config.name}</span>
+        <span className={sizes.text}>{known ? config.name : playerClass.charAt(0) + playerClass.slice(1).toLowerCase()}</span>
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import crypto from 'crypto';
 import { Router } from 'express';
 import db from '@taskquest/shared/db';
+import shared from '@taskquest/shared';
 import config from '../config.js';
 import { asyncRoute, requireAuth, uid } from '../lib/http.js';
 
@@ -76,7 +77,7 @@ router.get(
         const me = await meRes.json();
         if (!/^\d{5,25}$/.test(String(me.id))) return loginError(res, 'profile_failed');
 
-        await db.users.ensureUser(me.id, { username: me.global_name || me.username, avatar: me.avatar });
+        await db.users.ensureUser(me.id, { username: me.global_name || me.username, handle: me.username, avatar: me.avatar });
 
         // New session ID on login prevents session fixation.
         req.session.regenerate((err) => {
@@ -107,6 +108,7 @@ router.get(
             discord: req.session.user,
             ...stats,
             skills,
+            freezeLimits: shared.getFreezeLimits(skills),
             userAchievements: achievements,
             // ai: usable now; aiAvailable: the server offers AI at all (so Settings can show the opt-out switch)
             features: { ai: config.ai.enabled && stats.user.ai_enabled !== 0, aiAvailable: config.ai.enabled }

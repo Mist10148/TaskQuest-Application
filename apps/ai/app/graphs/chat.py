@@ -157,20 +157,30 @@ READ_ONLY_REFUSAL = (
 )
 
 
+PUBLIC_REFUSAL = (
+    "Quest lookups are not available in a public channel. Nothing was read. "
+    "Tell the user to DM the bot or use /ask, which replies privately."
+)
+
+
 def build_chat_graph(
     deps: ChatDeps,
     checkpointer: Any,
     *,
     prompt_name: str = "chat_system",
     read_only: bool = False,
+    public: bool = False,
     fold_at: int = FOLD_AT,
     keep: int = KEEP,
 ):
     """The chat agent. ``read_only`` (Discord conversation) binds only read tools and never pauses
-    for confirmation; any write call the model invents is answered with READ_ONLY_REFUSAL."""
+    for confirmation; any write call the model invents is answered with READ_ONLY_REFUSAL.
+    ``public`` (a guild channel, where replies are visible to everyone) binds no tools at all and
+    retrieves only the public docs, so a quest name can never be read out into the channel."""
     chat_prompt, chat_version = load_prompt(prompt_name, persona=True)
     router_prompt, _ = load_prompt("router_system")
-    tools = [t for t in langchain_tools() if not (read_only and TOOLS[t.name].write)]
+    # Every read tool exposes the user's private quests, so a public conversation gets none of them.
+    tools = [] if public else [t for t in langchain_tools() if not (read_only and TOOLS[t.name].write)]
     max_rounds = get_settings().max_tool_iterations
 
     def ctx_for(state: ChatState) -> ToolContext:
@@ -219,7 +229,8 @@ def build_chat_graph(
         return {"intent": out.intent, "filters": {"status": out.status, "category": out.category}}
 
     def after_router(state: ChatState) -> str:
-        return "rewrite_query" if state["intent"] in ("task_question", "app_help") else "agent"
+        wanted = ("app_help",) if public else ("task_question", "app_help")
+        return "rewrite_query" if state["intent"] in wanted else "agent"
 
     async def rewrite_query(state: ChatState) -> dict:
         messages = state["messages"]
@@ -247,7 +258,8 @@ def build_chat_graph(
     async def retrieve(state: ChatState) -> dict:
         if deps.retriever is None:
             return {"retrieved": []}
-        types = frozenset({"doc"}) if state["intent"] == "app_help" else frozenset({"list", "item", "history"})
+        docs_only = public or state["intent"] == "app_help"
+        types = frozenset({"doc"}) if docs_only else frozenset({"list", "item", "history"})
         filters = state.get("filters") or {}
         try:
             from app.db import pool
@@ -276,7 +288,7 @@ def build_chat_graph(
             system += f"\n\nContext:\n{context}"
         llm = deps.llm_factory()
         exhausted = tool_rounds_this_turn(state["messages"]) >= max_rounds
-        model = llm if exhausted else llm.bind_tools(tools)
+        model = llm if exhausted or not tools else llm.bind_tools(tools)
         if exhausted:
             system += "\n\nTool budget for this turn is used up. Answer now with what you have."
         # An attached image travels in the run config, so it is never saved in the checkpoint.
@@ -338,6 +350,8 @@ def build_chat_graph(
             event: dict[str, Any] = {"name": call["name"], "status": "done"}
             if spec is None:
                 content, event["status"] = f"Unknown tool {call['name']}.", "error"
+            elif public:  # the model was never offered tools here; refuse one it made up anyway
+                content, event["status"] = PUBLIC_REFUSAL, "declined"
             elif spec.write and read_only:
                 content, event["status"] = READ_ONLY_REFUSAL, "declined"
             elif spec.write and approvals.get(call_id) is not True:

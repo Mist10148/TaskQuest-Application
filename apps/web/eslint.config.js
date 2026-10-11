@@ -28,4 +28,9 @@ export default tseslint.config(
     files: ["src/components/ui/**/*.{ts,tsx}"],
     rules: { "react-refresh/only-export-components": "off" },
   },
+  {
+    // Playwright fixtures take a callback named `use`, which the React hooks rule mistakes for a hook.
+    files: ["e2e/**/*.ts"],
+    rules: { "react-hooks/rules-of-hooks": "off" },
+  },
 );

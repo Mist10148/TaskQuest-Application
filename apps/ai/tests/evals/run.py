@@ -322,10 +322,10 @@ async def run_summary(env: Env) -> SuiteResult:
 async def run_prioritize(env: Env) -> SuiteResult:
     spec = load_json("prioritize.json")
     agreements, top1, valid, failures = [], 0, 0, []
-    async with env.engine.connect() as conn:
+    async with env.engine.connect():
         for case in spec["cases"]:
             prio.clear_cache()
-            out = await prio.prioritize(conn, case["user"], env.llm_factory, today=env.seeded.today)
+            out = await prio.prioritize(case["user"], env.llm_factory, today=env.seeded.today)
             ranked = [r["id"] for r in out["ranked"]]
             own = {
                 label for label, owner in env.seeded.owner.items() if owner == case["user"] and label.startswith("L")

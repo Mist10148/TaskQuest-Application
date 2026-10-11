@@ -30,7 +30,7 @@ export const CelebrationHost = () => {
   }, [reduced]);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[70] overflow-hidden" aria-hidden="true">
+    <div className="pointer-events-none fixed inset-0 z-70 overflow-hidden" aria-hidden="true">
       <AnimatePresence>
         {bursts.map((burst) => (
           <div key={burst.id} className="absolute left-1/2 top-1/3">

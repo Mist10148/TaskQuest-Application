@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sharedEnv from '@taskquest/shared/env';
+import { pushConfigProblems } from './lib/pushConfig.js';
 
 // apps/server/.env first, then the shared root .env.
 sharedEnv.loadEnv(path.dirname(fileURLToPath(import.meta.url)));
@@ -44,6 +45,15 @@ const config = {
         serviceUrl: stripSlash(env.AI_SERVICE_URL || 'http://localhost:8000'),
         internalToken: env.AI_INTERNAL_TOKEN,
         timeoutMs: parseInt(env.AI_TIMEOUT_MS, 10) || 20000
+    },
+    /** Optional web push (docs/DEPLOYMENT.md): on only when all three VAPID values are set. */
+    push: {
+        publicKey: env.WEB_PUSH_PUBLIC_KEY || '',
+        privateKey: env.WEB_PUSH_PRIVATE_KEY || '',
+        subject: env.WEB_PUSH_SUBJECT || '',
+        enabled: Boolean(env.WEB_PUSH_PUBLIC_KEY && env.WEB_PUSH_PRIVATE_KEY && env.WEB_PUSH_SUBJECT),
+        /** Lets the bot ask this server to push a reminder; falls back to the AI token the bot already has. */
+        internalToken: env.WEB_PUSH_INTERNAL_TOKEN || env.AI_INTERNAL_TOKEN || ''
     }
 };
 
@@ -66,6 +76,8 @@ export function validateConfig() {
     if (config.ai.enabled && (!config.ai.internalToken || config.ai.internalToken.length < 32)) {
         problems.push('AI_INTERNAL_TOKEN must be at least 32 characters when AI_ENABLED=true.');
     }
+
+    problems.push(...pushConfigProblems(config.push));
 
     if (problems.length) {
         throw new Error(`Invalid configuration:\n  - ${problems.join('\n  - ')}`);

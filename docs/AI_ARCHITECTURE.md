@@ -83,6 +83,7 @@ flowchart TB
 - **Chunks:** one per quest (name, description, category, deadline, priority and its subtasks), one per subtask longer than 300 characters, one per week of completed subtasks with the XP earned that week, and the help docs split by heading.
 - **Only changed text is embedded.** Each chunk stores a SHA-256 `content_hash`. Unchanged chunks are only "touched" so the reconcile job stops flagging them.
 - **Staying fresh:** web writes and bot edits trigger a fire-and-forget `/internal/index`. The reconcile loop catches anything missed: changed lists, new completions or XP for history, and users who opted out, whose vectors are deleted. Toggling AI in settings re-indexes or purges straight away.
+- **Shared quests are never AI context.** A quest that anybody else belongs to (`list_members`) is excluded from every read in `apps/ai/app/db/repo.py` (`UNSHARED`), is never indexed or summarised, and its existing vectors are purged by the next reconcile, because its names and task titles can be written by other people and are untrusted.
 - **Retrieval reads fresh data.** Stored vectors only decide which quests are candidates. The text shown to the model is rebuilt from MySQL, so completion state is never stale.
 - **Filters:** a `status` or `category` filter drops doc chunks. History chunks count as finished work, so they appear only under `status="done"`.
 - **Vector store:** MySQL plus numpy, so there is no extra infrastructure. [AI_INTEGRATION.md §17](AI_INTEGRATION.md) lists when to move to a dedicated vector database.
@@ -120,6 +121,7 @@ stateDiagram-v2
 - `compute_features` computes a deterministic baseline score from overdue days, priority, deadline proximity and progress.
 - `merge_scores` blends the model's rank with that baseline. An overdue HIGH-priority quest can never be ranked below the top 3.
 - `fallback_rank` uses the baseline alone and template reasons, so the feature still works without Gemini.
+- `POST /v1/prioritize` is the one model route that degrades instead of failing on an exhausted daily quota: `require_ai("prioritize", degrade_on_quota=True)` lets it through unreserved, the graph's quota check sends it to `fallback_rank`, and the response carries `usedFallback: true` (nothing is booked). An opted-out user still gets 403 `AI_OPTED_OUT`.
 - More than 15 open quests switches to the reasoning model. Results are cached for 5 minutes per open-task set; fallback results are never cached.
 
 ## 6. Chat graph
@@ -160,6 +162,7 @@ The bot answers @mentions, replies to its own messages and DMs, Zephyr-style (`a
 - **Same graph, read-only:** `build_chat_graph(..., prompt_name="converse_system", read_only=True, fold_at=20, keep=10)`.
   - Only read tools are bound, and the graph never routes to `confirm`.
   - A write call the model invents is answered with a refusal that points to `/ask` or the website.
+- **Guild channels are public:** the bot sends `public: true` when the message came from a server. The service then builds the graph with `public=True` and `prompt_name="converse_public_system"`: **no tools are bound** (every read tool exposes private quests), retrieval is limited to the `doc` source type, and a tool call the model invents anyway is answered with a refusal. Quest lookups therefore work only in DMs (and `/ask`, which replies ephemerally).
 - **Memory is per user per channel**, using thread id `uuid5("discord:<channel>:<user>")`. Zephyr shares memory across a channel; TaskQuest can't, because retrieval and tools read each user's private quests.
 - **Threads are saved with `source='discord'`** (migration 005), so they never appear in the web app's thread list. `/forget` deletes the thread and its checkpoints.
 - **Images:** only `https` URLs on Discord's CDN are fetched, up to 4 MB, image types only. The bytes go to Gemini through the run config and are never written to the checkpoint.
@@ -208,7 +211,11 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 | Invented ids or XP | Ids are validated (summarizer and prioritizer retry, then drop unknown ids). XP is mentioned only when a tool result includes it. |
 | Unsafe content | Gemini `safety_settings` set explicitly (harassment blocks only high-probability content, so the snappy persona still works). Blocked replies become a friendly message. |
 | Runaway agents | `recursion_limit=40` and `MAX_TOOL_ITERATIONS`. |
-| Cost | A per-user daily request quota checked before chat, resume, converse, summary and prioritize. Token usage goes to `ai_usage`. |
+| Cost and opt-out | One shared dependency (`deps.require_ai`) guards chat, resume, converse, summary and prioritize. It rejects users with `users.ai_enabled = 0` (403 `AI_OPTED_OUT`) and **reserves one request atomically** (`INSERT ... ON DUPLICATE KEY UPDATE requests = requests + 1`, then a limit check inside the same transaction) before any work starts, so concurrent requests cannot all slip under the limit. Routes that reject a call before the model runs (404, 409, cache hit, provider failure) refund it. `require_ai` is a yield dependency, so a request that fails body validation (422) or raises before the response starts is refunded too; `AIAccess.refund()` is idempotent. Tokens are booked afterwards with `requests=0`, in a `finally` so a client that disconnects mid-stream still pays for what the model spent. |
+| Double clicks and races | Turns on one thread run under a per-thread `asyncio.Lock` (`app/locks.py`). A resume re-checks "a confirmation is pending" under that lock, so a second Approve never runs the write again. `POST /v1/chat` returns 409 while a confirmation is pending. Thread creation is `INSERT IGNORE`, so simultaneous first Discord messages do not collide. `summary` and `prioritize` use short database connections around the model call instead of holding one pooled connection for the whole LLM round trip. |
+| Confirm previews | The preview of every write tool (`create_list`, `add_item`, `update_item`, `break_down_task`, ...) lists every field that will be written, including each subtask name, due date, priority, tags, repeat and parent, so the user approves exactly what is written. |
+| Per-task fields | `add_item` and `update_item` take `due_date` (a real `YYYY-MM-DD` date), `priority` (`LOW`/`MEDIUM`/`HIGH`), `tags` (at most 5, 20 characters each, letters, digits, `-` and `_`) and `repeat` (`daily`/`weekly`/`monthly`, sent as `recurrence`); `add_item` also takes `parent_id` (a top-level subtask, one level only). The argument models forbid extra fields, and the server validates everything again with the shared rules. |
+| Break down a task | `break_down_task(item_id, subtasks)` takes 2 to 8 names and creates them under that subtask in one transaction (`POST /internal/items/:id/subtasks` → `db.tasks.addSubtasks`): all or none, one level deep, XP and the daily add cap as for any added task. The owner is the `discord_id` from graph state, never a tool argument, so a foreign or invented id is a not-found error. |
 | Privacy | Opting out deletes the user's vectors at once and on every reconcile pass. Opted-out users are never sent to Gemini. |
 | SSRF via attachments | Discord CDN host allow-list, https only, no redirects, size and type limits. |
 

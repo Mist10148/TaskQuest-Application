@@ -81,7 +81,7 @@ test('a mention sends the cleaned text with the channel and replies without ping
     chat._setClient(ai);
     const m = fakeMessage();
     await chat.handleMessage(m);
-    assert.deepEqual(ai.calls, [{ id: '42', channelId: '900', message: 'hello', imageUrl: undefined }]);
+    assert.deepEqual(ai.calls, [{ id: '42', channelId: '900', message: 'hello', imageUrl: undefined, public: true }]);
     assert.ok(m.sent[0].typing);
     assert.deepEqual(m.sent.at(-1).reply, { content: '*smiles* Hey there.', allowedMentions: { parse: [], repliedUser: false } });
 });
@@ -164,4 +164,30 @@ test('users who picked /ai-format embed get embeds', async () => {
     } finally {
         user = { discord_id: '42', ai_enabled: 1 };
     }
+});
+
+test('cooldown entries are pruned so the map cannot grow without bound', async () => {
+    chat._setClient(stubAi());
+    let t = 1000;
+    for (let n = 0; n < 5; n++) {
+        const m = fakeMessage();
+        m.author.id = `u${n}`;
+        await chat.handleMessage(m, { now: () => t });
+        t += 10;
+    }
+    assert.equal(chat._lastSeenSize(), 5);
+    t += 120_000; // far past the cooldown and the prune interval
+    const late = fakeMessage();
+    late.author.id = 'late';
+    await chat.handleMessage(late, { now: () => t });
+    assert.equal(chat._lastSeenSize(), 1, 'only the fresh entry remains');
+});
+
+test('guild messages are sent as public so the AI keeps private quests out of the channel; DMs are not', async () => {
+    const ai = stubAi();
+    chat._setClient(ai);
+    await chat.handleMessage(fakeMessage({ guildId: '1' }));
+    chat._reset();
+    await chat.handleMessage(fakeMessage({ guildId: null }));
+    assert.deepEqual(ai.calls.map((c) => c.public), [true, false]);
 });

@@ -61,6 +61,11 @@ function fake({ options = {}, customId } = {}) {
             i.deferred = true;
             sent.push({ type: 'deferReply' });
         },
+        async update(p) {
+            i.deferred = true;
+            i.replied = true; // like discord.js: after update() further errors arrive as follow-ups
+            sent.push({ type: 'update', ...serialize(p) });
+        },
         async deferUpdate() {
             i.deferred = true;
             sent.push({ type: 'deferUpdate' });
@@ -263,7 +268,16 @@ test('/ask shows Approve/Cancel when a write needs confirmation, and resume appl
     assert.deepEqual(ids, [`ai_ok:${THREAD}`, `ai_no:${THREAD}`]);
 
     const ok = fake({ customId: ids[0] });
+    const seenAtCall = [];
+    const realChat = client.chat;
+    client.chat = async (...args) => {
+        seenAtCall.push(ok.sent.map((s) => s.type)); // what the user already saw when the AI call started
+        return realChat(...args);
+    };
     await aiCommands.handleButton(ok);
+    client.chat = realChat;
+    assert.deepEqual(seenAtCall, [['update']], 'buttons are removed before the AI call');
+    assert.deepEqual(ok.sent[0].components, []);
     assert.deepEqual(client.calls[1], { kind: 'chat', path: `/v1/chat/${THREAD}/resume`, body: { approved: true } });
     assert.match(lastEdit(ok).embeds[0].description, /\+25 XP/);
     assert.deepEqual(lastEdit(ok).components, []);
@@ -273,6 +287,29 @@ test('/ask shows Approve/Cancel when a write needs confirmation, and resume appl
     await aiCommands.handleButton(no);
     assert.deepEqual(client.calls[2].body, { approved: false });
     assert.match(lastEdit(no).embeds[0].description, /Cancelled/);
+});
+
+test('a failed resume gives the Approve/Cancel buttons back, except when nothing is pending (409)', async () => {
+    const mk = (err) => {
+        const client = stubClient({});
+        client.chat = async () => {
+            throw err;
+        };
+        aiCommands._setClient(client);
+    };
+    mk(new TaskQuestError('AI_UNAVAILABLE', 'down', 503));
+    const i = fake({ customId: `ai_ok:${THREAD}` });
+    await aiCommands.handleButton(i);
+    assert.deepEqual(i.sent[0].components, []);
+    const ids = lastEdit(i).components[0].components.map((c) => c.custom_id);
+    assert.deepEqual(ids, [`ai_ok:${THREAD}`, `ai_no:${THREAD}`]);
+    assert.ok(i.sent.some((s) => s.type === 'followUp'));
+
+    mk(new TaskQuestError('CONFLICT', 'Nothing is waiting for confirmation.', 409));
+    const j = fake({ customId: `ai_no:${THREAD}` });
+    await aiCommands.handleButton(j);
+    assert.equal(lastEdit(j), undefined);
+    assert.ok(j.sent.some((s) => s.type === 'followUp'));
 });
 
 test('an unknown ai_ button is reported as expired', async () => {

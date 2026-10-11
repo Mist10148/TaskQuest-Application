@@ -30,6 +30,14 @@ const TYPING_EVERY_MS = 8000;
 let client;
 const ai = () => (client ||= createAiClient());
 const lastSeen = new Map(); // userId -> timestamp, for the per-user cooldown
+let lastPrune = 0;
+
+/** Drop cooldown entries that have expired so the map cannot grow forever. */
+function pruneLastSeen(at) {
+    if (at - lastPrune < COOLDOWN_MS * 20) return;
+    lastPrune = at;
+    for (const [id, t] of lastSeen) if (at - t >= COOLDOWN_MS) lastSeen.delete(id);
+}
 
 // Never let a model reply ping @everyone, roles or users.
 const NO_PINGS = { parse: [], repliedUser: false };
@@ -139,6 +147,7 @@ async function handleMessage(message, { log = console.warn, now = Date.now } = {
         const userId = message.author.id;
         if (lastSeen.has(userId) && now() - lastSeen.get(userId) < COOLDOWN_MS) return;
         lastSeen.set(userId, now());
+        pruneLastSeen(now());
 
         const user = await users.ensureUser(userId);
         if (user && Number(user.ai_enabled) === 0) {
@@ -159,7 +168,9 @@ async function handleMessage(message, { log = console.warn, now = Date.now } = {
             result = await ai().converse(userId, {
                 channelId: message.channelId,
                 message: (text || '(no text, just the attached image)').slice(0, MAX_INPUT),
-                imageUrl: attachment?.imageUrl
+                imageUrl: attachment?.imageUrl,
+                // Replies in a server channel are visible to everyone: the AI must not read private quests there.
+                public: Boolean(message.guildId)
             });
         } finally {
             clearInterval(typing);
@@ -186,5 +197,9 @@ module.exports = {
     _setClient: (c) => {
         client = c;
     },
-    _reset: () => lastSeen.clear()
+    _reset: () => {
+        lastSeen.clear();
+        lastPrune = 0;
+    },
+    _lastSeenSize: () => lastSeen.size
 };

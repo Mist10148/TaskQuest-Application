@@ -45,6 +45,20 @@ test('nextOccurrence: daily, weekly and monthly with month-end clamping', () => 
     assert.equal(nextDueOnOrAfter('2030-01-01', 'daily', '2030-01-01'), '2030-01-02');
 });
 
+test('monthly repeats keep the anchor day and far-late tasks resolve arithmetically', () => {
+    const { nextOccurrence, nextDueOnOrAfter } = require('../src/dates');
+    assert.equal(nextOccurrence('2030-01-31', 'monthly', 31), '2030-02-28');
+    assert.equal(nextOccurrence('2030-02-28', 'monthly', 31), '2030-03-31', 'back to the 31st');
+    assert.equal(nextOccurrence('2030-04-30', 'monthly', 31), '2030-05-31');
+    assert.equal(nextDueOnOrAfter('2030-01-31', 'monthly', '2030-03-05', 31), '2030-03-31');
+    // years late: the old 400-step loop gave up and returned a past date
+    assert.equal(nextDueOnOrAfter('2000-01-01', 'daily', '2030-01-10'), '2030-01-10');
+    assert.equal(nextDueOnOrAfter('2000-01-01', 'weekly', '2030-01-10'), '2030-01-12');
+    assert.equal(nextDueOnOrAfter('2000-01-15', 'monthly', '2030-01-10'), '2030-01-15');
+    assert.equal(nextDueOnOrAfter('2000-01-15', 'monthly', '2030-01-16'), '2030-02-15');
+    assert.equal(nextDueOnOrAfter('2000-01-15', 'monthly', '2030-12-20'), '2031-01-15');
+});
+
 test('hourInZone and weekdayInZone follow the zone', () => {
     const { hourInZone, weekdayInZone } = require('../src/dates');
     const instant = new Date('2030-01-13T21:30:00Z'); // Sunday 21:30 UTC (no DST in January)

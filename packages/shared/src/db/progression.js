@@ -8,7 +8,7 @@
 'use strict';
 
 const { withTransaction } = require('./pool');
-const { lockUser, getUserSkills, getGameCounts } = require('./users');
+const { lockUser, getUser, getUserSkills, getGameCounts } = require('./users');
 const { errors } = require('../errors');
 const {
     CLASSES,
@@ -16,20 +16,26 @@ const {
     classOwnershipColumn,
     findSkill,
     LIMITS,
-    STREAK_FREEZE,
-    SPEND_SOURCES
+    REWARDS,
+    SPEND_SOURCES,
+    STREAK_CHESTS,
+    PRESTIGE
 } = require('../constants');
-const { levelFromXP, calculateFinalXP, calculateDailyReward } = require('../xp');
+const { levelFromXP, prestigeTitle, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
+const tz = require('../tz');
+const { todayInZone } = require('../dates');
 
 /** Columns applyXP() may update alongside the balance. */
 const UPDATABLE_COLUMNS = new Set([
-    'assassin_streak', 'assassin_stacks', 'wizard_counter', 'archer_streak', 'tank_stacks',
+    'assassin_streak', 'assassin_stacks', 'assassin_last_at', 'assassin_bleed', 'gambler_streak', 'wizard_counter', 'archer_streak', 'tank_stacks',
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
-    'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes'
+    'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes',
+    'owns_monk', 'monk_rhythm', 'monk_day', 'owns_artisan', 'artisan_progress', 'owns_ranger', 'owns_necromancer', 'owns_paladin', 'necro_souls',
+    'last_chest_streak'
 ]);
 
-const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
+const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, artisan_progress: 0, necro_souls: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
 
 /** Persist column updates on a locked user and mirror them on the object. */
 async function updateUserColumns(conn, user, updates) {
@@ -65,16 +71,19 @@ async function applyXP(conn, user, amount, source, opts = {}) {
 
     const lifetimeDelta = Math.max(0, opts.lifetimeDelta ?? Math.max(delta, 0));
     const lifetimeAfter = Number(user.lifetime_xp) + lifetimeDelta;
+    // lifetime_xp drives the level and is reset by prestige; the total is never reset.
+    const totalAfter = Math.max(Number(user.lifetime_xp_total) || 0, Number(user.lifetime_xp)) + lifetimeDelta;
     const previousLevel = Number(user.player_level);
     const level = levelFromXP(lifetimeAfter);
 
-    await conn.query('UPDATE users SET player_xp = ?, lifetime_xp = ?, player_level = ? WHERE discord_id = ?', [
+    await conn.query('UPDATE users SET player_xp = ?, lifetime_xp = ?, lifetime_xp_total = ?, player_level = ? WHERE discord_id = ?', [
         balanceAfter,
         lifetimeAfter,
+        totalAfter,
         level,
         user.discord_id
     ]);
-    Object.assign(user, { player_xp: balanceAfter, lifetime_xp: lifetimeAfter, player_level: level });
+    Object.assign(user, { player_xp: balanceAfter, lifetime_xp: lifetimeAfter, lifetime_xp_total: totalAfter, player_level: level });
     await updateUserColumns(conn, user, opts.userUpdates);
     if (delta < 0 && SPEND_SOURCES.includes(source)) {
         await conn.query('UPDATE users SET xp_spent = xp_spent + ? WHERE discord_id = ?', [-delta, user.discord_id]);
@@ -98,23 +107,41 @@ async function applyXP(conn, user, amount, source, opts = {}) {
     };
 }
 
-/** Start of the current UTC day as a JS Date. */
-function startOfUtcDay(now = new Date()) {
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+/** The IANA zone of a user (row or discord id); null means UTC. */
+async function userZone(conn, who) {
+    if (who && typeof who === 'object') return who.timezone || null;
+    const [rows] = await conn.query('SELECT timezone FROM users WHERE discord_id = ?', [String(who)]);
+    return rows[0] ? rows[0].timezone || null : null;
 }
 
-async function countToday(conn, discordId, source) {
+/**
+ * The user's day window [from, to) containing `now`: 00:00 to 00:00 in their own time zone (users.timezone,
+ * UTC when unset). `who` is a user row (its zone is used, no query) or a discord id (its zone is looked up).
+ * Every daily reward cap reads this window, so "today" is the user's own day.
+ */
+async function dayWindow(conn, who, now = new Date()) {
+    const zone = await userZone(conn, who);
+    return { from: tz.dayStart(zone, now), to: tz.nextDayStart(zone, now) };
+}
+
+/** XP transactions of `source` the user earned in their current day. */
+async function countToday(conn, who, source, now = new Date()) {
+    const { from, to } = await dayWindow(conn, who, now);
+    const id = who && typeof who === 'object' ? who.discord_id : String(who);
     const [[row]] = await conn.query(
-        'SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ?',
-        [discordId, source, startOfUtcDay()]
+        'SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ? AND created_at < ?',
+        [id, source, from, to]
     );
     return Number(row.n);
 }
 
-async function sumToday(conn, discordId, source) {
+/** XP of `source` the user earned in their current day. */
+async function sumToday(conn, who, source, now = new Date()) {
+    const { from, to } = await dayWindow(conn, who, now);
+    const id = who && typeof who === 'object' ? who.discord_id : String(who);
     const [[row]] = await conn.query(
-        'SELECT COALESCE(SUM(amount), 0) AS total FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ?',
-        [discordId, source, startOfUtcDay()]
+        'SELECT COALESCE(SUM(amount), 0) AS total FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ? AND created_at < ?',
+        [id, source, from, to]
     );
     return Number(row.total);
 }
@@ -127,16 +154,16 @@ async function sumToday(conn, discordId, source) {
  * @param {object} user locked user row
  * @param {string} source  'list_create' | 'item_add' | 'item_complete' | 'game_reward' ...
  * @param {number} baseXP
- * @param {object} [opts] { context, dailyLimit, maxXP, referenceId }
+ * @param {object} [opts] { context, dailyLimit, maxXP, referenceId, now }
  */
 async function rewardAction(conn, user, source, baseXP, opts = {}) {
     if (!user.gamification_enabled || baseXP <= 0) return null;
-    if (opts.dailyLimit !== undefined && (await countToday(conn, user.discord_id, source)) >= opts.dailyLimit) {
+    if (opts.dailyLimit !== undefined && (await countToday(conn, user, source)) >= opts.dailyLimit) {
         return { capped: true, finalXP: 0, baseXP };
     }
 
     const skills = await getUserSkills(user.discord_id, conn);
-    const calc = calculateFinalXP(user, skills, baseXP, { context: { action: source, ...(opts.context || {}) } });
+    const calc = calculateFinalXP(user, skills, baseXP, { context: { action: source, ...(opts.context || {}) }, now: opts.now });
     let finalXP = calc.finalXP;
     let capped = false;
     if (opts.maxXP !== undefined && finalXP > opts.maxXP) {
@@ -153,30 +180,56 @@ async function rewardAction(conn, user, source, baseXP, opts = {}) {
     return { ...calc, finalXP, capped, ...tx };
 }
 
-/** Remaining free-game XP a user can earn today. */
-async function remainingFreeGameXP(conn, discordId) {
-    return Math.max(0, LIMITS.FREE_GAME_XP_PER_DAY - (await sumToday(conn, discordId, 'game_reward')));
+/**
+ * Pay a flat bonus (no class or skill modifiers) from its own source, optionally under a daily cap
+ * shared by `capSources`. Returns { xp, tx } for what was paid, or null when nothing was.
+ *
+ * @param {object} [opts] { dailyCap, capSources, referenceId }
+ */
+async function awardFlat(conn, user, source, amount, opts = {}) {
+    if (!user.gamification_enabled) return null;
+    let pay = Math.trunc(Number(amount));
+    if (opts.dailyCap !== undefined) {
+        let paid = 0;
+        for (const s of opts.capSources || [source]) paid += await sumToday(conn, user, s);
+        pay = Math.min(pay, opts.dailyCap - paid);
+    }
+    if (!(pay > 0)) return null;
+    const tx = await applyXP(conn, user, pay, source, { referenceId: opts.referenceId });
+    return { xp: pay, tx };
+}
+
+/** Remaining free-game XP a user can earn today (their own day). */
+async function remainingFreeGameXP(conn, discordId, now = new Date()) {
+    return Math.max(0, LIMITS.FREE_GAME_XP_PER_DAY - (await sumToday(conn, discordId, 'game_reward', now)));
 }
 
 /**
- * Evaluate and persist newly earned achievements for a (locked) user.
- * @returns {Promise<Array<object>>} achievements unlocked by this call
+ * Evaluate and persist newly earned achievements for a (locked) user. Each one pays REWARDS.ACHIEVEMENT
+ * flat XP (source achievement_reward) in the same transaction. That XP can itself earn an XP or level
+ * achievement, so the check repeats until nothing new unlocks; it always ends, because every achievement
+ * unlocks once and the list is finite.
+ * @returns {Promise<Array<object>>} achievements unlocked by this call, each with the `xp` it paid (0 when XP is off)
  */
 async function unlockAchievements(conn, user, events = {}) {
-    const [rows] = await conn.query('SELECT achievement_key FROM achievements WHERE discord_id = ?', [user.discord_id]);
-    const games = await getGameCounts(user.discord_id, conn);
-    const candidates = evaluateAchievements(
-        { ...user, games_played: games.played, games_won: games.won },
-        rows.map((r) => r.achievement_key),
-        events
-    );
     const unlocked = [];
-    for (const ach of candidates) {
-        const [res] = await conn.query('INSERT IGNORE INTO achievements (discord_id, achievement_key) VALUES (?, ?)', [
-            user.discord_id,
-            ach.key
-        ]);
-        if (res.affectedRows === 1) unlocked.push(ach);
+    const known = new Set((await conn.query('SELECT achievement_key FROM achievements WHERE discord_id = ?', [user.discord_id]))[0].map((r) => r.achievement_key));
+    for (let round = 0; round < 100; round++) {
+        const games = await getGameCounts(user.discord_id, conn);
+        const candidates = evaluateAchievements({ ...user, games_played: games.played, games_won: games.won }, known, events);
+        let found = 0;
+        for (const ach of candidates) {
+            const [res] = await conn.query('INSERT IGNORE INTO achievements (discord_id, achievement_key) VALUES (?, ?)', [
+                user.discord_id,
+                ach.key
+            ]);
+            known.add(ach.key);
+            if (res.affectedRows !== 1) continue;
+            found++;
+            const paid = await awardFlat(conn, user, 'achievement_reward', REWARDS.ACHIEVEMENT, { referenceId: res.insertId || null });
+            unlocked.push({ ...ach, xp: paid ? paid.xp : 0 });
+        }
+        if (!found) break;
     }
     return unlocked;
 }
@@ -206,15 +259,24 @@ async function claimDaily(discordId) {
         const reward = calculateDailyReward(user, skills, Date.now());
         if (!reward.eligible) return { claimed: false, remainingMs: reward.remainingMs, streak: reward.streak };
 
+        // A streak chest pays once per streak run: only above the last chest paid, which a reset streak clears.
+        const lastChest = Number(user.last_chest_streak) || 0;
+        const chestXP = STREAK_CHESTS[reward.newStreak] && lastChest < reward.newStreak ? STREAK_CHESTS[reward.newStreak] : 0;
         const tx = await applyXP(conn, user, reward.totalXP, 'daily', {
             userUpdates: {
                 ...reward.xp.userUpdates,
+                last_chest_streak: chestXP ? reward.newStreak : reward.newStreak < lastChest ? 0 : lastChest,
                 ...(reward.freezeUsed ? { streak_freezes: Number(user.streak_freezes) - 1 } : {}),
                 streak_count: reward.newStreak,
                 last_daily_claim: new Date(),
-                last_active_day: new Date().toISOString().slice(0, 10)
+                last_active_day: todayInZone(user.timezone)
             }
         });
+        let chest = null;
+        if (chestXP) {
+            await applyXP(conn, user, chestXP, 'streak_chest', { referenceId: reward.newStreak });
+            chest = { streak: reward.newStreak, xp: chestXP };
+        }
         const achievements = await unlockAchievements(conn, user);
 
         return {
@@ -224,18 +286,76 @@ async function claimDaily(discordId) {
             classBonus: reward.xp.finalXP - reward.xp.baseXP,
             streakBonus: reward.streakBonus,
             skillDailyBonus: reward.skillDailyBonus,
+            surpriseBonus: reward.surpriseBonus,
+            chest,
             bonusInfo: reward.xp.bonusInfo,
             streak: reward.newStreak,
             previousStreak,
             streakBroken: reward.streakBroken,
             streakPreserved: reward.streakPreserved,
             freezeUsed: reward.freezeUsed,
-            balance: tx.balanceAfter,
-            level: tx.level,
-            leveledUp: tx.leveledUp,
+            balance: Number(user.player_xp),
+            level: Number(user.player_level),
+            leveledUp: Number(user.player_level) > tx.previousLevel,
             achievements
         };
     });
+}
+
+// ─── Prestige ────────────────────────────────────────────────────────────────
+
+/**
+ * Start over for a permanent XP multiplier and a title. Resets the balance, level (lifetime_xp), class,
+ * class ownership, skills, class counters and streak freezes. Achievements, quest claims, tasks, the
+ * daily streak and lifetime_xp_total (which the XP achievements and the lifetime board read) are kept.
+ */
+async function prestige(discordId) {
+    return withTransaction(async (conn) => {
+        const user = await lockUser(conn, discordId);
+        requireGamification(user);
+        const done = Number(user.prestige) || 0;
+        if (Number(user.player_level) < PRESTIGE.MIN_LEVEL) throw errors.validation(`Reach level ${PRESTIGE.MIN_LEVEL} to prestige.`);
+        if (done >= PRESTIGE.MAX) throw errors.conflict(`You have already prestiged ${PRESTIGE.MAX} times.`);
+
+        const levelBefore = Number(user.player_level);
+        const balanceBefore = Number(user.player_xp);
+        // The balance leaves through the ledger, so the history shows where it went.
+        await applyXP(conn, user, -balanceBefore, 'prestige', { referenceId: done + 1 });
+        const owned = Object.fromEntries(PURCHASABLE_CLASS_KEYS.map((k) => [classOwnershipColumn(k), 0]));
+        const sets = { lifetime_xp: 0, player_level: 1, player_class: 'DEFAULT', streak_freezes: 0, prestige: done + 1, ...owned, ...CLASS_COUNTER_RESET };
+        const keys = Object.keys(sets);
+        await conn.query(`UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE discord_id = ?`, [...keys.map((k) => sets[k]), user.discord_id]);
+        Object.assign(user, sets);
+        await conn.query('DELETE FROM user_skills WHERE discord_id = ?', [user.discord_id]);
+        const achievements = await unlockAchievements(conn, user);
+        return {
+            prestige: done + 1,
+            title: prestigeTitle(done + 1),
+            bonusPercent: (done + 1) * PRESTIGE.BONUS_PERCENT,
+            levelBefore,
+            balanceLost: balanceBefore,
+            balance: Number(user.player_xp),
+            level: Number(user.player_level),
+            achievements
+        };
+    });
+}
+
+/** What prestige would do for this user right now. */
+async function getPrestige(discordId) {
+    const user = (await getUser(discordId)) || {};
+    const done = Number(user.prestige) || 0;
+    return {
+        prestige: done,
+        title: prestigeTitle(done),
+        nextTitle: done < PRESTIGE.MAX ? prestigeTitle(done + 1) : null,
+        bonusPercent: Math.min(done, PRESTIGE.MAX) * PRESTIGE.BONUS_PERCENT,
+        nextBonusPercent: done < PRESTIGE.MAX ? (done + 1) * PRESTIGE.BONUS_PERCENT : null,
+        level: Number(user.player_level) || 1,
+        minLevel: PRESTIGE.MIN_LEVEL,
+        max: PRESTIGE.MAX,
+        eligible: Boolean(user.gamification_enabled) && Number(user.player_level) >= PRESTIGE.MIN_LEVEL && done < PRESTIGE.MAX
+    };
 }
 
 // ─── Streak freeze ───────────────────────────────────────────────────────────
@@ -245,12 +365,13 @@ async function buyStreakFreeze(discordId) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         requireGamification(user);
+        const limits = getFreezeLimits(await getUserSkills(user.discord_id, conn));
         const owned = Number(user.streak_freezes) || 0;
-        if (owned >= STREAK_FREEZE.MAX) throw errors.conflict(`You can hold at most ${STREAK_FREEZE.MAX} streak freezes.`);
-        if (Number(user.player_xp) < STREAK_FREEZE.COST) throw errors.insufficientXP(STREAK_FREEZE.COST, Number(user.player_xp));
-        const tx = await applyXP(conn, user, -STREAK_FREEZE.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
+        if (owned >= limits.MAX) throw errors.conflict(`You can hold at most ${limits.MAX} streak freezes.`);
+        if (Number(user.player_xp) < limits.COST) throw errors.insufficientXP(limits.COST, Number(user.player_xp));
+        const tx = await applyXP(conn, user, -limits.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
         const achievements = await unlockAchievements(conn, user);
-        return { freezes: owned + 1, cost: STREAK_FREEZE.COST, balance: tx.balanceAfter, achievements };
+        return { freezes: owned + 1, max: limits.MAX, cost: limits.COST, balance: Number(user.player_xp), achievements };
     });
 }
 
@@ -281,7 +402,7 @@ async function buyClass(discordId, rawKey) {
             userUpdates: { [classOwnershipColumn(classKey)]: 1, player_class: classKey, ...CLASS_COUNTER_RESET }
         });
         const achievements = await unlockAchievements(conn, user);
-        return { classKey, cost, balance: tx.balanceAfter, user, achievements };
+        return { classKey, cost, balance: Number(user.player_xp), user, achievements };
     });
 }
 
@@ -348,6 +469,7 @@ async function unlockSkill(discordId, skillId) {
 module.exports = {
     applyXP,
     rewardAction,
+    awardFlat,
     remainingFreeGameXP,
     unlockAchievements,
     checkAchievements,
@@ -355,12 +477,15 @@ module.exports = {
     updateUserColumns,
     countToday,
     sumToday,
-    startOfUtcDay,
+    dayWindow,
+    userZone,
     claimDaily,
     buyStreakFreeze,
     buyClass,
     equipClass,
     unlockSkill,
+    prestige,
+    getPrestige,
     ownsClass,
     normaliseClassKey,
     CLASS_COUNTER_RESET

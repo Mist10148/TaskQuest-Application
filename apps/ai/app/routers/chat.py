@@ -14,7 +14,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app import chat_service, threads, usage
 from app.db import pool
-from app.deps import Caller, get_caller
+from app.deps import AIAccess, Caller, get_caller, require_ai
 from app.graphs.chat import ChatDeps
 from app.graphs.checkpointer import MySQLCheckpointSaver
 from app.llm import AIUnavailable, chat_model
@@ -76,41 +76,62 @@ async def _title_in_background(deps: ChatDeps, discord_id: str, thread_id: str, 
 
 
 @router.post("/chat")
-async def chat(body: ChatBody, caller: Caller = Depends(get_caller), deps: ChatDeps = Depends(get_chat_deps)):
+async def chat(body: ChatBody, access: AIAccess = Depends(require_ai("chat")), deps: ChatDeps = Depends(get_chat_deps)):
+    discord_id = access.discord_id
     new_thread = body.threadId is None
-    async with pool.connection() as conn:
-        await usage.check(conn, caller.discord_id)  # 429 before any stream starts
-        if body.threadId is None:
-            thread_id = await threads.create_thread(conn, caller.discord_id, body.message)
-        else:
-            thread_id = _valid_uuid(body.threadId)
-            if await threads.get_thread(conn, caller.discord_id, thread_id) is None:
-                raise HTTPException(status_code=404, detail="Thread not found")
+    try:
+        async with pool.connection() as conn:
+            if body.threadId is None:
+                thread_id = await threads.create_thread(conn, discord_id, body.message)
+            else:
+                thread_id = _valid_uuid(body.threadId)
+                if await threads.get_thread(conn, discord_id, thread_id) is None:
+                    raise HTTPException(status_code=404, detail="Thread not found")
+        if not new_thread:
+            graph = chat_service.make_graph(deps)
+            if await chat_service.pending_actions(graph, {"configurable": {"thread_id": thread_id}}):
+                raise HTTPException(status_code=409, detail="Confirm or cancel the pending action first")
+    except HTTPException:
+        await access.refund()  # rejected before the model ran
+        raise
     if new_thread:
-        task = asyncio.create_task(_title_in_background(deps, caller.discord_id, thread_id, body.message))
+        task = asyncio.create_task(_title_in_background(deps, discord_id, thread_id, body.message))
         _background.add(task)
         task.add_done_callback(_background.discard)
     return EventSourceResponse(
         chat_service.stream_turn(
-            deps, caller.discord_id, thread_id, chat_service.user_input(caller.discord_id, body.message)
+            deps,
+            discord_id,
+            thread_id,
+            chat_service.user_input(discord_id, body.message),
+            expect="any" if new_thread else "idle",
         )
     )
 
 
 @router.post("/chat/{thread_id}/resume")
 async def resume(
-    thread_id: str, body: ResumeBody, caller: Caller = Depends(get_caller), deps: ChatDeps = Depends(get_chat_deps)
+    thread_id: str,
+    body: ResumeBody,
+    access: AIAccess = Depends(require_ai("chat")),  # resuming runs the agent again
+    deps: ChatDeps = Depends(get_chat_deps),
 ):
-    thread_id = _valid_uuid(thread_id)
-    async with pool.connection() as conn:
-        if await threads.get_thread(conn, caller.discord_id, thread_id) is None:
-            raise HTTPException(status_code=404, detail="Thread not found")
-        await usage.check(conn, caller.discord_id)  # resuming runs the agent again
-    graph = chat_service.make_graph(deps)
-    if not await chat_service.pending_actions(graph, {"configurable": {"thread_id": thread_id}}):
-        raise HTTPException(status_code=409, detail="Nothing is waiting for confirmation")
+    try:
+        thread_id = _valid_uuid(thread_id)
+        async with pool.connection() as conn:
+            if await threads.get_thread(conn, access.discord_id, thread_id) is None:
+                raise HTTPException(status_code=404, detail="Thread not found")
+        graph = chat_service.make_graph(deps)
+        if not await chat_service.pending_actions(graph, {"configurable": {"thread_id": thread_id}}):
+            raise HTTPException(status_code=409, detail="Nothing is waiting for confirmation")
+    except HTTPException:
+        await access.refund()
+        raise
     return EventSourceResponse(
-        chat_service.stream_turn(deps, caller.discord_id, thread_id, Command(resume={"approved": body.approved}))
+        # "pending" is re-checked under the thread lock, so a second concurrent Approve is rejected there.
+        chat_service.stream_turn(
+            deps, access.discord_id, thread_id, Command(resume={"approved": body.approved}), expect="pending"
+        )
     )
 
 

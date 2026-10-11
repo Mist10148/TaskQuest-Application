@@ -23,10 +23,9 @@ from cachetools import TTLCache
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app import usage
-from app.db import repo
+from app.db import pool, repo
 from app.llm import AIUnavailable
 from app.llm_call import structured_call
 from app.prompts import load_prompt
@@ -189,12 +188,17 @@ def _feature_table(tasks: list[TaskFeatures]) -> str:
     return "\n".join(rows)
 
 
-def build_graph(conn: AsyncConnection, llm_factory: Callable[..., Any]):
+def build_graph(llm_factory: Callable[..., Any], *, reserved: bool = False):
+    """``reserved``: the caller already reserved the request (deps.require_ai), so no quota check here and
+    only tokens are booked. No connection is held while the model runs: each DB step opens its own."""
     system, version = load_prompt("prioritize_system")
 
     async def load_tasks(state: PrioritizeState) -> dict:
         # prioritize() passes the lists it already loaded for the cache key.
-        lists = state.get("lists") or await repo.lists_for_user(conn, state["discord_id"], open_only=True)
+        lists = state.get("lists")
+        if not lists:
+            async with pool.connection() as conn:
+                lists = await repo.lists_for_user(conn, state["discord_id"], open_only=True)
         return {"lists": lists, "errors": [], "retries": 0, "llm_failed": False, "used_fallback": False}
 
     async def compute_features(state: PrioritizeState) -> dict:
@@ -204,7 +208,9 @@ def build_graph(conn: AsyncConnection, llm_factory: Callable[..., Any]):
         tasks = state["tasks"]
         retries = state.get("retries", 0)
         try:
-            await usage.check(conn, state["discord_id"])
+            if not reserved:
+                async with pool.connection() as conn:
+                    await usage.check(conn, state["discord_id"])
             llm = llm_factory(reasoning=len(tasks) > REASONING_THRESHOLD)
         except (usage.QuotaExceeded, AIUnavailable) as err:
             log.info("prioritize fallback: %s", type(err).__name__)
@@ -222,7 +228,10 @@ def build_graph(conn: AsyncConnection, llm_factory: Callable[..., Any]):
         except Exception as err:  # noqa: BLE001 - any provider failure degrades gracefully
             log.warning("prioritize llm failed: %s", type(err).__name__)
             return {"llm_ranking": None, "llm_failed": True, "errors": [type(err).__name__]}
-        await usage.record(conn, state["discord_id"], "prioritize", input_tokens=i, output_tokens=o)
+        async with pool.connection() as conn:
+            await usage.record(
+                conn, state["discord_id"], "prioritize", input_tokens=i, output_tokens=o, requests=0 if reserved else 1
+            )
         log.info("prioritize prompt=%s n=%d attempt=%d tokens=%s", version, len(tasks), retries + 1, (i, o))
         return {"llm_ranking": ranking, "retries": retries + 1}
 
@@ -307,25 +316,42 @@ def _row(t: TaskFeatures, rank: int, score: float, reason: str, suggestion: str 
 
 
 async def prioritize(
-    conn: AsyncConnection,
     discord_id: str,
     llm_factory: Callable[..., Any],
     *,
     limit: int | None = None,
     today: date | None = None,
+    reserved: bool = False,
 ) -> dict[str, Any]:
-    """Run the graph. Results are cached for 5 minutes per (user, open-task set)."""
+    """Run the graph. Results are cached for 5 minutes per (user, open-task set).
+
+    ``reserved``: the request was reserved up front; it is handed back when the model gave no answer
+    (cache hit, nothing to rank, provider failure).
+    """
     today = today or datetime.now(UTC).date()
-    graph = build_graph(conn, llm_factory)
+    graph = build_graph(llm_factory, reserved=reserved)
+
+    async def give_back() -> None:
+        if reserved:
+            async with pool.connection() as conn:
+                await usage.release(conn, discord_id, "prioritize")
 
     # Cache key = hash of the same features the model sees, so any edit invalidates it.
-    lists = await repo.lists_for_user(conn, discord_id, open_only=True)
+    async with pool.connection() as conn:
+        lists = await repo.lists_for_user(conn, discord_id, open_only=True)
     sig = json.dumps([asdict(f) for f in build_features(lists, today)], sort_keys=True, default=str)
     key = f"{discord_id}:{limit}:{hashlib.sha256(sig.encode()).hexdigest()}"
     if key in _cache:
+        await give_back()
         return {**_cache[key], "cached": True}
 
-    state = await graph.ainvoke({"discord_id": discord_id, "today": today, "limit": limit, "lists": lists})
+    try:
+        state = await graph.ainvoke({"discord_id": discord_id, "today": today, "limit": limit, "lists": lists})
+    except Exception:
+        await give_back()
+        raise
+    if not lists or state.get("retries", 0) == 0:  # the model never answered
+        await give_back()
     out = {
         "ranked": state["result"],
         "focusMessage": state.get("focus_message", ""),

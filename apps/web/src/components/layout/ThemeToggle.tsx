@@ -31,7 +31,7 @@ export const ThemeToggle = ({ className }: { className?: string }) => {
             onClick={() => setTheme(value)}
             className={cn(
               "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-              active ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground"
+              active ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground"
             )}
           >
             <Icon className="h-3.5 w-3.5" aria-hidden />

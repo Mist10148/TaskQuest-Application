@@ -60,33 +60,67 @@ function weekdayInZone(tz, now = new Date()) {
 
 const pad = (n) => String(n).padStart(2, '0');
 
+const DAY_MS = 86400e3;
+const fmt = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+const parts = (date) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || ''));
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+/** `day` clamped into month `mo` (1-12) of year `y`: Jan 31 -> Feb 28/29. */
+const clampedDay = (y, mo, day) => Math.min(day, new Date(Date.UTC(y, mo, 0)).getUTCDate());
+
 /**
  * The next due date for a repeating task, as YYYY-MM-DD.
- * Monthly repeats keep the day of month but clamp to short months (Jan 31 -> Feb 28/29).
+ * Monthly repeats aim for `anchorDay` (default: the day of `date`) and clamp to short
+ * months, so passing the original day keeps Jan 31 -> Feb 28 -> Mar 31.
  * @param {string} date    the date being repeated from (YYYY-MM-DD)
  * @param {'daily'|'weekly'|'monthly'} rule
+ * @param {number|null} [anchorDay]  the day of month a monthly repeat should return to
  */
-function nextOccurrence(date, rule) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || ''));
-    if (!m) return null;
-    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-    if (rule === 'daily' || rule === 'weekly') {
-        const next = new Date(Date.UTC(y, mo - 1, d + (rule === 'daily' ? 1 : 7)));
-        return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
-    }
+function nextOccurrence(date, rule, anchorDay = null) {
+    const p = parts(date);
+    if (!p) return null;
+    const [y, mo, d] = p;
+    if (rule === 'daily' || rule === 'weekly') return fmt(new Date(Date.UTC(y, mo - 1, d + (rule === 'daily' ? 1 : 7))));
     if (rule === 'monthly') {
         const target = new Date(Date.UTC(y, mo, 1)); // first of next month
-        const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-        return `${target.getUTCFullYear()}-${pad(target.getUTCMonth() + 1)}-${pad(Math.min(d, lastDay))}`;
+        const ty = target.getUTCFullYear();
+        const tm = target.getUTCMonth() + 1;
+        return `${ty}-${pad(tm)}-${pad(clampedDay(ty, tm, anchorDay || d))}`;
     }
     return null;
 }
 
-/** Repeat until the date is `today` or later, so completing a task late doesn't spawn an already-overdue copy. */
-function nextDueOnOrAfter(date, rule, today) {
-    let next = nextOccurrence(date, rule);
-    for (let i = 0; next && next < today && i < 400; i++) next = nextOccurrence(next, rule);
+/**
+ * Repeat until the date is `today` or later, so completing a task late doesn't spawn an
+ * already-overdue copy. Computed arithmetically, so any amount of lateness is handled.
+ */
+function nextDueOnOrAfter(date, rule, today, anchorDay = null) {
+    const first = nextOccurrence(date, rule, anchorDay);
+    const p = parts(first);
+    const t = parts(today);
+    if (!p || !t || first >= today) return first;
+    if (rule === 'daily' || rule === 'weekly') {
+        const step = rule === 'daily' ? 1 : 7;
+        const gap = Math.round((Date.UTC(t[0], t[1] - 1, t[2]) - Date.UTC(p[0], p[1] - 1, p[2])) / DAY_MS);
+        return fmt(new Date(Date.UTC(p[0], p[1] - 1, p[2] + Math.ceil(gap / step) * step)));
+    }
+    // Monthly: jump to today's month, then step at most once more.
+    const anchor = anchorDay || p[2];
+    let [y, mo] = [t[0], t[1]];
+    let next = `${y}-${pad(mo)}-${pad(clampedDay(y, mo, anchor))}`;
+    if (next < today) {
+        mo += 1;
+        if (mo > 12) [y, mo] = [y + 1, 1];
+        next = `${y}-${pad(mo)}-${pad(clampedDay(y, mo, anchor))}`;
+    }
     return next;
 }
 
-module.exports = { isValidTimeZone, hourInZone, weekdayInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };
+/** Whole days from one YYYY-MM-DD date to another (positive when `to` is later). Zone-free. */
+function daysBetween(from, to) {
+    const parse = (s) => Date.UTC(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+    return Math.round((parse(String(to)) - parse(String(from))) / 86400e3);
+}
+
+module.exports = { daysBetween, isValidTimeZone, hourInZone, weekdayInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };

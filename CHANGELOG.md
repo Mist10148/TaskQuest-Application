@@ -4,8 +4,44 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **Run the migrations.** `npm run db:migrate` (or just start the bot or the server) applies `010` to `021` in order; take a backup first. Do not point a database that was migrated at an intermediate commit of this branch at the release: migrations `011` and `012` were edited across commits before release, so reset such development databases ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)).
+- **Re-register slash commands** (`npm run deploy:commands`): `/review`, `/prestige`, `/shop`, `/share`, `/invites`, `/members`, `/leave` and `/party` are new, and `/list` gained a Details button.
+- **New optional environment variables** for web push: `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` (set all three or none), plus `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_INTERNAL_URL`, `WEB_PUSH_INTERNAL_TOKEN` and `WEB_PUSH_TIMEOUT_MS`. Nothing changes while they are unset. See [DEPLOYMENT.md](docs/DEPLOYMENT.md#web-push-optional).
+- **Invite handles fill in over time.** Sharing lists and parties invites people by their exact Discord username (`users.discord_handle`, migration `021`). It is stored at each person's next web login or slash command, never backfilled, so a person who has not used TaskQuest since the upgrade cannot be invited yet.
+- **Open arcade tabs must be refreshed.** Arcade runs now carry a recorded input timeline; an old client gets a "refresh the page" error instead of XP.
+- **Blackjack no longer takes class or skill bonuses**, so a Hero or Gambler earns less from it than before. Nobody's level drops: the level curve is unchanged.
+
 ### Added
 
+- **Class rebalance and five new classes.** Twelve classes now (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank plus **Monk** (Rhythm of consecutive days), **Artisan** (Project progress and list-clearing), **Ranger** (early and on-time finishes), **Necromancer** (revive overdue tasks, collect souls) and **Paladin** (HIGH priority Vows, a forgiving streak)) and 62 skills (27 before): 15 new skills extend the six old trees and each new class has four. Migration `011_class_rework`.
+  - The Assassin's streak and stacks decay after 36 hours without acting (48 with Night Owl), the Tank's shield cap grows with level (`min(15, 3 + level ÷ 3)`, plus Absorb; it used to shrink as `max(3, 20 − level)`), and the Hero's flat +25 is capped at 3 × the base reward (Oath raises it to `min(25 + level, 50)`).
+  - New skills include Freeze Cache, Daily Surprise, Momentum, Rally, Anchor, Insurance, Hot Hand, Night Owl, Bleed, Overcharge, Tome, Quiver and Eagle Eye. The Discord class browser and the web Classes, Skills and Profile pages show all twelve with their counters.
+- **New XP sources**, all flat XP with their own daily caps, paid in their own `xp_transactions` source and counted on the weekly board ([XP_GUIDE.md](docs/XP_GUIDE.md) lists every one). Migration `012_xp_sources`.
+  - **Task bonuses** on a task's first completion: first task of the day (+10), list cleared (+25), finished early (+5 a day early, max +20), overdue cleared (+10), all subtasks done (+10). They are listed with the completion result.
+  - **Streak chests**: the daily claim that reaches a 7, 14 or 30 day streak also pays +100, +250 or +600 XP, once per streak run.
+  - **Achievement rewards**: +25 XP for each newly unlocked achievement.
+  - **Habit streaks** on repeating tasks: +2 XP per step from a streak of 2 (max +20 a completion, 60 a day).
+  - **Focus sessions**: a server-timed 10 to 90 minute work timer that pays 0.6 XP a minute (100 XP and 8 sessions a day), on the new **Focus** page.
+  - **Weekly review**: +40 XP once a week after finishing a task, on the new **Review** page and with `/review`.
+  - **Monthly boss quest** (complete 50 tasks, 400 XP) and a **rotating weekly quest** pool of four (the ISO week picks one), alongside the daily and weekly quests.
+  - **Prestige** at level 30 (up to 10 times): start over for a permanent +2% XP and a title; achievements, quest claims, tasks and the daily streak are kept. The never-reset lifetime XP total feeds the XP achievements and the lifetime leaderboard. `/prestige`, Profile page.
+- **CSV import.** `POST /api/import/csv` reads a TaskQuest CSV export or any spreadsheet whose first row names its columns, with a dry-run preview and row-numbered errors; a Settings dialog drives it. Same rules as the JSON import: all or nothing, per-account quota, no XP.
+- **Task templates**: save a quest's tasks as a template and start a new quest from it or append to one (20 templates of up to 30 tasks; subtasks, due dates and completion are not kept). Migration `014_templates`.
+- **Search inside tasks.** `GET /api/lists/search?scope=lists|tasks|all` matches task names and descriptions, and the web search shows task hits.
+- **Stats and review pages.** New `GET /api/stats/xp-history` and `/api/stats/summary`, and the web pages **Stats** (XP over 7, 30 or 90 days, XP by source, busiest weekday), **Review**, **Focus**, **Shop** and **Party**, each in the sidebar and the Ctrl+K palette.
+- **Per-task reminders.** A task with its own due date gets its own DM (and web push) on its due day at your reminder hour, with Snooze and Stop buttons; a task due on its list's deadline is covered by the list reminder. Migration `013_task_reminders`.
+- **Discord list editor details.** The `/list` views show each task's due date, priority, tags, repeat and subtasks, and a **Details** button edits them (an empty field clears it). The completion bonuses a task paid are listed too.
+- **New Discord commands:** `/review`, `/prestige`, `/shop`, `/share`, `/invites`, `/members`, `/leave` and `/party` (status, create, invite, invites, kick, leave, disband). Stats, Focus, templates, CSV import and push stay web only.
+- **AI tool updates.** Chat tools gained `update_item` and `break_down_task` (2 to 8 subtasks in one transaction) and `add_item` takes due date, priority, tags, repeat and parent. Confirmation previews list every field. New internal routes `PATCH /internal/items/:id` and `POST /internal/items/:id/subtasks`.
+- **Cosmetics shop.** Titles, avatar frames and profile accents bought once with XP (some need a level, a prestige or an achievement), with no gameplay effect; they show on the profile, sidebar and leaderboard. `/shop`, the **Shop** page, migration `016_cosmetics`. Cosmetic purchases count as spending for the spending achievements.
+- **Optional web push** for reminders: a service worker, VAPID keys, a Settings switch per browser and `POST /internal/push` for the bot, all off unless the `WEB_PUSH_*` variables are set. Push endpoints are limited to the browsers' own push services on port 443. Migration `017_web_push`.
+- **Days follow your time zone.** Daily caps, the first-of-day bonus, Monk Rhythm, Ranger and Necromancer due-date checks, daily, weekly and monthly quests, the weekly review and the Stats page use your own day, Monday-to-Monday week and month (UTC until you set a zone), with DST-safe local midnights. A zone change is allowed once every 24 hours so zone hopping cannot reset caps (migration `015_timezone_days`). The weekly leaderboard stays on one global UTC week.
+- **Arcade anti-cheat.** Snake, Dino Runner and Space Invaders are deterministic fixed-step simulators shared by the web app and the server; the browser records every input, and the server replays the run and pays on the score it derives itself. Runs that do not replay, run too long, press too fast or do not fit the elapsed time are rejected. Design: [arcade-anti-cheat](docs/design/arcade-anti-cheat.md).
+- **Playwright e2e suite** (`npm run test:e2e`, own CI job against MySQL 8) for the main flows: dashboard, tasks, Focus, Stats, Review, shared lists and parties.
+- **Shared lists and parties.** Invite people to a list as viewer, editor or manager (members, roles, accept or decline, leave, 7-day invitations) and form a party of up to six with a shared weekly quest (12 tasks per active member, +60 XP each for 6 tasks of their own). XP, caps, quests and stats belong to whoever acted. Invitations name a person by their exact Discord username with a confirmation step on the web, and the AI service never reaches a list you merely belong to. Migrations `018_list_members`, `019_parties` and `021_sharing_hardening`. Design: [shared-lists](docs/design/shared-lists.md).
+- **Docs:** [XP_GUIDE.md](docs/XP_GUIDE.md), [CLASS_GUIDE.md](docs/CLASS_GUIDE.md), [PLAYER_FAQ.md](docs/PLAYER_FAQ.md), [design/balance.md](docs/design/balance.md), a docs index ([docs/README.md](docs/README.md)) and a test that fails when GAMEPLAY.md disagrees with `constants.js`.
 - **Tasks grow up.** Each task can have its own due date, priority, up to five tags, one level of subtasks and a repeat rule (daily / weekly / monthly: completing a repeating task creates the next copy, with no creation XP). Migration `007_item_fields`.
   - **Quick add** from one line of text ("Finish report fri !high #work every week"): a quick-add bar with a live preview on the web, and `/quick` on Discord. The web can also hand the sentence to the AI chat (pre-filled, never auto-sent).
   - Up/down buttons that work on touch, a real reorder API (`PATCH /api/lists/:id/reorder`), bulk select (complete or delete several tasks), **undo** for task deletion, and keyboard shortcuts (`n`, `/`, `s`, `?`, `Esc`).
@@ -44,6 +80,12 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **The level curve stays linear on purpose.** A level is still 100 lifetime XP. A steeper curve was considered and rejected so that no veteran's level drops; the reasoning is in [design/balance.md](docs/design/balance.md).
+- **Blackjack** pays a flat 1:1 (3:2 for a natural) with no class or skill bonuses, because any larger payout made it a positive-expectation XP farm (see Fixed for the abandoned-hand rule).
+- **Tailwind CSS 4.** The web app moved to Tailwind 4 with a CSS-first config (`@tailwindcss/vite`, `tw-animate-css`), which also cleared the dev-only dependency advisories: `npm audit` is clean for the whole tree. Notes: [design/tailwind-4-migration.md](docs/design/tailwind-4-migration.md).
+- **Quests and caps are per person.** Every quest, daily cap and weekly number counts the person who acted, also on a list somebody else owns; the weekly leaderboard keeps its single UTC week.
+- **Docs:** the PRD, README, GAMEPLAY, COMMANDS, API, DATABASE, ARCHITECTURE and KNOWN_ISSUES were brought in line with the code; the PRD's user stories now carry section prefixes (`US-P1`, `US-G1`) so they no longer collide with personas and goals.
+- **Web UX pass:** one mobile gutter, touch-visible controls, per-button pending states and a confirm dialog with "balance after" for spending XP, a daily-claim countdown, a drag handle with optimistic reorder and Shift-click selection, optimistic Settings switches, new text colour tokens that meet WCAG AA, a Leaderboard with arrow-key tabs, Achievements filters and progress bars, a Ctrl+K command palette and a first-run tour.
 - **The leaderboard defaults to lifetime XP** instead of the spendable balance, so buying a class or skill no longer lowers your rank.
 - **Auto-delete only removes finished lists.** It used to also delete unfinished lists five days after their deadline; overdue lists now stay visible.
 - **Reminders** are sent at the user's reminder hour in their time zone (UTC and 09:00 until set), and a reminder missed during an outage is sent late (up to 3 days) instead of never.
@@ -54,6 +96,24 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Deadlock under load.** `lockUser` could deadlock against list locks (shared lists, add several, invitation replies), and a MySQL deadlock victim failed the whole request. User rows are now locked first, lists in ascending order (and list-first in `forItem`), and `withTransaction` retries deadlock victims.
+- **Due dates could be backdated for bonuses.** Overdue and early effects (early finish, overdue clear, Ranger, Necromancer, Early Riser, Spring Cleaning) now need a due date set at least 24 hours before the completion (migration `020_due_date_set_at`).
+- **Sharing hardening.** Editors delete only tasks they added; members get a column whitelist of lists and tasks, not the whole row; invitations are withdrawn when their inviter loses the right to invite; unknown, unavailable and declined invitees all get the same neutral answer; a decline blocks the same inviter for 7 days; names are escaped in invitation DMs, embeds and reminders; a progress reset zeroes quest, review and party progress; party rewards need your own work since joining and the target counts active members only.
+- **Reminder floods.** A person gets at most 20 reminder DMs an hour (the rest collapse into one digest), and re-dating a task or list re-arms everybody's reminders at most 3 times a day.
+- **Quotas on every path.** The 200 list and 5000 task limits are enforced when creating, adding several, breaking down, importing and applying templates; imports retry names that collide by accent or case; the large body parsers sit behind session, auth and the rate limiter.
+- **AI context.** Quests that anybody else belongs to are never the owner's AI context; lifetime XP after a prestige is read from the never-reset total; public converse threads are separate from tool-bearing history; quota is refunded on early failures and `/v1/prioritize` degrades to the heuristic when the quota is exhausted.
+- **Smaller fixes:** the Artisan clear bonus pays once per list, the Sniper text matches the code, list paging in Discord keeps sort and filter, Approve and Cancel come back when a resume call fails, and several web glitches (toggle guard, tour restart, calendar feed flash, prestige cache invalidation, import input reset, Snake keys, achievement XP).
+- **Blackjack could be farmed.** Winnings took class and skill bonuses, so a Hero betting 10 earned +35 per win with no cap. Blackjack now pays a flat 1:1 (3:2 for a natural). Every hand abandoned for 30 minutes is now played out with you standing and settled, instead of refunded (a refund would let you look at the deal and walk away from a bad hand). Games refuse to settle while XP is off, arcade starts share the free-game cooldown, and a zero-score arcade run is a loss, not a win.
+- **Quests could be farmed** by unchecking and rechecking tasks, importing a file, raising a task's priority after finishing it, or completing recurring copies. Migration `010_quest_integrity` records the first completion and flags rows that don't count.
+- **Monthly repeats drifted** (Jan 31 became the 28th for good) and very late repeating tasks got a wrong next date.
+- **Auto-cleanup could delete a list that had just received a new task.** It now re-checks under a lock.
+- Importing now enforces a per-user quota (200 lists, 5,000 tasks) and rejects nested subtasks. A progress reset also clears quest claims. The streak leaderboard hides lapsed streaks, and `GET /api/leaderboard/me` honours the class filter. The web server now also expires abandoned game sessions every 5 minutes.
+- **Security:** the calendar feed token is no longer part of the profile or `/api/auth/me`; it is returned only by `GET /api/user/calendar-token`.
+- **Discord `/list` views are locked to the person who ran them**, and list and task menus page past 25 entries.
+- Snoozed and due reminders skip finished lists, a snooze after the deadline settles the due and overdue notices, the weekly digest can no longer double-send and uses your time zone, and background jobs no longer overlap.
+- **Mentions in server channels no longer expose private quests** (quest lookups work in DMs and through `/ask`).
+- **AI:** opt-out and the daily quota are enforced on every model route with atomic reservation, a double Approve runs a write once, `/v1/chat` returns 409 while a confirmation is pending, usage counts even when the client disconnects, confirm previews list every field and subtask, and AI-created quests are all-or-nothing.
+- **Web:** New chat and delete-thread no longer bounce back to the old thread; reordering works while an undo-delete is pending; quests and profile numbers refresh right after task actions; the checkbox no longer double-toggles; Snake food no longer spawns under the snake and arcade XP is no longer lost when the start request is slow; the Settings reset keeps the dialog open until it succeeds; bad `?list=` links show an error; forms have inline validation; the dashboard separates XP balance from lifetime XP.
 - **Task completion XP could be farmed.** Only creation had a daily cap, so add / complete / delete loops paid unlimited XP. Completions now share a 50-per-day reward cap.
 - **A rejected arcade score did not cancel the run**: the error rolled the cancellation back, so the same run could be resubmitted with a higher score.
 - **Due dates were shifted by the time zone.** Lists showed as overdue on their own due date and as the previous day west of UTC, in the web app and in bot embeds; dates are now compared and formatted as dates.
@@ -75,6 +135,13 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - `/summary` read a quest whose name is only digits (e.g. "2026") as a list id, and a failed autocomplete lookup was unhandled.
 - A shared in-memory SQLite connection made the chat confirmation tests fail on Python 3.12.
 - The AI reconcile job now notices edits to a quest itself (name, deadline, priority), not only to its subtasks. New migration `004_lists_updated_at` adds `lists.updated_at`.
+
+### Security
+
+- Web push endpoints are accepted only for the browsers' own push services (or hosts listed in `WEB_PUSH_ALLOWED_HOSTS`), on port 443, and never for IP literals or internal names, so a subscription cannot point the server at an internal address.
+- Invitations cannot be used to probe who uses TaskQuest: every outcome the inviter must not learn gets one neutral answer, the lookup is rate limited per account and per address, and the web app asks the inviter to confirm the person it resolved. Discord IDs never leave the server (members use an opaque key).
+- Arcade scores are verified by replaying the recorded inputs instead of trusting the client.
+- Dev-only advisories in the Tailwind 3 toolchain are gone with the Tailwind 4 migration.
 
 ## [4.0.0] - 2026-10-08
 

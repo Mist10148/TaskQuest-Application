@@ -17,9 +17,14 @@ const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
 const questCommands = require('./commands/quests');
+const reviewCommand = require('./commands/review');
+const prestigeCommand = require('./commands/prestige');
+const shopCommand = require('./commands/shop');
 const timezoneCommand = require('./commands/timezone');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
+const sharingCommands = require('./commands/sharing');
+const partyCommand = require('./commands/party');
 
 const commands = [
     listCommand.data,
@@ -28,9 +33,17 @@ const commands = [
     gamification.dailyData,
     gamification.freezeData,
     questCommands.data,
+    reviewCommand.data,
+    prestigeCommand.data,
+    shopCommand.data,
     timezoneCommand.data,
     weeklyCommand.data,
     quickCommand.data,
+    partyCommand.data,
+    sharingCommands.shareData,
+    sharingCommands.invitesData,
+    sharingCommands.membersData,
+    sharingCommands.leaveData,
     gamification.automationData,
     gamification.profileData,
     gamification.achievementsData,

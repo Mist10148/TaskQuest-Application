@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import { Copy, Download, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Copy, Download, FileSpreadsheet, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useCalendarToken, useImportData } from "@/hooks/useApi";
+import { useCalendarToken, useCsvImport, useImportData } from "@/hooks/useApi";
+import { ApiError, type CsvImportCheck } from "@/lib/api";
+import { csvCounts, csvErrorLines, csvFileProblem } from "@/lib/csvImport";
 import { SettingRow } from "./SettingsSection";
 
 const MAX_IMPORT_BYTES = 1_000_000; // the server accepts 1 MB for imports
@@ -11,29 +13,127 @@ const MAX_IMPORT_BYTES = 1_000_000; // the server accepts 1 MB for imports
 /** Calendar feed address for a token, on this site's own origin. */
 const feedUrl = (token: string) => `${window.location.origin}/api/calendar/${token}.ics`;
 
-/** Download your data (JSON or CSV) and bring a JSON export back in. */
+/** Check a spreadsheet, show what it contains and any row problems, then import it only if it is clean. */
+const CsvImport = () => {
+  const { check, run } = useCsvImport();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState<string | null>(null);
+  const [result, setResult] = useState<CsvImportCheck | null>(null);
+  const [fileName, setFileName] = useState("");
+
+  const reset = () => {
+    setText(null);
+    setResult(null);
+    setFileName("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    const problem = csvFileProblem(file);
+    if (problem) return void toast.error(problem);
+    const content = await file.text();
+    setText(content);
+    setFileName(file.name);
+    try {
+      setResult(await check.mutateAsync(content));
+    } catch (error) {
+      reset();
+      toast.error(error instanceof Error ? error.message : "Couldn't read that file.");
+    }
+  };
+
+  const doImport = async () => {
+    if (text === null) return;
+    try {
+      const done = await run.mutateAsync(text);
+      toast.success(`Imported ${csvCounts(done.lists, done.items)}`, { description: "Imports never award XP." });
+      reset();
+    } catch (error) {
+      // The server re-checks everything; if it found problems we missed (or quota), show them in place.
+      if (error instanceof ApiError && error.details && typeof error.details === "object" && "errors" in error.details) {
+        const d = error.details as Pick<CsvImportCheck, "errors" | "errorCount">;
+        setResult((prev) => (prev ? { ...prev, ok: false, errors: d.errors, errorCount: d.errorCount } : prev));
+      } else toast.error(error instanceof Error ? error.message : "Import failed.");
+    }
+  };
+
+  return (
+    <SettingRow label="Import from CSV" description="Adds quests and tasks from a spreadsheet (a TaskQuest CSV export, or columns like list, task, due, priority, tags, repeat, done). Nothing you have is changed, and imports earn no XP.">
+      <div className="w-full sm:max-w-md space-y-3">
+        <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" id="import-csv-file" aria-label="Choose a CSV file" onChange={(e) => void onFile(e.target.files?.[0])} />
+        <Button type="button" variant="outline" size="sm" disabled={check.isPending || run.isPending} onClick={() => fileRef.current?.click()}>
+          {check.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}Choose CSV file
+        </Button>
+        {result && (
+          <div className="rounded-lg border border-border p-3 space-y-3 text-sm" aria-live="polite">
+            <p className="font-medium break-all">{fileName}</p>
+            <p className="text-foreground-muted">
+              {result.rows} row{result.rows === 1 ? "" : "s"} found: {csvCounts(result.lists, result.items)}.
+            </p>
+            {result.preview.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <caption className="sr-only">First rows of the file</caption>
+                  <thead className="text-foreground-muted"><tr><th className="pr-3 py-1">Row</th><th className="pr-3">Quest</th><th className="pr-3">Task</th><th>Due</th></tr></thead>
+                  <tbody>
+                    {result.preview.map((r) => (
+                      <tr key={r.row} className="border-t border-border">
+                        <td className="pr-3 py-1">{r.row}</td><td className="pr-3 break-words">{r.list}</td><td className="pr-3 break-words">{r.task || "(empty quest)"}</td><td>{r.due_date ?? ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {result.errorCount > 0 && (
+              <div role="alert" className="text-destructive-text">
+                <p className="font-medium">Nothing was imported. Fix {result.errorCount} problem{result.errorCount === 1 ? "" : "s"} and choose the file again:</p>
+                <ul className="list-disc pl-5 mt-1 space-y-0.5">
+                  {csvErrorLines(result.errors, result.errorCount).map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button type="button" size="sm" disabled={result.errorCount > 0 || result.items + result.lists === 0 || run.isPending} onClick={() => void doImport()}>
+                {run.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Import
+              </Button>
+              <Button type="button" variant="ghost" size="sm" disabled={run.isPending} onClick={reset}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </SettingRow>
+  );
+};
+
+/** Download your data (JSON or CSV) and bring a JSON export or a CSV back in. */
 export const DataSettings = () => {
   const importData = useImportData();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
-    if (file.size > MAX_IMPORT_BYTES) return void toast.error("That file is too large to import (1 MB limit).");
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(await file.text());
-    } catch {
-      return void toast.error("That file isn't valid JSON. Import a TaskQuest export.");
+      if (file.size > MAX_IMPORT_BYTES) return void toast.error("That file is too large to import (1 MB limit).");
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await file.text());
+      } catch {
+        return void toast.error("That file isn't valid JSON. Import a TaskQuest export.");
+      }
+      try {
+        const result = await importData.mutateAsync(parsed);
+        toast.success(`Imported ${result.lists} quest${result.lists === 1 ? "" : "s"} and ${result.items} task${result.items === 1 ? "" : "s"}`, {
+          description: "Imports never award XP.",
+        });
+      } catch {
+        /* error toast shown by the mutation hook */
+      }
+    } finally {
+      // Reset so picking the same file again fires onChange.
+      if (fileRef.current) fileRef.current.value = "";
     }
-    try {
-      const result = await importData.mutateAsync(parsed);
-      toast.success(`Imported ${result.lists} quest${result.lists === 1 ? "" : "s"} and ${result.items} task${result.items === 1 ? "" : "s"}`, {
-        description: "Imports never award XP.",
-      });
-    } catch {
-      /* error toast shown by the mutation hook */
-    }
-    if (fileRef.current) fileRef.current.value = "";
   };
 
   return (
@@ -52,12 +152,13 @@ export const DataSettings = () => {
           </Button>
         </div>
       </SettingRow>
+      <CsvImport />
     </div>
   );
 };
 
 /** Subscribe to your deadlines from Google Calendar, Apple Calendar or Outlook. */
-export const CalendarFeed = ({ token }: { token: string | null | undefined }) => {
+export const CalendarFeed = ({ token, loading = false }: { token: string | null | undefined; loading?: boolean }) => {
   const { create, revoke } = useCalendarToken();
   const [shown, setShown] = useState(false);
   const url = token ? feedUrl(token) : "";
@@ -70,6 +171,15 @@ export const CalendarFeed = ({ token }: { token: string | null | undefined }) =>
       toast.error("Couldn't copy. Select the address and copy it by hand.");
     }
   };
+
+  // The token is fetched separately; until it arrives "Create feed" must not show (it would rotate an existing feed).
+  if (loading && !token) {
+    return (
+      <SettingRow label="Calendar feed" description="Loading your feed...">
+        <div className="h-8 w-24 animate-pulse rounded-md bg-muted" role="status" aria-label="Loading calendar feed" />
+      </SettingRow>
+    );
+  }
 
   if (!token) {
     return (
@@ -95,7 +205,7 @@ export const CalendarFeed = ({ token }: { token: string | null | undefined }) =>
         <Button type="button" variant="outline" size="sm" disabled={create.isPending} onClick={() => create.mutate()}>
           <RefreshCw className="h-4 w-4 mr-2" />New address
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
+        <Button type="button" variant="ghost" size="sm" className="text-destructive-text" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
           <Trash2 className="h-4 w-4 mr-2" />Turn off
         </Button>
       </div>

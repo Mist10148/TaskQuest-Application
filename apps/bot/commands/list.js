@@ -5,9 +5,13 @@
  *                 → LIST_EDIT (all mutations)
  *
  * Every lookup and mutation goes through @taskquest/shared/db tasks
- * services, which only ever match rows owned by the clicking user. A
- * button on someone else's (public) list message therefore just reports
- * "not found" instead of acting on their data.
+ * services, which only ever match lists the clicking user owns or is a member
+ * of (and check their role). A button on someone else's (public) list message
+ * is also refused up front (notOwner), and otherwise just reports "not found"
+ * instead of acting on their data.
+ *
+ * Shared lists show 👥 and the viewer's role; a viewer gets a read-only view and
+ * no Edit button, an editor no list settings, and only the owner can delete.
  */
 
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -27,32 +31,52 @@ const data = new SlashCommandBuilder()
 
 // ─── Rendering helpers ───────────────────────────────────────────────────────
 
-function overviewComponents(lists, { withCategoryFilter = false } = {}) {
+function overviewComponents(lists, { withCategoryFilter = false, page = 0 } = {}) {
     const components = [];
     if (withCategoryFilter) components.push(ui.categoryFilterSelect());
-    const sel = ui.listSelect(lists);
+    const sel = ui.listSelect(lists, 'sel_list', { page, paged: true });
     if (sel) components.push(sel);
     components.push(...ui.overviewButtons());
     return components.slice(0, 5);
 }
 
+/** A viewer of a shared list never gets edit mode, whatever button was pressed. */
+const canEdit = (list) => list.role !== 'viewer';
+
 async function renderList(userId, listId, mode) {
     const list = await tasks.getList(userId, listId);
     if (!list) return null;
     const items = await tasks.getItems(userId, listId);
+    const shown = mode === 'edit' && !canEdit(list) ? 'view' : mode;
     return {
-        embeds: [ui.listViewEmbed(list, items, mode)],
-        components: mode === 'edit' ? ui.editButtons(list.id) : ui.viewButtons(list.id)
+        embeds: [ui.listViewEmbed(list, items, shown)],
+        components: shown === 'edit' ? ui.editButtons(list.id, { role: list.role, isOwner: list.is_owner }) : ui.viewButtons(list.id, { canEdit: canEdit(list) })
     };
 }
 
-const denied = (interaction) => interaction.reply({ embeds: [ui.error('Not found', 'That list no longer exists or is not yours.')], ...EPHEMERAL });
+const viewOnly = (interaction) => interaction.reply({ embeds: [ui.error('View only', 'You only have view access to this list.')], ...EPHEMERAL });
+
+const denied = (interaction) => interaction.reply({ embeds: [ui.error('Not found', 'That list no longer exists, or you no longer have access to it.')], ...EPHEMERAL });
 
 function metaEditComponents(listId, done = false) {
     const buttons = [new ButtonBuilder().setCustomId(`rename_${listId}`).setLabel('Edit Name/Desc/Deadline').setStyle(done ? ButtonStyle.Secondary : ButtonStyle.Primary)];
     if (done) buttons.push(new ButtonBuilder().setCustomId(`metadone_${listId}`).setLabel('Done').setEmoji('✅').setStyle(ButtonStyle.Success));
     return [ui.catSelect(`cat_${listId}`), ui.priSelect(`pri_${listId}`), new ActionRowBuilder().addComponents(...buttons)];
 }
+
+/**
+ * True when the clicked message belongs to a different user. /list overviews
+ * are public, so without this a click from anyone else would `update` the
+ * shared message with the clicker's own lists.
+ */
+function notOwner(interaction) {
+    const m = interaction.message;
+    const owner = m?.interactionMetadata?.user?.id ?? m?.interaction?.user?.id;
+    return Boolean(owner) && owner !== interaction.user.id;
+}
+
+const rejectNotOwner = (interaction) =>
+    interaction.reply({ embeds: [ui.error("This isn't your list view", 'Run **/list** to open your own.')], ...EPHEMERAL });
 
 const isExpired = (list) => isPastDeadline(list.deadline);
 
@@ -90,6 +114,7 @@ async function autocomplete(interaction) {
 
 async function handleButton(interaction) {
     try {
+        if (notOwner(interaction)) return await rejectNotOwner(interaction);
         return await routeButton(interaction);
     } catch (err) {
         return handleError(interaction, err);
@@ -129,13 +154,18 @@ async function routeButton(interaction) {
             const list = listId && (await tasks.getList(userId, listId));
             if (!list) return denied(interaction);
             const items = await tasks.getItems(userId, listId, { sortBy, order });
-            return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
+            return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId, { canEdit: canEdit(list) }) });
         }
     }
     if (id.startsWith('search_')) return interaction.showModal(ui.searchModal());
 
     for (const [prefix, mode] of [['refresh_', 'view'], ['view_', 'view'], ['edit_', 'edit'], ['metadone_', 'edit']]) {
         if (id.startsWith(prefix)) {
+            if (mode === 'edit') {
+                const target = await tasks.getList(userId, idFrom(id, prefix));
+                if (!target) return denied(interaction);
+                if (!canEdit(target)) return viewOnly(interaction);
+            }
             const view = await renderList(userId, idFrom(id, prefix), mode);
             if (!view) return denied(interaction);
             return interaction.update(view);
@@ -146,6 +176,7 @@ async function routeButton(interaction) {
     if (id.startsWith('item_add_')) {
         const list = await tasks.getList(userId, idFrom(id, 'item_add_'));
         if (!list) return denied(interaction);
+        if (!canEdit(list)) return viewOnly(interaction);
         return interaction.showModal(ui.itemModal(list.id));
     }
 
@@ -154,6 +185,7 @@ async function routeButton(interaction) {
         item_del_: ['sel_del_', 'Delete Item', 1],
         item_done_: ['sel_done_', 'Toggle Status', 1],
         item_desc_: ['sel_desc_', 'Edit Description', 1],
+        item_details_: ['sel_details_', 'Edit Details (due date, priority, tags, repeat)', 1],
         item_swap_: ['sel_swap1_', 'Reorder — select the FIRST item', 2]
     };
     for (const [prefix, [selectId, title, min]] of Object.entries(pickers)) {
@@ -161,6 +193,7 @@ async function routeButton(interaction) {
             const listId = idFrom(id, prefix);
             const items = listId ? await tasks.getItems(userId, listId) : null;
             if (!items) return denied(interaction);
+            if (!canEdit(await tasks.getList(userId, listId))) return viewOnly(interaction);
             if (items.length < min) {
                 return interaction.reply({ embeds: [ui.info('Not enough tasks', min > 1 ? 'You need at least 2 tasks.' : 'This list has no tasks.')], ...EPHEMERAL });
             }
@@ -204,6 +237,7 @@ async function routeButton(interaction) {
 
 async function handleSelectMenu(interaction) {
     try {
+        if (notOwner(interaction)) return await rejectNotOwner(interaction);
         return await routeSelect(interaction);
     } catch (err) {
         return handleError(interaction, err);
@@ -214,6 +248,10 @@ async function routeSelect(interaction) {
     const id = interaction.customId;
     const userId = interaction.user.id;
     const val = interaction.values[0];
+
+    // "More…" / "Previous…" option of a paged select menu.
+    const page = ui.pageFromValue(val);
+    if (page !== null) return pageSelect(interaction, id, page);
 
     if (id === 'filter_category') {
         let lists = await tasks.getLists(userId);
@@ -247,10 +285,11 @@ async function routeSelect(interaction) {
         });
     }
 
-    if (id.startsWith('sel_edit_') || id.startsWith('sel_desc_')) {
+    if (id.startsWith('sel_edit_') || id.startsWith('sel_desc_') || id.startsWith('sel_details_')) {
         const item = await tasks.getItem(userId, val);
         if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
-        return interaction.showModal(id.startsWith('sel_edit_') ? ui.editItemModal(item) : ui.descModal(item));
+        const modal = id.startsWith('sel_edit_') ? ui.editItemModal(item) : id.startsWith('sel_desc_') ? ui.descModal(item) : ui.detailsModal(item);
+        return interaction.showModal(modal);
     }
 
     if (id.startsWith('sel_del_')) {
@@ -266,8 +305,9 @@ async function routeSelect(interaction) {
         const result = await tasks.setItemCompleted(userId, val);
         aiSync.reindex(userId, result.item?.list_id);
         const note = result.completed && !result.firstCompletion ? '\n-# XP is only awarded the first time a task is completed.' : '';
+        const bonuses = result.completed ? ui.bonusLines(result.bonuses) : '';
         await interaction.editReply({
-            embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${result.item.name}**${note}`)],
+            embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${result.item.name}**${bonuses}${note}`)],
             components: []
         });
         return sendRewards(interaction, result);
@@ -295,6 +335,58 @@ async function routeSelect(interaction) {
     }
 }
 
+/**
+ * The sort/filter an overview message is showing, read back from its footer ("Sorted: name • Filter: Current") and
+ * from whether it carries the category filter row. Unknown or missing pieces mean the default view.
+ */
+function overviewViewOf(message) {
+    const footer = message?.embeds?.[0]?.footer?.text || '';
+    let sort = '';
+    let filter = '';
+    for (const part of footer.split(' • ')) {
+        if (part.startsWith('Sorted: ')) sort = part.slice('Sorted: '.length);
+        else if (part.startsWith('Filter: ')) filter = part.slice('Filter: '.length);
+    }
+    const hasCategoryRow = (message?.components || []).some((row) => (row.components || []).some((c) => (c.customId ?? c.custom_id) === 'filter_category'));
+    return { sort, filter, withCategoryFilter: hasCategoryRow };
+}
+
+/** The lists an overview view (see overviewViewOf) shows, sorted and filtered the way its buttons would. */
+async function listsForView(userId, { sort, filter }) {
+    const sorts = { name: { sortBy: 'name', order: 'ASC' }, created_at: { sortBy: 'created_at', order: 'DESC' }, priority: { sortBy: 'priority', order: 'DESC' } };
+    let lists = await tasks.getLists(userId, sorts[sort]);
+    if (sort.startsWith('category: ')) {
+        const label = sort.slice('category: '.length);
+        if (label === 'Uncategorized') lists = lists.filter((l) => !l.category);
+        else if (label !== 'All Categories') lists = lists.filter((l) => l.category === label);
+    }
+    if (filter === 'Current') lists = lists.filter((l) => !isExpired(l));
+    else if (filter === 'Expired') lists = lists.filter(isExpired);
+    else if (filter === 'Completed') lists = lists.filter((l) => l.items_total > 0 && l.items_completed === l.items_total);
+    return lists;
+}
+
+/** Re-render a paged list/item select menu on another page. */
+async function pageSelect(interaction, id, page) {
+    const userId = interaction.user.id;
+    if (id === 'sel_list') {
+        // Paging must not reset the view: recover the sort/filter from the message's footer and its category row.
+        const view = overviewViewOf(interaction.message);
+        const lists = await listsForView(userId, view);
+        return interaction.update({
+            embeds: [ui.listsOverviewEmbed(lists, view.sort, view.filter)],
+            components: overviewComponents(lists, { page, withCategoryFilter: view.withCategoryFilter })
+        });
+    }
+    const m = /^(sel_(?:edit|del|done|desc|details|swap1|swap2))_(\d+)$/.exec(id);
+    if (!m) return interaction.deferUpdate();
+    const listId = Number(m[2]);
+    let items = await tasks.getItems(userId, listId);
+    if (!items) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
+    if (m[1] === 'sel_swap2') items = items.filter((i) => i.id !== swapState.get(`${userId}_${listId}`));
+    return interaction.update({ components: [ui.itemSelect(items, id, undefined, { page })] });
+}
+
 // ─── Modals ──────────────────────────────────────────────────────────────────
 
 async function handleModal(interaction) {
@@ -303,6 +395,25 @@ async function handleModal(interaction) {
     } catch (err) {
         return handleError(interaction, err);
     }
+}
+
+/** Words people type for a priority, mapped to what the shared validation accepts ('' clears it). */
+const PRIORITY_WORDS = { l: 'LOW', low: 'LOW', m: 'MEDIUM', med: 'MEDIUM', medium: 'MEDIUM', h: 'HIGH', high: 'HIGH', none: null, '-': null };
+
+/**
+ * The Details modal's four inputs as updateItem fields. Empty (or none) clears a field; anything else
+ * unrecognised is passed through so the shared validation rejects it with its own message.
+ */
+function parseDetails(get) {
+    const text = (name) => String(get(name) ?? '').trim();
+    const pri = text('priority').toLowerCase();
+    const repeat = text('repeat').toLowerCase();
+    return {
+        due_date: text('due') || null,
+        priority: Object.hasOwn(PRIORITY_WORDS, pri) ? PRIORITY_WORDS[pri] : pri,
+        tags: text('tags') || null,
+        recurrence: repeat === 'none' || repeat === '-' ? null : repeat || null
+    };
 }
 
 const field = (interaction, name) => {
@@ -356,6 +467,12 @@ async function routeModal(interaction) {
         return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**`)], ...EPHEMERAL });
     }
 
+    if (id.startsWith('m_details_')) {
+        const item = await tasks.updateItem(userId, idFrom(id, 'm_details_'), parseDetails((name) => field(interaction, name)));
+        aiSync.reindex(userId, item?.list_id);
+        return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**\n${ui.itemMeta(item) || 'No details set.'}`)], ...EPHEMERAL });
+    }
+
     if (id.startsWith('m_desc_')) {
         const desc = field(interaction, 'desc');
         const item = await tasks.updateItem(userId, idFrom(id, 'm_desc_'), { description: desc || null });
@@ -372,4 +489,4 @@ async function routeModal(interaction) {
     }
 }
 
-module.exports = { data, execute, autocomplete, handleButton, handleSelectMenu, handleModal };
+module.exports = { data, execute, autocomplete, handleButton, handleSelectMenu, handleModal, parseDetails, overviewViewOf };

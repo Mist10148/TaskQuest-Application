@@ -4,8 +4,8 @@ TaskQuest is a gamified task manager. You keep to-do lists, and finishing work e
 
 You can use it in two places, and both share one account and one database:
 
-- **Discord bot**: slash commands, buttons and modals inside any server, plus deadline reminders by DM.
-- **Web app**: a React dashboard with Discord sign-in, visual skill trees, a leaderboard, and three web-only arcade games.
+- **Discord bot**: 30 slash commands, buttons and modals inside any server (see [docs/COMMANDS.md](docs/COMMANDS.md)), plus deadline and task reminders by DM.
+- **Web app**: a React dashboard with Discord sign-in, visual skill trees, statistics, a focus timer, a shop, a leaderboard, three web-only arcade games and optional push notifications.
 
 A task completed in Discord shows up on the web immediately, and a class bought on the web applies in Discord.
 
@@ -28,17 +28,22 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 
 | Area | What you get |
 |---|---|
-| **Tasks** | Lists with description, category, priority and deadline. Tasks have their own due date, priority, tags, subtasks and a repeat rule, and can be added (also from one line of text), edited, reordered, completed in bulk, deleted with undo and searched. |
-| **Progression** | XP for creating lists, adding tasks and completing tasks. Levels come from lifetime XP. There is a daily reward with streaks, streak freezes, and daily and weekly quests. |
-| **Classes** | Seven classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank), each changing how XP is earned. |
-| **Skills** | 27 skills in 7 trees, all with real effects that work the same on both platforms. |
-| **Achievements** | 33 achievements for lists, tasks, XP, levels, streaks, classes, games and spending. |
-| **Games** | Blackjack (bet XP, with double down), Rock Paper Scissors and Hangman on both platforms; Snake, Dino Runner and Space Invaders on the web. Every outcome is decided by the server. |
-| **Automation** | Deadline reminder DMs at your own reminder hour and time zone (with Snooze), an overdue notice, an opt-in weekly summary DM, and optional clean-up of finished lists. |
-| **Your data** | JSON and CSV export, reward-free JSON import, and a private calendar feed (`.ics`) of deadlines and due dates. |
-| **Web app** | Light and dark themes, keyboard shortcuts, responsive layout with an accessible mobile drawer, reduce-motion setting, on-screen game controls. |
-| **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
+| **Tasks** | Lists with description, category, priority and deadline. Tasks have their own due date, priority, tags, subtasks and a repeat rule, and can be added (also from one line of text), edited, reordered, completed in bulk, deleted with undo, searched (names and descriptions) and saved as templates. |
+| **Progression** | XP for creating lists, adding tasks and completing tasks, plus capped bonuses for good habits (first task of the day, clearing a list, finishing early, clearing overdue work, subtasks, habit streaks, achievements, streak chests, focus sessions, a weekly review). Levels come from lifetime XP (100 XP a level). A daily reward with streaks and freezes. See [docs/XP_GUIDE.md](docs/XP_GUIDE.md). |
+| **Quests** | Daily, weekly, a rotating weekly pool and a monthly boss, all computed from what you actually did in your own day. |
+| **Classes** | Twelve classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank, Monk, Artisan, Ranger, Necromancer, Paladin), each changing how XP is earned. Choosing one: [docs/CLASS_GUIDE.md](docs/CLASS_GUIDE.md). |
+| **Skills** | 62 skills in 12 trees, all with real effects that work the same on both platforms. |
+| **Achievements** | 33 achievements for lists, tasks, XP, levels, streaks, classes, games and spending; each pays 25 XP. |
+| **Prestige and shop** | At level 30, start over for a permanent XP bonus and a title. Spend XP on titles, avatar frames and profile accents with no gameplay effect. |
+| **Sharing** | Share a list with viewer, editor or manager roles (invited by Discord username), and team up in parties of up to six with a shared weekly quest. |
+| **Games** | Blackjack (bet XP, with double down, flat payouts), Rock Paper Scissors and Hangman on both platforms; Snake, Dino Runner and Space Invaders on the web, verified by server replay. Every outcome is decided by the server. |
+| **Automation** | Deadline and per-task reminder DMs at your own reminder hour and time zone (with Snooze), an overdue notice, an opt-in weekly summary DM, optional browser push, and optional clean-up of finished lists. |
+| **Your data** | JSON and CSV export, reward-free JSON and CSV import, and a private calendar feed (`.ics`) of deadlines and due dates. |
+| **Web app** | Dashboard, Stats, Focus, Review, Shop and Party pages, light and dark themes, a Ctrl+K command palette, keyboard shortcuts, a responsive layout with an accessible mobile drawer, reduce-motion setting, on-screen game controls. |
+| **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create, update, break down or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
 | **Leaderboard** | Boards for lifetime XP, XP earned this week, streaks and balance, filterable by class. Discord IDs are never exposed. |
+
+> **TODO:** the README has no screenshots yet. They need a signed-in session; capture them from a real deployment.
 
 ## Architecture
 
@@ -81,12 +86,12 @@ TaskQuest-Application/
 ├── apps/
 │   ├── bot/        Discord bot (CommonJS, discord.js 14)
 │   ├── server/     Express API + Discord OAuth, serves the built web app
-│   ├── web/        React 18 + Vite + Tailwind + shadcn/ui single-page app
+│   ├── web/        React 18 + Vite + Tailwind 4 + shadcn/ui single-page app (Vitest and Playwright tests)
 │   └── ai/         Optional private AI service (Python, FastAPI, LangGraph)
 ├── packages/
 │   └── shared/     @taskquest/shared: rules, validation, DB services, migrations
 ├── db/legacy/      Historical SQL scripts (do not run; see its README)
-├── docs/           Product, architecture, API, gameplay, deployment docs
+├── docs/           Product, architecture, API, gameplay, player guides, deployment docs (index: docs/README.md)
 ├── scripts/        Repository tooling
 └── render.yaml     Render blueprint (web service, bot worker, optional AI service)
 ```
@@ -146,11 +151,12 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run dev:web` / `dev:server` / `dev:bot` | Run each app in watch mode |
 | `npm run build` | Build the web app into `apps/web/dist` |
 | `npm run start:server` / `start:bot` | Production start |
-| `npm run db:migrate` | Apply pending database migrations |
+| `npm run db:migrate` | Apply pending database migrations (001 to 021; both apps also do it on start) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint and TypeScript for the web app |
+| `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |
 | `npm run check` | `node --check` every Node source file |
-| `npm test` | Unit tests (Node packages and the web app's Vitest suite). Integration tests also run when `TEST_DB_NAME` is set (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
+| `npm test` | Unit tests (Node packages, the docs consistency test and the web app's Vitest suite). Integration tests also run when `TEST_DB_NAME` is set (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
 
 ## Configuration
 
@@ -166,18 +172,22 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 
 | Document | Contents |
 |---|---|
+| [docs/README.md](docs/README.md) | Index of every document, with the date it was last checked against the code |
 | [docs/PRD.md](docs/PRD.md) | Product requirements: goals, personas, user stories, requirements, roadmap |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, transactions, security design |
 | [docs/API.md](docs/API.md) | Every REST endpoint with request and response shapes |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Every Discord command and interaction |
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | XP, levels, classes, skills, achievements and game rules, with exact numbers |
+| [docs/XP_GUIDE.md](docs/XP_GUIDE.md) | How XP is earned: every source with its amount, cap and modifiers |
+| [docs/CLASS_GUIDE.md](docs/CLASS_GUIDE.md) | Choosing a class: what each rewards, example builds and pitfalls |
+| [docs/PLAYER_FAQ.md](docs/PLAYER_FAQ.md) | Streaks, freezes, reminders, time zone days, prestige, sharing and push, from the player's side |
 | [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) | How the AI service works: graphs, retrieval, tools, guardrails |
 | [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | The AI design record: goals, decisions, and how the build differs from the plan |
 | [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, and upgrading a legacy database |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render, environment variables, Discord setup, operations |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Backups and restore, troubleshooting, and the first live Gemini run |
-| [docs/design/](docs/design/) | Design notes for work that is planned but not built: shared lists, Tailwind 4, arcade anti-cheat |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations and the roadmap |
+| [docs/design/](docs/design/) | Design records for what was built: shared lists and parties, Tailwind 4, arcade anti-cheat, and the balance rationale |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations (the roadmap is in the PRD) |
 | [SECURITY.md](SECURITY.md) | Security model, fixed vulnerabilities, required secret rotation, reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, tests, conventions |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |

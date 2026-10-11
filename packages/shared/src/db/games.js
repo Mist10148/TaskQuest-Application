@@ -13,11 +13,11 @@
 'use strict';
 
 const { getPool, withTransaction } = require('./pool');
-const { lockUser, getUserSkills } = require('./users');
+const { lockUser } = require('./users');
 const { applyXP, rewardAction, remainingFreeGameXP, unlockAchievements, requireGamification, updateUserColumns } = require('./progression');
 const { errors } = require('../errors');
+const tz = require('../tz');
 const { REWARDS, LIMITS, ARCADE_CONFIG } = require('../constants');
-const { calculateFinalXP } = require('../xp');
 const blackjack = require('../games/blackjack');
 const rps = require('../games/rps');
 const hangman = require('../games/hangman');
@@ -76,19 +76,20 @@ async function rewardFreeGame(conn, user, baseXP, sessionId) {
 
 // ─── Blackjack ───────────────────────────────────────────────────────────────
 
+/**
+ * Pay out a finished hand. Blackjack pays flat 1:1 (3:2 for a natural): class and skill bonuses do
+ * not apply, because a win that pays more than 1:1 would turn the game into a positive-expectation
+ * XP farm that the daily free-game cap does not cover.
+ */
 async function settleBlackjack(conn, user, session, state) {
     const { winnings } = blackjack.settle(state);
     let credited = 0;
-    let bonus = null;
 
     if (state.outcome === 'won' || state.outcome === 'blackjack') {
-        const skills = await getUserSkills(user.discord_id, conn);
-        bonus = calculateFinalXP(user, skills, winnings, { context: { action: 'game' } });
-        credited = state.bet + bonus.finalXP;
+        credited = state.bet + winnings;
         await applyXP(conn, user, credited, state.outcome === 'blackjack' ? 'blackjack_blackjack' : 'blackjack_win', {
-            lifetimeDelta: bonus.finalXP,
-            referenceId: session.id,
-            userUpdates: bonus.userUpdates
+            lifetimeDelta: winnings,
+            referenceId: session.id
         });
     } else if (state.outcome === 'push') {
         credited = state.bet;
@@ -101,7 +102,7 @@ async function settleBlackjack(conn, user, session, state) {
         blackjack: state.outcome === 'blackjack',
         gameWinXP: Math.max(0, net)
     });
-    return { credited, net, bonusInfo: bonus ? bonus.bonusInfo : null, achievements };
+    return { credited, net, bonusInfo: null, achievements };
 }
 
 function blackjackResult(session, state, user, settlement = null) {
@@ -157,6 +158,7 @@ async function blackjackAction(discordId, action) {
     if (!['hit', 'stand', 'double'].includes(action)) throw errors.validation('Unknown action.');
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
+        requireGamification(user);
         const session = await lockActiveSession(conn, user.discord_id, 'blackjack');
         if (!session || !session.game_data) throw errors.notFound('No active blackjack hand. Start a new game.');
 
@@ -233,6 +235,7 @@ async function startHangman(discordId) {
 async function hangmanGuess(discordId, letter) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
+        requireGamification(user);
         const session = await lockActiveSession(conn, user.discord_id, 'hangman');
         if (!session) throw errors.notFound('No active hangman game. Start a new one.');
 
@@ -277,27 +280,38 @@ async function quitGame(discordId, gameType) {
 
 // ─── Arcade (web) ────────────────────────────────────────────────────────────
 
-/** Begin an arcade run; the returned sessionId must be sent with the score. */
+/**
+ * Begin an arcade run. The server issues the run's seed (stored in game_data); the browser plays the
+ * deterministic simulator from it, and finishArcade() replays the recorded inputs from the same seed.
+ */
 async function startArcade(discordId, gameType) {
     if (!arcade.isArcadeGame(gameType)) throw errors.validation('Unknown arcade game.');
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         requireGamification(user);
+        enforceCooldown(user);
         await conn.query(
             "UPDATE game_sessions SET state = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE discord_id = ? AND game_type = ? AND state = 'active'",
             [user.discord_id, gameType]
         );
-        const sessionId = await insertSession(conn, user.discord_id, gameType, { data: { type: gameType } });
-        return { sessionId };
+        const seed = arcade.newSeed();
+        const sessionId = await insertSession(conn, user.discord_id, gameType, { data: { type: gameType, seed } });
+        await updateUserColumns(conn, user, { last_game_at: new Date() });
+        return { sessionId, seed };
     });
 }
 
-/** Submit the score for a run started with startArcade(). */
-async function finishArcade(discordId, sessionId, score) {
+/**
+ * Submit a finished run started with startArcade(). `claim` is { score, ticks, inputs }: the score is only
+ * a claim, the reward is based on the score the server derives by replaying the inputs from the run's seed.
+ * Any rejected submission cancels the run for good.
+ */
+async function finishArcade(discordId, sessionId, claim) {
     const id = Number(sessionId);
     if (!Number.isSafeInteger(id) || id <= 0) throw errors.validation('Invalid session.');
     const outcome = await withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
+        requireGamification(user);
         const [[session]] = await conn.query(
             `SELECT *, TIMESTAMPDIFF(MICROSECOND, created_at, CURRENT_TIMESTAMP(3)) DIV 1000 AS elapsed_ms
              FROM game_sessions WHERE id = ? AND discord_id = ? AND state = 'active' FOR UPDATE`,
@@ -305,7 +319,8 @@ async function finishArcade(discordId, sessionId, score) {
         );
         if (!session || !arcade.isArcadeGame(session.game_type)) throw errors.notFound('Arcade run not found or already submitted.');
 
-        const scored = arcade.scoreRun(session.game_type, Number(score), Number(session.elapsed_ms));
+        const seed = parseData(session.game_data)?.seed;
+        const scored = arcade.verifyRun(session.game_type, { seed, elapsedMs: Number(session.elapsed_ms) }, claim);
         if (!scored.ok) {
             // Cancel the run and commit; the error is thrown after the commit, because
             // throwing here would roll the cancellation back and let the run be retried.
@@ -315,7 +330,8 @@ async function finishArcade(discordId, sessionId, score) {
 
         const xp = await rewardFreeGame(conn, user, scored.baseXP, id);
         const gained = xp ? xp.finalXP : 0;
-        await finishSession(conn, id, 'won', gained, { type: session.game_type, score: scored.score });
+        // A run that scored nothing is not a win (it would count towards "win 10 games").
+        await finishSession(conn, id, scored.baseXP > 0 ? 'won' : 'lost', gained, { type: session.game_type, seed, score: scored.score, ticks: scored.ticks });
         const achievements = await unlockAchievements(conn, user, { gameWinXP: gained });
         return {
             sessionId: id,
@@ -334,16 +350,20 @@ async function finishArcade(discordId, sessionId, score) {
 
 /** How much free-game XP (RPS, hangman, arcade) the user can still earn today, and when it resets. */
 async function getFreeGameAllowance(discordId, now = new Date()) {
-    const remaining = await remainingFreeGameXP(getPool(), String(discordId));
+    const pool = getPool();
+    const remaining = await remainingFreeGameXP(pool, String(discordId), now);
     const cap = LIMITS.FREE_GAME_XP_PER_DAY;
-    const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    const [[user]] = await pool.query('SELECT timezone FROM users WHERE discord_id = ?', [String(discordId)]);
+    const resetsAt = tz.nextDayStart(user ? user.timezone : null, now); // the user's own midnight
     return { cap, remainingXP: remaining, usedXP: Math.max(0, cap - remaining), resetsAt: resetsAt.toISOString() };
 }
 
 // ─── Housekeeping & history ──────────────────────────────────────────────────
 
 /**
- * Expire sessions older than the TTL. Escrowed blackjack bets are refunded.
+ * Expire sessions older than the TTL. An unfinished blackjack hand is never refunded, even an untouched one (a
+ * refund would let a player look at the deal and walk away from the bad hands): the player auto-stands, the
+ * dealer plays out and the hand is settled normally.
  * @returns {Promise<number>} sessions expired
  */
 async function expireStaleSessions(ttlMinutes = LIMITS.GAME_SESSION_TTL_MINUTES) {
@@ -357,13 +377,15 @@ async function expireStaleSessions(ttlMinutes = LIMITS.GAME_SESSION_TTL_MINUTES)
             const user = await lockUser(conn, row.discord_id);
             const [[session]] = await conn.query("SELECT * FROM game_sessions WHERE id = ? AND state = 'active' FOR UPDATE", [row.id]);
             if (!session) return;
-            if (session.game_type === 'blackjack' && Number(session.bet_amount) > 0) {
-                await applyXP(conn, user, Number(session.bet_amount), 'blackjack_refund', { lifetimeDelta: 0, referenceId: session.id });
+            const data = parseData(session.game_data);
+            if (session.game_type === 'blackjack' && data && !data.finished) {
+                const state = blackjack.act(data, 'stand');
+                await conn.query('UPDATE game_sessions SET bet_amount = ?, game_data = ? WHERE id = ?', [state.bet, JSON.stringify(state), session.id]);
+                await settleBlackjack(conn, user, session, state);
+                expired++;
+                return;
             }
-            await conn.query(
-                "UPDATE game_sessions SET state = 'expired', payout = ?, ended_at = CURRENT_TIMESTAMP WHERE id = ?",
-                [session.game_type === 'blackjack' ? session.bet_amount : 0, session.id]
-            );
+            await conn.query("UPDATE game_sessions SET state = 'expired', payout = 0, ended_at = CURRENT_TIMESTAMP WHERE id = ?", [session.id]);
             expired++;
         });
     }

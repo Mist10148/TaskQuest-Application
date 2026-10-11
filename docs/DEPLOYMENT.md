@@ -107,6 +107,7 @@ In production, set the variables in your host's dashboard instead. Because the b
 |---|---|
 | `VITE_API_URL` | Only for split deployments where the API is on another origin. Not recommended: third-party cookies are often blocked. |
 | `VITE_DEV_API_TARGET` | Dev proxy target (default `http://localhost:3001`) |
+| `VITE_BOT_INVITE_URL` | An `https://` Discord invite URL (scopes `bot applications.commands`) at build time; Settings then shows an "Add the bot" button. Without it there is no button. |
 
 ### AI service (`apps/ai`, optional)
 
@@ -125,6 +126,11 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [A
 | `AI_DAILY_REQUEST_LIMIT` | ai | Requests per user per UTC day across all features (default `100`) |
 | `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate MySQL user for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables. It never writes tasks directly. |
 | `LANGSMITH_API_KEY` | ai | Optional tracing |
+| `AI_RECONCILE_MINUTES` | ai | How often missed re-index calls are caught up (default `15`) |
+| `SUMMARY_MAP_REDUCE_CHARS` | ai | Summaries are made in parts above this input size (default `40000`) |
+| `MAX_TOOL_ITERATIONS` | ai | Tool rounds per chat turn (default `6`) |
+| `DB_POOL_SIZE` | ai | The AI service's own MySQL pool (default `5`; the Node apps default to `10`) |
+| `LOG_LEVEL` | ai | AI service JSON log level (default `INFO`) |
 
 The AI service reads the same root `.env` as the other apps, plus the database variables above. It needs migrations `003_ai` to `006_ai_chat_format`, which the web service and the bot apply on startup.
 
@@ -141,6 +147,22 @@ python -m app.rag.backfill                    # once: embed existing quests
 ```
 
 Set `AI_ENABLED=true`, `AI_INTERNAL_TOKEN`, `GEMINI_API_KEY` in `.env`, then open `/api/ai/ping` while logged in.
+
+### Web push (optional)
+
+Browser notifications for reminders, **off unless all three VAPID values are set** (set one or two and the server refuses to start). Generate a key pair once with `npx web-push generate-vapid-keys` and keep the private key secret. The bot owns the reminder job, so it asks the web server to send the push (the server holds the keys); the push is best effort and never delays or replaces the Discord DM.
+
+| Variable | Where | Description |
+|---|---|---|
+| `WEB_PUSH_PUBLIC_KEY` | web | VAPID public key (base64url, about 87 characters). Sent to browsers, so it is safe to expose. |
+| `WEB_PUSH_PRIVATE_KEY` | web | VAPID private key (about 43 characters). Server-side only, never a `VITE_*` variable. |
+| `WEB_PUSH_SUBJECT` | web | Contact for the push services: `mailto:you@example.com` or an `https://` URL |
+| `WEB_PUSH_ALLOWED_HOSTS` | web | Optional. Extra host suffixes (comma separated, e.g. `push.example.com`) a push endpoint may use. By default only the browsers' own push services are accepted (`fcm.googleapis.com`, `push.services.mozilla.com` and subdomains, `notify.windows.com`, `push.apple.com` and `web.push.apple.com`), on port 443, because the server sends to the endpoint a browser hands it. |
+| `WEB_PUSH_INTERNAL_URL` | bot | Base URL of the web service (`http://localhost:3001`; the private host on Render). Without it the bot never pushes. |
+| `WEB_PUSH_INTERNAL_TOKEN` | web, bot | Shared secret, **at least 32 characters**, identical on both. Optional: it falls back to `AI_INTERNAL_TOKEN`, so with the AI token already shared you only need `WEB_PUSH_INTERNAL_URL`. Sent as the `X-AI-Token` header of `POST /internal/push` and checked in constant time. |
+| `WEB_PUSH_TIMEOUT_MS` | bot | How long the bot waits for the web server per push (default `5000`) |
+
+Users then turn it on per browser under **Settings → Push notifications**. The service worker (`/sw.js`) is only registered at that point, shows the notification, opens the right page on click and caches nothing. Push needs HTTPS (or `localhost`). Subscriptions are stored in `push_subscriptions` (migration `017_web_push`); dead ones are removed when the push service answers 404 or 410.
 
 ## 4. Deploying on Render
 
@@ -190,6 +212,8 @@ If you ran `taskquest-botv2` (v3.x) and/or `taskquest-web_deploy` (v1.5):
 5. **Re-run `deploy:commands`.** The `/list` command definition changed (its `name` option now has a length limit).
 
 Behaviour changes players may notice are listed in [CHANGELOG.md](../CHANGELOG.md#400).
+
+**Upgrading to the improvement pass** (migrations `010` to `021`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
 
 ## 7. Operations
 

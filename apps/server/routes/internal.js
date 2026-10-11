@@ -2,7 +2,8 @@
  * Service-to-service endpoints for the AI service (chat write tools).
  *
  * Not reachable by browsers: no session, protected by the shared
- * X-AI-Token. They run the same db.tasks.* services as the public API, so XP,
+ * X-AI-Token. They run the same db.tasks.* services as the public API (through db.tasks.asOwner, which refuses any
+ * list the user merely belongs to: shared lists are never reachable by the AI), so XP,
  * achievements and validation behave identically. The AI service only calls
  * these after the user approved the action in the UI.
  */
@@ -18,7 +19,9 @@ import {
     internalCreateListBody,
     internalAddItemBody,
     internalToggleBody,
-    internalUpdateListBody
+    internalUpdateListBody,
+    internalUpdateItemBody,
+    internalSubtasksBody
 } from '../lib/schemas.js';
 
 /** Constant-time check of the shared secret. 404s when AI is disabled. */
@@ -38,12 +41,12 @@ router.post(
     '/lists',
     asyncRoute(async (req, res) => {
         const { discordId, items = [], ...fields } = parse(internalCreateListBody, req.body);
-        const created = await db.tasks.createList(discordId, fields);
+        // One transaction: a failing item rolls the new list back too, so the AI never reports a half-made quest.
+        const created = await db.tasks.asOwner.createListWithItems(discordId, fields, items);
         const addedItems = [];
         let xp = created.xp;
         const achievements = [...(created.achievements || [])];
-        for (const name of items) {
-            const r = await db.tasks.addItem(discordId, created.list.id, { name });
+        for (const r of created.items) {
             addedItems.push(r.item);
             achievements.push(...(r.achievements || []));
             if (r.xp?.finalXP) xp = r.xp;
@@ -58,9 +61,9 @@ router.post(
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
         const { discordId, ...fields } = parse(internalAddItemBody, req.body);
-        const r = await db.tasks.addItem(discordId, id, fields);
+        const r = await db.tasks.asOwner.addItem(discordId, id, fields);
         aiClient.reindex(discordId, id);
-        res.status(201).json({ ...r.item, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
+        res.status(201).json({ ...r.item, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses });
     })
 );
 
@@ -69,9 +72,34 @@ router.patch(
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
         const { discordId, completed } = parse(internalToggleBody, req.body);
-        const r = await db.tasks.setItemCompleted(discordId, id, completed);
+        const r = await db.tasks.asOwner.setItemCompleted(discordId, id, completed);
         if (r.item?.list_id) aiClient.reindex(discordId, r.item.list_id);
-        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
+        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses });
+    })
+);
+
+router.patch(
+    '/items/:id',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { discordId, ...fields } = parse(internalUpdateItemBody, req.body);
+        const updated = await db.tasks.asOwner.updateItem(discordId, id, fields);
+        aiClient.reindex(discordId, updated.list_id);
+        res.json(updated);
+    })
+);
+
+// Break a task down: 2-8 subtasks under it in one transaction, owner-scoped by the discordId the AI service took from its state.
+router.post(
+    '/items/:id/subtasks',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { discordId, names } = parse(internalSubtasksBody, req.body);
+        const r = await db.tasks.asOwner.addSubtasks(discordId, id, names);
+        aiClient.reindex(discordId, r.parent.list_id);
+        const achievements = r.items.flatMap((x) => x.achievements || []);
+        const xp = r.items.reduce((last, x) => (x.xp?.finalXP ? x.xp : last), null);
+        res.status(201).json({ parent: r.parent, items: r.items.map((x) => x.item), newAchievements: achievements, xpResult: xpResult(xp) });
     })
 );
 
@@ -80,7 +108,7 @@ router.patch(
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
         const { discordId, ...fields } = parse(internalUpdateListBody, req.body);
-        const updated = await db.tasks.updateList(discordId, id, fields);
+        const updated = await db.tasks.asOwner.updateList(discordId, id, fields);
         aiClient.reindex(discordId, id);
         res.json(updated);
     })

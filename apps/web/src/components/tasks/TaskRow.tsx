@@ -23,7 +23,8 @@ interface Props {
   isSubtask?: boolean;
   selectMode: boolean;
   selected: boolean;
-  onSelect: (id: number) => void;
+  /** `range` is true for a Shift-click, which selects everything since the last click. */
+  onSelect: (id: number, range: boolean) => void;
   onToggle: (id: number) => void;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
@@ -32,12 +33,14 @@ interface Props {
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   drag?: DragProps;
+  /** A viewer of a shared quest: the checkbox is disabled and the row has no actions. */
+  readOnly?: boolean;
 }
 
-const iconButton = "p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
+const iconButton = "p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
-export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag }: Props) => {
+export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
   const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
@@ -45,66 +48,79 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
 
   return (
     <div
-      draggable={drag?.draggable}
-      onDragStart={drag ? (e) => drag.onDragStart(e, item.id) : undefined}
-      onDragEnd={drag?.onDragEnd}
+      data-task-row
       onDragOver={drag ? (e) => drag.onDragOver(e, item.id) : undefined}
       onDragLeave={drag?.onDragLeave}
       onDrop={drag ? (e) => drag.onDrop(e, item.id) : undefined}
       className={cn(
         "group flex items-start gap-2 sm:gap-3 rounded-lg border bg-card p-3 sm:p-4 transition-all duration-200 focus-within:border-primary/50",
         isSubtask && "ml-6 sm:ml-10 p-2.5 sm:p-3",
-        completed && "opacity-60",
+        completed && "bg-card/60",
         selected && "border-primary bg-primary/5",
-        drag?.draggable && "cursor-grab active:cursor-grabbing",
         drag?.isDragOver ? "border-primary bg-primary/10" : !selected && "border-border hover:border-primary/30",
         drag?.isDragging && "opacity-50 scale-[0.98]"
       )}
     >
       {isSubtask ? (
-        <CornerDownRight className="h-4 w-4 mt-1 flex-shrink-0 text-foreground-muted/60" aria-hidden />
+        <CornerDownRight className="h-4 w-4 mt-1 shrink-0 text-foreground-muted/60" aria-hidden />
       ) : (
-        drag?.draggable && <GripVertical className="h-5 w-5 mt-0.5 flex-shrink-0 text-foreground-muted/50 hidden sm:block" aria-hidden />
+        drag?.draggable && (
+          // Only the handle drags, so the task text stays selectable. Keyboard and touch users reorder with the arrow buttons.
+          <span
+            draggable
+            onDragStart={(e) => drag.onDragStart(e, item.id)}
+            onDragEnd={drag.onDragEnd}
+            className="mt-0.5 shrink-0 cursor-grab touch-none rounded p-0.5 text-foreground-muted hover:bg-background-secondary hover:text-foreground active:cursor-grabbing"
+            title="Drag to reorder"
+            aria-hidden
+          >
+            <GripVertical className="h-5 w-5" />
+          </span>
+        )
       )}
 
       {selectMode && (
         <input
           type="checkbox"
           checked={selected}
-          onChange={() => onSelect(item.id)}
+          onChange={() => undefined}
+          onClick={(e) => onSelect(item.id, e.shiftKey)}
           aria-label={`Select ${item.name}`}
-          className="mt-1 h-4 w-4 flex-shrink-0 accent-[hsl(var(--primary))]"
+          className="mt-1 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]"
         />
       )}
 
       <button
         type="button"
         onClick={() => onToggle(item.id)}
+        disabled={readOnly}
         aria-pressed={completed}
         aria-label={completed ? `Mark "${item.name}" as not done` : `Mark "${item.name}" as done`}
         className={cn(
-          "flex-shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          completed ? "bg-success border-success" : "border-border hover:border-primary"
+          "shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+          completed ? "bg-success border-success" : "border-border hover:border-primary",
+          readOnly && "cursor-not-allowed opacity-60 hover:border-border"
         )}
       >
         {completed && <Check className="h-3 w-3 text-white" />}
       </button>
 
       <div className="flex-1 min-w-0">
-        <p className={cn("font-medium text-sm sm:text-base break-words", completed && "line-through text-foreground-muted")}>
+        <p className={cn("font-medium text-sm sm:text-base wrap-break-word", completed && "line-through text-foreground-muted")}>
           {priority && (
             <>
-              <span className={cn("inline-block h-2 w-2 rounded-full mr-2 align-middle", DOT[priority])} aria-hidden />
+              <span className={cn("inline-block h-2 w-2 rounded-full mr-2 align-middle", DOT[priority], completed && "opacity-40")} aria-hidden />
               <span className="sr-only">{priority.toLowerCase()} priority: </span>
             </>
           )}
           {item.name}
         </p>
         {item.description && <p className="text-xs sm:text-sm mt-1 line-clamp-2 text-foreground-muted">{item.description}</p>}
+        {completed && item.completed_by_name && <p className="mt-1 text-xs text-foreground-muted">Done by {item.completed_by_name}</p>}
         {(item.due_date || item.recurrence || tags.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive" : "border-border text-foreground-muted")}>
+              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
                 <Calendar className="h-3 w-3" aria-hidden /> {overdue && <span className="sr-only">Overdue: </span>}
                 {formatDeadline(item.due_date)}
               </span>
@@ -115,13 +131,13 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
               </span>
             )}
             {tags.map((t) => (
-              <span key={t} className="rounded-full px-2 py-0.5 bg-primary/10 text-primary">#{t}</span>
+              <span key={t} className="rounded-full px-2 py-0.5 bg-primary/10 text-primary-text">#{t}</span>
             ))}
           </div>
         )}
       </div>
 
-      <div className="flex-shrink-0 flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      {!readOnly && <div className="shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (
           <>
             <button type="button" aria-label={`Move "${item.name}" up`} disabled={!canMoveUp} onClick={() => onMove(item.id, -1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>
@@ -133,17 +149,19 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           </>
         )}
         {onAddSubtask && !isSubtask && (
-          <button type="button" aria-label={`Add a subtask to "${item.name}"`} onClick={() => onAddSubtask(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary")}>
+          <button type="button" aria-label={`Add a subtask to "${item.name}"`} onClick={() => onAddSubtask(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
             <ListPlus className="h-3.5 w-3.5" />
           </button>
         )}
-        <button type="button" aria-label={`Edit "${item.name}"`} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary")}>
+        <button type="button" aria-label={`Edit "${item.name}"`} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
           <Pencil className="h-3.5 w-3.5" />
         </button>
-        <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive")}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
+        {item.can_delete !== false && (
+          <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive-text")}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>}
     </div>
   );
 };

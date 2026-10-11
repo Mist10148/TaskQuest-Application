@@ -27,17 +27,17 @@ flowchart TB
     end
     subgraph "Web service (apps/server)"
         MW["helmet · rate limit · CSRF · session"]
-        R["Routes: auth · user · lists/items · classes/skills/achievements · leaderboard · games"]
+        R["Routes: auth · user · lists/items · sharing · parties · templates · import · quests · focus · review · stats · cosmetics · push · classes/skills/achievements · leaderboard · games"]
         STATIC["Static dist/ + SPA fallback"]
     end
     subgraph "Bot worker (apps/bot)"
         GW["discord.js client"]
-        CMD["commands: list · game · gamification"]
-        JOBS["jobs: reminders · clean-up · session expiry"]
+        CMD["commands: list · game · gamification · quests · review · prestige · shop · sharing · party · timezone · weekly · quick · ai"]
+        JOBS["jobs: reminders (list + task) · weekly digest · clean-up · session expiry"]
     end
     subgraph "@taskquest/shared"
         RULES["rules: constants · xp · achievements · games · validation"]
-        SVC["db services: users · tasks · progression · games"]
+        SVC["db services: users · tasks · access · sharing · parties · progression · quests · focus · review · stats · templates · transfer · cosmetics · push · games"]
         MIG["migrations"]
     end
     DB[(MySQL 8 / MariaDB)]
@@ -71,30 +71,49 @@ Before 4.0, the bot and the web server each had their own copy of the classes, s
 
 ```
 packages/shared/src
-├── constants.js     CLASSES, SKILL_TREES, ACHIEVEMENTS, QUESTS, REWARDS, LIMITS, game config
-├── xp.js            levelFromXP, calculateClassXP, getSkillBonuses, calculateFinalXP, calculateDailyReward (incl. streak freezes)
+├── constants.js     CLASSES, SKILL_TREES, ACHIEVEMENTS, QUESTS, REWARDS, LIMITS, PRESTIGE, COSMETICS, PARTY_QUEST, game config
+├── xp.js            levelFromXP, calculateClassXP, getSkillBonuses, calculateFinalXP, calculateDailyReward (incl. streak freezes, prestige multiplier)
 ├── achievements.js  evaluateAchievements(stats, unlocked, events)
-├── dates.js         date-only helpers: todayInZone, isPastDeadline, formatDeadline, nextOccurrence (no zone shifts)
-├── quests.js        questPeriod (UTC day / Monday-to-Monday week)
+├── tz.js            the user's day: zone validation, dayStart / weekStart / monthStart (DST-safe local midnights), todayInZone
+├── dates.js         date-only helpers: isPastDeadline, formatDeadline, nextOccurrence, daysBetween (no zone shifts)
+├── quests.js        questPeriod (the user's local day / Monday-to-Monday week / month), the rotating weekly pick
+├── cosmetics.js     requirement checks for the shop (level, prestige, achievement)
 ├── quickAdd.js      parseQuickAdd: "Finish report fri !high #work" -> task fields
+├── csv.js           CSV parsing and building (export, spreadsheet import, formula-safe cells)
 ├── ics.js           buildIcs: the calendar feed (RFC 5545)
-├── games/           blackjack.js · rps.js · hangman.js · arcade.js   (pure engines)
+├── text.js          escapeDiscord: names from other people are escaped in every DM and embed
+├── games/           blackjack.js · rps.js · hangman.js · arcade.js (pure engines); snake.js · dino.js · invaders.js · rng.js (deterministic simulators the server replays)
+├── push/            web push helpers (endpoint allow-list, subscription validation, payloads) and client.js, the bot's call to the web server
+├── ai/client.js     client for the AI service, for non-Express callers
 ├── validation.js    listName, itemName, deadline, dueDate, priority, tags, recurrence, escapeLike, ...
 ├── random.js        CSPRNG helpers (crypto.randomInt)
 ├── errors.js        TaskQuestError + factories
 └── db/
-    ├── pool.js      mysql2 pool (UTC, DATE as string, TLS), withTransaction
+    ├── pool.js      mysql2 pool (UTC, DATE as string, TLS), withTransaction (retries deadlock victims)
     ├── migrate.js   runner + information_schema helpers
-    ├── migrations/  001 … 009 (initial schema, legacy upgrade, AI, task details, preferences, quests)
+    ├── migrations/  001 … 021 (initial schema, legacy upgrade, AI, task details, preferences, quests, class rework, XP sources, reminders, templates, time zone days, cosmetics, web push, shared lists, parties, sharing hardening)
     ├── users.js     profile, settings, stats, leaderboard boards, weekly digest data, reset
-    ├── progression.js  applyXP, rewardAction, achievements, daily, streak freezes, classes, skills
-    ├── tasks.js     owner-scoped lists/items/subtasks, ordering, recurrence, reminders, clean-up
-    ├── quests.js    daily/weekly quest progress and atomic claims
-    ├── transfer.js  export, reward-free import, calendar feed data and token
-    └── games.js     blackjack / rps / hangman / arcade services, expiry
+    ├── progression.js  applyXP, rewardAction, awardFlat, achievements, daily and streak chests, streak freezes, classes, skills, prestige
+    ├── access.js    the one rule for who may touch a list or task (owner, or a member with a sufficient role); everything else calls it
+    ├── sharing.js   invitations, members, roles for shared lists
+    ├── parties.js   parties, invitations and the shared weekly quest
+    ├── tasks.js     lists/items/subtasks (own and shared, through access.js), ordering, recurrence, bonuses, reminders, clean-up
+    ├── quests.js    daily/weekly/monthly/rotating quest progress and atomic claims
+    ├── focus.js     server-timed focus sessions
+    ├── review.js    the weekly review
+    ├── stats.js     XP history and summary for the Stats page
+    ├── templates.js task templates
+    ├── cosmetics.js the shop: buy and equip titles, frames and accents
+    ├── push.js      push subscriptions
+    ├── transfer.js  export, reward-free JSON and CSV import, calendar feed data and token
+    └── games.js     blackjack / rps / hangman / arcade services (with replay verification), expiry
 ```
 
-**Rules are pure.** The `xp`, `achievements` and `games` modules do no I/O and take an injectable RNG, so they are unit-tested deterministically.
+**Rules are pure.** The `xp`, `achievements`, `tz`, `quests` and `games` modules do no I/O and take an injectable RNG or clock, so they are unit-tested deterministically.
+
+**Days are per user.** MySQL sessions stay in UTC, but every "today", week and month is a `[from, to)` pair of instants computed in JS from `users.timezone` (`tz.js`) and bound as query parameters: daily caps, quests, the weekly review, focus limits and stats all use it. The exceptions are the weekly leaderboard and the party quest, which use a single UTC week for everyone. Zone changes are limited to once every 24 hours.
+
+**Access rule.** A list belongs to one owner (`lists.discord_id`) and may be shared through `list_members` (viewer, editor, manager; the owner is an implicit manager). Nothing decides ownership on its own: `access.forList` / `forItem` load a list or task for a user at a minimum role, and `accessSql` is the fragment for queries over many lists. A stranger gets `NOT_FOUND`, never `FORBIDDEN`, so a list's existence does not leak; a member whose role is too weak gets `FORBIDDEN`. XP, caps, quests and stats always belong to the **actor**: `rewardAction` takes the acting user's locked row, and `items.created_by` / `completed_by` / `first_completed_by` record who did what. The AI service is untouched by sharing: `routes/internal.js` calls `db.tasks.asOwner.*`, which refuses a list the user merely belongs to. An automated test enumerates every exported function of `db.tasks`, `db.templates`, `db.transfer` and `db.quests` and proves a non-member gets `NOT_FOUND` and changes nothing; a new export must be classified there. Design record: [design/shared-lists.md](design/shared-lists.md).
 
 **Services are the only writers.** Apps never write SQL. Services validate input, enforce ownership, run in transactions, and throw `TaskQuestError(code, message, status)` for expected failures. The API maps `status` to an HTTP status. The bot shows `message` in an ephemeral embed. Any other error is treated as a bug: it is logged, and the user sees a generic message.
 
@@ -155,18 +174,18 @@ Achievement unlocks happen in the same transaction (`INSERT IGNORE` on the uniqu
 | Blackjack | bot + web | `game_sessions.game_data` (deck, hands, bet) | Server (CSPRNG shuffle) |
 | RPS | bot + web | single row, finished immediately | Server |
 | Hangman | bot + web | `game_data` (word, guesses, lives) | Server |
-| Snake / Dino / Invaders | web | session row created at start | Browser plays; server validates the score |
+| Snake / Dino / Invaders | web | session row created at start | Browser plays and records inputs; the server replays them and pays on its own score |
 
 - **Hidden information stays on the server.** `publicView()` strips the deck, hides the dealer's hole card until the hand ends, and masks the Hangman word.
-- **Escrow.** Starting Blackjack inserts the session and debits the bet in one transaction. Double down debits a second bet. Settling credits `bet + boosted winnings` (class and skill bonuses apply to winnings only) or returns the bet on a push. `finishSession` only updates rows with `state = 'active'`.
-- **Expiry.** Active sessions older than 30 minutes are expired by the bot's job every 5 minutes. Escrowed bets are refunded with source `blackjack_refund`.
+- **Escrow.** Starting Blackjack inserts the session and debits the bet in one transaction. Double down debits a second bet. Settling credits `bet + winnings` (a flat 1:1, or 3:2 for a natural; no class or skill bonuses) or returns the bet on a push. `finishSession` only updates rows with `state = 'active'`.
+- **Expiry.** Active sessions older than 30 minutes are expired by a job in the bot and in the web server (every 5 minutes; whichever runs second finds nothing to do). An unfinished Blackjack hand is auto-stood and settled normally, never refunded (a refund would let players walk away from bad deals); other games just expire.
 - **Free-game economy.**
   - RPS, Hangman and arcade rewards go through `rewardAction` with `maxXP` set to the remainder of the 500 XP per day cap.
   - A 3-second cooldown (`users.last_game_at`) throttles RPS and Hangman.
-- **Arcade plausibility.**
-  - The score must be at most `elapsed_seconds × maxPointsPerSecond + 1`. Elapsed time is measured by the database clock from the server-created session.
-  - XP per run is capped at 100–150.
-  - A run can be submitted only once.
+- **Arcade replay verification.**
+  - `startArcade` issues a per-run seed. The three games are deterministic fixed-step simulators (`packages/shared/src/games/`), mirrored in `apps/web/src/lib/arcade/`.
+  - The browser records its inputs and sends them with the claimed score and tick count; the server replays them and pays on the score it derives itself. The score must also be at most `elapsed_seconds × maxPointsPerSecond + 1`, with the elapsed time measured by the database clock.
+  - XP per run is capped at 100–150, and a run can be submitted only once. See [design/arcade-anti-cheat.md](design/arcade-anti-cheat.md).
 
 ## 6. Web security design
 
@@ -175,7 +194,7 @@ Achievement unlocks happen in the same transaction (`INSERT IGNORE` on the uniqu
 | CSRF (e.g. hidden form posting to `/api/user/reset`) | `SameSite=Lax` cookie on a single origin. State-changing requests must carry an `Origin` or `Referer` matching `PUBLIC_URL`/`ALLOWED_ORIGINS`. Bodies must be `application/json`. Reset also needs `{"confirm":"RESET"}`. |
 | Session fixation / theft | `session.regenerate()` at login. `httpOnly`, `secure` in production, cookie name `tq.sid`, store in MySQL. |
 | Login CSRF | OAuth `state` bound to the session and compared in constant time. |
-| IDOR | Ownership is part of every SQL statement (`JOIN lists ... WHERE discord_id = ?`). |
+| IDOR | Access is decided in one place (`access.js`: ownership or a membership row with a sufficient role) and a stranger gets 404. Discord IDs of other people are never sent to a client (members are addressed by an opaque key, tasks expose display names). |
 | XSS / clickjacking | helmet CSP (`script-src 'self'`, `frame-ancestors 'none'`, `img-src 'self' cdn.discordapp.com`). React escapes output. |
 | Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games). |
 | Mass assignment / bad input | `.strict()` zod schemas, then service-level validation. 16 KB body limit. |
@@ -187,8 +206,8 @@ See [SECURITY.md](../SECURITY.md) for the full list of fixed vulnerabilities.
 ## 7. Bot design
 
 - **Intents:** `Guilds` only. No privileged intents are needed: commands arrive as interactions, and DMs are sent, never read.
-- **Routing:** `index.js` dispatches by interaction type and `customId` prefix to `commands/list.js`, `commands/game.js` or `commands/gamification.js`.
-- **Ownership:** `/list` replies are public, so anyone in the channel can click their buttons. Every handler passes the clicking user's ID to the services, so clicks on someone else's list only ever return "not found".
+- **Routing:** `index.js` dispatches by interaction type, command name and `customId` prefix to the modules in `commands/` (`list`, `game`, `gamification`, `quests`, `review`, `prestige`, `shop`, `sharing`, `party`, `timezone`, `weekly`, `quick`, `ai`); [COMMANDS.md](COMMANDS.md#interaction-ids-for-developers) lists the prefixes.
+- **Ownership:** `/list` replies are public, so anyone in the channel can click their buttons. A click on a message that belongs to another user is refused up front, and every handler passes the clicking user's ID to the services, so clicks on a list they have no part in only ever return "not found". On a shared list the service also checks the clicker's role (a viewer's edit click is refused).
 - **Privacy:** XP, achievements, games and `/profile` are ephemeral. `/profile @user` never creates a row for the target.
 - **Errors:** `utils/respond.js#handleError` turns `TaskQuestError` into a friendly embed. Anything else is logged with its stack and shown as a generic message.
 
@@ -198,10 +217,10 @@ All jobs run in the bot process. Each is wrapped so that a failure is logged and
 
 | Job | Schedule | What it does |
 |---|---|---|
-| Deadline reminders | 5s after ready, then hourly | `utils/reminders.js`: for each candidate list (`tasks.getReminderCandidates`) it decides, in the owner's time zone and at their reminder hour, whether to send a *due* reminder, one *overdue* notice or a *snooze* reminder (`decideReminder`, a pure function). A list is marked handled only when the DM was sent or can never be sent (DMs closed); temporary errors retry on the next run. Reminder DMs carry Snooze and Stop buttons. |
+| Deadline and task reminders | 5s after ready, then hourly | `utils/reminders.js`: for each candidate list (`tasks.getReminderCandidates`) and task with its own due date (`getTaskReminderCandidates`) it decides, in each recipient's time zone and at their reminder hour, whether to send a *due* reminder, one *overdue* notice or a *snooze* reminder (`decideReminder`, a pure function). Shared lists remind the owner and every member with automation on, once each. At most 20 DMs a person per run; the rest collapse into one digest message. A reminder is marked handled only when the DM was sent or can never be sent (DMs closed); temporary errors retry on the next run. Reminder DMs carry Snooze and Stop buttons, and the same text is pushed to the person's subscribed browsers when web push is configured (best effort, through the web server's `/internal/push`). |
 | Weekly digest | 15s after ready, then hourly | `utils/digest.js`: users who opted in (`/weekly`) get one DM on Monday at their reminder hour with their week's numbers, plus the AI recap when AI is on (best effort, never blocking). `last_digest_at` keeps it to once a week. |
-| Finished-list clean-up | 10s after ready, then daily | Deletes lists whose tasks have all been done for 5+ days (see [DATABASE.md](DATABASE.md#automation-queries)) and tells the AI service to forget their vectors. |
-| Game session expiry | On ready, then every 5 min | Expires sessions older than 30 minutes and refunds escrowed bets. |
+| Finished-list clean-up | 10s after ready, then daily | Deletes lists whose tasks have all been done for 5+ days (see [DATABASE.md](DATABASE.md#automation-queries)), never a list with members, and tells the AI service to forget their vectors. |
+| Game session expiry | On ready, then every 5 min (bot and web server) | Expires sessions older than 30 minutes; an unfinished Blackjack hand is settled as a stand. |
 
 ## 9. Configuration and startup
 
@@ -241,7 +260,9 @@ The LangChain/LangGraph internals (RAG pipeline, graphs, checkpointer, persona, 
 | Services | `packages/shared/test/db.integration.test.js`: ownership, farming, races, escrow, refunds, caps | Yes |
 | HTTP | `apps/server/test/api.integration.test.js`: headers, auth, CSRF, validation, IDOR, games, privacy | Yes |
 | Bot | `apps/bot/test/flows.integration.test.js`: every command flow with fake interactions | Yes |
-| Web | `tsc` + ESLint + `vite build` | No |
+| Docs | `packages/shared/test/docs.test.js`: the tables in `docs/GAMEPLAY.md` against `constants.js` | No |
+| Web | `tsc` + ESLint + `vite build`, Vitest unit tests for pure logic (`apps/web/src/lib/*.test.ts`, incl. theme contrast) | No |
+| Browser | `apps/web/e2e` (Playwright): the main flows against the built app, a real API and a seeded database; `npm run test:e2e` and its own CI job | Yes |
 | AI client, internal token, AI schemas | `apps/server/test/ai.test.js` against a stub AI service | No |
 | AI service | `apps/ai/tests`: chunking, vector store, indexer, summarizer, prioritizer paths, chat graph (routing, tools, confirmation, memory), checkpointer, red-team prompts. Offline, with fake models and in-memory SQLite. | No |
 

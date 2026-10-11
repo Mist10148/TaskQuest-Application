@@ -11,14 +11,19 @@ const achievements = require('./achievements');
 const validation = require('./validation');
 const random = require('./random');
 const dates = require('./dates');
-const { questPeriod } = require('./quests');
+const cosmetics = require('./cosmetics');
+const push = require('./push');
+const { questPeriod, isoWeek, activeRotatingQuest } = require('./quests');
+const tz = require('./tz');
 const { buildIcs } = require('./ics');
 const { parseQuickAdd } = require('./quickAdd');
+const { parseCsv, csvToImport } = require('./csv');
 const blackjack = require('./games/blackjack');
 const rps = require('./games/rps');
 const hangman = require('./games/hangman');
 const arcade = require('./games/arcade');
 const { TaskQuestError, errors } = require('./errors');
+const { escapeDiscord } = require('./text');
 
 module.exports = {
     ...constants,
@@ -26,11 +31,19 @@ module.exports = {
     ...achievements,
     TaskQuestError,
     errors,
+    escapeDiscord,
     validation,
     random,
     ...dates,
+    ...cosmetics,
+    push,
+    tz,
     questPeriod,
+    isoWeek,
+    activeRotatingQuest,
     buildIcs,
     parseQuickAdd,
+    parseCsv,
+    csvToImport,
     games: { blackjack, rps, hangman, arcade }
 };

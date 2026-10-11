@@ -7,14 +7,17 @@ import { useClaimQuest, useQuests } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
 
 const QuestRow = ({ quest, onClaim, claiming }: { quest: Quest; onClaim: (key: string) => void; claiming: boolean }) => {
-  const percent = Math.round((quest.progress / quest.target) * 100);
+  const percent = Math.min(100, Math.round((quest.progress / quest.target) * 100));
   return (
     <li className="flex items-center gap-3 py-3">
       <span className="text-2xl" aria-hidden>{quest.emoji}</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <p className={cn("truncate text-sm font-medium", quest.claimed && "text-foreground-muted line-through")}>{quest.name}</p>
-          <span className="flex-shrink-0 text-xs font-medium text-xp">+{quest.reward} XP</span>
+          {quest.rotating && (
+            <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-text">This week's pick</span>
+          )}
+          <span className="shrink-0 text-xs font-medium text-xp">+{quest.reward} XP</span>
         </div>
         <p className="truncate text-xs text-foreground-muted">{quest.description}</p>
         <div
@@ -28,7 +31,7 @@ const QuestRow = ({ quest, onClaim, claiming }: { quest: Quest; onClaim: (key: s
           <div className={cn("h-full rounded-full transition-all", quest.claimed ? "bg-success" : "bg-primary")} style={{ width: `${percent}%` }} />
         </div>
       </div>
-      <div className="w-20 flex-shrink-0 text-right">
+      <div className="w-20 shrink-0 text-right">
         {quest.claimed ? (
           <span className="text-xs font-medium text-success">Claimed</span>
         ) : quest.claimable ? (
@@ -43,26 +46,31 @@ const QuestRow = ({ quest, onClaim, claiming }: { quest: Quest; onClaim: (key: s
   );
 };
 
-/** Daily and weekly quests with progress and claim buttons. */
+/** Daily, weekly and monthly quests with progress and claim buttons. */
 export const QuestsCard = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useQuests();
   const claim = useClaimQuest();
   const quests = data?.quests ?? [];
   const daily = quests.filter((q) => q.period === "daily");
   const weekly = quests.filter((q) => q.period === "weekly");
+  const monthly = quests.filter((q) => q.period === "monthly");
 
   return (
     <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} aria-labelledby="quests-heading">
       <h2 id="quests-heading" className="mb-4 flex items-center gap-2 font-heading text-lg font-semibold sm:text-xl">
-        <ScrollText className="h-4 w-4 text-primary sm:h-5 sm:w-5" aria-hidden /> Daily &amp; weekly quests
+        <ScrollText className="h-4 w-4 text-primary-text sm:h-5 sm:w-5" aria-hidden /> Daily, weekly &amp; monthly quests
       </h2>
       {isError ? (
         <ErrorCard what="your quests" error={error} onRetry={() => void refetch()} retrying={isFetching} />
       ) : isLoading ? (
         <div className="h-48 animate-pulse rounded-xl bg-card/50" aria-busy="true" />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {[["Today", daily, "Resets at 00:00 UTC"] as const, ["This week", weekly, "Resets Monday 00:00 UTC"] as const].map(([title, list, resets]) => (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {[
+            ["Today", daily, "Resets at your midnight"] as const,
+            ["This week", weekly, "Resets Monday at your midnight"] as const,
+            ["This month", monthly, "Resets on the 1st at your midnight"] as const,
+          ].filter(([, list]) => list.length > 0).map(([title, list, resets]) => (
             <div key={title} className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-baseline justify-between">
                 <h3 className="font-heading font-semibold">{title}</h3>

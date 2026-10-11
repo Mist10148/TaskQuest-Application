@@ -30,8 +30,8 @@ interface Props {
 export const OnboardingChecklist = ({ hasQuest, hasTask, claimedDaily, onClaimDaily, claiming }: Props) => {
   const [dismissed, setDismissed] = useState(wasDismissed);
   const steps = [
-    { done: hasQuest, label: "Create your first quest", hint: "A quest is a list of tasks.", action: <Link to="/tasks" className="text-primary underline-offset-4 hover:underline">Open Quest Log</Link> },
-    { done: hasTask, label: "Add a task to it", hint: "Press n inside a quest, or type in quick add.", action: <Link to="/tasks" className="text-primary underline-offset-4 hover:underline">Add a task</Link> },
+    { done: hasQuest, label: "Create your first quest", hint: "A quest is a list of tasks.", action: <Link to="/tasks" className="text-primary-text underline-offset-4 hover:underline">Open Quest Log</Link> },
+    { done: hasTask, label: "Add a task to it", hint: "Press n inside a quest, or type in quick add.", action: <Link to="/tasks" className="text-primary-text underline-offset-4 hover:underline">Add a task</Link> },
     { done: claimedDaily, label: "Claim your daily reward", hint: "Come back every day to build a streak.", action: <Button size="sm" variant="outline" onClick={onClaimDaily} disabled={claiming}>Claim now</Button> },
   ];
   const doneCount = steps.filter((s) => s.done).length;
@@ -72,12 +72,12 @@ export const OnboardingChecklist = ({ hasQuest, hasTask, claimedDaily, onClaimDa
       <ol className="space-y-3">
         {steps.map((step) => (
           <li key={step.label} className="flex items-center gap-3">
-            {step.done ? <Check className="h-5 w-5 flex-shrink-0 text-success" aria-label="Done" /> : <Circle className="h-5 w-5 flex-shrink-0 text-foreground-muted" aria-label="Not done yet" />}
+            {step.done ? <Check className="h-5 w-5 shrink-0 text-success" aria-label="Done" /> : <Circle className="h-5 w-5 shrink-0 text-foreground-muted" aria-label="Not done yet" />}
             <div className="min-w-0 flex-1">
               <p className={cn("text-sm font-medium", step.done && "text-foreground-muted line-through")}>{step.label}</p>
               {!step.done && <p className="text-xs text-foreground-muted">{step.hint}</p>}
             </div>
-            {!step.done && <div className="flex-shrink-0 text-sm">{step.action}</div>}
+            {!step.done && <div className="shrink-0 text-sm">{step.action}</div>}
           </li>
         ))}
       </ol>

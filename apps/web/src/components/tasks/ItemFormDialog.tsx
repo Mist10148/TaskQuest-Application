@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PRIORITIES } from "./constants";
+import { PRIORITIES, TEXT_LIMITS } from "./constants";
 import type { ItemFormValues } from "./forms";
 
 interface Props {
@@ -29,8 +29,12 @@ const REPEATS = [
 /** One dialog for adding and editing a task and its details. */
 export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOptions, pending, onSubmit }: Props) => {
   const [form, setForm] = useState<ItemFormValues>(initial);
+  const [nameError, setNameError] = useState("");
   useEffect(() => {
-    if (open) setForm(initial);
+    if (open) {
+      setForm(initial);
+      setNameError("");
+    }
   }, [open, initial]);
   const set = <K extends keyof ItemFormValues>(key: K, value: ItemFormValues[K]) => setForm((f) => ({ ...f, [key]: value }));
   const creating = mode === "create";
@@ -40,7 +44,7 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {creating ? <Plus className="h-5 w-5 text-primary" /> : <Pencil className="h-5 w-5 text-primary" />}
+            {creating ? <Plus className="h-5 w-5 text-primary-text" /> : <Pencil className="h-5 w-5 text-primary-text" />}
             {creating ? "Add Task" : "Edit Task"}
           </DialogTitle>
         </DialogHeader>
@@ -48,16 +52,19 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
           className="space-y-4 py-2"
           onSubmit={(e) => {
             e.preventDefault();
+            if (!form.name.trim()) return setNameError("Give your task a name.");
+            setNameError("");
             onSubmit(form);
           }}
         >
           <div>
             <label htmlFor="item-name" className="text-sm font-medium block mb-1">Task Name *</label>
-            <Input id="item-name" placeholder="What needs to be done?" value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
+            <Input id="item-name" placeholder="What needs to be done?" value={form.name} onChange={(e) => { set("name", e.target.value); setNameError(""); }} autoFocus required maxLength={TEXT_LIMITS.ITEM_NAME} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "item-name-error" : undefined} />
+            {nameError && <p id="item-name-error" role="alert" className="text-xs text-destructive-text mt-1">{nameError}</p>}
           </div>
           <div>
             <label htmlFor="item-desc" className="text-sm font-medium block mb-1">Description (optional)</label>
-            <Textarea id="item-desc" placeholder="Add more details..." value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} />
+            <Textarea id="item-desc" placeholder="Add more details..." value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} maxLength={TEXT_LIMITS.DESCRIPTION} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

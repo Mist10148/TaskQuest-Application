@@ -7,17 +7,19 @@ interface Props {
   error?: unknown;
   onRetry?: () => void;
   retrying?: boolean;
+  /** Replaces the generic "check your connection" advice, e.g. when retrying cannot help. */
+  hint?: string;
 }
 
 /** Shown when a request fails: says what went wrong in plain words and offers a retry. */
-export const ErrorCard = ({ what, error, onRetry, retrying }: Props) => {
+export const ErrorCard = ({ what, error, onRetry, retrying, hint }: Props) => {
   const detail = error instanceof Error ? error.message : undefined;
   return (
     <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-6 text-center">
-      <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive" aria-hidden />
+      <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive-text" aria-hidden />
       <h3 className="font-heading text-lg font-semibold">Couldn't load {what}</h3>
       <p className="mt-1 text-sm text-foreground-muted">
-        {detail || "Something went wrong."} Check your connection and try again.
+        {detail || "Something went wrong."} {hint ?? "Check your connection and try again."}
       </p>
       {onRetry && (
         <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={onRetry} disabled={retrying}>

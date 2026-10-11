@@ -1,3 +1,4 @@
+import { clampBet, parseBetInput } from "@/lib/gameHelpers";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -9,6 +10,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGameHistory, useGameAllowance, invalidateProgress, showAchievementNotifications, showError } from "@/hooks/useApi";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { startFixedLoop } from "@/lib/gameLoop";
+import { createRecorder, type ArcadeTelemetry } from "@/lib/arcade";
+import * as snakeSim from "@/lib/arcade/snake";
+import * as dinoSim from "@/lib/arcade/dino";
+import * as invadersSim from "@/lib/arcade/invaders";
 import { playSound, setSoundEnabled } from "@/lib/sound";
 import { TouchPad } from "@/components/game/TouchPad";
 import {
@@ -38,36 +43,52 @@ type GameType = "menu" | "blackjack" | "rps" | "hangman" | "snake" | "dino" | "i
 
 // Neon Number Input Component
 const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) => {
+  // The box keeps what the user types as text; it is clamped on blur/Enter so typing "50" is not fought halfway.
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText((t) => (parseBetInput(t) === value ? t : String(value)));
+  }, [value]);
   const decrease = () => onChange(Math.max(min, value - step));
   const increase = () => onChange(Math.min(max, value + step));
-  
+  const commit = () => {
+    const v = clampBet(text, min, max, value);
+    setText(String(v));
+    onChange(v);
+  };
+
   return (
     <div className="flex items-center gap-1 bg-background-secondary/50 rounded-lg border border-border p-1">
-      <button 
-        onClick={decrease} 
+      <button
+        onClick={decrease}
         disabled={value <= min}
-        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary-text disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
       >
         <Minus className="h-4 w-4" />
       </button>
       <div className="relative">
         <input
-          type="number"
-          value={value}
+          type="text"
+          inputMode="numeric"
+          value={text}
           onChange={(e) => {
-            const v = parseInt(e.target.value) || min;
-            onChange(Math.min(max, Math.max(min, v)));
+            const raw = e.target.value;
+            setText(raw);
+            const n = parseBetInput(raw);
+            if (n !== null && n >= min && n <= max) onChange(n);
           }}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
+          aria-label="Bet"
           min={min}
           max={max}
-          className="w-16 h-8 bg-background border border-border rounded-md text-center font-heading font-bold text-lg focus:outline-none focus:border-primary focus:shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className="w-16 h-8 bg-background border border-border rounded-md text-center font-heading font-bold text-lg focus:outline-hidden focus:border-primary focus:shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
         <Sparkles className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-xp opacity-60" />
       </div>
       <button 
         onClick={increase}
         disabled={value >= max}
-        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+        className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary-text disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
       >
         <Plus className="h-4 w-4" />
       </button>
@@ -76,8 +97,8 @@ const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: numbe
 };
 
 const PlayingCard = ({ card }: { card: Card | null }) => {
-  if (!card) return <div className="w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/50 flex items-center justify-center text-xl sm:text-2xl text-primary shadow-[0_0_20px_rgba(99,102,241,0.3)]">?</div>;
-  return <motion.div initial={{ rotateY: 180, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} className={cn("w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-foreground border-2 border-border flex flex-col items-center justify-center shadow-lg", ["♥","♦"].includes(card.suit) ? "text-destructive" : "text-background")}><span className="text-base sm:text-lg font-bold">{card.rank}</span><span className="text-lg sm:text-xl">{card.suit}</span></motion.div>;
+  if (!card) return <div className="w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-linear-to-br from-primary/30 to-primary/10 border-2 border-primary/50 flex items-center justify-center text-xl sm:text-2xl text-primary-text shadow-[0_0_20px_rgba(99,102,241,0.3)]">?</div>;
+  return <motion.div initial={{ rotateY: 180, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} className={cn("w-12 h-18 sm:w-16 sm:h-24 rounded-lg bg-foreground border-2 border-border flex flex-col items-center justify-center shadow-lg", ["♥","♦"].includes(card.suit) ? "text-destructive-text" : "text-background")}><span className="text-base sm:text-lg font-bold">{card.rank}</span><span className="text-lg sm:text-xl">{card.suit}</span></motion.div>;
 };
 
 // Game Instructions Component
@@ -125,7 +146,7 @@ const GameInstructions = ({ game }: { game: 'blackjack' | 'rps' | 'hangman' | 's
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4">
-      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-xs text-foreground-muted hover:text-primary transition-colors mx-auto">
+      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-xs text-foreground-muted hover:text-primary-text transition-colors mx-auto">
         <HelpCircle className="h-3.5 w-3.5" />
         {expanded ? 'Hide' : 'Show'} Rules
       </button>
@@ -148,12 +169,18 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
   const notifyAchievements = useNotifyAchievements();
   const [hand, setHand] = useState<BlackjackResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  // Resume an unfinished hand (e.g. started from Discord or before a reload).
+  // Resume an unfinished hand (e.g. started from Discord or before a reload). Deal stays disabled until this
+  // resolves, and a resumed hand never replaces one that is already on the table.
   useEffect(() => {
+    let cancelled = false;
     gamesApi.getActive().then((a) => {
-      if (a.blackjack) setHand({ ...a.blackjack, balance: 0, maxBet: 0, settlement: null });
-    }).catch(() => {});
+      if (cancelled) return;
+      const active = a.blackjack;
+      if (active) setHand((cur) => cur ?? { ...active, balance: 0, maxBet: 0, settlement: null });
+    }).catch(() => {}).finally(() => { if (!cancelled) setChecking(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const run = async (fn: () => Promise<BlackjackResult>) => {
@@ -185,26 +212,26 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
   const net = hand?.settlement?.net ?? 0;
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500/20 to-purple-500/5 border border-violet-500/30 shadow-[0_0_20px_rgba(139,92,246,0.2)]">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-linear-to-r from-violet-500/20 to-purple-500/5 border border-violet-500/30 shadow-[0_0_20px_rgba(139,92,246,0.2)]">
           <Sparkles className="h-4 w-4 text-violet-400" />
           <span className="font-heading font-bold text-lg text-violet-400">{view?.bet ?? bet} XP</span>
         </div>
       </div>
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(139,92,246,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-violet-500/20" style={{ boxShadow: 'inset 0 0 30px rgba(139,92,246,0.05)' }} />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-violet-500/50 to-transparent" />
 
         {!view ? (
           <div className="text-center py-8 relative z-10">
             <Spade className="h-16 w-16 mx-auto text-violet-400 mb-4 drop-shadow-[0_0_20px_rgba(139,92,246,0.5)]" />
-            <h2 className="text-2xl font-heading font-bold mb-4 bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Ready to Play?</h2>
-            <Button onClick={deal} disabled={busy} className="gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-[0_0_20px_rgba(139,92,246,0.4)]">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gamepad2 className="h-4 w-4" />} Deal Cards ({bet} XP)
+            <h2 className="text-2xl font-heading font-bold mb-4 bg-linear-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Ready to Play?</h2>
+            <Button onClick={deal} disabled={busy || checking} className="gap-2 bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-[0_0_20px_rgba(139,92,246,0.4)]">
+              {busy || checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gamepad2 className="h-4 w-4" />} Deal Cards ({bet} XP)
             </Button>
             <GameInstructions game="blackjack" />
           </div>
@@ -223,18 +250,18 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
             {playing ? (
               <div className="flex justify-center gap-3">
                 <Button onClick={() => act('hit')} disabled={busy} variant="outline" className="border-violet-500/50 hover:bg-violet-500/10">👆 Hit</Button>
-                <Button onClick={() => act('stand')} disabled={busy} className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500">✋ Stand</Button>
+                <Button onClick={() => act('stand')} disabled={busy} className="bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500">✋ Stand</Button>
                 {view.canDouble && <Button onClick={() => act('double')} disabled={busy} variant="outline" className="border-amber-500/50 text-amber-400 hover:bg-amber-500/10">💰 Double</Button>}
               </div>
             ) : ended ? (
               <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-                <p className={cn("text-2xl font-heading font-bold mb-2", view.outcome === "won" || view.outcome === "blackjack" ? "text-success" : view.outcome === "lost" ? "text-destructive" : "text-xp")}>
+                <p className={cn("text-2xl font-heading font-bold mb-2", view.outcome === "won" || view.outcome === "blackjack" ? "text-success" : view.outcome === "lost" ? "text-destructive-text" : "text-xp")}>
                   {view.outcome === "blackjack" ? "🎰 BLACKJACK!" : view.outcome === "won" ? "🎉 YOU WIN!" : view.outcome === "lost" ? (view.playerValue.bust ? "💔 BUST!" : "💔 DEALER WINS") : "🤝 PUSH"}
                 </p>
-                <p className={cn("text-lg font-bold mb-4", net >= 0 ? "text-success" : "text-destructive")}>{net >= 0 ? "+" : ""}{net} XP</p>
+                <p className={cn("text-lg font-bold mb-4", net >= 0 ? "text-success" : "text-destructive-text")}>{net >= 0 ? "+" : ""}{net} XP</p>
                 <div className="flex justify-center gap-3">
                   <Button onClick={deal} disabled={busy} variant="outline" className="gap-2 border-violet-500/50 hover:bg-violet-500/10"><RotateCcw className="h-4 w-4" /> Play Again</Button>
-                  <Button onClick={onBack} className="bg-gradient-to-r from-violet-600 to-purple-600">Back to Games</Button>
+                  <Button onClick={onBack} className="bg-linear-to-r from-violet-600 to-purple-600">Back to Games</Button>
                 </div>
               </motion.div>
             ) : null}
@@ -276,23 +303,23 @@ const RPSGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () => v
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-500/5 border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-linear-to-r from-emerald-500/20 to-emerald-500/5 border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
           <Sparkles className="h-4 w-4 text-emerald-400" />
           <span className="font-heading font-bold text-emerald-400">+10 XP per win • Risk-free!</span>
         </div>
       </div>
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-emerald-500/20" style={{ boxShadow: 'inset 0 0 30px rgba(16,185,129,0.05)' }} />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-emerald-500/50 to-transparent" />
 
         {!round ? (
           <div className="text-center py-4 relative z-10">
-            <h2 className="text-xl font-heading font-bold mb-6 bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">Choose Your Weapon!</h2>
+            <h2 className="text-xl font-heading font-bold mb-6 bg-linear-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">Choose Your Weapon!</h2>
             <div className="flex justify-center gap-4 mb-6">
               {(Object.keys(RPS_EMOJI) as RpsChoice[]).map((c) => (
                 <motion.button key={c} disabled={busy} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => play(c)} aria-label={c} className="text-5xl p-4 rounded-2xl bg-background-secondary/50 hover:bg-emerald-500/20 border border-border hover:border-emerald-500/50 transition-all hover:shadow-[0_0_25px_rgba(16,185,129,0.3)] disabled:opacity-50">{RPS_EMOJI[c]}</motion.button>
@@ -313,7 +340,7 @@ const RPSGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () => v
             {round.outcome === "won" && <p className="text-lg font-bold text-success mb-4">+{round.xpGained} XP</p>}
             <div className="flex justify-center gap-3">
               <Button onClick={() => setRound(null)} variant="outline" className="gap-2 border-emerald-500/50 hover:bg-emerald-500/10"><RotateCcw className="h-4 w-4" /> Play Again</Button>
-              <Button onClick={onBack} className="bg-gradient-to-r from-emerald-600 to-green-600">Back to Games</Button>
+              <Button onClick={onBack} className="bg-linear-to-r from-emerald-600 to-green-600">Back to Games</Button>
             </div>
             <GameInstructions game="rps" />
           </motion.div>
@@ -457,19 +484,19 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
   const xpGained = game && 'xpGained' in game ? game.xpGained : 0;
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={leave} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={leave} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-cyan-500/5 border border-cyan-500/30">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-linear-to-r from-cyan-500/20 to-cyan-500/5 border border-cyan-500/30">
             <Sparkles className="h-4 w-4 text-cyan-400" />
             <span className="font-heading font-bold text-cyan-400">Free play</span>
           </div>
           <div className="flex gap-1 px-3 py-2 rounded-lg bg-background-secondary/50 border border-border">
             {Array(maxLives).fill(0).map((_, i) => (
-              <span key={i} className={cn("text-lg transition-all", i < lives ? "text-destructive" : "text-foreground-muted/30 scale-75")}>❤️</span>
+              <span key={i} className={cn("text-lg transition-all", i < lives ? "text-destructive-text" : "text-foreground-muted/30 scale-75")}>❤️</span>
             ))}
           </div>
         </div>
@@ -477,7 +504,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
 
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-cyan-500/20" style={{ boxShadow: 'inset 0 0 30px rgba(6,182,212,0.05)' }} />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-cyan-500/50 to-transparent" />
 
         {!view ? (
           <div className="py-12 text-center relative z-10"><Loader2 className="h-6 w-6 animate-spin mx-auto text-cyan-400" /></div>
@@ -492,7 +519,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
                     key={i}
                     initial={c ? { scale: 1.2 } : {}}
                     animate={{ scale: 1 }}
-                    className={cn("w-8 h-12 flex items-center justify-center font-bold relative", view.masked[i] ? "text-cyan-400" : view.finished ? "text-destructive" : "")}
+                    className={cn("w-8 h-12 flex items-center justify-center font-bold relative", view.masked[i] ? "text-cyan-400" : view.finished ? "text-destructive-text" : "")}
                     style={{ borderBottom: view.masked[i] ? '3px solid rgb(6, 182, 212)' : '3px dashed rgb(148, 163, 184)' }}
                   >
                     {c ?? ""}
@@ -523,7 +550,7 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
                         used
                           ? !wrong
                             ? "bg-success/20 text-success border border-success/50"
-                            : "bg-destructive/20 text-destructive border border-destructive/50 opacity-50"
+                            : "bg-destructive/20 text-destructive-text border border-destructive/50 opacity-50"
                           : "bg-background-secondary hover:bg-cyan-500/20 hover:text-cyan-400 border border-border hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.3)]"
                       )}
                     >
@@ -542,13 +569,13 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
                   </>
                 ) : (
                   <>
-                    <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 GAME OVER</p>
+                    <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 GAME OVER</p>
                     <p className="text-foreground-muted mb-4">The word was: <span className="font-bold text-foreground">{view.word}</span></p>
                   </>
                 )}
                 <div className="flex justify-center gap-3">
                   <Button onClick={start} disabled={busy} variant="outline" className="gap-2 border-cyan-500/50 hover:bg-cyan-500/10"><RotateCcw className="h-4 w-4" /> New Word</Button>
-                  <Button onClick={onBack} className="bg-gradient-to-r from-cyan-600 to-blue-600">Back to Games</Button>
+                  <Button onClick={onBack} className="bg-linear-to-r from-cyan-600 to-blue-600">Back to Games</Button>
                 </div>
               </motion.div>
             )}
@@ -565,45 +592,45 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
 //  🐍 SNAKE GAME (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
+/** What every arcade game component receives: begin a run (resolves the server's seed, or null when it cannot be recorded) and report the finished run's telemetry. */
+type ArcadeGameProps = { onBack: () => void; onStart: () => Promise<number | null>; onResult: (run: ArcadeTelemetry) => void };
+
+const GRID_SIZE = snakeSim.GRID_SIZE;
+const CELL_SIZE = 15;
+
+const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
-  
-  const gameRef = useRef({
-    snake: [{ x: 10, y: 10 }],
-    dir: { x: 1, y: 0 },
-    food: { x: 15, y: 15 },
-    score: 0,
-    gameOver: false,
-    lastDir: { x: 1, y: 0 }
-  });
+  const [starting, setStarting] = useState(false);
 
-  const GRID_SIZE = 20;
-  const CELL_SIZE = 15;
+  // The simulation is shared with the server, which replays the recorded inputs to derive the score.
+  const simRef = useRef<snakeSim.SnakeState>(snakeSim.create(1));
+  const pendingRef = useRef<number[]>([]);
+  const recorderRef = useRef(createRecorder());
 
-  const startGame = () => {
-    gameRef.current = {
-      snake: [{ x: 10, y: 10 }],
-      dir: { x: 1, y: 0 },
-      food: { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) },
-      score: 0,
-      gameOver: false,
-      lastDir: { x: 1, y: 0 }
-    };
+  // The run only begins once the server has issued its session and seed, otherwise the XP would be lost.
+  const startGame = async () => {
+    if (starting) return;
+    setStarting(true);
+    const seed = await onStart();
+    setStarting(false);
+    if (seed === null) return;
+    simRef.current = snakeSim.create(seed);
+    pendingRef.current = [];
+    recorderRef.current = createRecorder();
     setScore(0);
     setGameState("playing");
-    onStart();
   };
 
-  const endGame = useCallback((finalScore: number) => {
+  const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
-    setScore(finalScore);
-    if (finalScore > highScore) setHighScore(finalScore);
-    // Report pellets eaten; the server converts points to XP and caps it.
+    setScore(run.score);
+    if (run.score > highScore) setHighScore(run.score);
+    // Report the recorded inputs; the server replays them, derives the pellets eaten, converts them to XP and caps it.
     playSound("lose");
-    onResult("won", finalScore);
+    onResult(run);
   }, [highScore, onResult]);
 
   useEffect(() => {
@@ -614,12 +641,16 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Inputs are queued here and handed to the simulation (and the recorder) on the next step.
     const handleKeyDown = (e: KeyboardEvent) => {
-      const g = gameRef.current;
-      if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { if (g.lastDir.y !== 1) g.dir = { x: 0, y: -1 }; }
-      else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { if (g.lastDir.y !== -1) g.dir = { x: 0, y: 1 }; }
-      else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") { if (g.lastDir.x !== 1) g.dir = { x: -1, y: 0 }; }
-      else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") { if (g.lastDir.x !== -1) g.dir = { x: 1, y: 0 }; }
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // typing elsewhere on the page
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) e.preventDefault();
+      if (e.repeat) return;
+      if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") pendingRef.current.push(snakeSim.INPUT.UP);
+      else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") pendingRef.current.push(snakeSim.INPUT.DOWN);
+      else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") pendingRef.current.push(snakeSim.INPUT.LEFT);
+      else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") pendingRef.current.push(snakeSim.INPUT.RIGHT);
     };
 
     // Mobile touch controls (swipe)
@@ -630,20 +661,17 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
       touchStartY = e.touches[0].clientY;
     };
     const handleTouchEnd = (e: TouchEvent) => {
-      const touchEndX = e.changedTouches[0].clientX;
-      const touchEndY = e.changedTouches[0].clientY;
-      const diffX = touchEndX - touchStartX;
-      const diffY = touchEndY - touchStartY;
-      const g = gameRef.current;
+      const diffX = e.changedTouches[0].clientX - touchStartX;
+      const diffY = e.changedTouches[0].clientY - touchStartY;
 
       if (Math.abs(diffX) > Math.abs(diffY)) {
         // Horizontal swipe
-        if (diffX > 30 && g.lastDir.x !== -1) g.dir = { x: 1, y: 0 }; // Right
-        else if (diffX < -30 && g.lastDir.x !== 1) g.dir = { x: -1, y: 0 }; // Left
+        if (diffX > 30) pendingRef.current.push(snakeSim.INPUT.RIGHT);
+        else if (diffX < -30) pendingRef.current.push(snakeSim.INPUT.LEFT);
       } else {
         // Vertical swipe
-        if (diffY > 30 && g.lastDir.y !== -1) g.dir = { x: 0, y: 1 }; // Down
-        else if (diffY < -30 && g.lastDir.y !== 1) g.dir = { x: 0, y: -1 }; // Up
+        if (diffY > 30) pendingRef.current.push(snakeSim.INPUT.DOWN);
+        else if (diffY < -30) pendingRef.current.push(snakeSim.INPUT.UP);
       }
     };
 
@@ -652,31 +680,20 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
     canvas.addEventListener("touchend", handleTouchEnd);
 
     const stopLoop = startFixedLoop(() => {
-      const g = gameRef.current;
-      if (g.gameOver) return;
+      const g = simRef.current;
+      if (g.over) return;
 
-      // Move snake
-      const head = { x: g.snake[0].x + g.dir.x, y: g.snake[0].y + g.dir.y };
-      g.lastDir = { ...g.dir };
-
-      // Check collisions
-      if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE || 
-          g.snake.some(s => s.x === head.x && s.y === head.y)) {
-        g.gameOver = true;
-        endGame(g.score);
-        return;
-      }
-
-      g.snake.unshift(head);
-
-      // Check food
-      if (head.x === g.food.x && head.y === g.food.y) {
-        g.score++;
+      const inputs = pendingRef.current.splice(0);
+      for (const code of inputs) recorderRef.current.record(g.tick, code);
+      const before = g.score;
+      snakeSim.step(g, inputs);
+      if (g.score > before) {
         playSound("eat");
         setScore(g.score);
-        g.food = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
-      } else {
-        g.snake.pop();
+      }
+      if (g.over) {
+        endGame(recorderRef.current.finish(g.score, g.tick));
+        return;
       }
 
       // Draw
@@ -725,7 +742,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
         ctx.fillRect(seg.x * CELL_SIZE + 1, seg.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
       });
       ctx.shadowBlur = 0;
-    }, 100);
+    }, snakeSim.STEP_MS);
 
     return () => {
       stopLoop();
@@ -736,13 +753,13 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
   }, [gameState, endGame]);
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-500/20 to-green-500/5 border border-green-500/30">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-linear-to-r from-green-500/20 to-green-500/5 border border-green-500/30">
             <Bug className="h-4 w-4 text-green-400" />
             <span className="font-heading font-bold text-green-400">Pellets: {score}</span>
           </div>
@@ -755,16 +772,16 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
       
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(34,197,94,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-green-500/20" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/50 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-green-500/50 to-transparent" />
         
         <div className="flex flex-col items-center relative z-10">
           {gameState === "ready" && (
             <div className="text-center py-8">
               <Bug className="h-16 w-16 mx-auto text-green-400 mb-4 drop-shadow-[0_0_20px_rgba(34,197,94,0.5)]" />
-              <h2 className="text-2xl font-heading font-bold mb-2 bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">Snake</h2>
+              <h2 className="text-2xl font-heading font-bold mb-2 bg-linear-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">Snake</h2>
               <p className="text-foreground-muted mb-4">Eat pellets, grow longer, don't crash!</p>
               <p className="text-sm text-xp mb-4">🎁 XP = Pellets × 2</p>
-              <Button onClick={startGame} className="gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
+              <Button onClick={startGame} disabled={starting} className="gap-2 bg-linear-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
               <GameInstructions game="snake" />
@@ -776,20 +793,20 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
               ref={canvasRef} 
               width={GRID_SIZE * CELL_SIZE} 
               height={GRID_SIZE * CELL_SIZE}
-              className="rounded-lg border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]"
+              className="touch-none rounded-lg border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]"
             /><TouchPad layout="dpad" /></>
           )}
           
           {gameState === "ended" && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
-              <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 Game Over!</p>
+              <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 Game Over!</p>
               <p className="text-foreground-muted mb-2">Pellets eaten: {score}</p>
               <p className="text-lg font-bold text-success mb-4">+{score * 2} XP</p>
               <div className="flex justify-center gap-3">
-                <Button onClick={startGame} variant="outline" className="gap-2 border-green-500/50 hover:bg-green-500/10">
+                <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-green-500/50 hover:bg-green-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
                 </Button>
-                <Button onClick={onBack} className="bg-gradient-to-r from-green-600 to-emerald-600">Back to Games</Button>
+                <Button onClick={onBack} className="bg-linear-to-r from-green-600 to-emerald-600">Back to Games</Button>
               </div>
             </motion.div>
           )}
@@ -804,57 +821,53 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Dino Runner physics and canvas size (module scope: stable identities for the hooks below).
-const GROUND_Y = 160;
-const GRAVITY = 0.9;
-const JUMP_FORCE = -16;
-const CANVAS_WIDTH = 600;
-const CANVAS_HEIGHT = 200;
+const GROUND_Y = dinoSim.GROUND_Y;
+const CANVAS_WIDTH = dinoSim.CANVAS_WIDTH;
+const CANVAS_HEIGHT = dinoSim.CANVAS_HEIGHT;
 
-const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
+const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
-  
-  const gameRef = useRef({
-    dino: { y: 150, vy: 0, jumping: false, frame: 0 },
-    obstacles: [] as { x: number; type: 'cactus' | 'bird'; passed: boolean; height: number }[],
-    score: 0,
-    speed: 6,
-    gameOver: false,
-    frameCount: 0,
-    groundOffset: 0
-  });
+  const [starting, setStarting] = useState(false);
 
-  const startGame = () => {
-    gameRef.current = {
-      dino: { y: GROUND_Y, vy: 0, jumping: false, frame: 0 },
-      obstacles: [],
-      score: 0,
-      speed: 6,
-      gameOver: false,
-      frameCount: 0,
-      groundOffset: 0
-    };
+  // The simulation is shared with the server, which replays the recorded inputs to derive the score.
+  const simRef = useRef<dinoSim.DinoState>(dinoSim.create(1));
+  const pendingRef = useRef<number[]>([]);
+  const recorderRef = useRef(createRecorder());
+  // Scrolling ground offset: purely visual, not part of the simulation.
+  const viewRef = useRef({ ground: 0 });
+
+  // The run only begins once the server has issued its session and seed, otherwise the XP would be lost.
+  const startGame = async () => {
+    if (starting) return;
+    setStarting(true);
+    const seed = await onStart();
+    setStarting(false);
+    if (seed === null) return;
+    simRef.current = dinoSim.create(seed);
+    pendingRef.current = [];
+    recorderRef.current = createRecorder();
+    viewRef.current = { ground: 0 };
     setScore(0);
     setGameState("playing");
-    onStart();
   };
 
-  const endGame = useCallback((finalScore: number) => {
+  const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
-    setScore(finalScore);
-    if (finalScore > highScore) setHighScore(finalScore);
+    setScore(run.score);
+    if (run.score > highScore) setHighScore(run.score);
     playSound("lose");
-    onResult("won", finalScore);
+    onResult(run);
   }, [highScore, onResult]);
 
   const jump = useCallback(() => {
-    const g = gameRef.current;
-    if (!g.dino.jumping && gameState === "playing") {
-      g.dino.vy = JUMP_FORCE;
+    const g = simRef.current;
+    // Only a jump the simulation will accept is recorded: on the ground, and not already queued this step.
+    if (gameState === "playing" && !g.over && !g.dino.jumping && !pendingRef.current.includes(dinoSim.INPUT.JUMP)) {
+      pendingRef.current.push(dinoSim.INPUT.JUMP);
       playSound("jump");
-      g.dino.jumping = true;
     }
   }, [gameState]);
 
@@ -1002,69 +1015,18 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     canvas.addEventListener("touchstart", handleTouchStart);
 
     const stopLoop = startFixedLoop(() => {
-      const g = gameRef.current;
-      if (g.gameOver) return;
+      const g = simRef.current;
+      if (g.over) return;
 
-      g.frameCount++;
-      g.dino.frame++;
-      g.groundOffset = (g.groundOffset + g.speed) % 20;
-
-      // Increase speed over time
-      g.speed = 6 + Math.floor(g.score / 10) * 0.5;
-
-      // Dino physics
-      g.dino.vy += GRAVITY;
-      g.dino.y += g.dino.vy;
-      if (g.dino.y >= GROUND_Y) {
-        g.dino.y = GROUND_Y;
-        g.dino.vy = 0;
-        g.dino.jumping = false;
-      }
-
-      // Spawn obstacles randomly
-      const lastObstacle = g.obstacles[g.obstacles.length - 1];
-      const minGap = 200 + Math.random() * 150;
-      if (!lastObstacle || lastObstacle.x < CANVAS_WIDTH - minGap) {
-        if (Math.random() < 0.02) {
-          const type = Math.random() > 0.75 ? 'bird' : 'cactus';
-          const height = type === 'cactus' ? 30 + Math.random() * 25 : 0;
-          g.obstacles.push({ 
-            x: CANVAS_WIDTH + 50, 
-            type, 
-            passed: false,
-            height
-          });
-        }
-      }
-
-      // Move obstacles and check for passed
-      g.obstacles.forEach(o => {
-        o.x -= g.speed;
-        // Score when obstacle passes dino
-        if (!o.passed && o.x + 40 < 50) {
-          o.passed = true;
-          g.score++;
-          setScore(g.score);
-        }
-      });
-      g.obstacles = g.obstacles.filter(o => o.x > -60);
-
-      // Collision detection
-      const dinoBox = { x: 55, y: g.dino.y - 42, w: 35, h: 42 };
-      for (const o of g.obstacles) {
-        let oBox;
-        if (o.type === 'cactus') {
-          oBox = { x: o.x, y: GROUND_Y - o.height, w: 20, h: o.height };
-        } else {
-          oBox = { x: o.x, y: GROUND_Y - 50, w: 35, h: 16 };
-        }
-        
-        if (dinoBox.x < oBox.x + oBox.w && dinoBox.x + dinoBox.w > oBox.x &&
-            dinoBox.y < oBox.y + oBox.h && dinoBox.y + dinoBox.h > oBox.y) {
-          g.gameOver = true;
-          endGame(g.score);
-          return;
-        }
+      const inputs = pendingRef.current.splice(0);
+      for (const code of inputs) recorderRef.current.record(g.tick, code);
+      const before = g.score;
+      dinoSim.step(g, inputs);
+      viewRef.current.ground = (viewRef.current.ground + g.speed) % 20;
+      if (g.score > before) setScore(g.score);
+      if (g.over) {
+        endGame(recorderRef.current.finish(g.score, g.tick));
+        return;
       }
 
       // Draw background
@@ -1078,7 +1040,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
       // Stars
       ctx.fillStyle = "#475569";
       for (let i = 0; i < 30; i++) {
-        const x = (i * 47 + g.frameCount * 0.2) % CANVAS_WIDTH;
+        const x = (i * 47 + g.tick * 0.2) % CANVAS_WIDTH;
         const y = (i * 31) % 100;
         ctx.fillRect(x, y, 2, 2);
       }
@@ -1094,7 +1056,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
       // Ground details
       ctx.fillStyle = "#475569";
       for (let i = 0; i < 40; i++) {
-        const x = ((i * 30 - g.groundOffset) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
+        const x = ((i * 30 - viewRef.current.ground) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
         ctx.fillRect(x, GROUND_Y + 15, 10, 2);
       }
 
@@ -1103,12 +1065,12 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
         if (o.type === 'cactus') {
           drawCactus(ctx, o.x, GROUND_Y, o.height);
         } else {
-          drawBird(ctx, o.x, GROUND_Y - 45, g.frameCount);
+          drawBird(ctx, o.x, GROUND_Y - 45, g.tick);
         }
       });
 
       // Draw dino
-      drawDino(ctx, 50, g.dino.y, g.dino.jumping ? 0 : g.frameCount);
+      drawDino(ctx, 50, g.dino.y, g.dino.jumping ? 0 : g.tick);
 
       // Score display with glow
       ctx.shadowColor = "#f59e0b";
@@ -1117,7 +1079,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
       ctx.font = "bold 20px monospace";
       ctx.fillText(`🏆 ${g.score}`, CANVAS_WIDTH - 80, 35);
       ctx.shadowBlur = 0;
-    }, 1000 / 60);
+    }, dinoSim.STEP_MS);
 
     return () => {
       stopLoop();
@@ -1127,13 +1089,13 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
   }, [gameState, jump, endGame]);
 
   return (
-    <div className="max-w-3xl mx-auto px-4">
+    <div className="max-w-3xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500/20 to-amber-500/5 border border-amber-500/30">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-linear-to-r from-amber-500/20 to-amber-500/5 border border-amber-500/30">
             <Zap className="h-4 w-4 text-amber-400" />
             <span className="font-heading font-bold text-amber-400">Obstacles: {score}</span>
           </div>
@@ -1146,16 +1108,16 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
       
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(245,158,11,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-amber-500/20" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-amber-500/50 to-transparent" />
         
         <div className="flex flex-col items-center relative z-10">
           {gameState === "ready" && (
             <div className="text-center py-8">
               <div className="text-6xl mb-4">🦖</div>
-              <h2 className="text-2xl font-heading font-bold mb-2 bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Dino Runner</h2>
+              <h2 className="text-2xl font-heading font-bold mb-2 bg-linear-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Dino Runner</h2>
               <p className="text-foreground-muted mb-4">Jump over obstacles - endless runner!</p>
               <p className="text-sm text-xp mb-4">🎁 XP = Obstacles Passed</p>
-              <Button onClick={startGame} className="gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500">
+              <Button onClick={startGame} disabled={starting} className="gap-2 bg-linear-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
               <GameInstructions game="dino" />
@@ -1169,7 +1131,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
                 width={CANVAS_WIDTH} 
                 height={CANVAS_HEIGHT}
                 onClick={jump}
-                className="rounded-lg border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.2)] cursor-pointer"
+                className="rounded-lg border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.2)] cursor-pointer touch-none"
               /><TouchPad layout="jump" /></>
               <p className="text-center text-xs text-foreground-muted mt-2">Tap screen or press SPACE to jump</p>
             </div>
@@ -1177,14 +1139,14 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
           
           {gameState === "ended" && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
-              <p className="text-2xl font-heading font-bold text-destructive mb-2">💀 Game Over!</p>
+              <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 Game Over!</p>
               <p className="text-foreground-muted mb-2">Obstacles passed: {score}</p>
               <p className="text-lg font-bold text-success mb-4">+{score} XP</p>
               <div className="flex justify-center gap-3">
-                <Button onClick={startGame} variant="outline" className="gap-2 border-amber-500/50 hover:bg-amber-500/10">
+                <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-amber-500/50 hover:bg-amber-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
                 </Button>
-                <Button onClick={onBack} className="bg-gradient-to-r from-amber-600 to-orange-600">Back to Games</Button>
+                <Button onClick={onBack} className="bg-linear-to-r from-amber-600 to-orange-600">Back to Games</Button>
               </div>
             </motion.div>
           )}
@@ -1198,63 +1160,46 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
 //  👾 SPACE INVADERS (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
+const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [starting, setStarting] = useState(false);
   const [aliensKilled, setAliensKilled] = useState(0);
-  
-  const gameRef = useRef({
-    player: { x: 225, y: 350 },
-    bullets: [] as { x: number; y: number }[],
-    aliens: [] as { x: number; y: number; alive: boolean }[],
-    alienDir: 1,
-    alienSpeed: 1,
-    score: 0,
-    kills: 0,
-    gameOver: false,
-    won: false,
-    keys: { left: false, right: false },
-    lastShot: 0
-  });
 
-  const startGame = () => {
-    const aliens: { x: number; y: number; alive: boolean }[] = [];
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 8; col++) {
-        aliens.push({ x: 60 + col * 50, y: 40 + row * 40, alive: true });
-      }
-    }
-    
-    gameRef.current = {
-      player: { x: 225, y: 350 },
-      bullets: [],
-      aliens,
-      alienDir: 1,
-      alienSpeed: 1,
-      score: 0,
-      kills: 0,
-      gameOver: false,
-      won: false,
-      keys: { left: false, right: false },
-      lastShot: 0
-    };
+  // The simulation is shared with the server, which replays the recorded inputs to derive the score.
+  const simRef = useRef<invadersSim.InvadersState>(invadersSim.create(1));
+  const pendingRef = useRef<number[]>([]);
+  const recorderRef = useRef(createRecorder());
+  // Which movement keys are held right now, so only changes (not key auto-repeat) become inputs.
+  const heldRef = useRef({ left: false, right: false });
+
+  // The run only begins once the server has issued its session and seed, otherwise the XP would be lost.
+  const startGame = async () => {
+    if (starting) return;
+    setStarting(true);
+    const seed = await onStart();
+    setStarting(false);
+    if (seed === null) return;
+    simRef.current = invadersSim.create(seed);
+    pendingRef.current = [];
+    recorderRef.current = createRecorder();
+    heldRef.current = { left: false, right: false };
     setScore(0);
     setAliensKilled(0);
     setGameState("playing");
-    onStart();
   };
 
-  const endGame = useCallback((won: boolean, kills: number) => {
+  const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
-    setAliensKilled(kills);
-    const finalScore = kills * 3;
+    setAliensKilled(run.score);
+    const finalScore = run.score * 3;
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
-    // Report aliens destroyed; the server converts points to XP and caps it.
+    // Report the recorded inputs; the server replays them, derives the aliens destroyed, converts them to XP and caps it.
     playSound("lose");
-    onResult("won", kills);
+    onResult(run);
   }, [highScore, onResult]);
 
   useEffect(() => {
@@ -1265,55 +1210,56 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Inputs are queued here and handed to the simulation (and the recorder) on the next step.
+    const setHeld = (side: "left" | "right", down: boolean) => {
+      const held = heldRef.current;
+      if (held[side] === down) return;
+      held[side] = down;
+      const I = invadersSim.INPUT;
+      pendingRef.current.push(side === "left" ? (down ? I.LEFT_DOWN : I.LEFT_UP) : (down ? I.RIGHT_DOWN : I.RIGHT_UP));
+    };
+    // Only a shot the simulation will accept (cooldown over, not already queued this step) is recorded.
+    const fire = () => {
+      if (simRef.current.over || !invadersSim.canShoot(simRef.current) || pendingRef.current.includes(invadersSim.INPUT.SHOOT)) return;
+      pendingRef.current.push(invadersSim.INPUT.SHOOT);
+      playSound("shoot");
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      const g = gameRef.current;
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") g.keys.left = true;
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") g.keys.right = true;
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") setHeld("left", true);
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") setHeld("right", true);
       if (e.code === "Space") {
         e.preventDefault();
-        const now = Date.now();
-        if (now - g.lastShot > 250) {
-          g.bullets.push({ x: g.player.x + 15, y: g.player.y });
-          playSound("shoot");
-          g.lastShot = now;
-        }
+        fire();
       }
     };
-    
+
     const handleKeyUp = (e: KeyboardEvent) => {
-      const g = gameRef.current;
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") g.keys.left = false;
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") g.keys.right = false;
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") setHeld("left", false);
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") setHeld("right", false);
     };
 
     // Mobile touch controls
     const handleTouchStart = (e: TouchEvent) => {
       const rect = canvas.getBoundingClientRect();
       const touchX = e.touches[0].clientX - rect.left;
-      const g = gameRef.current;
 
       // Tap to shoot
-      const now = Date.now();
-      if (now - g.lastShot > 250) {
-        g.bullets.push({ x: g.player.x + 15, y: g.player.y });
-          playSound("shoot");
-        g.lastShot = now;
-      }
+      fire();
 
       // Left/right movement based on tap position
       if (touchX < canvas.width / 2) {
-        g.keys.left = true;
-        g.keys.right = false;
+        setHeld("left", true);
+        setHeld("right", false);
       } else {
-        g.keys.right = true;
-        g.keys.left = false;
+        setHeld("right", true);
+        setHeld("left", false);
       }
     };
 
     const handleTouchEnd = () => {
-      const g = gameRef.current;
-      g.keys.left = false;
-      g.keys.right = false;
+      setHeld("left", false);
+      setHeld("right", false);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1322,58 +1268,19 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     canvas.addEventListener("touchend", handleTouchEnd);
 
     const stopLoop = startFixedLoop(() => {
-      const g = gameRef.current;
-      if (g.gameOver) return;
+      const g = simRef.current;
+      if (g.over) return;
 
-      // Move player
-      if (g.keys.left && g.player.x > 0) g.player.x -= 5;
-      if (g.keys.right && g.player.x < 450) g.player.x += 5;
-
-      // Move bullets
-      g.bullets.forEach(b => b.y -= 8);
-      g.bullets = g.bullets.filter(b => b.y > 0);
-
-      // Move aliens
-      let moveDown = false;
-      g.aliens.forEach(a => {
-        if (a.alive) {
-          a.x += g.alienDir * g.alienSpeed;
-          if (a.x < 10 || a.x > 470) moveDown = true;
-        }
-      });
-      
-      if (moveDown) {
-        g.alienDir *= -1;
-        g.aliens.forEach(a => { if (a.alive) a.y += 20; });
-        g.alienSpeed = Math.min(g.alienSpeed + 0.2, 4);
+      const inputs = pendingRef.current.splice(0);
+      for (const code of inputs) recorderRef.current.record(g.tick, code);
+      const before = g.score;
+      invadersSim.step(g, inputs);
+      if (g.score > before) {
+        setScore(g.score * 3);
+        setAliensKilled(g.score);
       }
-
-      // Check bullet-alien collisions
-      g.bullets.forEach((b, bi) => {
-        g.aliens.forEach(a => {
-          if (a.alive && b.x > a.x && b.x < a.x + 30 && b.y > a.y && b.y < a.y + 25) {
-            a.alive = false;
-            g.bullets.splice(bi, 1);
-            g.kills++;
-            g.score = g.kills * 3;
-            setScore(g.score);
-            setAliensKilled(g.kills);
-          }
-        });
-      });
-
-      // Check win condition
-      if (g.aliens.every(a => !a.alive)) {
-        g.gameOver = true;
-        g.won = true;
-        endGame(true, g.kills);
-        return;
-      }
-
-      // Check lose condition (aliens reach bottom)
-      if (g.aliens.some(a => a.alive && a.y > 320)) {
-        g.gameOver = true;
-        endGame(false, g.kills);
+      if (g.over) {
+        endGame(recorderRef.current.finish(g.score, g.tick));
         return;
       }
 
@@ -1424,7 +1331,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
           ctx.fillRect(a.x + 18, a.y + 8, 5, 5);
         }
       });
-    }, 1000 / 60);
+    }, invadersSim.STEP_MS);
 
     return () => {
       stopLoop();
@@ -1436,13 +1343,13 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
   }, [gameState, endGame]);
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-2xl mx-auto">
       <div className="flex justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary text-sm group transition-colors">
+        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-primary-text text-sm group transition-colors">
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />Back
         </button>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500/20 to-purple-500/5 border border-purple-500/30">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-linear-to-r from-purple-500/20 to-purple-500/5 border border-purple-500/30">
             <Skull className="h-4 w-4 text-purple-400" />
             <span className="font-heading font-bold text-purple-400">Kills: {aliensKilled}</span>
           </div>
@@ -1455,16 +1362,16 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
       
       <div className="rounded-2xl bg-card border border-border p-4 sm:p-8 relative overflow-hidden shadow-[0_0_30px_rgba(168,85,247,0.1)]">
         <div className="absolute inset-0 rounded-2xl border border-purple-500/20" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-purple-500/50 to-transparent" />
         
         <div className="flex flex-col items-center relative z-10">
           {gameState === "ready" && (
             <div className="text-center py-8">
               <Rocket className="h-16 w-16 mx-auto text-purple-400 mb-4 drop-shadow-[0_0_20px_rgba(168,85,247,0.5)]" />
-              <h2 className="text-2xl font-heading font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Space Invaders</h2>
+              <h2 className="text-2xl font-heading font-bold mb-2 bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Space Invaders</h2>
               <p className="text-foreground-muted mb-4">Destroy all the aliens!</p>
               <p className="text-sm text-xp mb-4">🎁 XP = Aliens × 3</p>
-              <Button onClick={startGame} className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500">
+              <Button onClick={startGame} disabled={starting} className="gap-2 bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
               <GameInstructions game="invaders" />
@@ -1477,7 +1384,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
                 ref={canvasRef} 
                 width={500} 
                 height={400}
-                className="rounded-lg border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
+                className="touch-none rounded-lg border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
               /><TouchPad layout="shooter" /></>
               <p className="text-center text-xs text-foreground-muted mt-2">Tap left/right to move & shoot • Arrow keys/WASD + SPACE on desktop</p>
             </div>
@@ -1485,16 +1392,16 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
           
           {gameState === "ended" && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
-              <p className={cn("text-2xl font-heading font-bold mb-2", gameRef.current.won ? "text-success" : "text-destructive")}>
-                {gameRef.current.won ? "🎉 Victory!" : "💀 Game Over!"}
+              <p className={cn("text-2xl font-heading font-bold mb-2", simRef.current.won ? "text-success" : "text-destructive-text")}>
+                {simRef.current.won ? "🎉 Victory!" : "💀 Game Over!"}
               </p>
               <p className="text-foreground-muted mb-2">Aliens destroyed: {aliensKilled}</p>
               <p className="text-lg font-bold text-success mb-4">+{aliensKilled * 3} XP</p>
               <div className="flex justify-center gap-3">
-                <Button onClick={startGame} variant="outline" className="gap-2 border-purple-500/50 hover:bg-purple-500/10">
+                <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-purple-500/50 hover:bg-purple-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
                 </Button>
-                <Button onClick={onBack} className="bg-gradient-to-r from-purple-600 to-pink-600">Back to Games</Button>
+                <Button onClick={onBack} className="bg-linear-to-r from-purple-600 to-pink-600">Back to Games</Button>
               </div>
             </motion.div>
           )}
@@ -1535,6 +1442,7 @@ const Games = () => {
   const [game, setGame] = useState<GameType>("menu");
   const [bet, setBet] = useState(BLACKJACK_CONFIG.MIN_BET);
   const arcadeRun = useRef<number | null>(null);
+  const arcadeStarting = useRef<Promise<{ sessionId: number; seed: number }> | null>(null);
   const notifyAchievements = useNotifyAchievements();
 
   const xp = Number(user?.user?.player_xp) || 0;
@@ -1547,17 +1455,26 @@ const Games = () => {
     qc.invalidateQueries({ queryKey: ['games'] });
   }, [qc]);
 
-  const arcadeStart = useCallback((type: ArcadeType) => {
+  // Resolves the run's seed once the server issued a session; null (after a toast) when the run cannot be recorded.
+  const arcadeStart = useCallback((type: ArcadeType): Promise<number | null> => {
     arcadeRun.current = null;
-    gamesApi.arcadeStart(type).then((r) => { arcadeRun.current = r.sessionId; }).catch(showError);
+    const started = gamesApi.arcadeStart(type);
+    arcadeStarting.current = started;
+    return started.then(
+      (run) => { arcadeRun.current = run.sessionId; return run.seed; },
+      (err) => { showError(err); return null; }
+    );
   }, []);
 
-  const arcadeFinish = useCallback(async (type: ArcadeType, points: number) => {
-    const sessionId = arcadeRun.current;
+  const arcadeFinish = useCallback(async (type: ArcadeType, run: ArcadeTelemetry) => {
+    // Wait for the start request if it is somehow still in flight.
+    const sessionId = arcadeRun.current ?? (await arcadeStarting.current?.catch(() => null))?.sessionId ?? null;
     arcadeRun.current = null;
+    arcadeStarting.current = null;
     if (!sessionId) return;
+    const points = run.score;
     try {
-      const r = await gamesApi.arcadeFinish(type, sessionId, points);
+      const r = await gamesApi.arcadeFinish(type, sessionId, run);
       if (r.xpGained > 0) toast.success(`🎮 ${GAME_NAMES[type]} +${r.xpGained} XP!`, { description: r.bonusInfo?.details || undefined });
       else toast.info(points > 0 ? 'Daily free-game XP cap reached.' : `${GAME_NAMES[type]} - Game over! Try again.`);
       notifyAchievements(r.achievements);
@@ -1582,21 +1499,21 @@ const Games = () => {
   if (game === "blackjack") return <DashboardLayout><BlackjackGame onBack={back} bet={Math.min(bet, Math.max(maxBet, BLACKJACK_CONFIG.MIN_BET))} onSettled={onSettled} /></DashboardLayout>;
   if (game === "rps") return <DashboardLayout><RPSGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
   if (game === "hangman") return <DashboardLayout><HangmanGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
-  if (game === "snake") return <DashboardLayout><SnakeGame onBack={back} onStart={() => arcadeStart("snake")} onResult={(_r, p) => arcadeFinish("snake", p)} /></DashboardLayout>;
-  if (game === "dino") return <DashboardLayout><DinoGame onBack={back} onStart={() => arcadeStart("dino")} onResult={(_r, p) => arcadeFinish("dino", p)} /></DashboardLayout>;
-  if (game === "invaders") return <DashboardLayout><SpaceInvadersGame onBack={back} onStart={() => arcadeStart("invaders")} onResult={(_r, p) => arcadeFinish("invaders", p)} /></DashboardLayout>;
+  if (game === "snake") return <DashboardLayout><SnakeGame onBack={back} onStart={() => arcadeStart("snake")} onResult={(run) => arcadeFinish("snake", run)} /></DashboardLayout>;
+  if (game === "dino") return <DashboardLayout><DinoGame onBack={back} onStart={() => arcadeStart("dino")} onResult={(run) => arcadeFinish("dino", run)} /></DashboardLayout>;
+  if (game === "invaders") return <DashboardLayout><SpaceInvadersGame onBack={back} onStart={() => arcadeStart("invaders")} onResult={(run) => arcadeFinish("invaders", run)} /></DashboardLayout>;
 
   return (
     <DashboardLayout>
-      <div className="px-4 sm:px-0">
+      <div>
         {/* Header with neon glow */}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-heading font-bold mb-1 flex items-center gap-3">
             <div className="relative">
-              <Gamepad2 className="h-8 w-8 text-primary drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+              <Gamepad2 className="h-8 w-8 text-primary-text drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
               <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
             </div>
-            <span className="bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">Game Center</span>
+            <span className="bg-linear-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">Game Center</span>
           </h1>
           <p className="text-foreground-muted text-sm sm:text-base">Test your luck and skills to win XP! Free games share a daily cap of {allowance?.cap ?? FREE_GAME_DAILY_CAP} XP.</p>
         </div>
@@ -1634,15 +1551,15 @@ const Games = () => {
             aria-pressed={sound}
             className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium hover:border-primary/40"
           >
-            {sound ? <Volume2 className="h-4 w-4 text-primary" aria-hidden /> : <VolumeX className="h-4 w-4 text-foreground-muted" aria-hidden />}
+            {sound ? <Volume2 className="h-4 w-4 text-primary-text" aria-hidden /> : <VolumeX className="h-4 w-4 text-foreground-muted" aria-hidden />}
             Sound {sound ? "on" : "off"}
           </button>
         </div>
 
         {/* Balance & Bet Section */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="flex-1 p-4 rounded-xl bg-gradient-to-r from-xp/20 via-xp/10 to-transparent border border-xp/30 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-xp/5 to-transparent" />
+          <div className="flex-1 p-4 rounded-xl bg-linear-to-r from-xp/20 via-xp/10 to-transparent border border-xp/30 relative overflow-hidden">
+            <div className="absolute inset-0 bg-linear-to-r from-xp/5 to-transparent" />
             <div className="relative z-10">
               <p className="text-xs text-foreground-muted mb-1">Your Balance</p>
               <p className="text-2xl font-heading font-bold text-xp drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]">{xp.toLocaleString()} XP</p>
@@ -1657,7 +1574,7 @@ const Games = () => {
               <NeonNumberInput value={bet} onChange={setBet} min={BLACKJACK_CONFIG.MIN_BET} max={Math.max(BLACKJACK_CONFIG.MIN_BET, maxBet)} step={5} />
               <div className="flex gap-1">
                 {[10, 25, 50, 100].map(v => (
-                  <button key={v} onClick={() => setBet(Math.min(v, maxBet))} disabled={v > maxBet} className={cn("px-2 py-1 text-xs rounded-md border transition-all", bet === v ? "bg-primary/20 border-primary/50 text-primary" : "bg-background-secondary border-border hover:border-primary/30 disabled:opacity-30")}>{v}</button>
+                  <button key={v} onClick={() => setBet(Math.min(v, maxBet))} disabled={v > maxBet} className={cn("px-2 py-1 text-xs rounded-md border transition-all", bet === v ? "bg-primary/20 border-primary/50 text-primary-text" : "bg-background-secondary border-border hover:border-primary/30 disabled:opacity-30")}>{v}</button>
                 ))}
               </div>
             </div>
@@ -1667,7 +1584,7 @@ const Games = () => {
 
         {!canBet && (
           <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30">
-            <p className="text-sm text-destructive font-medium">⚠️ Not enough XP to bet</p>
+            <p className="text-sm text-destructive-text font-medium">⚠️ Not enough XP to bet</p>
             <p className="text-xs text-foreground-muted">Blackjack needs at least {BLACKJACK_CONFIG.MIN_BET * 4} XP. Try the free games below!</p>
           </div>
         )}
@@ -1676,21 +1593,21 @@ const Games = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {gamesList.map((g, i) => (
             <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className={cn("group p-4 rounded-xl bg-card border border-border transition-all duration-300 cursor-pointer hover:scale-[1.02]", g.glow, g.border, g.requiresBet && !canBet && "opacity-50")} onClick={() => start(g.id)} role="button" tabIndex={0} aria-label={`Play ${g.name}`} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(g.id); } }}>
-              <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center bg-gradient-to-br mb-3 shadow-lg", g.color)}>
+              <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center bg-linear-to-br mb-3 shadow-lg", g.color)}>
                 <g.icon className="h-6 w-6 text-white drop-shadow-lg" />
               </div>
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-heading font-bold text-lg flex items-center gap-2">
                     {g.name}
-                    {g.webOnly && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">WEB</span>}
+                    {g.webOnly && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary-text">WEB</span>}
                   </h3>
                   <p className="text-sm text-foreground-muted">{g.desc}</p>
                 </div>
                 <div className={cn("text-xs px-2 py-1 rounded-full border", g.risk === "Risk-free" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : g.risk === "Free play" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : "bg-background-secondary text-foreground-muted border-border")}>{g.risk}</div>
               </div>
-              <div className="flex items-center justify-end mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-sm text-primary font-medium flex items-center gap-1">Play <Zap className="h-4 w-4" /></span>
+              <div className="flex items-center justify-end mt-3 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <span className="text-sm text-primary-text font-medium flex items-center gap-1">Play <Zap className="h-4 w-4" /></span>
               </div>
             </motion.div>
           ))}
@@ -1704,7 +1621,7 @@ const Games = () => {
           </h2>
           <div className="rounded-xl bg-card border border-border overflow-hidden">
             {isLoading ? (
-              <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>
+              <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary-text" /></div>
             ) : !history?.length ? (
               <div className="p-8 text-center text-foreground-muted">No games played yet. Try your luck!</div>
             ) : (
@@ -1714,7 +1631,7 @@ const Games = () => {
                 return (
                   <div key={e.id} className="flex items-center justify-between p-3 sm:p-4 border-b border-border last:border-0 hover:bg-background-secondary/30 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center bg-gradient-to-br", gameInfo?.color || 'from-primary to-violet-600')}>
+                      <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center bg-linear-to-br", gameInfo?.color || 'from-primary to-violet-600')}>
                         {gameInfo?.icon && <gameInfo.icon className="h-5 w-5 text-white" />}
                       </div>
                       <div>
@@ -1723,8 +1640,8 @@ const Games = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={cn("font-bold", e.net > 0 ? "text-success" : e.net < 0 ? "text-destructive" : "text-foreground-muted")}>{e.net > 0 ? "+" : ""}{e.net} XP</p>
-                      <p className={cn("text-xs", e.state === 'won' || e.state === 'blackjack' ? "text-success" : e.state === 'lost' ? "text-destructive" : "text-foreground-muted")}>{stateLabel[e.state] || e.state}</p>
+                      <p className={cn("font-bold", e.net > 0 ? "text-success" : e.net < 0 ? "text-destructive-text" : "text-foreground-muted")}>{e.net > 0 ? "+" : ""}{e.net} XP</p>
+                      <p className={cn("text-xs", e.state === 'won' || e.state === 'blackjack' ? "text-success" : e.state === 'lost' ? "text-destructive-text" : "text-foreground-muted")}>{stateLabel[e.state] || e.state}</p>
                     </div>
                   </div>
                 );

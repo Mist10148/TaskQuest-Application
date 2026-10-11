@@ -15,5 +15,14 @@ const tasks = require('./tasks');
 const games = require('./games');
 const quests = require('./quests');
 const transfer = require('./transfer');
+const focus = require('./focus');
+const review = require('./review');
+const templates = require('./templates');
+const stats = require('./stats');
+const cosmetics = require('./cosmetics');
+const push = require('./push');
+const access = require('./access');
+const sharing = require('./sharing');
+const parties = require('./parties');
 
-module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer };
+module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates, cosmetics, push, access, sharing, parties };

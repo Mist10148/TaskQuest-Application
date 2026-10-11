@@ -20,7 +20,7 @@ export const ConfirmDeleteDialog = ({ open, onOpenChange, title, description, co
       <DialogHeader>
         <DialogTitle className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-destructive/20 flex items-center justify-center">
-            <Trash2 className="h-5 w-5 text-destructive" />
+            <Trash2 className="h-5 w-5 text-destructive-text" />
           </div>
           {title}
         </DialogTitle>

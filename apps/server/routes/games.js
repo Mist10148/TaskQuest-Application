@@ -1,6 +1,6 @@
 /**
  * Server-authoritative games. The client only sends player decisions
- * (bet, hit/stand/double, rock/paper/scissors, a letter, an arcade score);
+ * (bet, hit/stand/double, rock/paper/scissors, a letter, an arcade run's recorded inputs);
  * outcomes and payouts are decided by @taskquest/shared.
  */
 
@@ -105,8 +105,8 @@ router.post(
     '/arcade/:type/finish',
     asyncRoute(async (req, res) => {
         parse(arcadeParam, req.params);
-        const { sessionId, score } = parse(arcadeFinishBody, req.body);
-        res.json(await db.games.finishArcade(uid(req), sessionId, score));
+        const { sessionId, score, ticks, inputs } = parse(arcadeFinishBody, req.body);
+        res.json(await db.games.finishArcade(uid(req), sessionId, { score, ticks, inputs }));
     })
 );
 

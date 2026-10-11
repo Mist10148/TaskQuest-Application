@@ -62,6 +62,7 @@ async function autocomplete(interaction) {
         const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
         return await interaction.respond(
             lists
+                .filter((l) => l.role !== 'viewer') // a view-only list cannot take a new task
                 .filter((l) => l.name.toLowerCase().includes(q))
                 .slice(0, 25)
                 .map((l) => ({ name: l.name.slice(0, 100), value: l.name.slice(0, 100) }))

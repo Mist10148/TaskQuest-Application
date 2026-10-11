@@ -27,7 +27,7 @@ function renderInline(text: string, knownIds: Map<string, string>): ReactNode[] 
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) return <code key={i} className="px-1 rounded bg-background-secondary text-xs">{part.slice(1, -1)}</code>;
     if (/^L\d+$/.test(part) && knownIds.has(part)) {
       return (
-        <Link key={i} to={`/tasks?list=${part.slice(1)}`} className="text-primary underline underline-offset-2 hover:opacity-80">
+        <Link key={i} to={`/tasks?list=${part.slice(1)}`} className="text-primary-text underline underline-offset-2 hover:opacity-80">
           {part}
         </Link>
       );
@@ -69,7 +69,7 @@ export function ChatMessage({ message }: { message: Message }) {
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
       <div className={cn("h-8 w-8 shrink-0 rounded-full flex items-center justify-center", isUser ? "bg-primary/20" : "bg-card border border-border")}>
-        {isUser ? <UserIcon className="h-4 w-4 text-primary" /> : <Bot className="h-4 w-4 text-primary" />}
+        {isUser ? <UserIcon className="h-4 w-4 text-primary-text" /> : <Bot className="h-4 w-4 text-primary-text" />}
       </div>
       <div className={cn("max-w-[85%] space-y-2", isUser && "items-end")}>
         <div className={cn("rounded-2xl px-4 py-2.5 text-sm leading-relaxed", isUser ? "bg-primary text-primary-foreground" : "bg-card border border-border")}>
@@ -79,7 +79,7 @@ export function ChatMessage({ message }: { message: Message }) {
         {!isUser && doneTools.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {doneTools.map((t, i) => (
-              <span key={i} className={cn("inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border", t.status === "declined" ? "border-border text-foreground-muted" : "border-primary/20 text-primary bg-primary/5")}>
+              <span key={i} className={cn("inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border", t.status === "declined" ? "border-border text-foreground-muted" : "border-primary/20 text-primary-text bg-primary/5")}>
                 <Wrench className="h-3 w-3" /> {t.status === "declined" ? "Declined" : TOOL_LABELS[t.name] ?? t.name}
               </span>
             ))}

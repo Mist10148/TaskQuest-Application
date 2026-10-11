@@ -80,6 +80,11 @@ async def test_repo_reads_the_real_schema(mysql):
         assert lst is not None and lst["items_total"] == 2 and lst["priority"] == "HIGH"
         assert await repo.get_list_with_items(conn, OTHER, list_id) is None
         assert await repo.ai_enabled(conn, UID)
+    async with engine.begin() as conn:  # after a prestige lifetime_xp restarts; the total must win
+        await conn.execute(text("UPDATE users SET lifetime_xp = 40, lifetime_xp_total = 900 WHERE discord_id = :u"), {"u": UID})
+    async with engine.connect() as conn:
+        stats = await repo.get_user_stats(conn, UID)
+        assert stats is not None and stats["lifetime_xp"] == 40 and stats["lifetime_xp_total"] == 900
 
 
 async def test_store_and_reconcile_on_mysql(mysql):
@@ -196,3 +201,36 @@ async def test_forgetting_a_user_removes_threads_checkpoints_and_summaries_but_k
         assert (await count("SELECT COUNT(*) FROM ai_checkpoints WHERE thread_id = :t", t=theirs)).scalar() == 1
         assert (await count("SELECT COUNT(*) FROM ai_summary_cache WHERE discord_id = :u", u=OTHER)).scalar() == 1
         assert await usage.requests_today(conn, UID) == 1
+
+
+async def test_quota_reservation_and_idempotent_threads_on_mysql(mysql, monkeypatch):
+    """ON DUPLICATE KEY UPDATE / INSERT IGNORE: the real-MySQL spellings of what the SQLite tests cover."""
+    import asyncio
+
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ai_daily_request_limit", 3)
+
+    async def attempt() -> bool:
+        try:
+            async with pool.connection() as conn:
+                await usage.reserve(conn, UID, "chat")
+            return True
+        except usage.QuotaExceeded:
+            return False
+
+    assert sum(await asyncio.gather(*(attempt() for _ in range(8)))) == 3
+    async with pool.connection() as conn:
+        await usage.release(conn, UID, "chat")
+        assert await usage.requests_today(conn, UID) == 2
+
+    tid = str(uuid.uuid4())
+
+    async def make() -> None:
+        async with pool.connection() as conn:
+            await threads.create_thread(conn, UID, "x", thread_id=tid, source=threads.DISCORD)
+
+    await asyncio.gather(make(), make(), make())
+    async with pool.get_engine().connect() as conn:
+        n = (await conn.execute(text("SELECT COUNT(*) FROM ai_chat_threads WHERE id = :t"), {"t": tid})).scalar()
+    assert n == 1

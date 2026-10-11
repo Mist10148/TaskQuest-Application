@@ -84,7 +84,8 @@ async function assertAllowed(discordId) {
 /** The quest option is a list id (picked from autocomplete) or a typed name. */
 async function resolveListId(discordId, value) {
     if (!value) throw new TaskQuestError('VALIDATION', 'Pick a quest with the `quest` option.', 400);
-    const lists = await tasks.getLists(discordId);
+    // The AI only ever sees the user's own quests; lists shared with them are not offered.
+    const lists = (await tasks.getLists(discordId)).filter((l) => l.is_owner !== false);
     const name = value.trim().toLowerCase();
     // Autocomplete sends the id; a typed value is a name (which may itself be all digits, e.g. "2026").
     const match = lists.find((l) => l.name.toLowerCase() === name) || lists.find((l) => String(l.id) === value.trim());
@@ -150,7 +151,8 @@ async function ask(interaction) {
 async function handleButton(interaction) {
     const parsed = fmt.parseConfirmId(interaction.customId);
     if (!parsed) return interaction.reply({ content: '❌ This button has expired.', ...EPHEMERAL });
-    await interaction.deferUpdate();
+    // Remove Approve/Cancel before the (slow) AI call, so a second click cannot resume the same action twice.
+    await interaction.update({ components: [] });
     try {
         const discordId = interaction.user.id;
         await assertAllowed(discordId);
@@ -162,6 +164,15 @@ async function handleButton(interaction) {
         });
         return giveRewards(interaction, turn.tools);
     } catch (err) {
+        // The action is still pending after a failed call (timeout, 429, outage), so give the buttons back.
+        // A 409 means nothing is waiting any more: leave them off.
+        if (!(err instanceof TaskQuestError && err.status === 409)) {
+            try {
+                await interaction.editReply({ components: [fmt.confirmRow(parsed.threadId)] });
+            } catch {
+                /* interaction expired */
+            }
+        }
         return handleError(interaction, err);
     }
 }
@@ -207,7 +218,7 @@ async function autocomplete(interaction) {
         const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
         return await interaction.respond(
             lists
-                .filter((l) => l.name.toLowerCase().includes(q))
+                .filter((l) => l.is_owner !== false && l.name.toLowerCase().includes(q))
                 .slice(0, 25)
                 .map((l) => ({ name: l.name.slice(0, 100), value: String(l.id) }))
         );

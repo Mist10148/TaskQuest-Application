@@ -33,7 +33,7 @@ This monorepo was created **without importing either history**, and `.gitignore`
 
 - **Identity.** Discord is the only identity provider. The web app uses OAuth2 authorization code flow with the `identify` scope, and stores no passwords.
 - **Trust boundary.** Clients (browser and Discord UI) are untrusted. All rules, outcomes and prices are decided in `@taskquest/shared` on the server.
-- **Authorization.** Ownership is part of every SQL statement that touches user data (`... WHERE discord_id = ?`, items through `JOIN lists`). A missing row and someone else's row are indistinguishable (`404`).
+- **Authorization.** A list is reachable only by its owner or a member holding a `list_members` row; that rule is one module (`packages/shared/src/db/access.js`) used by every service, and any other user data is scoped by `discord_id` in the SQL. A missing list and a list you have no part in are indistinguishable (`404`); a member whose role is too weak gets `403` (they already know the list exists). Sharing exposes only display names: no response contains another person's Discord ID, members are addressed by a random key, invitations name a person by their exact Discord username, never the non-unique display name, and the web UI makes the inviter confirm who it resolved to before anything is sent (the API rejects Discord IDs), the invite lookup and the per-day send limit are rate limited, names from other people are escaped in every invitation DM and embed and those DMs never ping (`escapeDiscord`, `allowedMentions: { parse: [] }`), members only receive the fields the UI draws (a column whitelist: the owner's reminder state and the reward bookkeeping of a task never leave for a member), a person can switch invitations off and a decline blocks the same inviter for 7 days (the inviter is told neither), and the AI service never reaches a shared list (`db.tasks.asOwner`). XP, caps, quests and stats stay with the person who acted, so two cooperating accounts gain nothing beyond what each could do alone.
 - **Integrity.** XP changes run in transactions holding a row lock on the user and are recorded in an append-only ledger (`xp_transactions`).
 - **Web surface:**
   - Single origin with `SameSite=Lax` cookies.
@@ -85,9 +85,18 @@ This monorepo was created **without importing either history**, and `.gitignore`
 | Risk | Impact | Mitigation |
 |---|---|---|
 | **Arcade games run in the browser.** A scripted client can submit plausible fake scores. | At most 100–150 XP per run, and at most 500 XP per day across all free games. | Server-issued runs, plausibility rate check, caps. See the roadmap in [docs/PRD.md](docs/PRD.md#11-roadmap). |
-| **Public `/list` messages.** Anyone in the channel sees your list names and tasks (by design: lists are shared in-channel). | Information visible to channel members | Use `/list` in DMs or a private channel for private lists. Mutations are owner-only. |
-| **Dev-only dependency advisories** in the Tailwind CSS 3 toolchain (`braces`, `micromatch`, `chokidar`, `postcss-selector-parser`) | Build time only; nothing is shipped to users or servers | Tracked in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Tailwind 4 migration). |
+| **Public `/list` messages.** Anyone in the channel sees your list names and tasks (by design: lists are shared in-channel). | Information visible to channel members | Use `/list` in DMs or a private channel for private lists. Mutations are limited to the owner and members with a role, and a click on someone else's message is refused. |
+| **Invitation spam and name enumeration.** Anyone can try to invite a name, and a `404` tells them the name has not used TaskQuest. | `POST /api/lists/:id/invites`, `POST /api/parties/invites`, `/share`, `/party invite` | Rate limit on the endpoint, 30 invitations a day per person, 7-day expiry, the invitee must accept. People can switch invitations off (`users.accept_invites`, Settings), and the inviter cannot tell that from a name nobody uses; see the known residual risks below. |
 | **Single shared database user** for both apps | A compromise of either app reaches all data | Use `MIGRATE_ON_START=false` with a DML-only user, and restrict network access to the DB. |
+
+### Known residual risks
+
+These are accepted, bounded and documented rather than fixed:
+
+- **Offline arcade solvers.** A run is verified by replaying its recorded inputs on the server, so a script that solves the game offline can submit a perfect, valid recording. The damage is bounded by the per-run payout, the cooldown and the shared free-game cap (500 XP a day across all free games), not by detection.
+- **Dependencies.** The Tailwind 4 migration removed the dev-only advisories that the Tailwind 3 toolchain carried: `npm audit` is clean for the whole tree. Keep Dependabot or a regular audit on.
+- **Time zone hopping.** The time zone decides when a user's day (and so the daily caps) reset. Changing it is limited to once per 24 hours, so moving the zone back and forth can open one extra capped day now and then; this is worth about 70 XP a day at most.
+- **Invitation probing.** An invite call answers the same neutral message whether the name matches nobody, the person turned invitations off, declined this inviter within 7 days, or (for a party) is already in one, and whether or not an invitation really went out; the confirmation step shows a name only for a person who can be invited. The calls are limited per account (30 per 15 minutes) and per address (60), plus 30 sends a day. What stays visible: the inviter's own pending-invitations list shows the invitations that were really created, so a patient manager can still tell a sent invitation from a skipped one by looking there, and someone who can be invited can be previewed by their exact username (display name and default avatar, never an ID).
 
 ## 5. Reporting a vulnerability
 

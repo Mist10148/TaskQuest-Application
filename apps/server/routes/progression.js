@@ -104,10 +104,13 @@ leaderboardRouter.get(
                 username: r.discord_username || 'Adventurer',
                 avatarUrl: avatarUrl(r.discord_id, r.discord_avatar),
                 xp: Number(r.player_xp),
-                lifetimeXp: Number(r.lifetime_xp),
+                lifetimeXp: Number(r.lifetime_xp_total),
+                prestige: Number(r.prestige),
+                prestigeTitle: shared.prestigeTitle(r.prestige),
                 score: r.score,
                 level: Number(r.player_level),
                 playerClass: r.player_class,
+                cosmetics: shared.describeEquipped(r),
                 streak: Number(r.streak_count),
                 gamesPlayed: r.games_played,
                 tasksCompleted: Number(r.total_items_completed),
@@ -121,7 +124,7 @@ leaderboardRouter.get(
     '/me',
     requireAuth,
     asyncRoute(async (req, res) => {
-        const { by } = parse(leaderboardQuery, req.query);
-        res.json({ rank: await db.users.getRank(uid(req), by) });
+        const { by, class: playerClass } = parse(leaderboardQuery, req.query);
+        res.json({ rank: await db.users.getRank(uid(req), by, { playerClass }) });
     })
 );

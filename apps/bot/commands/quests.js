@@ -28,7 +28,7 @@ function render(list) {
         .setColor(0x5865f2)
         .setTitle('📜 Quests')
         .addFields({ name: 'Today', value: section('daily') }, { name: 'This week', value: section('weekly') })
-        .setFooter({ text: 'Daily quests reset at 00:00 UTC, weekly ones on Monday.' });
+        .setFooter({ text: 'Daily quests reset at your midnight (see /timezone), weekly ones on Monday.' });
 
     const claimable = list.filter((q) => q.claimable).slice(0, 5);
     const components = claimable.length

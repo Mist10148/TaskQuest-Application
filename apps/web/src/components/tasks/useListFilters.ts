@@ -6,8 +6,12 @@ import { PRIORITY_ORDER, type ListTab } from "./constants";
 const isComplete = (list: ListWithCounts) => list.itemsTotal > 0 && list.itemsCompleted === list.itemsTotal;
 
 /** Search, filter, tab and sort state for the quest overview, plus the resulting list. */
+export type SearchScope = "quests" | "tasks";
+
 export function useListFilters(lists: ListWithCounts[]) {
   const [searchQuery, setSearchQuery] = useState("");
+  // "tasks" searches inside task names and descriptions on the server; "quests" filters the loaded quests here.
+  const [searchScope, setSearchScope] = useState<SearchScope>("quests");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -15,7 +19,7 @@ export function useListFilters(lists: ListWithCounts[]) {
   const [sortBy, setSortBy] = useState("newest");
 
   const visible = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = searchScope === "quests" ? searchQuery.toLowerCase() : "";
     return lists
       .filter((list) => !query || list.name.toLowerCase().includes(query) || list.category?.toLowerCase().includes(query))
       .filter((list) => categoryFilter === "all" || (categoryFilter === "none" ? !list.category : list.category === categoryFilter))
@@ -40,7 +44,7 @@ export function useListFilters(lists: ListWithCounts[]) {
           default: return 0;
         }
       });
-  }, [lists, searchQuery, categoryFilter, priorityFilter, statusFilter, activeTab, sortBy]);
+  }, [lists, searchQuery, searchScope, categoryFilter, priorityFilter, statusFilter, activeTab, sortBy]);
 
   const activeFilters = [categoryFilter !== "all", priorityFilter !== "all", statusFilter !== "all"].filter(Boolean).length;
   const clearFilters = () => {
@@ -54,6 +58,7 @@ export function useListFilters(lists: ListWithCounts[]) {
     activeFilters,
     clearFilters,
     searchQuery, setSearchQuery,
+    searchScope, setSearchScope,
     categoryFilter, setCategoryFilter,
     priorityFilter, setPriorityFilter,
     statusFilter, setStatusFilter,

@@ -138,3 +138,249 @@ test('the snooze button defers 24 hours; stop turns reminders off', async () => 
     await handleButton(interaction('remind_off'), { db, now: NOW });
     assert.deepEqual(calls[1], ['settings', '42', { automation_enabled: false }]);
 });
+
+test('a due snooze or first due reminder is skipped when every task is already done', () => {
+    const done = { items_done: 2, items_total: 2 };
+    assert.equal(decideReminder(list({ ...done, deadline_notified: 1, overdue_notified: 1, remind_at: '2030-03-09T03:00:00Z' }), NOW), 'snooze_done');
+    assert.equal(decideReminder(list(done), NOW), 'due_done');
+    assert.equal(decideReminder(list({ items_done: 0, items_total: 0 }), NOW), 'due', 'an empty list is still reminded');
+});
+
+test('finished lists get no DM but are marked handled so they are not picked up every hour', async () => {
+    const ctx = setup({
+        lists: [list({ items_done: 2, items_total: 2 }), list({ id: 2, items_done: 2, items_total: 2, deadline_notified: 1, overdue_notified: 1, remind_at: '2030-03-09T00:00:00Z' })]
+    });
+    const res = await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.equal(ctx.sent.length, 0);
+    assert.equal(res.sent, 0);
+    assert.deepEqual(ctx.marked.map(([id, kind]) => [id, kind]), [[1, 'due'], [2, 'snooze']]);
+});
+
+test('a snooze that fires after the deadline also marks the deadline as notified', async () => {
+    const ctx = setup({ lists: [list({ deadline: '2030-03-08', deadline_notified: 1, overdue_notified: 1, remind_at: '2030-03-09T00:00:00Z' })] });
+    const calls = [];
+    ctx.db.tasks.markReminderSent = async (id, kind, opts) => calls.push([id, kind, opts]);
+    await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.deepEqual(calls, [[1, 'snooze', { late: true, pastDeadline: true }]]);
+
+    const today = setup({ lists: [list({ remind_at: '2030-03-09T00:00:00Z' })] });
+    const t = [];
+    today.db.tasks.markReminderSent = async (id, kind, opts) => t.push(opts);
+    await sendDeadlineReminders({ ...today, now: NOW });
+    assert.deepEqual(t, [{ late: false, pastDeadline: true }], 'due today: counts as the due notice only');
+});
+
+// ─── Per-task reminders ──────────────────────────────────────────────────────
+
+const { sendTaskReminders, decideTaskReminder, taskReminderMessage } = require('../utils/reminders');
+
+const task = (over = {}) => ({
+    id: 5,
+    discord_id: '42',
+    name: 'Pay rent',
+    list_name: 'Home',
+    due_date: '2030-03-10',
+    timezone: null,
+    reminder_hour: 9,
+    remind_at: null,
+    reminded_at: null,
+    ...over
+});
+
+test('a task due today is reminded at the reminder hour in the owner\'s zone, once', () => {
+    const t = task({ timezone: 'Asia/Manila' });
+    assert.equal(decideTaskReminder(t, at('2030-03-10T00:30:00Z')), null, '08:30 in Manila');
+    assert.equal(decideTaskReminder(t, at('2030-03-10T01:00:00Z')), 'due');
+    assert.equal(decideTaskReminder(task({ due_date: '2030-03-11' }), NOW), null, 'not due yet');
+    assert.equal(decideTaskReminder(task({ reminded_at: '2030-03-10T09:00:00Z' }), NOW), null, 'already sent');
+});
+
+test('a missed task reminder is still sent for 3 days, then dropped', () => {
+    assert.equal(decideTaskReminder(task({ due_date: '2030-03-07' }), NOW), 'due');
+    assert.equal(decideTaskReminder(task({ due_date: '2030-03-06' }), NOW), null);
+});
+
+test('a task snooze fires once it has ended, regardless of the hour', () => {
+    const t = task({ reminded_at: '2030-03-10T09:00:00Z', remind_at: '2030-03-11T03:00:00Z' });
+    assert.equal(decideTaskReminder(t, at('2030-03-11T02:59:00Z')), null);
+    assert.equal(decideTaskReminder(t, at('2030-03-11T03:00:00Z')), 'snooze');
+});
+
+test('task reminders DM with task_remind_snooze_<id> and the shared stop button, then mark the task', async () => {
+    const marked = [];
+    const sent = [];
+    const db = { tasks: { getTaskReminderCandidates: async () => [task(), task({ id: 6, due_date: '2030-03-12' })], markTaskReminderSent: async (id) => marked.push(id) } };
+    const client = { users: { fetch: async () => ({ send: async (m) => sent.push(m) }) } };
+    const res = await sendTaskReminders({ db, client, log: () => {}, now: NOW });
+    assert.deepEqual(res, { sent: 1, skipped: 0, retry: 0 });
+    assert.deepEqual(marked, [5]);
+    assert.match(sent[0].embeds[0].description, /Pay rent/);
+    assert.deepEqual(sent[0].components[0].toJSON().components.map((c) => c.custom_id), ['task_remind_snooze_5', 'remind_off']);
+});
+
+test('task reminders: closed DMs are marked, temporary errors are retried', async () => {
+    const run = async (code) => {
+        const marked = [];
+        const db = { tasks: { getTaskReminderCandidates: async () => [task()], markTaskReminderSent: async (id) => marked.push(id) } };
+        const client = { users: { fetch: async () => ({ send: async () => { throw Object.assign(new Error('x'), { code }); } }) } };
+        return [await sendTaskReminders({ db, client, log: () => {}, now: NOW }), marked];
+    };
+    assert.deepEqual(await run(50007), [{ sent: 0, skipped: 1, retry: 0 }, [5]]);
+    assert.deepEqual(await run(0), [{ sent: 0, skipped: 0, retry: 1 }, []]);
+});
+
+test('an overdue task reminder says so; the snooze button snoozes the task, not a list', async () => {
+    assert.match(taskReminderMessage(task({ due_date: '2030-03-08' }), 'due', NOW).embeds[0].title, /overdue/);
+    const calls = [];
+    const db = { tasks: { snoozeTask: async (u, id, until) => calls.push([u, id, until.getTime()]), snoozeList: async () => calls.push('list') } };
+    const replies = [];
+    await handleButton({ customId: 'task_remind_snooze_5', user: { id: '42' }, update: async (r) => replies.push(r) }, { db, now: NOW });
+    assert.deepEqual(calls, [['42', '5', NOW.getTime() + SNOOZE_MS]]);
+    assert.match(replies[0].content, /Snoozed/);
+});
+
+// ─── Web push mirror (best effort) ───────────────────────────────────────────
+
+const { pushForList, pushForTask } = require('../utils/reminders');
+
+const fakePush = (over = {}) => {
+    const calls = [];
+    return { calls, enabled: true, notify: async (id, msg) => (calls.push([id, msg]), true), ...over };
+};
+
+test('a list reminder is also pushed once the DM is final, and not for finished lists', async () => {
+    const push = fakePush();
+    const ctx = setup({ lists: [list(), list({ id: 2, name: 'Done', items_done: 2, items_total: 2 })] });
+    await sendDeadlineReminders({ ...ctx, push, now: NOW });
+    assert.equal(push.calls.length, 1, 'the finished list sends nothing, so it pushes nothing');
+    assert.equal(push.calls[0][0], '42');
+    assert.deepEqual(push.calls[0][1], { title: 'Deadline today', body: 'Taxes: 1/2 tasks done', url: '/tasks' });
+});
+
+test('a temporary DM failure retries without pushing; a permanent one still pushes once', async () => {
+    const retry = fakePush();
+    await sendDeadlineReminders({ ...setup({ lists: [list()], sendError: Object.assign(new Error('x'), { code: 0 }) }), push: retry, now: NOW });
+    assert.equal(retry.calls.length, 0);
+    const closed = fakePush();
+    await sendDeadlineReminders({ ...setup({ lists: [list()], sendError: Object.assign(new Error('x'), { code: 50007 }) }), push: closed, now: NOW });
+    assert.equal(closed.calls.length, 1);
+});
+
+test('a broken or disabled push client never breaks the reminder', async () => {
+    const throwing = fakePush({ notify: async () => { throw new Error('boom'); } });
+    const ctx = setup({ lists: [list()] });
+    const res = await sendDeadlineReminders({ ...ctx, push: throwing, now: NOW });
+    assert.deepEqual(res, { sent: 1, skipped: 0, retry: 0 });
+    assert.deepEqual(ctx.marked, [[1, 'due', false]]);
+    const off = fakePush({ enabled: false });
+    await sendDeadlineReminders({ ...setup({ lists: [list()] }), push: off, now: NOW });
+    assert.equal(off.calls.length, 0);
+    const res2 = await sendDeadlineReminders({ ...setup({ lists: [list()] }), now: NOW });
+    assert.equal(res2.sent, 1, 'no push client at all is fine');
+});
+
+test('task reminders push too, titled by lateness', async () => {
+    const push = fakePush();
+    const db = { tasks: { getTaskReminderCandidates: async () => [task()], markTaskReminderSent: async () => {} } };
+    const client = { users: { fetch: async () => ({ send: async () => {} }) } };
+    await sendTaskReminders({ db, client, log: () => {}, push, now: NOW });
+    assert.equal(push.calls.length, 1);
+    assert.match(push.calls[0][1].body, /Pay rent/);
+    assert.equal(pushForTask(task({ due_date: '2030-03-08' }), 'due', NOW).title, 'Task overdue');
+    assert.equal(pushForTask(task(), 'snooze', NOW).title, 'Task reminder');
+    assert.equal(pushForList(list({ deadline: '2030-03-08' }), 'overdue', NOW).title, 'Overdue');
+});
+
+test('a member of a shared list is marked for themselves; the owner keeps the list-level marker', async () => {
+    const ctx = setup({ lists: [list({ id: 1, owner_id: '42', discord_id: '42' }), list({ id: 1, owner_id: '42', discord_id: '77' })] });
+    const calls = [];
+    ctx.db.tasks.markReminderSent = async (id, kind, opts) => calls.push([id, kind, opts]);
+    await sendDeadlineReminders({ ...ctx, now: new Date('2030-03-10T10:00:00Z') });
+    assert.deepEqual(calls.map(([, , opts]) => opts.recipientId), [undefined, '77'], 'only the member row carries a recipient');
+    assert.equal(ctx.sent.length, 2, 'each of them is messaged once');
+
+    const marked = [];
+    const db = {
+        tasks: {
+            getTaskReminderCandidates: async () => [task({ id: 5, owner_id: '42', discord_id: '42' }), task({ id: 5, owner_id: '42', discord_id: '77' })],
+            markTaskReminderSent: async (...args) => marked.push(args.slice(2))
+        }
+    };
+    await sendTaskReminders({ db, client: ctx.client, log: () => {}, now: new Date('2030-03-10T10:00:00Z') });
+    assert.deepEqual(marked, [[], ['77']]);
+});
+
+// ─── Fan-out cap, digest and safe names ──────────────────────────────────────
+
+const { createBudget, flushOverflow, MAX_DMS_PER_USER_PER_RUN, reminderMessage } = require('../utils/reminders');
+
+test('one person gets at most 20 reminder DMs per run; the rest become ONE digest DM and are marked handled', async () => {
+    assert.equal(MAX_DMS_PER_USER_PER_RUN, 20);
+    const lists = Array.from({ length: 27 }, (_, n) => list({ id: n + 1, name: `L${n + 1}` }));
+    lists.push(list({ id: 100, discord_id: '99', name: 'Someone else' })); // another person is not held back by the first one's cap
+    const ctx = setup({ lists });
+    const sentTo = [];
+    ctx.client.users.fetch = async (id) => ({ send: async (m) => sentTo.push([id, m]) });
+    const res = await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.deepEqual(res, { sent: 21, skipped: 0, retry: 0 });
+    const mine = sentTo.filter(([id]) => id === '42');
+    assert.equal(mine.length, 21, '20 reminders and one digest');
+    assert.match(mine.at(-1)[1].content, /^📬 7 more reminders due: see \/list$/);
+    assert.deepEqual(mine.at(-1)[1].allowedMentions, { parse: [] });
+    assert.equal(sentTo.filter(([id]) => id === '99').length, 1);
+    assert.equal(ctx.marked.length, 28, 'the collapsed ones are marked handled too, so they do not repeat every hour');
+});
+
+test('the cap is per person across list and task reminders, and a failed digest leaves the rest for the next run', async () => {
+    const budget = createBudget(2);
+    const marks = [];
+    const db = {
+        tasks: {
+            getReminderCandidates: async () => [list({ id: 1 }), list({ id: 2 })],
+            markReminderSent: async (id) => marks.push(['list', id]),
+            getTaskReminderCandidates: async () => [task({ id: 7 }), task({ id: 8 })],
+            markTaskReminderSent: async (id) => marks.push(['task', id])
+        }
+    };
+    const sent = [];
+    let digestFails = true;
+    const client = {
+        users: {
+            fetch: async () => ({
+                send: async (m) => {
+                    if (m.content && digestFails) throw Object.assign(new Error('Service unavailable'), { code: 0 });
+                    sent.push(m);
+                }
+            })
+        }
+    };
+    const logs = [];
+    const log = (...a) => logs.push(a);
+    await sendDeadlineReminders({ db, client, log, now: NOW, budget });
+    await sendTaskReminders({ db, client, log, now: NOW, budget });
+    assert.equal(sent.length, 2, 'two lists used the whole budget, no task reminder went out');
+    assert.deepEqual(marks, [['list', 1], ['list', 2]]);
+    assert.deepEqual(await flushOverflow({ client, log, budget }), { digests: 0, collapsed: 0 });
+    assert.deepEqual(marks, [['list', 1], ['list', 2]], 'the digest failed: nothing is marked, the next run tries again');
+    digestFails = false;
+    const again = createBudget(0);
+    again.defer('42', async () => marks.push(['task', 7]));
+    again.defer('42', async () => marks.push(['task', 8]));
+    assert.deepEqual(await flushOverflow({ client, log, budget: again }), { digests: 1, collapsed: 2 });
+    assert.match(sent.at(-1).content, /2 more reminders due/);
+    assert.deepEqual(marks.slice(2), [['task', 7], ['task', 8]]);
+});
+
+test('names written by other people cannot add links, formatting or pings to a reminder DM', () => {
+    const hostile = '[Win a prize](https://evil.example) @everyone **boom**';
+    const l = reminderMessage(list({ name: hostile, category: '@here' }), 'due', NOW);
+    const t = taskReminderMessage(task({ name: hostile, list_name: hostile }), 'due', NOW);
+    for (const m of [l, t]) {
+        const text = JSON.stringify(m.embeds[0]);
+        assert.equal(/\]\(/.test(text), false, 'no masked link');
+        assert.equal(/https?:\/\//.test(text), false, 'no clickable link');
+        assert.equal(/@(everyone|here)/.test(text), false, 'no mention');
+        assert.deepEqual(m.allowedMentions, { parse: [] });
+    }
+    assert.match(l.embeds[0].description, /\\\*\\\*boom\\\*\\\*/);
+});

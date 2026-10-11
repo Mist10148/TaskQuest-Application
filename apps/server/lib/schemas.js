@@ -19,6 +19,8 @@ export const leaderboardQuery = z
     })
     .strip();
 export const questParam = z.object({ key: z.string().regex(/^[A-Za-z0-9_]{1,40}$/) });
+export const cosmeticParam = z.object({ id: z.string().regex(/^[a-z_]{1,40}$/) });
+export const equipCosmeticBody = z.object({ kind: z.enum(shared.COSMETIC_KINDS), id: z.string().regex(/^[a-z_]{1,40}$/).nullable() }).strict();
 export const skillParam = z.object({ skillId: z.string().regex(/^[a-z_]{1,50}$/) });
 
 const optionalText = (max) => z.string().max(max).nullable().optional();
@@ -31,13 +33,41 @@ export const settingsBody = z
         auto_delete_old_lists: z.boolean().optional(),
         ai_enabled: z.boolean().optional(),
         weekly_digest: z.boolean().optional(),
+        web_push: z.boolean().optional(),
+        accept_invites: z.boolean().optional(),
         timezone: z.string().min(1).max(64).nullable().optional(),
         reminder_hour: z.number().int().min(0).max(23).optional()
     })
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
+/** A spreadsheet import: the CSV text itself (1 MB), optionally just checked without writing. */
+export const csvImportBody = z.object({ csv: z.string().min(1).max(1_000_000), dryRun: z.boolean().optional() }).strict();
+
+/** A PushSubscription as the browser serialises it. The service re-validates the endpoint (https, public host, 2048 chars) and the keys. */
+export const subscribeBody = z
+    .object({
+        subscription: z
+            .object({
+                endpoint: z.string().min(1).max(2048),
+                expirationTime: z.number().nullable().optional(),
+                keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(200) }).strict()
+            })
+            .strict()
+    })
+    .strict();
+export const unsubscribeBody = z.object({ endpoint: z.string().min(1).max(2048) }).strict();
+/** The bot's request to push a reminder to one user. */
+export const internalPushBody = z
+    .object({
+        discordId: z.string().regex(/^\d{5,32}$/),
+        title: z.string().min(1).max(100),
+        body: z.string().max(300).optional(),
+        url: z.string().max(200).optional()
+    })
+    .strict();
 export const resetBody = z.object({ confirm: z.literal('RESET') }).strict();
+export const prestigeBody = z.object({ confirm: z.literal('PRESTIGE') }).strict();
 
 const listFields = {
     name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME),
@@ -46,6 +76,9 @@ const listFields = {
     priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),
     deadline: nullableEmpty(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional())
 };
+
+/** GET /api/lists/search: the text to find and where to look (quests by default). */
+export const searchQuery = z.object({ q: z.string().trim().min(1).max(100), scope: z.enum(['lists', 'tasks', 'all']).default('lists') }).strip();
 
 export const createListBody = z.object(listFields).strict();
 export const updateListBody = z
@@ -86,15 +119,63 @@ export const reorderBody = z.object({ itemIds: z.array(z.number().int().positive
 
 export const toggleItemBody = z.object({ completed: z.boolean().optional() }).strict().optional();
 
+const templateItem = z
+    .object({
+        name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
+        description: optionalText(TEXT_LIMITS.DESCRIPTION),
+        priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),
+        tags: tagsField,
+        recurrence: nullableEmpty(z.enum(['daily', 'weekly', 'monthly']).nullable().optional())
+    })
+    .strict();
+export const createTemplateBody = z
+    .object({
+        name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME),
+        description: optionalText(TEXT_LIMITS.DESCRIPTION),
+        items: z.array(templateItem).min(1).max(shared.LIMITS.MAX_TEMPLATE_ITEMS)
+    })
+    .strict();
+export const applyTemplateBody = z
+    .object({ listName: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional(), listId: z.number().int().positive().optional() })
+    .strict();
+// Sharing: people are found by their exact Discord username, never by display name or Discord ID, and a member is addressed by an opaque key.
+// dryRun asks who the username resolves to (for the confirmation step) without inviting anyone.
+export const inviteBody = z
+    .object({ username: z.string().trim().min(1).max(100), role: z.enum(shared.LIST_ROLES).default('viewer'), dryRun: z.boolean().optional() })
+    .strict();
+export const memberRoleBody = z.object({ role: z.enum(shared.LIST_ROLES) }).strict();
+export const memberKeyParam = z.object({ id: z.coerce.number().int().positive(), memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
+
+export const partyMemberKeyParam = z.object({ memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
+export const createPartyBody = z.object({ name: z.string().trim().min(1).max(TEXT_LIMITS.PARTY_NAME) }).strict();
+export const partyInviteBody = z.object({ username: z.string().trim().min(1).max(100), dryRun: z.boolean().optional() }).strict();
+
+export const saveTemplateBody = z.object({ name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional() }).strict();
+
 export const blackjackStartBody = z.object({ bet: z.number().int().positive().max(1_000_000) }).strict();
 export const blackjackActionBody = z.object({ action: z.enum(['hit', 'stand', 'double']) }).strict();
 export const rpsBody = z.object({ choice: z.enum(['rock', 'paper', 'scissors']) }).strict();
 export const hangmanGuessBody = z.object({ letter: z.string().regex(/^[A-Za-z]$/) }).strict();
 export const arcadeParam = z.object({ type: z.enum(Object.keys(shared.ARCADE_CONFIG)) });
+const arcadeLimits = Object.values(shared.games.arcade.TELEMETRY_LIMITS);
+export const ARCADE_MAX_TICKS = Math.max(...arcadeLimits.map((l) => l.maxTicks));
+export const ARCADE_MAX_INPUT_VALUES = Math.max(...arcadeLimits.map((l) => l.maxInputs)) * 2;
+// ticks and inputs are optional here only so that an old client (score alone) gets the clear
+// "please refresh the page" error from the service instead of a generic validation failure.
 export const arcadeFinishBody = z
-    .object({ sessionId: z.number().int().positive(), score: z.number().int().min(0).max(1_000_000) })
+    .object({
+        sessionId: z.number().int().positive(),
+        score: z.number().int().min(0).max(1_000_000),
+        ticks: z.number().int().min(1).max(ARCADE_MAX_TICKS).optional(),
+        inputs: z.array(z.number().int().min(0).max(1_000_000)).max(ARCADE_MAX_INPUT_VALUES).optional()
+    })
     .strict();
 export const quitParam = z.object({ type: z.enum(GAME_TYPES) });
+
+export const focusStartBody = z.object({ minutes: z.number().int().min(shared.LIMITS.FOCUS_MIN_MINUTES).max(shared.LIMITS.FOCUS_MAX_MINUTES) }).strict();
+export const focusFinishBody = z.object({ sessionId: z.number().int().positive() }).strict();
+
+export const statsHistoryQuery = z.object({ days: z.coerce.number().int().refine((n) => [7, 30, 90].includes(n), 'days must be 7, 30 or 90').default(30) }).strip();
 
 // ── AI ───────────────────────────────────────────────────────────────────────
 export const uuidParam = z.object({ threadId: z.string().uuid() });
@@ -125,5 +206,14 @@ export const internalAddItemBody = z.object({ ...internalBase, ...createItemBody
 export const internalToggleBody = z.object({ ...internalBase, completed: z.boolean().optional() }).strict();
 export const internalUpdateListBody = z
     .object({ ...internalBase, priority: listFields.priority, deadline: listFields.deadline })
+    .strict();
+// Change a task's own fields (name, description, due date, priority, tags, repeat, parent). Moving is not offered.
+export const internalUpdateItemBody = z
+    .object({ ...internalBase, ...createItemBody.partial().shape })
+    .strict()
+    .refine((o) => Object.keys(o).length > 1, 'Nothing to update');
+// Break a task down into 2-8 subtasks (the AI tool's limits; the shared service allows up to 20).
+export const internalSubtasksBody = z
+    .object({ ...internalBase, names: z.array(z.string().min(1).max(TEXT_LIMITS.ITEM_NAME)).min(2).max(8) })
     .strict();
 export const internalIndexBody = z.object({ discordId: internalBase.discordId, listId: z.number().int().positive().optional() }).strict();

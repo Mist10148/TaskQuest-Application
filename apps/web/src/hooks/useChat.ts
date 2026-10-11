@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { aiApi, type AiConfirmAction, type AiSource, type AiToolEvent, type ChatEvent } from '@/lib/api';
+import { isPendingConflict, PENDING_CONFIRM_NOTICE, withoutFailedTurn } from '@/lib/chatTurn';
 import { invalidateProgress, showAchievementNotifications, showError, showXPNotification } from '@/hooks/useApi';
 
 export interface ChatMessage {
@@ -51,10 +52,16 @@ export function useChat(initialThreadId: string | null) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [pending, setPending] = useState<AiConfirmAction[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
+    // Inline message when the server refuses a message because a confirmation is still pending (HTTP 409).
+    const [notice, setNotice] = useState<string | null>(null);
     const abortRef = useRef<AbortController | null>(null);
     const threadRef = useRef<string | null>(initialThreadId);
     // The thread whose history is already on screen (a new thread is adopted when its first turn ends).
     const loadedFor = useRef<string | null>(null);
+    // Set once the user sends before history resolves, so the late history never overwrites live messages.
+    const touchedRef = useRef(false);
+    // Id of a thread the stream itself just created (the only case where the URL should adopt it).
+    const [createdThreadId, setCreatedThreadId] = useState<string | null>(null);
 
     // Load history (and any confirmation still waiting) when a thread is opened.
     useEffect(() => {
@@ -62,6 +69,8 @@ export function useChat(initialThreadId: string | null) {
         loadedFor.current = initialThreadId;
         abortRef.current?.abort();
         threadRef.current = initialThreadId;
+        touchedRef.current = false;
+        setCreatedThreadId(null);
         setThreadId(initialThreadId);
         setPending([]);
         if (!initialThreadId) {
@@ -72,7 +81,7 @@ export function useChat(initialThreadId: string | null) {
         aiApi
             .thread(initialThreadId)
             .then((t) => {
-                if (cancelled) return;
+                if (cancelled || touchedRef.current) return;
                 setMessages(t.messages.map((m) => ({ id: newId(), role: m.role, text: m.text, sources: [], tools: [] })));
                 setPending(t.pendingConfirm);
             })
@@ -99,6 +108,7 @@ export function useChat(initialThreadId: string | null) {
                 }
             }
             if (event.event === 'done') {
+                if (threadRef.current !== event.data.threadId) setCreatedThreadId(event.data.threadId);
                 threadRef.current = event.data.threadId;
                 loadedFor.current = event.data.threadId;
                 setThreadId(event.data.threadId);
@@ -109,7 +119,8 @@ export function useChat(initialThreadId: string | null) {
     );
 
     const run = useCallback(
-        async (start: (signal: AbortSignal) => Promise<void>) => {
+        async (start: (signal: AbortSignal) => Promise<void>): Promise<'ok' | 'blocked'> => {
+            setNotice(null);
             abortRef.current?.abort();
             const controller = new AbortController();
             abortRef.current = controller;
@@ -117,6 +128,14 @@ export function useChat(initialThreadId: string | null) {
             try {
                 await start(controller.signal);
             } catch (err) {
+                if (isPendingConflict(err)) {
+                    // Another tab or the bot left an action waiting: show it and keep the typed message.
+                    setMessages((prev) => withoutFailedTurn(prev));
+                    setNotice(PENDING_CONFIRM_NOTICE);
+                    const id = threadRef.current;
+                    if (id) aiApi.thread(id).then((t) => setPending(t.pendingConfirm)).catch(() => undefined);
+                    return 'blocked';
+                }
                 if ((err as Error).name !== 'AbortError') {
                     showError(err);
                     setMessages((prev) => applyEvent(prev, { event: 'error', data: { message: 'The assistant could not answer. Please try again.' } }));
@@ -124,20 +143,26 @@ export function useChat(initialThreadId: string | null) {
             } finally {
                 if (abortRef.current === controller) setIsStreaming(false);
             }
+            return 'ok';
         },
         []
     );
 
     const send = useCallback(
-        async (text: string) => {
+        async (text: string): Promise<'ok' | 'blocked'> => {
             const message = text.trim();
-            if (!message || isStreaming || pending.length) return;
+            if (!message || isStreaming) return 'ok';
+            if (pending.length) {
+                setNotice(PENDING_CONFIRM_NOTICE);
+                return 'blocked';
+            }
+            touchedRef.current = true;
             setMessages((prev) => [
                 ...prev,
                 { id: newId(), role: 'user', text: message, sources: [], tools: [] },
                 { id: newId(), role: 'assistant', text: '', sources: [], tools: [], streaming: true },
             ]);
-            await run((signal) => aiApi.chatStream({ threadId: threadRef.current ?? undefined, message }, handleEvent, signal));
+            return run((signal) => aiApi.chatStream({ threadId: threadRef.current ?? undefined, message }, handleEvent, signal));
         },
         [handleEvent, isStreaming, pending.length, run]
     );
@@ -148,6 +173,7 @@ export function useChat(initialThreadId: string | null) {
             const id = threadRef.current;
             if (!id || !pending.length || isStreaming) return;
             setPending([]);
+            setNotice(null);
             setMessages((prev) => [...prev, { id: newId(), role: 'assistant', text: '', sources: [], tools: [], streaming: true }]);
             await run((signal) => aiApi.resumeStream(id, approved, handleEvent, signal));
         },
@@ -160,5 +186,5 @@ export function useChat(initialThreadId: string | null) {
         setMessages((prev) => prev.map((m) => ({ ...m, streaming: false })));
     }, []);
 
-    return { threadId, messages, pending, isStreaming, send, respond, stop };
+    return { threadId, createdThreadId, messages, pending, isStreaming, notice, send, respond, stop };
 }

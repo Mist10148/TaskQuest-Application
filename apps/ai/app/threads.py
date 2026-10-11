@@ -12,6 +12,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from app.db.dialect import insert_ignore
+
 DEFAULT_TITLE = "New chat"
 WEB = "web"
 DISCORD = "discord"
@@ -25,9 +27,14 @@ def title_from(message: str) -> str:
 async def create_thread(
     conn: AsyncConnection, discord_id: str, first_message: str, *, thread_id: str | None = None, source: str = WEB
 ) -> str:
+    """Insert a thread. A row that already exists is left alone, so concurrent first messages of the
+    same (user, channel) conversation cannot fail with a duplicate key."""
     thread_id = thread_id or str(uuid.uuid4())
     await conn.execute(
-        text("INSERT INTO ai_chat_threads (id, discord_id, title, source) VALUES (:id, :uid, :title, :src)"),
+        text(
+            f"{insert_ignore(conn)} INTO ai_chat_threads (id, discord_id, title, source) "
+            "VALUES (:id, :uid, :title, :src)"
+        ),
         {"id": thread_id, "uid": discord_id, "title": title_from(first_message) or DEFAULT_TITLE, "src": source},
     )
     return thread_id

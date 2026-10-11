@@ -2,18 +2,17 @@ import { Loader2, Snowflake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBuyStreakFreeze } from "@/hooks/useApi";
 
-// Mirrors @taskquest/shared STREAK_FREEZE; the server enforces it.
-const COST = 150;
-const MAX = 3;
-
 interface Props {
   freezes: number;
+  /** Price and cap for this player (Freeze Cache changes both); the server enforces them. */
+  cost: number;
+  max: number;
   balance: number;
   gamificationOn: boolean;
 }
 
 /** Buy streak freezes: each one saves the daily streak once if you miss a day. */
-export const StreakFreezeCard = ({ freezes, balance, gamificationOn }: Props) => {
+export const StreakFreezeCard = ({ freezes, cost: COST, max: MAX, balance, gamificationOn }: Props) => {
   const buy = useBuyStreakFreeze();
   const full = freezes >= MAX;
   const poor = balance < COST;
@@ -24,7 +23,7 @@ export const StreakFreezeCard = ({ freezes, balance, gamificationOn }: Props) =>
     <section className="mb-6 rounded-xl border border-border bg-card p-4 sm:mb-8 sm:p-5" aria-labelledby="freeze-heading">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-cyan-500/20 sm:h-12 sm:w-12">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/20 sm:h-12 sm:w-12">
             <Snowflake className="h-5 w-5 text-cyan-700 dark:text-cyan-400 sm:h-6 sm:w-6" aria-hidden />
           </div>
           <div>

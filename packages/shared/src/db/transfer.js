@@ -12,13 +12,15 @@ const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const { errors } = require('../errors');
 const v = require('../validation');
+const { LIMITS: USER_LIMITS } = require('../constants');
+const access = require('./access');
 
 const LIMITS = { LISTS: 100, ITEMS_PER_LIST: 500, ITEMS_TOTAL: 1000 };
 const FORMAT_VERSION = 1;
 
 const isoDate = (value) => (value ? String(value).slice(0, 10) : null);
 
-/** Everything the user owns, in a portable shape. */
+/** Everything the user OWNS, in a portable shape. Lists shared with them are not theirs to export. */
 async function exportAll(discordId) {
     const id = String(discordId);
     const [lists] = await getPool().query('SELECT * FROM lists WHERE discord_id = ? ORDER BY id', [id]);
@@ -144,27 +146,55 @@ async function importAll(discordId, data) {
         const [existing] = await conn.query('SELECT name FROM lists WHERE discord_id = ?', [user.discord_id]);
         const taken = new Set(existing.map((l) => l.name.toLowerCase()));
 
+        // Per-user quota: what the user already owns plus what this import adds.
+        const [[have]] = await conn.query(
+            'SELECT COUNT(DISTINCT l.id) AS lists, COUNT(i.id) AS items FROM lists l LEFT JOIN items i ON i.list_id = l.id WHERE l.discord_id = ?',
+            [user.discord_id]
+        );
+        const importedItems = lists.reduce((n, l) => n + l.items.length, 0);
+        if (Number(have.lists) + lists.length > USER_LIMITS.MAX_LISTS_PER_USER) {
+            throw errors.validation(`You can have at most ${USER_LIMITS.MAX_LISTS_PER_USER} lists; this import would exceed that.`);
+        }
+        if (Number(have.items) + importedItems > USER_LIMITS.MAX_ITEMS_PER_USER) {
+            throw errors.validation(`You can have at most ${USER_LIMITS.MAX_ITEMS_PER_USER} tasks; this import would exceed that.`);
+        }
+
         let itemCount = 0;
         for (const l of lists) {
-            const name = freeName(l.name, taken);
-            taken.add(name.toLowerCase());
-            const [res] = await conn.query(
-                'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
-                [user.discord_id, name, l.description, l.category, l.priority, l.deadline]
-            );
-            const listId = res.insertId;
+            // The database compares names with its own collation (Cafe = Café), which a lower-cased set does not see:
+            // when the insert is refused as a duplicate, mark that name taken and pick the next suffix.
+            let listId;
+            for (let attempt = 0; listId === undefined; attempt++) {
+                const name = freeName(l.name, taken);
+                taken.add(name.toLowerCase());
+                try {
+                    const [res] = await conn.query(
+                        'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
+                        [user.discord_id, name, l.description, l.category, l.priority, l.deadline]
+                    );
+                    listId = res.insertId;
+                } catch (err) {
+                    if (!err || err.code !== 'ER_DUP_ENTRY' || attempt >= 20) throw err;
+                }
+            }
             const idByRef = new Map();
+            const subtaskRefs = new Set(); // imported rows that were stored as subtasks
             // Parents first, so a subtask can point at a row that already exists.
             const ordered = [...l.items.filter((i) => i.parentRef === null), ...l.items.filter((i) => i.parentRef !== null)];
             let position = 0;
             for (const it of ordered) {
                 const parentId = it.parentRef !== null && idByRef.has(it.parentRef) ? idByRef.get(it.parentRef) : null;
+                // Subtasks are one level deep (the same rule assertValidParent enforces elsewhere).
+                if (parentId !== null && subtaskRefs.has(it.parentRef)) throw errors.validation('Subtasks can only be one level deep.');
                 const [ir] = await conn.query(
-                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, position, due_date, priority, tags, recurrence, parent_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, position++, it.due_date, it.priority, it.tags, it.recurrence, parentId]
+                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, completed_by, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, counts_for_quests, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+                    [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, it.completed ? user.discord_id : null, position++, it.due_date, it.due_date ? new Date() : null, it.priority, it.tags, it.recurrence, parentId, user.discord_id]
                 );
-                if (it.ref !== undefined && it.ref !== null) idByRef.set(it.ref, ir.insertId);
+                if (it.ref !== undefined && it.ref !== null) {
+                    idByRef.set(it.ref, ir.insertId);
+                    if (parentId !== null) subtaskRefs.add(it.ref);
+                }
                 itemCount++;
             }
         }
@@ -182,6 +212,12 @@ async function regenerateCalendarToken(discordId) {
     return token;
 }
 
+/** The user's feed token, or null when the feed is off. Only the owner's settings endpoint calls this. */
+async function getCalendarToken(discordId) {
+    const [rows] = await getPool().query('SELECT calendar_token FROM users WHERE discord_id = ?', [String(discordId)]);
+    return rows[0] ? rows[0].calendar_token || null : null;
+}
+
 async function clearCalendarToken(discordId) {
     await getPool().query('UPDATE users SET calendar_token = NULL WHERE discord_id = ?', [String(discordId)]);
 }
@@ -193,19 +229,19 @@ async function findUserByCalendarToken(token) {
     return rows[0] ? rows[0].discord_id : null;
 }
 
-/** Lists with a deadline and tasks with a due date, for buildIcs(). */
+/** Lists with a deadline and tasks with a due date, for buildIcs(): the user's own lists and the ones shared with them. */
 async function getCalendarData(discordId) {
-    const id = String(discordId);
+    const acc = access.accessSql('l', discordId);
     const [lists] = await getPool().query(
         `SELECT l.id, l.name, l.description, l.category, l.deadline,
                 (SELECT COUNT(*) > 0 AND SUM(i.completed) = COUNT(*) FROM items i WHERE i.list_id = l.id) AS completed
-         FROM lists l WHERE l.discord_id = ? AND l.deadline IS NOT NULL`,
-        [id]
+         FROM lists l WHERE ${acc.sql} AND l.deadline IS NOT NULL`,
+        acc.params
     );
     const [items] = await getPool().query(
         `SELECT i.id, i.name, i.description, i.due_date, i.completed, l.name AS list_name
-         FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ? AND i.due_date IS NOT NULL`,
-        [id]
+         FROM items i JOIN lists l ON l.id = i.list_id WHERE ${acc.sql} AND i.due_date IS NOT NULL`,
+        acc.params
     );
     return {
         lists: lists.map((l) => ({ ...l, deadline: isoDate(l.deadline), completed: Boolean(Number(l.completed)) })),
@@ -220,6 +256,7 @@ module.exports = {
     importAll,
     parseImport,
     regenerateCalendarToken,
+    getCalendarToken,
     clearCalendarToken,
     findUserByCalendarToken,
     getCalendarData

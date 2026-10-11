@@ -62,6 +62,8 @@ async function sendWeeklyDigests({ db, client, log, ai, now = new Date() }) {
     const aiClient = ai === undefined ? defaultAi() : ai;
     for (const user of await db.users.getDigestCandidates(now)) {
         if (!isDigestTime(user, now)) continue;
+        // Claim the week first (atomic UPDATE) so overlapping runs cannot both send it.
+        if (!(await db.users.claimDigest(user.discord_id, now))) continue;
         try {
             const [stats, recap] = await Promise.all([db.users.getWeeklyStats(user.discord_id, now), tryRecap(aiClient, user)]);
             const discordUser = await client.users.fetch(user.discord_id);
@@ -74,10 +76,10 @@ async function sendWeeklyDigests({ db, client, log, ai, now = new Date() }) {
             } else {
                 result.retry++;
                 log('⚠️', 'DIGEST', `${user.discord_id}: ${err.message} (will retry)`);
-                continue;
+                // Give the claim back so the next hourly run tries again.
+                await db.users.releaseDigest(user.discord_id, now, user.last_digest_at ?? null).catch(() => {});
             }
         }
-        await db.users.markDigestSent(user.discord_id, now);
     }
     return result;
 }

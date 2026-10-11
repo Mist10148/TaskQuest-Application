@@ -24,9 +24,9 @@ export const SettingsSection = ({ icon, title, description, tint = "bg-primary/2
     className={cn("rounded-xl bg-card border p-4 sm:p-6 mb-4 sm:mb-6", danger ? "border-destructive/30" : "border-border")}
   >
     <div className="flex items-center gap-3 mb-4">
-      <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0", danger ? "bg-destructive/20" : tint)}>{icon}</div>
+      <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0", danger ? "bg-destructive/20" : tint)}>{icon}</div>
       <div className="min-w-0">
-        <h2 id={`settings-${title.replace(/\W+/g, "-").toLowerCase()}`} className={cn("font-heading font-semibold", danger && "text-destructive")}>{title}</h2>
+        <h2 id={`settings-${title.replace(/\W+/g, "-").toLowerCase()}`} className={cn("font-heading font-semibold", danger && "text-destructive-text")}>{title}</h2>
         <p className="text-sm text-foreground-muted">{description}</p>
       </div>
     </div>
@@ -47,13 +47,13 @@ export const SettingRow = ({ label, description, children }: RowProps) => (
       <p className="font-medium text-sm sm:text-base">{label}</p>
       {description && <p className="text-xs sm:text-sm text-foreground-muted">{description}</p>}
     </div>
-    <div className="flex-shrink-0">{children}</div>
+    <div className="shrink-0">{children}</div>
   </div>
 );
 
 /** A switch row with an accessible name. */
-export const SwitchRow = ({ label, description, checked, onChange }: { label: string; description?: string; checked: boolean; onChange: (value: boolean) => void }) => (
+export const SwitchRow = ({ label, description, checked, disabled, onChange }: { label: string; description?: string; checked: boolean; /** True while this setting is being saved. */ disabled?: boolean; onChange: (value: boolean) => void }) => (
   <SettingRow label={label} description={description}>
-    <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+    <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} aria-busy={disabled || undefined} aria-label={label} />
   </SettingRow>
 );

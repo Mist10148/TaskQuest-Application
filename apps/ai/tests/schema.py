@@ -12,13 +12,15 @@ from sqlalchemy.pool import NullPool
 
 SCHEMA = [
     "CREATE TABLE users (discord_id TEXT PRIMARY KEY, player_xp INT DEFAULT 0, lifetime_xp INT DEFAULT 0,"
-    " player_level INT DEFAULT 1, streak_count INT DEFAULT 0, ai_enabled INT DEFAULT 1)",
+    " lifetime_xp_total INT DEFAULT 0, player_level INT DEFAULT 1, streak_count INT DEFAULT 0, ai_enabled INT DEFAULT 1)",
     "CREATE TABLE lists (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT, name TEXT, description TEXT,"
     " category TEXT, deadline TEXT, priority TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
     " updated_at TEXT DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, list_id INT, name TEXT, description TEXT,"
     " completed INT DEFAULT 0, completed_at TEXT, position INT DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
     " updated_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE list_members (list_id INT, discord_id TEXT, role TEXT DEFAULT 'viewer',"
+    " created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (list_id, discord_id))",
     "CREATE TABLE xp_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT, amount INT, source TEXT,"
     " created_at TEXT DEFAULT CURRENT_TIMESTAMP)",
     "CREATE TABLE ai_embeddings (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT, source_type TEXT,"

@@ -70,7 +70,10 @@ def test_converse_binds_only_read_tools_and_uses_the_persona(monkeypatch):
     build_converse_graph(deps_for(Spy()), None)
     assert ("converse_system", {"persona": True}) in prompts
     tools = {t.name for t in C.langchain_tools() if not C.TOOLS[t.name].write}
-    assert tools and not {"create_list", "add_item", "complete_item", "update_list"} & tools
+    assert (
+        tools
+        and not {"create_list", "add_item", "update_item", "break_down_task", "complete_item", "update_list"} & tools
+    )
 
 
 async def test_memory_folds_after_twenty_messages(seeded):
@@ -129,3 +132,53 @@ async def test_http_converse_reads_discord_images_without_saving_them(http):  # 
         blobs = (await conn.execute(text("SELECT checkpoint FROM ai_checkpoints"))).scalars().all()
         writes = (await conn.execute(text("SELECT value FROM ai_checkpoint_writes"))).scalars().all()
     assert blobs and not any(b"base64" in bytes(b or b"") for b in [*blobs, *writes])
+
+
+async def test_public_channel_never_reads_quests(seeded, monkeypatch):
+    """In a guild the answer is visible to everyone: no tools, no quest retrieval, made-up calls refused."""
+    from tests.graphs.test_chat import retriever_for
+
+    retriever = await retriever_for(seeded)
+    bound: list = []
+    llm = make_llm(
+        [call("get_overdue", {}), AIMessage("Quest lookups work in DMs or /ask.")],
+        [RouterOut(intent="task_question")],
+    )
+    monkeypatch.setattr(type(llm), "bind_tools", lambda self, tools, **kw: bound.extend(t.name for t in tools) or self)
+    out = await chat_service.converse_turn(
+        deps_for(llm, retriever=retriever), UID, CHANNEL, "what is due for math?", public=True
+    )
+    assert bound == [], "no tools are offered in a public channel"
+    assert out["tools"] == [{"name": "get_overdue", "status": "declined"}]
+    assert out["sources"] == [], "quest context is never retrieved"
+    assert "Math homework" not in out["reply"]
+
+    # The same question in a DM may use the tools.
+    llm2 = make_llm([call("get_overdue", {}), AIMessage("Nothing overdue.")], [RouterOut(intent="task_question")])
+    dm = await chat_service.converse_turn(deps_for(llm2), UID, "901", "what is overdue?")
+    assert dm["tools"] == [{"name": "get_overdue", "status": "done"}]
+
+
+async def test_http_converse_accepts_the_public_flag(http):  # noqa: F811
+    async with http(make_llm([AIMessage("Hi.")], [RouterOut(intent="chitchat")])) as c:
+        r = await c.post("/v1/converse", json={"channelId": CHANNEL, "message": "hi", "public": True}, headers=auth())
+        assert r.status_code == 200
+
+
+async def test_public_conversations_never_reuse_tool_bearing_history(seeded):
+    # A guild-channel thread from before public mode (same id as a DM thread) holds quest data from a tool.
+    assert thread_id_for(UID, CHANNEL, public=True) != thread_id_for(UID, CHANNEL)
+    llm = make_llm([call("get_overdue", {}), AIMessage("Done.")], [RouterOut(intent="task_question")])
+    await chat_service.converse_turn(deps_for(llm), UID, CHANNEL, "what is overdue?")  # old, tool-bearing
+
+    llm2 = make_llm([AIMessage("Hi there.")], [RouterOut(intent="chitchat")])
+    await chat_service.converse_turn(deps_for(llm2), UID, CHANNEL, "hello", public=True)
+    graph = build_converse_graph(deps_for(llm2), MySQLCheckpointSaver(pool.get_engine()), public=True)
+    state = await graph.aget_state({"configurable": {"thread_id": thread_id_for(UID, CHANNEL, public=True)}})
+    humans = [m.content for m in state.values["messages"] if isinstance(m, HumanMessage)]
+    assert humans == ["hello"], "the public thread starts empty"
+    assert not any(getattr(m, "type", "") == "tool" for m in state.values["messages"])
+
+    assert await chat_service.forget_conversation(UID, CHANNEL) is True  # wipes both threads
+    after = await graph.aget_state({"configurable": {"thread_id": thread_id_for(UID, CHANNEL, public=True)}})
+    assert not after.values

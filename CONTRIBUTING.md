@@ -39,7 +39,7 @@ Use a **separate Discord application** for development, register commands to a t
 - **Never edit a released migration.** Add a new one, and make it idempotent with the `h.*IfMissing` helpers.
 - **Date-only values stay strings.** Deadlines and due dates are `YYYY-MM-DD` with no zone. Compare and format them with `packages/shared/src/dates.js` (or `apps/web/src/lib/dates.ts`), never `new Date('2030-01-05')`, which is UTC midnight and shifts the day.
 - **Rewards need a cap.** Anything that pays XP for something a user can repeat cheaply must have a per-day limit (see `LIMITS` in `constants.js`) and a test that proves it.
-- **Update the docs** (`docs/GAMEPLAY.md`, `docs/API.md`, `docs/COMMANDS.md`, `docs/DATABASE.md`) when behaviour changes, and add a line to `CHANGELOG.md`.
+- **Update the docs** (`docs/GAMEPLAY.md`, `docs/XP_GUIDE.md`, `docs/API.md`, `docs/COMMANDS.md`, `docs/DATABASE.md`; the index is [docs/README.md](docs/README.md)) when behaviour changes, and add a line to `CHANGELOG.md`. `packages/shared/test/docs.test.js` fails when the tables in `docs/GAMEPLAY.md` (class costs, skills, quests, achievements, limits, cosmetics, prestige, arcade) disagree with `constants.js`; the code is the source of truth, so fix the document.
 
 ## Testing
 
@@ -51,7 +51,7 @@ npm run typecheck
 npm run build
 ```
 
-The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). There are no component or browser tests yet ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)); see "Trying the web app locally" below for a manual check.
+The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop, CSV, stats, sharing and party helpers and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). There are no component tests; browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
 
 ### Integration tests
 
@@ -65,6 +65,19 @@ TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=3306 TEST_DB_USER=root TEST_DB_PASSWORD= TES
 With XAMPP's MariaDB you can also start a disposable server with its own data directory on another port. CI runs the same suite against MySQL 8.
 
 When fixing a bug, add a test that fails without the fix. Use the existing helpers: the injectable `rng` for rules, and `fake()` interactions for bot flows.
+
+### Browser tests
+
+`apps/web/e2e` holds a small Playwright suite (Chromium) that drives the built app against a real API and database. It is separate from `npm test` and runs in its own CI job. The seed script **wipes** its database (default `taskquest_e2e`, override with `E2E_DB_HOST`, `E2E_DB_PORT`, `E2E_DB_USER`, `E2E_DB_PASSWORD`, `E2E_DB_NAME`):
+
+```bash
+mysql -uroot -e "CREATE DATABASE taskquest_e2e"
+(cd apps/web && npx playwright install chromium)   # once
+npm run build
+npm run test:e2e
+```
+
+`seed.mjs` resets the schema, creates a player with a few quests and writes a session row directly into `web_sessions`; the tests present the matching signed cookie, so there is no Discord login and no test-only route in the server. Specs are named `*.e2e.ts` (so Vitest ignores them), use role and label selectors and web-first assertions, and must not sleep. On failure a trace and screenshot land in `apps/web/test-results` (git-ignored).
 
 ### The AI service (Python)
 

@@ -8,7 +8,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
-const { TEXT_LIMITS, validation, levelProgress, isPastDeadline, formatDeadline } = require('@taskquest/shared');
+const { escapeDiscord, TEXT_LIMITS, CLASSES, CLASS_RULES, PRESTIGE_TITLES, validation, levelProgress, isPastDeadline, formatDeadline, todayInZone } = require('@taskquest/shared');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🎨 COLOR SYSTEM
@@ -31,10 +31,57 @@ const COLORS = {
     // Class Colors
     DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6, ASSASSIN: 0x2C3E50,
     WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C,
+    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1,
     
     // Skill Colors
     skill: 0x9B59B6, locked: 0x2C3E50, unlocked: 0x27AE60
 };
+
+/** Emoji for a class key; unknown keys fall back to the Default icon. */
+const classEmoji = (key) => CLASSES[key]?.emoji || '⚪';
+
+/**
+ * One line describing the equipped class's live counter (Monk rhythm, Artisan progress,
+ * Necromancer souls), or '' for classes without one. The caps depend on the owner's skills.
+ */
+function classCounterLine(user, userSkills = [], now = Date.now()) {
+    const levels = new Map((userSkills || []).map((s) => [s.skill_id, Number(s.skill_level) || 0]));
+    const lvl = (id) => levels.get(id) || 0;
+    switch (user.player_class) {
+        case 'MONK': {
+            const m = CLASS_RULES.MONK;
+            const cap = m.MAX_RHYTHM + (lvl('monk_discipline') ? m.DISCIPLINE_CAP : 0);
+            const rhythm = Math.min(cap, Number(user.monk_rhythm) || 0);
+            const last = user.monk_day ? new Date(user.monk_day).toISOString().slice(0, 10) : null;
+            const today = todayInZone(user.timezone, new Date(now)); // the user's own day, like the rule
+            const gap = last ? Math.round((Date.parse(today) - Date.parse(last)) / 86400000) : null;
+            const lapsed = rhythm > 0 && gap !== null && gap > (lvl('monk_serenity') ? 2 : 1);
+            return `🧘 Rhythm **${rhythm}/${cap}**${lapsed ? ' (lapsed, restarts at 1)' : ''}`;
+        }
+        case 'ARTISAN': {
+            const a = CLASS_RULES.ARTISAN;
+            const cap = a.MAX_PROGRESS + lvl('artisan_blueprint') * a.BLUEPRINT_CAP;
+            return `🛠️ Project **${Math.min(cap, Number(user.artisan_progress) || 0)}/${cap}**`;
+        }
+        case 'NECROMANCER': {
+            const n = CLASS_RULES.NECROMANCER;
+            const cap = n.MAX_SOULS + (lvl('necro_jar') ? n.JAR_SOULS : 0);
+            return `💀 Souls **${Math.min(cap, Number(user.necro_souls) || 0)}/${cap}**`;
+        }
+        default:
+            return '';
+    }
+}
+
+/** Human text for a daily milestone chest, whatever shape the shared result gives it. */
+function describeChest(chest) {
+    if (!chest) return '';
+    if (typeof chest === 'number') return `+${chest} XP`;
+    if (typeof chest === 'string') return chest;
+    const xp = chest.xp ?? chest.bonusXP ?? chest.amount;
+    const label = chest.label ?? chest.name ?? (chest.streak ? `${chest.streak}-day streak` : '');
+    return [label, xp !== undefined ? `+${xp} XP` : ''].filter(Boolean).join(': ');
+}
 
 // Priority indicators (minimal, clean)
 const PRIORITY_DOT = { HIGH: '🔴', MEDIUM: '🟡', LOW: '🟢', NONE: '⚪', null: '⚪' };
@@ -83,6 +130,55 @@ function xpBar(current, max, length = 15) {
 //  📋 LIST EMBEDS (Clean & Professional)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** Embed descriptions hold 4096 characters; leave room for the "and N more" note. */
+const DESCRIPTION_BUDGET = 3900;
+
+/**
+ * Top-level tasks in order, each followed by its subtasks (one level). A subtask whose
+ * parent is not in `items` is shown as a top-level task.
+ * @returns {Array<{ item: object, nested: boolean }>}
+ */
+function orderItems(items) {
+    const ids = new Set(items.map((i) => i.id));
+    const children = new Map();
+    for (const it of items) {
+        if (it.parent_id && ids.has(it.parent_id)) {
+            if (!children.has(it.parent_id)) children.set(it.parent_id, []);
+            children.get(it.parent_id).push(it);
+        }
+    }
+    const out = [];
+    for (const it of items) {
+        if (it.parent_id && ids.has(it.parent_id)) continue;
+        out.push({ item: it, nested: false });
+        for (const c of children.get(it.id) || []) out.push({ item: c, nested: true });
+    }
+    return out;
+}
+
+/** "🔴 · 📅 Mar 10 · 🔁 weekly · #home #bills" for a task's own fields ('' when it has none). */
+function itemMeta(it, today = undefined) {
+    const parts = [];
+    if (it.priority) parts.push(PRIORITY_DOT[it.priority] || '');
+    const due = validation.formatDate(it.due_date);
+    if (due) parts.push(!it.completed && isPastDeadline(due, today) ? `⚠️ ${formatDeadline(due, today)}` : `📅 ${formatDeadline(due, today)}`);
+    if (it.recurrence) parts.push(`🔁 ${it.recurrence}`);
+    const tags = String(it.tags || '').split(',').filter(Boolean);
+    if (tags.length) parts.push(tags.map((t) => `#${t}`).join(' '));
+    return parts.filter(Boolean).join(' · ');
+}
+
+/** The lines for one task: name (indented when a subtask), details, description. */
+function itemLines(it, nested, today) {
+    const pad = nested ? '　' : '';
+    const name = it.completed ? `~~${it.name}~~` : it.name;
+    let out = `${pad}${nested ? '↳ ' : ''}${it.completed ? '✅' : '⬜'} ${name}\n`;
+    const meta = itemMeta(it, today);
+    if (meta) out += `${pad}-# └─ ${meta}\n`;
+    if (it.description) out += `${pad}-# └─ ${it.description.substring(0, 50)}${it.description.length > 50 ? '...' : ''}\n`;
+    return out;
+}
+
 function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     const done = items.filter(i => i.completed).length;
     const total = items.length;
@@ -104,7 +200,7 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     // Title with category emoji if present
     const catEmoji = list.category ? (CATEGORY_EMOJI[list.category] || '📁') : '📋';
     const titleSuffix = filterLabel ? ` • ${filterLabel}` : '';
-    embed.setTitle(`${catEmoji} ${list.name}${titleSuffix}`);
+    embed.setTitle(`${catEmoji} ${list.name}${list.shared ? ' 👥' : ''}${titleSuffix}`);
     
     // Build clean description
     let desc = '';
@@ -126,14 +222,15 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     if (!items.length) {
         desc += '*No tasks yet — add some!*';
     } else {
-        items.forEach((it, i) => {
-            const checkbox = it.completed ? '✅' : '⬜';
-            const name = it.completed ? `~~${it.name}~~` : it.name;
-            desc += `${checkbox} ${name}\n`;
-            if (it.description) {
-                desc += `-# └─ ${it.description.substring(0, 50)}${it.description.length > 50 ? '...' : ''}\n`;
-            }
-        });
+        const ordered = orderItems(items);
+        let shown = 0;
+        for (const { item, nested } of ordered) {
+            const lines = itemLines(item, nested);
+            if (desc.length + lines.length > DESCRIPTION_BUDGET) break;
+            desc += lines;
+            shown++;
+        }
+        if (shown < ordered.length) desc += `-# … and ${ordered.length - shown} more tasks (open the web app to see them all)\n`;
     }
     
     embed.setDescription(desc);
@@ -145,7 +242,8 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
         const dateStr = formatDeadline(list.deadline);
         footerParts.push(isPastDeadline(list.deadline) ? `⚠️ Overdue: ${dateStr}` : `Due: ${dateStr}`);
     }
-    footerParts.push(mode === 'edit' ? '✏️ Edit Mode' : '👁️ View Mode');
+    if (list.shared) footerParts.push(list.is_owner ? `👥 ${list.member_count} people` : `👥 ${list.role} · by ${escapeDiscord(list.owner_name, { max: 60 }) || 'someone'}`);
+    footerParts.push(mode === 'edit' ? '✏️ Edit Mode' : list.shared && list.role === 'viewer' ? '👁️ View only' : '👁️ View Mode');
     
     embed.setFooter({ text: footerParts.join(' • ') });
     
@@ -175,7 +273,7 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
         
         // Build clean list entry
         // Line 1: Priority dot + List Name
-        desc += `${priorityDot} **${l.name}**\n`;
+        desc += `${priorityDot} **${l.name}**${l.shared ? ' 👥' : ''}\n`;
         
         // Line 2: Metadata (category + deadline) in muted text
         const metaParts = [];
@@ -193,6 +291,8 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
             if (dateStr) metaParts.push(isPastDeadline(l.deadline) ? `⚠️ ${dateStr}` : `📅 ${dateStr}`);
         }
         
+        if (l.shared) metaParts.push(l.is_owner ? `shared with ${Number(l.member_count) - 1}` : `${l.role} · by ${escapeDiscord(l.owner_name, { max: 60 }) || 'someone'}`);
+
         if (metaParts.length > 0) {
             desc += `-# ${metaParts.join(' · ')}\n`;
         }
@@ -210,11 +310,10 @@ function profileEmbed(user, stats, member) {
     const items = parseInt(stats.items.total) || 0;
     const done = parseInt(stats.items.completed) || 0;
     const rate = items > 0 ? Math.round((done / items) * 100) : 0;
-    const emoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     
     return new EmbedBuilder()
         .setColor(COLORS[user.player_class])
-        .setTitle(`${emoji[user.player_class]} ${member?.displayName || 'Player'}`)
+        .setTitle(`${classEmoji(user.player_class)} ${member?.displayName || 'Player'}${prestigeTitle(user) ? ` · ${prestigeTitle(user)}` : ''}`)
         .setThumbnail(member?.user?.displayAvatarURL?.() || null)
         .setDescription(`**Level ${user.player_level}** ${user.player_class}`)
         .addFields(
@@ -243,17 +342,26 @@ function achievementsEmbed(userAchs, allAchs, page = 0) {
 }
 
 function achievementUnlockEmbed(ach) {
-    return new EmbedBuilder().setColor(0xF1C40F).setTitle('🏆 Achievement Unlocked!').setDescription(`**${ach.name}**\n${ach.description}`);
+    const reward = Number(ach.xp) > 0 ? `\n**+${Number(ach.xp)} XP**` : '';
+    return new EmbedBuilder().setColor(0xF1C40F).setTitle('🏆 Achievement Unlocked!').setDescription(`**${ach.name}**\n${ach.description}${reward}`);
+}
+
+/** The prestige title for a player ('' before the first prestige). */
+const prestigeTitle = (user) => PRESTIGE_TITLES[Math.min(Number(user?.prestige) || 0, PRESTIGE_TITLES.length - 1)] || '';
+
+/** The task-completion bonuses ([{ key, label, xp }]) as lines under the completion message ('' when none). */
+function bonusLines(bonuses) {
+    const rows = (bonuses || []).filter((b) => b && Number(b.xp) > 0);
+    return rows.length ? `\n${rows.map((b) => `-# ✨ ${b.label}: +${Number(b.xp)} XP`).join('\n')}` : '';
 }
 
 function classShopEmbed(user, classes) {
-    const classEmoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     const currentClass = classes[user.player_class] || classes.DEFAULT;
     
     const embed = new EmbedBuilder()
         .setColor(COLORS[user.player_class] || COLORS.primary)
         .setTitle('⚔️ Class Shop')
-        .setDescription(`💰 **${user.player_xp} XP** Available\n\n**Current Class:** ${classEmoji[user.player_class]} ${user.player_class}`);
+        .setDescription(`💰 **${user.player_xp} XP** Available\n\n**Current Class:** ${classEmoji(user.player_class)} ${user.player_class}`);
     
     Object.entries(classes).forEach(([k, c]) => {
         if (k === 'DEFAULT') return;
@@ -304,13 +412,15 @@ function helpEmbed() {
         .setDescription('A gamified task manager with RPG elements')
         .addFields(
             { name: 'Tasks', value: '`/list` `/quick`', inline: true },
+            { name: 'Sharing', value: '`/share` `/invites` `/members` `/leave`', inline: true },
+            { name: 'Party', value: '`/party` Team weekly quest', inline: true },
             { name: 'Games', value: '`/game` Mini-games', inline: true },
-            { name: 'Daily', value: '`/daily` `/freeze` `/quests`', inline: true },
+            { name: 'Daily', value: '`/daily` `/freeze` `/quests` `/review`', inline: true },
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },
-            { name: 'Classes', value: '`/class` `/leaderboard`', inline: true },
+            { name: 'Classes', value: '`/class` `/shop` `/leaderboard` `/prestige`', inline: true },
             { name: 'Settings', value: '`/toggle` `/automation` `/timezone` `/weekly`', inline: true },
-            { name: 'Web App', value: '`/app` Open dashboard', inline: true },
-            { name: 'AI', value: '`/summary` `/prioritize` `/ask`', inline: true }
+            { name: 'Web App', value: '`/app` Open dashboard\n`/ping` Latency', inline: true },
+            { name: 'AI', value: '`/summary` `/prioritize` `/ask` `/forget` `/ai-format`', inline: true }
         )
         .setFooter({ text: 'TaskQuest v4.0' });
 }
@@ -324,7 +434,11 @@ const warn = (t, d) => new EmbedBuilder().setColor(COLORS.warning).setDescriptio
 //  🔘 BUTTONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function viewButtons(listId) {
+/** `canEdit`: false for a viewer of a shared list, who gets no Edit button. */
+function viewButtons(listId, { canEdit = true } = {}) {
+    const lastRow = new ActionRowBuilder();
+    if (canEdit) lastRow.addComponents(new ButtonBuilder().setCustomId(`edit_${listId}`).setLabel('Edit List').setEmoji('✏️').setStyle(ButtonStyle.Primary));
+    lastRow.addComponents(new ButtonBuilder().setCustomId('back').setLabel('Back').setStyle(ButtonStyle.Secondary));
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`sort_az_${listId}`).setLabel('A→Z').setStyle(ButtonStyle.Secondary),
@@ -333,14 +447,16 @@ function viewButtons(listId) {
             new ButtonBuilder().setCustomId(`search_${listId}`).setEmoji('🔍').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`refresh_${listId}`).setEmoji('🔄').setStyle(ButtonStyle.Secondary)
         ),
-        new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`edit_${listId}`).setLabel('Edit List').setEmoji('✏️').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('back').setLabel('Back').setStyle(ButtonStyle.Secondary)
-        )
+        lastRow
     ];
 }
 
-function editButtons(listId) {
+/** `role`: viewer/editor/manager on a shared list (an own list is a manager's). The list settings are a manager's, deleting the list the owner's. */
+function editButtons(listId, { role = 'manager', isOwner = true } = {}) {
+    const lastRow = new ActionRowBuilder();
+    if (role === 'manager') lastRow.addComponents(new ButtonBuilder().setCustomId(`list_meta_${listId}`).setLabel('List Info').setEmoji('📋').setStyle(ButtonStyle.Primary));
+    if (isOwner) lastRow.addComponents(new ButtonBuilder().setCustomId(`list_del_${listId}`).setLabel('Delete List').setEmoji('🗑️').setStyle(ButtonStyle.Danger));
+    lastRow.addComponents(new ButtonBuilder().setCustomId(`view_${listId}`).setLabel('Done').setStyle(ButtonStyle.Secondary));
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`item_add_${listId}`).setLabel('Add').setEmoji('➕').setStyle(ButtonStyle.Success),
@@ -350,13 +466,10 @@ function editButtons(listId) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`item_done_${listId}`).setLabel('Mark Done').setEmoji('✅').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(`item_swap_${listId}`).setLabel('Reorder').setEmoji('🔀').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId(`item_desc_${listId}`).setLabel('Description').setEmoji('📝').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`item_desc_${listId}`).setLabel('Description').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`item_details_${listId}`).setLabel('Details').setEmoji('🗓️').setStyle(ButtonStyle.Secondary)
         ),
-        new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`list_meta_${listId}`).setLabel('List Info').setEmoji('📋').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`list_del_${listId}`).setLabel('Delete List').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`view_${listId}`).setLabel('Done').setStyle(ButtonStyle.Secondary)
-        )
+        lastRow
     ];
 }
 
@@ -452,33 +565,76 @@ function achButtons(page, total) {
 //  📋 SELECTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function listSelect(lists, id = 'sel_list') {
+const SELECT_MAX = 25;
+/** Prefix of the pseudo option that jumps to another page of a select menu. */
+const PAGE_VALUE = '__page_';
+
+/**
+ * Slice `rows` for a select menu. A menu holds at most 25 options, so when
+ * there are more rows and `paged` is set, the first/last slots become
+ * "previous page" / "next page" options (value `__page_<n>`). Without
+ * `paged` the menu is capped at 25 and the placeholder says how many were
+ * left out.
+ */
+function selectWindow(rows, { page = 0, paged = false, label = 'item' } = {}) {
+    const total = rows.length;
+    if (total <= SELECT_MAX) return { slice: rows, offset: 0, prev: null, next: null, note: '' };
+    if (!paged) return { slice: rows.slice(0, SELECT_MAX), offset: 0, prev: null, next: null, note: ` (showing ${SELECT_MAX} of ${total})` };
+    // A page loses one slot per paging option it needs (first page: next only; last: previous only).
+    const pages = [];
+    for (let start = 0; start < total; ) {
+        const room = SELECT_MAX - (start > 0 ? 1 : 0);
+        const size = total - start > room ? room - 1 : room;
+        pages.push([start, start + size]);
+        start += size;
+    }
+    const current = Math.min(Math.max(0, page), pages.length - 1);
+    const [from, to] = pages[current];
+    const of = `Page %n of ${pages.length}`;
+    return {
+        slice: rows.slice(from, to),
+        offset: from,
+        prev: current > 0 ? { label: `◀ Previous ${label}s`, value: `${PAGE_VALUE}${current - 1}`, description: of.replace('%n', current) } : null,
+        next: current < pages.length - 1 ? { label: `▶ More ${label}s`, value: `${PAGE_VALUE}${current + 1}`, description: of.replace('%n', current + 2) } : null,
+        note: ` (${from + 1}-${to} of ${total})`
+    };
+}
+
+/** The page number a `__page_<n>` select value points at, or null for a normal value. */
+const pageFromValue = (val) => (String(val).startsWith(PAGE_VALUE) ? Number(String(val).slice(PAGE_VALUE.length)) || 0 : null);
+
+function listSelect(lists, id = 'sel_list', { page = 0, paged = false } = {}) {
     if (!lists.length) return null;
+    const w = selectWindow(lists, { page, paged, label: 'list' });
+    const options = w.slice.map((l) => {
+        // Build clean description
+        const descParts = [];
+        if (l.category) descParts.push(l.category);
+        if (l.deadline) descParts.push(formatDeadline(l.deadline));
+        if (l.shared) descParts.unshift(l.is_owner ? '👥 shared' : `👥 ${l.role}`);
+
+        return {
+            label: l.name.substring(0, 100),
+            value: String(l.id),
+            emoji: PRIORITY_DOT[l.priority] || '📋',
+            description: descParts.length > 0 ? descParts.join(' · ').substring(0, 100) : undefined
+        };
+    });
+    if (w.prev) options.unshift(w.prev);
+    if (w.next) options.push(w.next);
     return new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder('Select a list').addOptions(
-            lists.slice(0, 25).map(l => {
-                // Build clean description
-                const descParts = [];
-                if (l.category) descParts.push(l.category);
-                if (l.deadline) descParts.push(formatDeadline(l.deadline));
-                
-                return {
-                    label: l.name.substring(0, 100),
-                    value: String(l.id),
-                    emoji: PRIORITY_DOT[l.priority] || '📋',
-                    description: descParts.length > 0 ? descParts.join(' · ').substring(0, 100) : undefined
-                };
-            })
-        )
+        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(`Select a list${w.note}`.slice(0, 150)).addOptions(options)
     );
 }
 
-function itemSelect(items, id, ph = 'Select item...') {
+function itemSelect(items, id, ph = 'Select item...', { page = 0 } = {}) {
     if (!items.length) return null;
+    const w = selectWindow(items, { page, paged: true, label: 'task' });
+    const options = w.slice.map((it, i) => ({ label: `${w.offset + i + 1}. ${it.name.substring(0, 90)}`, value: String(it.id), emoji: it.completed ? '✅' : '⬜' }));
+    if (w.prev) options.unshift(w.prev);
+    if (w.next) options.push(w.next);
     return new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(ph).addOptions(
-            items.slice(0, 25).map((it, i) => ({ label: `${i + 1}. ${it.name.substring(0, 90)}`, value: String(it.id), emoji: it.completed ? '✅' : '⬜' }))
-        )
+        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(`${ph}${w.note}`.slice(0, 150)).addOptions(options)
     );
 }
 
@@ -545,6 +701,25 @@ function descModal(item) {
     return new ModalBuilder().setCustomId(`m_desc_${item.id}`).setTitle(`Description: ${item.name.substring(0, 30)}`).addComponents(new ActionRowBuilder().addComponents(d));
 }
 
+/**
+ * Modal for a task's own fields: due date, priority, tags and repeat. Empty clears a field.
+ * Four inputs (Discord allows five per modal).
+ */
+function detailsModal(item) {
+    const input = (id, label, placeholder, max, value) => {
+        const t = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(max).setPlaceholder(placeholder);
+        if (value) t.setValue(String(value).slice(0, max));
+        return new ActionRowBuilder().addComponents(t);
+    };
+    const tags = String(item.tags || '').split(',').filter(Boolean).join(', ');
+    return new ModalBuilder().setCustomId(`m_details_${item.id}`).setTitle(`Details: ${item.name.substring(0, 30)}`).addComponents(
+        input('due', 'Due date YYYY-MM-DD (empty clears)', '2030-12-31', 10, validation.formatDate(item.due_date)),
+        input('priority', 'Priority: low, med or high (empty clears)', 'med', 6, item.priority && (item.priority === 'MEDIUM' ? 'med' : item.priority.toLowerCase())),
+        input('tags', 'Tags, comma separated, max 5', 'home, bills', 100, tags),
+        input('repeat', 'Repeat: none, daily, weekly or monthly', 'none', 7, item.recurrence)
+    );
+}
+
 function searchModal() {
     return new ModalBuilder().setCustomId('m_search').setTitle('Search').addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q').setLabel('Search').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100))
@@ -555,8 +730,22 @@ function searchModal() {
 //  🌳 SKILL TREE UI
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** Split text on blank lines into embed fields of at most 1024 characters (Discord's limit). */
+function chunkFieldValue(text, limit = 1024) {
+    const fields = [];
+    let current = '';
+    for (const block of text.split('\n\n').filter(Boolean)) {
+        if (current && current.length + block.length + 2 > limit) {
+            fields.push({ name: '​', value: current, inline: false });
+            current = '';
+        }
+        current = current ? `${current}\n\n${block}` : block;
+    }
+    if (current) fields.push({ name: '​', value: current.slice(0, limit), inline: false });
+    return fields;
+}
+
 function skillTreeEmbed(user, classKey, skillTree, userSkills) {
-    const classEmoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     const tree = skillTree[classKey];
     if (!tree) return error('Invalid Class', 'Skill tree not found');
     
@@ -564,7 +753,7 @@ function skillTreeEmbed(user, classKey, skillTree, userSkills) {
     
     const embed = new EmbedBuilder()
         .setColor(COLORS[classKey] || COLORS.primary)
-        .setTitle(`${classEmoji[classKey]} ${tree.name} Skills`)
+        .setTitle(`${classEmoji(classKey)} ${tree.name} Skills`)
         .setDescription(`*${tree.description}*\n\n💰 **XP Available:** ${user.player_xp.toLocaleString()}`);
     
     // Build skill tree visualization with progress
@@ -595,7 +784,7 @@ function skillTreeEmbed(user, classKey, skillTree, userSkills) {
         skillList += `└ ${effectText} • ${skill.cost} XP\n\n`;
     });
     
-    embed.addFields({ name: '\u200B', value: skillList || '*No skills available*', inline: false });
+    embed.addFields(...chunkFieldValue(skillList || '*No skills available*'));
     embed.setFooter({ text: '🔓 Available • 🔶 Upgradeable • ✅ Maxed • 🔒 Locked' });
     
     return embed;
@@ -639,7 +828,6 @@ function skillInfoEmbed(skill, skillId, userSkillLevel, requirementMet) {
 }
 
 function classOverviewEmbed(user, classes, skillTrees) {
-    const classEmoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     const currentClass = user.player_class;
     const currentInfo = classes[currentClass];
     
@@ -647,7 +835,7 @@ function classOverviewEmbed(user, classes, skillTrees) {
         .setColor(COLORS[currentClass] || COLORS.primary)
         .setTitle('⚔️ Class System')
         .setDescription([
-            `**Current Class:** ${classEmoji[currentClass]} **${currentClass}**`,
+            `**Current Class:** ${classEmoji(currentClass)} **${currentClass}**`,
             `*${currentInfo?.description || 'No bonus'}*`,
             ``,
             `💰 **XP Available:** ${user.player_xp.toLocaleString()}`
@@ -678,12 +866,7 @@ function classOverviewEmbed(user, classes, skillTrees) {
 }
 
 // Video game style class detail view - one class at a time
-function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, totalClasses) {
-    const classColors = {
-        DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6,
-        ASSASSIN: 0x2C3E50, WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C
-    };
-    
+function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, totalClasses, userSkills = []) {
     const owned = classKey === 'DEFAULT' || user[`owns_${classKey.toLowerCase()}`];
     const equipped = user.player_class === classKey;
     const canAfford = user.player_xp >= (classInfo.cost || 0);
@@ -697,7 +880,7 @@ function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, tota
     else statusBadge = '🔒 LOCKED';
     
     const embed = new EmbedBuilder()
-        .setColor(classColors[classKey] || 0x5865F2)
+        .setColor(COLORS[classKey] || COLORS.primary)
         .setTitle(`${classInfo.emoji} ${classInfo.name}`)
         .setDescription([
             `### ${statusBadge}`,
@@ -706,22 +889,14 @@ function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, tota
             ``
         ].join('\n'));
     
-    // Playstyle summary
-    const playstyles = {
-        DEFAULT: 'Balanced gameplay with no bonuses or penalties. Great for learning the system.',
-        HERO: 'Consistent XP gains on every action. Reliable progress for steady players.',
-        GAMBLER: 'Random XP multipliers ranging from 0.5x to 2x. High risk, high reward gameplay.',
-        ASSASSIN: 'Build streaks to stack bonuses. Perfect for consistent daily players.',
-        WIZARD: 'Every third task gives double XP. Strategic task completion.',
-        ARCHER: 'Precision-based multipliers and crits. Rewards careful planning.',
-        TANK: 'Shield stacking system. Strong early game with momentum building.'
-    };
-    
+    // Playstyle and live counter come from the shared data, so new classes need no UI change.
     embed.addFields({
         name: '🎮 Playstyle',
-        value: playstyles[classKey] || 'Unique gameplay mechanics.',
+        value: classInfo.playstyle || 'Unique gameplay mechanics.',
         inline: false
     });
+    const counter = equipped ? classCounterLine(user, userSkills) : '';
+    if (counter) embed.addFields({ name: '📈 Current', value: counter, inline: false });
     
     // Cost and skills
     embed.addFields(
@@ -745,7 +920,7 @@ function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, tota
     // Skill preview
     if (skillTree && Object.keys(skillTree.skills).length > 0) {
         const skillPreview = Object.values(skillTree.skills)
-            .slice(0, 3)
+            .slice(0, 6)
             .map(s => `${s.emoji} ${s.name}`)
             .join(' • ');
         embed.addFields({
@@ -794,6 +969,9 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     const canAfford = user.player_xp >= (classInfo.cost || 0);
     
     const rows = [];
+    
+    // Jump straight to any class (12 classes fit one select menu, the limit is 25).
+    rows.push(classSelectMenu(CLASSES, user, classKey));
     
     // Navigation row: Previous / Class Count / Next
     const navRow = new ActionRowBuilder().addComponents(
@@ -871,12 +1049,11 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     return rows;
 }
 
-function classSelectMenu(classes, user) {
+function classSelectMenu(classes, user, browsing = null) {
     const options = [];
     
-    Object.entries(classes).forEach(([k, c]) => {
-        if (k === 'DEFAULT') return;
-        const owned = user[`owns_${k.toLowerCase()}`];
+    Object.entries(classes).slice(0, 25).forEach(([k, c]) => {
+        const owned = k === 'DEFAULT' || user[`owns_${k.toLowerCase()}`];
         const eq = user.player_class === k;
         
         options.push({
@@ -884,7 +1061,7 @@ function classSelectMenu(classes, user) {
             value: k,
             emoji: c.emoji,
             description: eq ? 'Equipped' : owned ? 'Owned' : `${c.cost} XP to unlock`,
-            default: eq
+            default: browsing ? k === browsing : eq
         });
     });
     
@@ -958,7 +1135,7 @@ function skillActionButtons(skillId, skill, userSkillLevel, requirementMet, user
 }
 
 module.exports = {
-    COLORS, PRIORITY_DOT, bar, smoothBar, fancyBar, xpBar,
+    COLORS, classEmoji, classCounterLine, describeChest, chunkFieldValue, PRIORITY_DOT, bar, smoothBar, fancyBar, xpBar,
     // Embeds
     listViewEmbed, listsOverviewEmbed, profileEmbed, achievementsEmbed, achievementUnlockEmbed,
     classShopEmbed, leaderboardEmbed, xpEmbed, pingEmbed, helpEmbed,
@@ -970,7 +1147,9 @@ module.exports = {
     viewButtons, editButtons, overviewButtons, confirmButtons, classButtons, achButtons,
     classNavButtons, classBrowserButtons, skillActionButtons,
     // Selects
-    listSelect, itemSelect, catSelect, priSelect, classSelectMenu, skillSelectMenu, categoryFilterSelect,
+    listSelect, itemSelect, pageFromValue, SELECT_MAX, catSelect, priSelect, classSelectMenu, skillSelectMenu, categoryFilterSelect,
     // Modals
-    listModal, itemModal, editItemModal, descModal, searchModal
+    listModal, itemModal, editItemModal, descModal, detailsModal, searchModal,
+    // Task details
+    orderItems, itemMeta, itemLines, prestigeTitle, bonusLines
 };

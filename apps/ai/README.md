@@ -76,6 +76,6 @@ app/
 
 - Every repository function and thread function takes `discord_id` and filters by it (a unit test checks the repo).
 - `discord_id` is never a tool argument. Tool argument models reject extra fields.
-- Write tools (`create_list`, `add_item`, `complete_item`, `update_list`) run only after the user approves a confirmation, and only through Express `/internal/*`, so XP and achievements are awarded in one place.
+- Write tools (`create_list`, `add_item`, `update_item`, `break_down_task`, `complete_item`, `update_list`) run only after the user approves a confirmation, and only through Express `/internal/*`, so XP and achievements are awarded in one place.
 - Task text reaches the model only inside delimited `<task>`/`<doc>` blocks, and the prompt says it is data, not instructions.
 - Logs never contain task text. Users who opted out are never embedded.

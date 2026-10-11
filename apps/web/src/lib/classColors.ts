@@ -11,6 +11,11 @@ const TOKENS: Record<string, string> = {
   WIZARD: "--class-wizard",
   ARCHER: "--class-archer",
   TANK: "--class-tank",
+  MONK: "--class-monk",
+  ARTISAN: "--class-artisan",
+  RANGER: "--class-ranger",
+  NECROMANCER: "--class-necromancer",
+  PALADIN: "--class-paladin",
 };
 
 /** A CSS color for a class, optionally translucent: classColor("HERO", 0.25). */

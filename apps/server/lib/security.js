@@ -52,6 +52,15 @@ export const gameLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 1000, 
 
 export const aiLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 1000, limit: 20, keyGenerator: keyByUser });
 
+/** Inviting looks a person up by name, so failed lookups are limited too, not only the invitations that were sent. */
+export const inviteLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 30, keyGenerator: keyByUser });
+
+/**
+ * The same lookups, limited per client address as well: one person with many accounts (or a script behind one signed-in account)
+ * cannot probe for names faster than a single account could. Both limiters apply to the invite routes.
+ */
+export const inviteIpLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 60, keyGenerator: (req) => `ip:${req.ip}` });
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function originOf(value) {

@@ -2,8 +2,9 @@
 
 import { Router } from 'express';
 import db from '@taskquest/shared/db';
+import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
-import { settingsBody, resetBody } from '../lib/schemas.js';
+import { settingsBody, resetBody, prestigeBody } from '../lib/schemas.js';
 import aiClient from '../lib/aiClient.js';
 
 const router = Router();
@@ -12,7 +13,7 @@ router.get(
     '/',
     asyncRoute(async (req, res) => {
         const [stats, skills] = await Promise.all([db.users.getUserStats(uid(req)), db.users.getUserSkills(uid(req))]);
-        res.json({ ...stats, skills });
+        res.json({ ...stats, skills, freezeLimits: shared.getFreezeLimits(skills) });
     })
 );
 
@@ -40,6 +41,8 @@ router.post(
             classBonus: r.classBonus,
             streakBonus: r.streakBonus,
             skillDailyBonus: r.skillDailyBonus,
+            surpriseBonus: r.surpriseBonus,
+            chest: r.chest,
             totalXP: r.totalXP,
             bonusInfo: r.bonusInfo,
             streak: r.streak,
@@ -58,7 +61,7 @@ router.post(
     '/streak-freeze',
     asyncRoute(async (req, res) => {
         const r = await db.progression.buyStreakFreeze(uid(req));
-        res.json({ success: true, freezes: r.freezes, cost: r.cost, newBalance: r.balance, newAchievements: r.achievements });
+        res.json({ success: true, freezes: r.freezes, cost: r.cost, max: r.max, newBalance: r.balance, newAchievements: r.achievements });
     })
 );
 
@@ -94,6 +97,15 @@ router.post(
     })
 );
 
+// The feed token is a secret, so the profile never includes it; Settings asks for it here.
+router.get(
+    '/calendar-token',
+    asyncRoute(async (req, res) => {
+        const stats = await db.transfer.getCalendarToken(uid(req));
+        res.json({ token: stats });
+    })
+);
+
 router.post(
     '/calendar-token',
     asyncRoute(async (req, res) => {
@@ -113,6 +125,22 @@ router.get(
     '/xp-history',
     asyncRoute(async (req, res) => {
         res.json(await db.users.getXPHistory(uid(req), 50));
+    })
+);
+
+router.get(
+    '/prestige',
+    asyncRoute(async (req, res) => {
+        res.json(await db.progression.getPrestige(uid(req)));
+    })
+);
+
+router.post(
+    '/prestige',
+    asyncRoute(async (req, res) => {
+        parse(prestigeBody, req.body);
+        const r = await db.progression.prestige(uid(req));
+        res.json({ success: true, ...r, newAchievements: r.achievements });
     })
 );
 

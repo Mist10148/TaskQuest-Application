@@ -47,7 +47,7 @@ export const XPProgressBar = ({
         }}
       >
         {/* Background shimmer effect */}
-        <div className="absolute inset-0 bg-shimmer bg-[length:200%_100%] animate-shimmer opacity-20" />
+        <div className="absolute inset-0 bg-shimmer bg-size-[200%_100%] animate-shimmer opacity-20" />
         
         {/* Progress fill */}
         <div
@@ -63,7 +63,7 @@ export const XPProgressBar = ({
         >
           {/* Shine effect */}
           <div 
-            className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent"
+            className="absolute inset-0 bg-linear-to-b from-white/30 to-transparent"
             style={{ height: "50%" }}
           />
         </div>

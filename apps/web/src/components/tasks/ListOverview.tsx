@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { AlertCircle, Keyboard, Plus, Scroll } from "lucide-react";
+import { AlertCircle, FileStack, Keyboard, Plus, Scroll } from "lucide-react";
 import { motion } from "framer-motion";
 import type { ListWithCounts } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { TaskListCard } from "@/components/game/TaskComponents";
 import { PriorityPanel } from "@/components/ai/PriorityPanel";
 import { ListFilters } from "./ListFilters";
+import { TaskSearchResults } from "./TaskSearchResults";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+import { InvitesBanner } from "./InvitesBanner";
+import { sharedSubtitle } from "@/lib/sharing";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import type { useListFilters } from "./useListFilters";
 
@@ -20,10 +23,11 @@ interface Props {
   filters: ReturnType<typeof useListFilters>;
   onOpen: (listId: number) => void;
   onCreate: () => void;
+  onOpenTemplates: () => void;
 }
 
 /** The quest log: header, AI priorities, filters and the grid of quest cards. */
-export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters, onOpen, onCreate }: Props) => {
+export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters, onOpen, onCreate, onOpenTemplates }: Props) => {
   const [showHelp, setShowHelp] = useState(false);
   useHotkeys({
     n: (e) => { e.preventDefault(); onCreate(); },
@@ -31,24 +35,32 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
     "?": () => setShowHelp(true),
   });
   return (
-  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-4 sm:px-0">
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
       <div>
         <h1 className="text-2xl sm:text-3xl font-heading font-bold flex items-center gap-2">
-          <Scroll className="h-7 w-7 text-primary" />
+          <Scroll className="h-7 w-7 text-primary-text" />
           Quest Log
         </h1>
         <p className="text-foreground-muted text-sm sm:text-base">Manage your quests and track progress</p>
       </div>
-      <Button variant="glow" onClick={onCreate} className="gap-2">
-        <Plus className="h-4 w-4" /> Create Quest
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={onOpenTemplates} className="gap-2">
+          <FileStack className="h-4 w-4" /> Templates
+        </Button>
+        <Button variant="glow" onClick={onCreate} className="gap-2">
+          <Plus className="h-4 w-4" /> Create Quest
+        </Button>
+      </div>
     </div>
 
+    <InvitesBanner />
     <PriorityPanel onOpen={onOpen} />
     <ListFilters filters={filters} />
 
-    {error ? (
+    {filters.searchScope === "tasks" ? (
+      <TaskSearchResults query={filters.searchQuery} onOpen={onOpen} />
+    ) : error ? (
       <ErrorCard what="your quests" error={error} onRetry={onRetry} retrying={retrying} />
     ) : loading ? (
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy="true">
@@ -80,6 +92,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
               priority={list.priority}
               deadline={list.deadline ?? undefined}
               onClick={() => onOpen(list.id)}
+              shared={list.shared ? { count: list.memberCount ?? 2, subtitle: sharedSubtitle(list) } : undefined}
             />
           </motion.div>
         ))}

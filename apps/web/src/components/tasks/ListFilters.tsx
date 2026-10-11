@@ -30,7 +30,7 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
           onClick={() => filters.setActiveTab(value)}
           className={cn(
             "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-            filters.activeTab === value ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground hover:bg-card/50"
+            filters.activeTab === value ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground hover:bg-card/50"
           )}
         >
           <Icon className="h-4 w-4" />
@@ -44,14 +44,31 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground-muted" />
         <Input
           id="quest-search"
-          aria-label="Search quests"
-          placeholder="Search quests..."
+          aria-label={filters.searchScope === "tasks" ? "Search tasks" : "Search quests"}
+          placeholder={filters.searchScope === "tasks" ? "Search task names and notes..." : "Search quests..."}
           value={filters.searchQuery}
           onChange={(e) => filters.setSearchQuery(e.target.value)}
           className="pl-10"
         />
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
+        <div className="flex p-1 bg-background-secondary rounded-lg" role="radiogroup" aria-label="Search in">
+          {(["quests", "tasks"] as const).map((scope) => (
+            <button
+              key={scope}
+              type="button"
+              role="radio"
+              aria-checked={filters.searchScope === scope}
+              onClick={() => filters.setSearchScope(scope)}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                filters.searchScope === scope ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground"
+              )}
+            >
+              {scope === "quests" ? "Quests" : "Tasks"}
+            </button>
+          ))}
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="relative" aria-label="Filter quests">

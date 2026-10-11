@@ -8,53 +8,85 @@
 'use strict';
 
 const { getPool, withTransaction } = require('./pool');
-const { lockUser } = require('./users');
-const { applyXP, requireGamification, unlockAchievements } = require('./progression');
+const { lockUser, progressFloor } = require('./users');
+const { applyXP, requireGamification, unlockAchievements, userZone } = require('./progression');
 const { errors } = require('../errors');
-const { QUESTS } = require('../constants');
-const { questPeriod } = require('../quests');
+const { QUESTS, ROTATING_QUESTS } = require('../constants');
+const { questPeriod, activeRotatingQuest } = require('../quests');
+const { actorSql } = require('./access');
+
+const PERIOD_NOUN = { daily: 'day', weekly: 'week', monthly: 'month' };
+
+/** Quests that can be listed and claimed at `now`: every fixed quest, and only the live rotating one. */
+function liveQuests(now, zone) {
+    const live = activeRotatingQuest(ROTATING_QUESTS, now, zone);
+    return Object.entries(QUESTS).filter(([key, q]) => !q.rotating || key === live);
+}
 
 /** How far along a user is on one metric within [from, to). */
-async function metricProgress(conn, discordId, metric, from, to) {
-    const params = [discordId, from, to];
-    const count = async (sql) => Number((await conn.query(sql, params))[0][0].n);
+async function metricProgress(conn, discordId, metric, windowFrom, to) {
+    const from = await progressFloor(conn, discordId, windowFrom); // nothing from before the last progress reset counts
+    const params = [discordId, discordId, from, to];
+    const count = async (sql, p = params) => Number((await conn.query(sql, p))[0][0].n);
     switch (metric) {
+        // Quests count what the user themselves did (items.first_completed_by / created_by, lists.cleared_by), whoever owns the list,
+        // recorded at the moment of first (XP-paid) completion or creation, never query-time state, so re-checking, editing priority, importing or recurring copies can't farm them.
         case 'completions':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.completed = 1 AND i.completed_at >= ? AND i.completed_at < ?`
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?`
             );
         case 'high_completions':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.completed = 1 AND i.completed_at >= ? AND i.completed_at < ?
-                   AND COALESCE(i.priority, l.priority) = 'HIGH'`
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                   AND i.first_completed_high = 1`
             );
         case 'adds':
             return count(
-                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.created_at >= ? AND i.created_at < ?`
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('created_by')} AND i.counts_for_quests = 1 AND i.created_at >= ? AND i.created_at < ?`
+            );
+        case 'early_completions':
+            return count(
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                   AND i.first_completed_early = 1`
+            );
+        case 'overdue_completions':
+            return count(
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                   AND i.first_completed_overdue = 1`
+            );
+        case 'lists_cleared':
+            return count('SELECT COUNT(*) AS n FROM lists WHERE (cleared_by = ? OR (cleared_by IS NULL AND discord_id = ?)) AND cleared_at >= ? AND cleared_at < ?');
+        case 'dated_adds':
+            return count(
+                `SELECT COUNT(*) AS n FROM items i
+                 WHERE ${actorSql('created_by')} AND i.counts_for_quests = 1 AND i.due_date IS NOT NULL AND i.created_at >= ? AND i.created_at < ?`
             );
         case 'daily_claims':
             return count(
                 `SELECT COUNT(*) AS n FROM xp_transactions
-                 WHERE discord_id = ? AND source = 'daily' AND created_at >= ? AND created_at < ?`
+                 WHERE discord_id = ? AND source = 'daily' AND created_at >= ? AND created_at < ?`,
+                [discordId, from, to]
             );
         default:
             return 0;
     }
 }
 
-async function questState(conn, discordId, now = new Date()) {
+async function questState(conn, discordId, now = new Date(), zone = null) {
     const [claims] = await conn.query('SELECT quest_key, period_start FROM quest_claims WHERE discord_id = ? AND period_start >= ?', [
         discordId,
-        questPeriod('weekly', now).start
+        [questPeriod('weekly', now, zone).start, questPeriod('monthly', now, zone).start].sort()[0]
     ]);
     const claimed = new Set(claims.map((c) => `${c.quest_key}@${String(c.period_start).slice(0, 10)}`));
 
     const out = [];
-    for (const [key, q] of Object.entries(QUESTS)) {
-        const period = questPeriod(q.period, now);
+    for (const [key, q] of liveQuests(now, zone)) {
+        const period = questPeriod(q.period, now, zone);
         const progress = Math.min(q.target, await metricProgress(conn, discordId, q.metric, period.startsAt, period.endsAt));
         const isClaimed = claimed.has(`${key}@${period.start}`);
         out.push({
@@ -63,6 +95,7 @@ async function questState(conn, discordId, now = new Date()) {
             emoji: q.emoji,
             description: q.description,
             period: q.period,
+            rotating: Boolean(q.rotating),
             target: q.target,
             reward: q.reward,
             progress,
@@ -79,7 +112,7 @@ async function questState(conn, discordId, now = new Date()) {
 async function getQuests(discordId, now = new Date()) {
     const conn = await getPool().getConnection();
     try {
-        return await questState(conn, String(discordId), now);
+        return await questState(conn, String(discordId), now, await userZone(conn, discordId));
     } finally {
         conn.release();
     }
@@ -94,7 +127,9 @@ async function claimQuest(discordId, rawKey, now = new Date()) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         requireGamification(user);
-        const period = questPeriod(quest.period, now);
+        // Periods are the user's own day, week and month; a rotating quest is live by their local ISO week.
+        if (!liveQuests(now, user.timezone).some(([k]) => k === key)) throw errors.notFound('Quest not found.');
+        const period = questPeriod(quest.period, now, user.timezone);
         const progress = await metricProgress(conn, user.discord_id, quest.metric, period.startsAt, period.endsAt);
         if (progress < quest.target) throw errors.validation(`${quest.name} isn't finished yet (${progress}/${quest.target}).`);
 
@@ -104,11 +139,11 @@ async function claimQuest(discordId, rawKey, now = new Date()) {
             period.start,
             quest.reward
         ]);
-        if (res.affectedRows !== 1) throw errors.conflict(`You already claimed ${quest.name} this ${quest.period === 'daily' ? 'day' : 'week'}.`);
+        if (res.affectedRows !== 1) throw errors.conflict(`You already claimed ${quest.name} this ${PERIOD_NOUN[quest.period]}.`);
 
         const tx = await applyXP(conn, user, quest.reward, 'quest_reward', { referenceId: res.insertId });
         const achievements = await unlockAchievements(conn, user);
-        return { key, name: quest.name, reward: quest.reward, balance: tx.balanceAfter, level: tx.level, leveledUp: tx.leveledUp, achievements };
+        return { key, name: quest.name, reward: quest.reward, balance: Number(user.player_xp), level: Number(user.player_level), leveledUp: Number(user.player_level) > tx.previousLevel, achievements };
     });
 }
 

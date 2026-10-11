@@ -208,6 +208,19 @@ test('schemas: internal write bodies require a numeric Discord ID and reject unk
     assert.ok(internalAddItemBody.parse({ discordId: '1', name: 'task' }));
     assert.ok(internalToggleBody.parse({ discordId: '1', completed: true }));
     assert.throws(() => internalUpdateListBody.parse({ discordId: '1', name: 'renamed' })); // only priority/deadline may change
+
+    const { internalUpdateItemBody, internalSubtasksBody } = schemas;
+    assert.ok(internalAddItemBody.parse({ discordId: '1', name: 't', due_date: '2030-01-05', priority: 'LOW', tags: ['a'], recurrence: 'daily', parent_id: 4 }));
+    assert.ok(internalUpdateItemBody.parse({ discordId: '1', priority: 'HIGH' }));
+    assert.throws(() => internalUpdateItemBody.parse({ discordId: '1' }), /Nothing to update/);
+    assert.throws(() => internalUpdateItemBody.parse({ discordId: '1', priority: 'URGENT' }));
+    assert.throws(() => internalUpdateItemBody.parse({ discordId: '1', position: 0 })); // moving is not offered
+    assert.throws(() => internalUpdateItemBody.parse({ name: 'no owner' })); // discordId is required
+    assert.ok(internalSubtasksBody.parse({ discordId: '1', names: ['a', 'b'] }));
+    assert.throws(() => internalSubtasksBody.parse({ discordId: '1', names: ['only'] }));
+    assert.throws(() => internalSubtasksBody.parse({ discordId: '1', names: Array(9).fill('x') }));
+    assert.throws(() => internalSubtasksBody.parse({ discordId: '1', names: ['a', ''] }));
+    assert.throws(() => internalSubtasksBody.parse({ discordId: 'x', names: ['a', 'b'] }));
 });
 
 test('config: AI_ENABLED requires a long internal token', async () => {

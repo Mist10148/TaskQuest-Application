@@ -54,19 +54,19 @@ export const AchievementBadge = ({
         sizes.container,
         unlocked
           ? "bg-card border-xp/50 shadow-lg shadow-xp/10 cursor-pointer"
-          : "bg-background-secondary border-border grayscale opacity-60",
+          : "bg-background-secondary border-border grayscale",
         className
       )}
     >
       {/* Glow effect for unlocked */}
       {unlocked && (
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-xp/10 via-transparent to-transparent" />
+        <div className="absolute inset-0 rounded-xl bg-linear-to-br from-xp/10 via-transparent to-transparent" />
       )}
 
       <div className="relative flex items-start gap-3">
         {/* Icon */}
         <div className={cn(
-          "flex-shrink-0 flex items-center justify-center rounded-lg w-12 h-12",
+          "shrink-0 flex items-center justify-center rounded-lg w-12 h-12",
           unlocked ? "bg-xp/20" : "bg-background-tertiary"
         )}>
           {unlocked ? (
@@ -100,7 +100,7 @@ export const AchievementBadge = ({
 
         {/* Trophy indicator */}
         {unlocked && (
-          <Trophy className="h-4 w-4 text-xp flex-shrink-0" />
+          <Trophy className="h-4 w-4 text-xp shrink-0" />
         )}
       </div>
     </motion.div>

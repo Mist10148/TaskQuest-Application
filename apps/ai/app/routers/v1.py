@@ -9,8 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.chains import summarize as summarize_chain
-from app.db import pool
-from app.deps import Caller, get_caller
+from app.deps import AIAccess, Caller, get_caller, require_ai
 from app.graphs import prioritize as prioritize_graph
 from app.llm import get_llm_factory
 
@@ -30,15 +29,22 @@ class SummaryBody(BaseModel):
 
 @router.post("/summary")
 async def summary(
-    body: SummaryBody, caller: Caller = Depends(get_caller), llm_factory: Callable[[], Any] = Depends(get_llm_factory)
+    body: SummaryBody,
+    access: AIAccess = Depends(require_ai("summary")),
+    llm_factory: Callable[[], Any] = Depends(get_llm_factory),
 ):
-    async with pool.connection() as conn:
-        try:
-            return await summarize_chain.summarize(
-                conn, caller.discord_id, llm_factory, body.mode, list_id=body.listId, range_=body.range
-            )
-        except summarize_chain.NotFound:
-            raise HTTPException(status_code=404, detail="List not found") from None
+    try:
+        return await summarize_chain.summarize(
+            access.discord_id,
+            llm_factory,
+            body.mode,
+            list_id=body.listId,
+            range_=body.range,
+            reserved=True,
+        )
+    except summarize_chain.NotFound:
+        access.settled = True  # the chain already handed the request back
+        raise HTTPException(status_code=404, detail="List not found") from None
 
 
 class PrioritizeBody(BaseModel):
@@ -48,10 +54,9 @@ class PrioritizeBody(BaseModel):
 @router.post("/prioritize")
 async def prioritize(
     body: PrioritizeBody | None = None,
-    caller: Caller = Depends(get_caller),
+    access: AIAccess = Depends(require_ai("prioritize", degrade_on_quota=True)),
     llm_factory: Callable[..., Any] = Depends(get_llm_factory),
 ):
-    async with pool.connection() as conn:
-        return await prioritize_graph.prioritize(
-            conn, caller.discord_id, llm_factory, limit=body.limit if body else None
-        )
+    return await prioritize_graph.prioritize(
+        access.discord_id, llm_factory, limit=body.limit if body else None, reserved=access.reserved
+    )

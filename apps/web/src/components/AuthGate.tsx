@@ -20,7 +20,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary-text" />
       </div>
     );
   }
@@ -33,16 +33,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-[0_0_40px_rgba(99,102,241,0.15)]">
         <img src="/taskquest-icon.svg" alt="" className="mx-auto mb-4 h-16 w-16" />
-        <h1 className="text-3xl font-heading font-bold mb-2 bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">TaskQuest</h1>
+        <h1 className="text-3xl font-heading font-bold mb-2 bg-linear-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">TaskQuest</h1>
         <p className="text-foreground-muted mb-6">Level up your productivity. Your lists, XP, classes and games sync with the TaskQuest Discord bot.</p>
 
         {error ? (
-          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2 justify-center">
+          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive-text flex items-center gap-2 justify-center">
             <ShieldAlert className="h-4 w-4" /> Can't reach the TaskQuest server right now.
             <button className="underline" onClick={() => refresh()}>Retry</button>
           </div>
         ) : loginError ? (
-          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <div className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive-text">
             {LOGIN_ERRORS[loginError] || "Login failed. Please try again."}
           </div>
         ) : null}

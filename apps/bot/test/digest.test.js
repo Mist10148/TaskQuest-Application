@@ -30,12 +30,16 @@ test('the embed reports real numbers, with or without an AI recap', () => {
     assert.match(digestEmbed({ ...STATS, completed: 0 }, null).toJSON().description, /No tasks finished/);
 });
 
-function setup({ users, sendError, recapError }) {
+function setup({ users, sendError, recapError, claims = () => true }) {
     const marked = [];
+    const released = [];
+    const order = [];
     const sent = [];
     const aiCalls = [];
     return {
         marked,
+        released,
+        order,
         sent,
         aiCalls,
         log: () => {},
@@ -43,13 +47,23 @@ function setup({ users, sendError, recapError }) {
             users: {
                 getDigestCandidates: async () => users,
                 getWeeklyStats: async () => STATS,
-                markDigestSent: async (id) => marked.push(id)
+                claimDigest: async (id) => {
+                    order.push('claim');
+                    const ok = claims(id);
+                    if (ok) marked.push(id);
+                    return ok;
+                },
+                releaseDigest: async (id) => {
+                    released.push(id);
+                    marked.splice(marked.indexOf(id), 1);
+                }
             }
         },
         client: {
             users: {
                 fetch: async () => ({
                     send: async (m) => {
+                        order.push('send');
                         if (sendError) throw sendError;
                         sent.push(m);
                     }
@@ -100,4 +114,16 @@ test('closed DMs are marked; temporary errors retry on the next run', async () =
     const flaky = setup({ users: [user()], sendError: Object.assign(new Error('503'), { code: 0 }) });
     assert.equal((await sendWeeklyDigests({ ...flaky, now: MONDAY_9_UTC })).retry, 1);
     assert.deepEqual(flaky.marked, []);
+    assert.deepEqual(flaky.released, ['42'], 'the claim is handed back for the retry');
+});
+
+test('the week is claimed atomically before sending, so overlapping runs cannot double send', async () => {
+    const claimed = new Set();
+    const claims = (id) => (claimed.has(id) ? false : (claimed.add(id), true));
+    const a = setup({ users: [user()], claims });
+    const b = setup({ users: [user()], claims });
+    const [ra, rb] = await Promise.all([sendWeeklyDigests({ ...a, now: MONDAY_9_UTC }), sendWeeklyDigests({ ...b, now: MONDAY_9_UTC })]);
+    assert.equal(ra.sent + rb.sent, 1);
+    assert.equal(a.sent.length + b.sent.length, 1);
+    for (const ctx of [a, b]) assert.equal(ctx.order[0], 'claim', 'claimed before any send');
 });

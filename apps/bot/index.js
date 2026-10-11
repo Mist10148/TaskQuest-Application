@@ -4,6 +4,9 @@
  *   /list → overview → view (read-only) → edit (all mutations)
  *   /game → blackjack · rock paper scissors · hangman
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
+ *   /review /prestige /shop
+ *   /share /invites /members /leave → shared lists
+ *   /party → a small group with a shared weekly quest
  *   /summary /prioritize /ask /forget /ai-format → AI service (when AI_ENABLED)
  *   @mention / reply / DM → AI conversation (chat.js)
  *
@@ -16,19 +19,27 @@ require('@taskquest/shared/env').loadEnv(__dirname);
 const http = require('http');
 const { Client, GatewayIntentBits, Events, ActivityType, MessageFlags, Partials } = require('discord.js');
 const db = require('@taskquest/shared/db');
+const { createPushClient } = require('@taskquest/shared/push');
 const { version } = require('./package.json');
 const listCommand = require('./commands/list');
+const { job: runJob } = require('./utils/job');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
 const questCommands = require('./commands/quests');
+const reviewCommand = require('./commands/review');
+const prestigeCommand = require('./commands/prestige');
+const shopCommand = require('./commands/shop');
 const aiSync = require('./utils/aiSync');
 const reminders = require('./utils/reminders');
 const timezoneCommand = require('./commands/timezone');
 const digest = require('./utils/digest');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
+const sharingCommands = require('./commands/sharing');
+const partyCommand = require('./commands/party');
 const chat = require('./chat');
+const { refreshProfile } = require('./utils/profile');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
 
@@ -54,18 +65,18 @@ const client = new Client({ intents, partials: [Partials.Channel] });
 
 // ─── Background jobs ─────────────────────────────────────────────────────────
 
-/** Run a job, logging (not crashing on) failures. */
-function job(name, fn) {
-    return async () => {
-        try {
-            await fn();
-        } catch (err) {
-            log('❌', name, err.stack || err.message);
-        }
-    };
-}
+/** Run a job, logging (not crashing on) failures, never overlapping itself. */
+const job = (name, fn) => runJob(name, fn, log);
 
-const checkDeadlines = job('DEADLINE', () => reminders.sendDeadlineReminders({ db, client, log }));
+// Web push (optional): the web server holds the VAPID keys; the bot only asks it, best effort. Off without WEB_PUSH_INTERNAL_URL.
+const push = createPushClient();
+
+const checkDeadlines = job('DEADLINE', async () => {
+    const budget = reminders.createBudget(); // one cap per person across list and task reminders
+    await reminders.sendDeadlineReminders({ db, client, log, push, budget });
+    await reminders.sendTaskReminders({ db, client, log, push, budget });
+    await reminders.flushOverflow({ client, log, budget });
+});
 
 const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));
 
@@ -112,9 +123,17 @@ const COMMANDS = {
     daily: gamification.daily,
     freeze: gamification.freeze,
     quests: questCommands.execute,
+    review: reviewCommand.execute,
+    prestige: prestigeCommand.execute,
+    shop: shopCommand.execute,
     timezone: timezoneCommand.execute,
     weekly: weeklyCommand.execute,
     quick: quickCommand.execute,
+    party: partyCommand.execute,
+    share: sharingCommands.share,
+    invites: sharingCommands.invites,
+    members: sharingCommands.members,
+    leave: sharingCommands.leave,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,
@@ -136,12 +155,14 @@ async function route(interaction) {
         if (interaction.commandName === 'summary') return aiCommands.autocomplete(interaction);
         if (interaction.commandName === 'timezone') return timezoneCommand.autocomplete(interaction);
         if (interaction.commandName === 'quick') return quickCommand.autocomplete(interaction);
+        if (['share', 'members', 'leave'].includes(interaction.commandName)) return sharingCommands.autocomplete(interaction);
         return interaction.respond([]);
     }
 
     if (interaction.isChatInputCommand()) {
         const handler = COMMANDS[interaction.commandName];
         if (!handler) return interaction.reply({ content: '❌ Unknown command', flags: MessageFlags.Ephemeral });
+        void refreshProfile(db, interaction.user); // not awaited: never in the way of the command
         return handler(interaction);
     }
 
@@ -149,7 +170,13 @@ async function route(interaction) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
         if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
-        if (id === 'remind_off' || id.startsWith('remind_snooze_')) return reminders.handleButton(interaction);
+        if (id.startsWith('party_')) return partyCommand.handleButton(interaction);
+        if (id.startsWith('inv_accept_') || id.startsWith('inv_decline_')) return sharingCommands.handleInviteButton(interaction);
+        if (id.startsWith('leave_yes_') || id === 'leave_no') return sharingCommands.handleLeaveButton(interaction);
+        if (id === 'review_claim') return reviewCommand.handleButton(interaction);
+        if (id.startsWith('prestige_')) return prestigeCommand.handleButton(interaction);
+        if (id.startsWith('shop_')) return shopCommand.handleButton(interaction);
+        if (id === 'remind_off' || id.startsWith('remind_snooze_') || id.startsWith('task_remind_snooze_')) return reminders.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
         if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
             return gamification.handleClassButton(interaction);
@@ -164,6 +191,8 @@ async function route(interaction) {
         const id = interaction.customId;
         if (id === 'game_select') return gameCommand.handleSelectMenu(interaction);
         if (id.startsWith('hm_letter_select')) return gameCommand.handleHangmanSelect(interaction);
+        if (id.startsWith('shop_pick_')) return shopCommand.handleSelect(interaction);
+        if (id.startsWith('mem_rm_')) return sharingCommands.handleSelect(interaction);
         if (id === 'class_select') return gamification.handleClassSelect(interaction);
         if (id === 'skill_select') return gamification.handleSkillSelect(interaction);
         return listCommand.handleSelectMenu(interaction);

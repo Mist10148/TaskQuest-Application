@@ -261,7 +261,9 @@ async function updateItem(discordId, itemId, input) {
             );
             if (!item) throw errors.notFound('Task not found.');
             if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
-            await conn.query(`UPDATE items SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map((k) => fields[k]), id]);
+            // A new due date or rule starts a new monthly anchor.
+            const cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
+            await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
         });
     }
     if (position !== undefined) await moveItem(discordId, id, position);
@@ -330,18 +332,20 @@ async function deleteItem(discordId, itemId) {
 /**
  * Create the next copy of a repeating task. It runs only on the first completion
  * (the xp_awarded guard), so un-checking and re-checking cannot duplicate it, and it
- * grants no creation XP or counters, so repeating tasks cannot be used to farm.
+ * grants no creation XP or counters and never counts towards quests (counts_for_quests = 0),
+ * so repeating tasks cannot be used to farm.
  */
 async function spawnNextOccurrence(conn, item, user) {
     const today = todayInZone(user.timezone);
     const base = item.due_date ? String(item.due_date).slice(0, 10) : today;
-    const due = nextDueOnOrAfter(base, item.recurrence, today);
+    const anchor = item.recurrence === 'monthly' ? item.repeat_anchor_day || Number(base.slice(8, 10)) : null;
+    const due = nextDueOnOrAfter(base, item.recurrence, today, anchor);
     if (!due) return null;
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id]
+        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id, anchor]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
     return created;
@@ -364,13 +368,19 @@ async function setItemCompleted(discordId, itemId, completed) {
         if (!item) throw errors.notFound('Task not found.');
 
         const target = completed === undefined ? !item.completed : Boolean(completed);
-        await conn.query('UPDATE items SET completed = ?, completed_at = ? WHERE id = ?', [target ? 1 : 0, target ? new Date() : null, id]);
+        const now = new Date();
+        await conn.query('UPDATE items SET completed = ?, completed_at = ? WHERE id = ?', [target ? 1 : 0, target ? now : null, id]);
 
         let xp = null;
         let achievements = [];
         let nextItem = null;
         if (target && !item.xp_awarded) {
-            await conn.query('UPDATE items SET xp_awarded = TRUE WHERE id = ?', [id]);
+            // first_completed_* is what quests count: set once, never rewritten by a re-check or a later priority edit.
+            await conn.query('UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_high = ? WHERE id = ?', [
+                now,
+                (item.priority || item.list_priority) === 'HIGH' ? 1 : 0,
+                id
+            ]);
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
             xp = await rewardAction(conn, user, 'item_complete', REWARDS.ITEM_COMPLETE, {

@@ -160,8 +160,8 @@ async function importAll(discordId, data) {
             for (const it of ordered) {
                 const parentId = it.parentRef !== null && idByRef.has(it.parentRef) ? idByRef.get(it.parentRef) : null;
                 const [ir] = await conn.query(
-                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, position, due_date, priority, tags, recurrence, parent_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, position, due_date, priority, tags, recurrence, parent_id, counts_for_quests)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
                     [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, position++, it.due_date, it.priority, it.tags, it.recurrence, parentId]
                 );
                 if (it.ref !== undefined && it.ref !== null) idByRef.set(it.ref, ir.insertId);

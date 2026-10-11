@@ -19,21 +19,23 @@ async function metricProgress(conn, discordId, metric, from, to) {
     const params = [discordId, from, to];
     const count = async (sql) => Number((await conn.query(sql, params))[0][0].n);
     switch (metric) {
+        // Quests count what was recorded at the moment of first (XP-paid) completion or creation,
+        // never query-time state, so re-checking, editing priority, importing or recurring copies can't farm them.
         case 'completions':
             return count(
                 `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.completed = 1 AND i.completed_at >= ? AND i.completed_at < ?`
+                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?`
             );
         case 'high_completions':
             return count(
                 `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.completed = 1 AND i.completed_at >= ? AND i.completed_at < ?
-                   AND COALESCE(i.priority, l.priority) = 'HIGH'`
+                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                   AND i.first_completed_high = 1`
             );
         case 'adds':
             return count(
                 `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
-                 WHERE l.discord_id = ? AND i.created_at >= ? AND i.created_at < ?`
+                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.created_at >= ? AND i.created_at < ?`
             );
         case 'daily_claims':
             return count(

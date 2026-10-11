@@ -43,10 +43,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await db.users.ensureUser(ALICE, { username: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
-    await t.test('migrations 007-009 are idempotent and add the new columns', async () => {
+    await t.test('migrations 007-010 are idempotent and add the new columns', async () => {
         await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
         const again = await db.runMigrations({ log: () => {} });
-        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims']);
+        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity']);
         const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
@@ -56,6 +56,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         }
         assert.ok((await cols('lists')).includes('remind_at'));
         assert.equal((await pool.query("SHOW TABLES LIKE 'quest_claims'"))[0].length, 1);
+        for (const c of ['first_completed_at', 'counts_for_quests', 'first_completed_high', 'repeat_anchor_day']) assert.ok(items.includes(c), `items.${c}`);
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -493,6 +494,46 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const bob = await db.users.getUser(BOB);
         assert.equal(Number(bob.player_xp), 0);
         assert.equal(Number(bob.lifetime_xp), 0);
+    });
+
+    await t.test('quests cannot be farmed by re-checking, importing, priority edits or recurring copies', async () => {
+        const QID = '100000000000000011';
+        await db.users.ensureUser(QID);
+        const progress = async (key) => (await db.quests.getQuests(QID)).find((q) => q.key === key).progress;
+        const { list } = await db.tasks.createList(QID, { name: 'Quest list' });
+        const { item: a } = await db.tasks.addItem(QID, list.id, { name: 'a' });
+
+        // re-checking after the completion moved to an earlier period must not re-count it
+        await db.tasks.setItemCompleted(QID, a.id, true);
+        assert.equal(await progress('DAILY_COMPLETE_3'), 1);
+        await db.getPool().query("UPDATE items SET first_completed_at = first_completed_at - INTERVAL 3 DAY, completed_at = completed_at - INTERVAL 3 DAY WHERE id = ?", [a.id]);
+        assert.equal(await progress('DAILY_COMPLETE_3'), 0);
+        await db.tasks.setItemCompleted(QID, a.id, false);
+        await db.tasks.setItemCompleted(QID, a.id, true);
+        assert.equal(await progress('DAILY_COMPLETE_3'), 0, 'uncheck/recheck does not move the first completion');
+
+        // priority raised after completing does not qualify for the high-priority quest
+        const { item: b } = await db.tasks.addItem(QID, list.id, { name: 'b', priority: 'low' });
+        await db.tasks.setItemCompleted(QID, b.id, true);
+        await db.tasks.updateItem(QID, b.id, { priority: 'high' });
+        assert.equal(await progress('DAILY_HIGH_1'), 0);
+        const { item: c } = await db.tasks.addItem(QID, list.id, { name: 'c', priority: 'high' });
+        await db.tasks.setItemCompleted(QID, c.id, true);
+        assert.equal(await progress('DAILY_HIGH_1'), 1);
+
+        // imported tasks (even completed ones) satisfy no quest
+        const before = { done: await progress('DAILY_COMPLETE_3'), adds: await progress('DAILY_ADD_3') };
+        await db.transfer.importAll(QID, { lists: [{ name: 'Imp', items: [1, 2, 3, 4].map((n) => ({ name: `i${n}`, completed: true })) }] });
+        assert.equal(await progress('DAILY_COMPLETE_3'), before.done);
+        assert.equal(await progress('DAILY_ADD_3'), before.adds);
+
+        // a spawned recurring copy is not an add, and completing it does not count either
+        const { item: r } = await db.tasks.addItem(QID, list.id, { name: 'r', recurrence: 'daily' });
+        const addsBefore = await progress('DAILY_ADD_3');
+        const res = await db.tasks.setItemCompleted(QID, r.id, true);
+        assert.ok(res.nextItem);
+        assert.equal(Number((await db.getPool().query('SELECT counts_for_quests AS n FROM items WHERE id = ?', [res.nextItem.id]))[0][0].n), 0);
+        assert.equal(await progress('DAILY_ADD_3'), addsBefore);
     });
 
     await db.closePool();

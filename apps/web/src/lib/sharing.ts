@@ -27,7 +27,7 @@ export interface MemberLike {
 const ROLE_LABEL: Record<ListRole, string> = { viewer: "Viewer", editor: "Editor", manager: "Manager" };
 const ROLE_HINT: Record<ListRole, string> = {
   viewer: "Can read the quest",
-  editor: "Can add, edit, reorder, complete and delete tasks",
+  editor: "Can add, edit, reorder and complete tasks, and delete the ones they added",
   manager: "Can also edit the quest and manage members",
 };
 
@@ -37,7 +37,7 @@ export const roleHint = (role: ListRole): string => ROLE_HINT[role];
 export const roleOf = (list: SharingFields): ListRole => list.role ?? "manager";
 export const isOwner = (list: SharingFields): boolean => list.isOwner ?? true;
 
-/** Add, edit, reorder, complete and delete tasks. */
+/** Add, edit, reorder and complete tasks (and delete the ones you added; managers delete any). */
 export const canEditTasks = (role: ListRole | undefined | null): boolean => role !== "viewer";
 
 /** Edit the quest's own fields, invite people and remove members. */

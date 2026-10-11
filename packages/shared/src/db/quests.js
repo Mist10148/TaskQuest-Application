@@ -8,7 +8,7 @@
 'use strict';
 
 const { getPool, withTransaction } = require('./pool');
-const { lockUser } = require('./users');
+const { lockUser, progressFloor } = require('./users');
 const { applyXP, requireGamification, unlockAchievements, userZone } = require('./progression');
 const { errors } = require('../errors');
 const { QUESTS, ROTATING_QUESTS } = require('../constants');
@@ -24,7 +24,8 @@ function liveQuests(now, zone) {
 }
 
 /** How far along a user is on one metric within [from, to). */
-async function metricProgress(conn, discordId, metric, from, to) {
+async function metricProgress(conn, discordId, metric, windowFrom, to) {
+    const from = await progressFloor(conn, discordId, windowFrom); // nothing from before the last progress reset counts
     const params = [discordId, discordId, from, to];
     const count = async (sql, p = params) => Number((await conn.query(sql, p))[0][0].n);
     switch (metric) {

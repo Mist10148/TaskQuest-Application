@@ -101,6 +101,8 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   };
   const selectedIds = items.filter((i) => selected.has(i.id)).map((i) => i.id);
   const openIds = items.filter((i) => selected.has(i.id) && !i.completed).map((i) => i.id);
+  // An editor may only delete tasks they added; the rest of a selection is left alone.
+  const deletableIds = items.filter((i) => selected.has(i.id) && i.can_delete !== false).map((i) => i.id);
 
   useHotkeys({
     n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
@@ -258,8 +260,8 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           <Button size="sm" className="gap-1" disabled={openIds.length === 0} onClick={async () => { await onBulkComplete(openIds); leaveSelectMode(); }}>
             <CheckCheck className="h-4 w-4" /> Complete{openIds.length ? ` (${openIds.length})` : ""}
           </Button>
-          <Button size="sm" variant="destructive" className="gap-1" disabled={selectedIds.length === 0} onClick={() => { onBulkDelete(selectedIds); leaveSelectMode(); }}>
-            <Trash2 className="h-4 w-4" /> Delete
+          <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { onBulkDelete(deletableIds); leaveSelectMode(); }}>
+            <Trash2 className="h-4 w-4" /> Delete{deletableIds.length && deletableIds.length < selectedIds.length ? ` (${deletableIds.length})` : ""}
           </Button>
           <Button size="sm" variant="ghost" aria-label="Leave select mode" onClick={leaveSelectMode}><X className="h-4 w-4" /></Button>
         </div>

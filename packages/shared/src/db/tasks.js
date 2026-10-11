@@ -284,13 +284,15 @@ async function getItems(discordId, listId, { sortBy = 'position', order = 'ASC' 
     const names = list.shared ? ', cu.discord_username AS completed_by_name' : '';
     const join = list.shared ? 'LEFT JOIN users cu ON cu.discord_id = i.completed_by' : '';
     const rows = await run(`SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ? ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`, [list.id]);
-    return rows.map(shapeItem);
+    // can_delete tells the UI which delete buttons to offer (the server decides again on every delete).
+    return rows.map((row) => ({ ...shapeItem(row), can_delete: mayDelete(list.role, row, discordId) }));
 }
 
 /** One item (with its list's name/priority) if it is on a list the user owns or is a member of. */
 async function getItem(discordId, itemId) {
     try {
-        return shapeItem((await access.forItem(getPool(), discordId, itemId)).item);
+        const { item, role } = await access.forItem(getPool(), discordId, itemId);
+        return { ...shapeItem(item), can_delete: mayDelete(role, item, discordId) };
     } catch (err) {
         if (err.code === 'NOT_FOUND') return null;
         throw err;
@@ -494,10 +496,22 @@ async function reorderItems(discordId, listId, orderedIds) {
     });
 }
 
+/**
+ * Whether `me` may delete an item of a list they hold `role` on: a manager (the owner counts) deletes anything; an editor only a task
+ * they added themselves (deleting somebody else's finished task would take away that person's quest, review and party progress).
+ */
+const mayDelete = (role, item, me) => access.atLeast(role, 'manager') || (item.created_by !== null && item.created_by !== undefined && String(item.created_by) === String(me));
+
 async function deleteItem(discordId, itemId) {
     const id = unwrap(v.id(itemId));
     await withTransaction(async (conn) => {
-        await access.forItem(conn, discordId, id, 'editor', { lock: true });
+        const { item, role } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
+        if (!mayDelete(role, item, discordId)) throw errors.forbidden('Editors can only delete tasks they added themselves. Ask a manager of this list.');
+        if (!access.atLeast(role, 'manager')) {
+            // Deleting a task also deletes its subtasks: not when somebody else added any of them.
+            const [[others]] = await conn.query('SELECT COUNT(*) AS n FROM items WHERE parent_id = ? AND (created_by IS NULL OR created_by <> ?)', [id, String(discordId)]);
+            if (Number(others.n) > 0) throw errors.forbidden('This task has subtasks added by other people, so only a manager of this list can delete it.');
+        }
         await conn.query('DELETE FROM items WHERE id = ?', [id]);
     });
     return true;

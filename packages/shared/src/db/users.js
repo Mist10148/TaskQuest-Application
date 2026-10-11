@@ -380,6 +380,19 @@ async function getWeeklyStats(discordId, now = new Date()) {
     };
 }
 
+/**
+ * The start of the window a metric may count: `from`, or the person's last progress reset when that is later. A reset deletes their
+ * own lists, claims and XP, but the tasks they finished on other people's lists stay, so without this floor they would count for
+ * quests, the weekly review and the party quest all over again.
+ * @param {Date} from
+ * @returns {Promise<Date>}
+ */
+async function progressFloor(conn, discordId, from) {
+    const rows = await run(conn, 'SELECT progress_reset_at FROM users WHERE discord_id = ?', [String(discordId)]);
+    const at = rows[0] && rows[0].progress_reset_at ? new Date(rows[0].progress_reset_at) : null;
+    return at && at.getTime() > from.getTime() ? at : from;
+}
+
 /** Delete all of a user's progress and content (lists, items, games, XP). */
 async function resetProgress(discordId) {
     const id = String(discordId);
@@ -393,7 +406,7 @@ async function resetProgress(discordId) {
         await conn.query('DELETE FROM parties WHERE owner_id = ?', [id]); // a party the user owns goes with them
         await conn.query('DELETE FROM party_members WHERE discord_id = ?', [id]);
         await conn.query(
-            `UPDATE users SET player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
+            `UPDATE users SET progress_reset_at = UTC_TIMESTAMP(), player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,
                 total_lists_created = 0, total_items_added = 0, total_items_completed = 0,
                 owns_hero = FALSE, owns_gambler = FALSE, owns_assassin = FALSE, owns_wizard = FALSE,
@@ -434,6 +447,7 @@ module.exports = {
     getLeaderboard,
     getRank,
     resetProgress,
+    progressFloor,
     getXPHistory,
     getDigestCandidates,
     markDigestSent,

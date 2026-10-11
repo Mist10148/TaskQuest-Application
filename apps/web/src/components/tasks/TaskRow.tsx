@@ -156,9 +156,11 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         <button type="button" aria-label={`Edit "${item.name}"`} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
           <Pencil className="h-3.5 w-3.5" />
         </button>
-        <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive-text")}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {item.can_delete !== false && (
+          <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive-text")}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>}
     </div>
   );

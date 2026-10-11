@@ -19,7 +19,7 @@ const { LIST_ROLES, INVITE_NEUTRAL_MESSAGE, errors, escapeDiscord } = require('@
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, idFrom } = require('../utils/respond');
 
-const ROLE_BLURB = { viewer: 'can read the list', editor: 'can add, edit, complete and delete tasks', manager: 'can also edit the list and manage people' };
+const ROLE_BLURB = { viewer: 'can read the list', editor: 'can add, edit and complete tasks, and delete the ones they added', manager: 'can also edit the list and manage people' };
 const roleChoices = LIST_ROLES.map((r) => ({ name: `${r} (${ROLE_BLURB[r]})`.slice(0, 100), value: r }));
 
 const listOption = (o) => o.setName('list').setDescription('The list').setRequired(true).setAutocomplete(true).setMaxLength(100);

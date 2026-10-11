@@ -20,7 +20,7 @@
 
 const crypto = require('crypto');
 const { withTransaction, getPool } = require('./pool');
-const { lockUser } = require('./users');
+const { lockUser, progressFloor } = require('./users');
 const { awardFlat, requireGamification, unlockAchievements } = require('./progression');
 const { actorSql } = require('./access');
 const { findInvitee, invitePreview, notSent } = require('./sharing');
@@ -229,7 +229,7 @@ async function weeklyCount(conn, discordId, period, joinedAt) {
     const [[row]] = await conn.query(
         `SELECT COUNT(*) AS n FROM items i
          WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ? AND i.first_completed_at >= ?`,
-        [discordId, discordId, period.startsAt, period.endsAt, joinedAt]
+        [discordId, discordId, await progressFloor(conn, discordId, period.startsAt), period.endsAt, joinedAt]
     );
     return Number(row.n);
 }

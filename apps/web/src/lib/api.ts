@@ -611,6 +611,8 @@ export interface Item {
     recurrence?: Recurrence | null;
     /** Display name of the person who finished it (shared quests only). */
     completed_by_name?: string | null;
+    /** false when the server would refuse to delete it for me (an editor may only delete tasks they added). Absent: assume yes. */
+    can_delete?: boolean;
 }
 
 export type Recurrence = 'daily' | 'weekly' | 'monthly';

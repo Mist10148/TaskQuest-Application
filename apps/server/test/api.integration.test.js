@@ -837,6 +837,12 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         noIds(done, 'toggle');
         assert.equal((await J('PATCH', `/api/items/${item.id}/toggle`, 'st')).status, 404);
         assert.equal((await J('PATCH', `/api/items/${item.id}`, 'st', { name: 'pwn' })).status, 404);
+        // An editor cannot delete a task somebody else added (and finished): that would erase their progress. The owner can.
+        assert.equal((await J('DELETE', `/api/items/${item.id}`, 'ed')).status, 403, 'an editor cannot delete the owner task');
+        assert.equal((await J('GET', `/api/lists/${listId}`, 'ed')).body.items.find((i) => i.id === item.id).can_delete, false);
+        assert.equal((await J('GET', `/api/lists/${listId}`, 'own')).body.items.find((i) => i.id === item.id).can_delete, true);
+        const edTask = await J('POST', `/api/lists/${listId}/items`, 'ed', { name: 'editor own task' });
+        assert.equal((await J('DELETE', `/api/items/${edTask.body.item ? edTask.body.item.id : edTask.body.id}`, 'ed')).status, 200, 'an editor deletes what they added');
         const again = (await J('GET', `/api/lists/${listId}`, 'own')).body;
         assert.equal(again.items[0].completed_by_name, 'share_ed');
         assert.equal(JSON.stringify(again).includes(ids.ed), false, 'the completer ID is not in the owner view');

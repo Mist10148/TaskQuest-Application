@@ -2898,6 +2898,65 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.query('SELECT rearm_count FROM items WHERE id = ?', [item.id]))[0].rearm_count, 1);
     });
 
+    await t.test('progress erasure: editors cannot delete tasks others added, and a reset really zeroes quest, review and party progress', async () => {
+        const S = db.sharing;
+        const mk = async (n) => {
+            const id = `2000000000000016${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(id, { username: `erase_${n}`, handle: `erase_${n}`, avatar: null });
+            return id;
+        };
+        const [O, E, M] = [await mk(1), await mk(2), await mk(3)];
+        const { list } = await db.tasks.createList(O, { name: 'Erase' });
+        await S.respond(E, (await S.invite(O, list.id, { discordId: E, role: 'editor' })).id, true);
+        await S.respond(M, (await S.invite(O, list.id, { discordId: M, role: 'manager' })).id, true);
+
+        // An editor deletes only what they added; managers and the owner delete anything.
+        const mine = (await db.tasks.addItem(E, list.id, { name: 'editor task' })).item;
+        const owners = (await db.tasks.addItem(O, list.id, { name: 'owner task' })).item;
+        const owners2 = (await db.tasks.addItem(O, list.id, { name: 'owner task 2' })).item;
+        await db.tasks.setItemCompleted(M, owners.id, true); // somebody else finished it: their progress is in it
+        await assert.rejects(db.tasks.deleteItem(E, owners.id), { code: 'FORBIDDEN', message: /Editors can only delete tasks they added/ });
+        assert.ok(await db.tasks.getItem(O, owners.id), 'still there');
+        const flags = Object.fromEntries((await db.tasks.getItems(E, list.id)).map((i) => [i.name, i.can_delete]));
+        assert.deepEqual(flags, { 'editor task': true, 'owner task': false, 'owner task 2': false }, 'the UI is told which deletes to offer');
+        assert.equal((await db.tasks.getItems(O, list.id)).every((i) => i.can_delete), true);
+        assert.equal((await db.tasks.getItem(E, owners2.id)).can_delete, false);
+        // The editor's own task goes, but not with subtasks somebody else added under it.
+        const parent = (await db.tasks.addItem(E, list.id, { name: 'editor parent' })).item;
+        const child = (await db.tasks.addItem(M, list.id, { name: 'manager subtask', parent_id: parent.id })).item;
+        await assert.rejects(db.tasks.deleteItem(E, parent.id), { code: 'FORBIDDEN', message: /subtasks added by other people/ });
+        assert.equal(await db.tasks.deleteItem(E, mine.id), true);
+        assert.equal(await db.tasks.deleteItem(M, parent.id), true, 'a manager may delete it with its subtasks');
+        assert.equal(await db.tasks.getItem(O, child.id), null);
+        assert.equal(await db.tasks.deleteItem(M, owners2.id), true, 'a manager deletes the owner\'s task');
+        assert.equal(await db.tasks.deleteItem(O, owners.id), true);
+        await assert.rejects(db.tasks.deleteItem(E, owners.id), { code: 'NOT_FOUND' });
+
+        // A reset zeroes quest, review and party progress even for tasks finished on somebody else's list (which a reset cannot delete).
+        const R = await mk(4);
+        await db.sharing.respond(R, (await S.invite(O, list.id, { discordId: R, role: 'editor' })).id, true);
+        await db.parties.create(R, 'Reset party');
+        await new Promise((r) => setTimeout(r, 1100));
+        for (let n = 0; n < 4; n++) await db.tasks.setItemCompleted(R, (await db.tasks.addItem(O, list.id, { name: `r${n}` })).item.id, true);
+        const questSum = async () => (await db.quests.getQuests(R)).reduce((n, q) => n + q.progress, 0);
+        assert.ok((await questSum()) > 0);
+        assert.equal((await db.review.getReview(R)).completed, 4);
+        assert.equal((await db.parties.status(R)).members[0].count, 4);
+        await new Promise((r) => setTimeout(r, 1100)); // timestamps are whole seconds
+        await db.users.resetProgress(R);
+        assert.ok((await db.users.getUser(R)).progress_reset_at, 'the reset is recorded');
+        assert.equal(await questSum(), 0, 'quests start from zero');
+        assert.equal((await db.review.getReview(R)).completed, 0, 'and so does the weekly review');
+        await db.parties.create(R, 'Fresh party');
+        assert.equal((await db.parties.status(R)).members[0].count, 0, 'and the party quest');
+        await assert.rejects(db.review.claimReview(R), { code: 'VALIDATION' }, 'no re-claim on old work');
+        // New work after the reset counts again.
+        await new Promise((r) => setTimeout(r, 1100));
+        const own = (await db.tasks.createList(R, { name: 'After reset' })).list;
+        await db.tasks.setItemCompleted(R, (await db.tasks.addItem(R, own.id, { name: 'after reset' })).item.id, true);
+        assert.equal((await db.review.getReview(R)).completed, 1);
+    });
+
 
     // ─── Parties ──────────────────────────────────────────────────────────────────
 

@@ -15,9 +15,12 @@
  *   items/lists.rearm_count, rearm_day   how many times today (UTC) a changed due date or deadline re-armed the reminders of everyone
  *                          on the item or list. A re-arm clears other members' reminder state, so it is limited per day (a member
  *                          editing the date back and forth cannot make everybody's reminders fire again and again)
+ *   users.progress_reset_at   when the person last reset their progress. Quest, weekly review and party metrics ignore everything
+ *                          they did before it, so tasks they finished on other people's lists (which a reset cannot delete) cannot
+ *                          be counted again for a second reward. NULL: never reset
  */
 
-exports.description = 'sharing hardening: users.discord_handle, users.accept_invites, party_members.public_id, reminder re-arm counters';
+exports.description = 'sharing hardening: users.discord_handle, users.accept_invites, party_members.public_id, reminder re-arm counters, users.progress_reset_at';
 
 exports.up = async (h) => {
     await h.addColumnIfMissing('users', 'discord_handle', 'VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL');
@@ -29,6 +32,8 @@ exports.up = async (h) => {
         await h.addColumnIfMissing(table, 'rearm_count', 'TINYINT UNSIGNED NOT NULL DEFAULT 0');
         await h.addColumnIfMissing(table, 'rearm_day', 'DATE NULL DEFAULT NULL');
     }
+
+    await h.addColumnIfMissing('users', 'progress_reset_at', 'DATETIME NULL DEFAULT NULL');
 
     await h.addColumnIfMissing('party_members', 'public_id', 'CHAR(12) NULL DEFAULT NULL');
     await h.exec("UPDATE party_members SET public_id = LEFT(SHA2(CONCAT(UUID(), '-', party_id, '-', discord_id), 256), 12) WHERE public_id IS NULL");

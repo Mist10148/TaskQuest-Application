@@ -33,7 +33,7 @@ The owner is implicitly a `manager` (no row needed). Roles:
 | Role | Can |
 |---|---|
 | viewer | read the list and its tasks |
-| editor | viewer + add, edit, reorder, complete and delete tasks |
+| editor | viewer + add, edit, reorder and complete tasks, and delete the tasks they added (a manager or the owner deletes any) |
 | manager | editor + edit list fields, invite and remove members, delete the list |
 
 (Only the owner can transfer ownership or delete a list that has other managers.)

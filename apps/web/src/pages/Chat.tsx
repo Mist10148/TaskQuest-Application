@@ -50,7 +50,8 @@ const Chat = () => {
     const text = input;
     if (!text.trim()) return;
     setInput("");
-    chat.send(text);
+    // A refused message (confirmation pending) goes back into the box instead of being lost.
+    void chat.send(text).then((outcome) => { if (outcome === "blocked") setInput((current) => current || text); });
   };
 
   const threads = threadData?.threads ?? [];
@@ -121,6 +122,7 @@ const Chat = () => {
             )}
             {chat.messages.map((m) => <ChatMessage key={m.id} message={m} />)}
             {waiting && slow && <p className="text-xs text-foreground-muted flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Waking up the AI… the first request can take a few seconds.</p>}
+            {chat.notice && <p role="alert" className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-foreground">{chat.notice}</p>}
             {chat.pending.length > 0 && <ConfirmActionCard actions={chat.pending} busy={chat.isStreaming} onRespond={chat.respond} />}
             <div ref={bottomRef} />
           </div>

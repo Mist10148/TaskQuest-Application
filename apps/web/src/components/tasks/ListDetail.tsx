@@ -5,7 +5,7 @@ import type { Item, ListWithItems } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { SummarizeButton } from "@/components/ai/SummarizeButton";
 import { formatDeadline } from "@/lib/dates";
-import { completeOrder } from "@/lib/reorder";
+import { completeOrder, rangeBetween } from "@/lib/reorder";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import { cn } from "@/lib/utils";
 import { CATEGORIES } from "./constants";
@@ -72,16 +72,25 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showHelp, setShowHelp] = useState(false);
   const quickAddRef = useRef<HTMLInputElement>(null);
-  const toggleSelected = (id: number) =>
+  const lastSelectedRef = useRef<number | null>(null);
+  // Rows in the order they are drawn (each task followed by its subtasks), for Shift-click ranges.
+  const visibleOrder = topLevel.flatMap((t) => [t.id, ...(childrenOf.get(t.id) || []).map((c) => c.id)]);
+  const toggleSelected = (id: number, range = false) => {
+    const anchor = lastSelectedRef.current;
+    lastSelectedRef.current = id;
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
+      if (range && anchor !== null) {
+        for (const rid of rangeBetween(visibleOrder, anchor, id)) next.add(rid);
+      } else if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
   const leaveSelectMode = () => {
     setSelectMode(false);
     setSelected(new Set());
+    lastSelectedRef.current = null;
   };
   const selectedIds = items.filter((i) => selected.has(i.id)).map((i) => i.id);
   const openIds = items.filter((i) => selected.has(i.id) && !i.completed).map((i) => i.id);
@@ -128,7 +137,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         drag={
           isSubtask
             ? undefined
-            : { draggable: true, isDragOver: drag.dragOverItemId === item.id, isDragging: drag.draggedItemId === item.id, ...drag.handlers }
+            : { draggable: !selectMode, isDragOver: drag.dragOverItemId === item.id, isDragging: drag.draggedItemId === item.id, ...drag.handlers }
         }
       />
     );
@@ -200,7 +209,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         <div className="space-y-2">
           <p className="text-xs text-foreground-muted mb-3 flex items-center gap-2">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
-            Drag tasks (or use the arrows) to reorder
+            Drag the grip (or use the arrows) to reorder. Shift-click selects a range.
           </p>
           {topLevel.map((item) => (
             <div key={item.id} className="space-y-2">

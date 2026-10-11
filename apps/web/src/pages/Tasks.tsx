@@ -189,10 +189,7 @@ const Tasks = () => {
           onDeleteItem={(id) => deleteItems([id])}
           onBulkComplete={completeItems}
           onBulkDelete={deleteItems}
-          onReorder={async (itemIds) => {
-            await reorderItems.mutateAsync({ listId: detail.id, itemIds });
-            toast.success("Task reordered");
-          }}
+          onReorder={(itemIds) => reorderItems.mutateAsync({ listId: detail.id, itemIds })}
         />
       ) : selectedListId ? (
         listLoading ? (

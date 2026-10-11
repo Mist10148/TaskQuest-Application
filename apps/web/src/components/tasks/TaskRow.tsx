@@ -23,7 +23,8 @@ interface Props {
   isSubtask?: boolean;
   selectMode: boolean;
   selected: boolean;
-  onSelect: (id: number) => void;
+  /** `range` is true for a Shift-click, which selects everything since the last click. */
+  onSelect: (id: number, range: boolean) => void;
   onToggle: (id: number) => void;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
@@ -45,9 +46,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
 
   return (
     <div
-      draggable={drag?.draggable}
-      onDragStart={drag ? (e) => drag.onDragStart(e, item.id) : undefined}
-      onDragEnd={drag?.onDragEnd}
+      data-task-row
       onDragOver={drag ? (e) => drag.onDragOver(e, item.id) : undefined}
       onDragLeave={drag?.onDragLeave}
       onDrop={drag ? (e) => drag.onDrop(e, item.id) : undefined}
@@ -56,7 +55,6 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         isSubtask && "ml-6 sm:ml-10 p-2.5 sm:p-3",
         completed && "opacity-60",
         selected && "border-primary bg-primary/5",
-        drag?.draggable && "cursor-grab active:cursor-grabbing",
         drag?.isDragOver ? "border-primary bg-primary/10" : !selected && "border-border hover:border-primary/30",
         drag?.isDragging && "opacity-50 scale-[0.98]"
       )}
@@ -64,14 +62,27 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       {isSubtask ? (
         <CornerDownRight className="h-4 w-4 mt-1 flex-shrink-0 text-foreground-muted/60" aria-hidden />
       ) : (
-        drag?.draggable && <GripVertical className="h-5 w-5 mt-0.5 flex-shrink-0 text-foreground-muted/50 hidden sm:block" aria-hidden />
+        drag?.draggable && (
+          // Only the handle drags, so the task text stays selectable. Keyboard and touch users reorder with the arrow buttons.
+          <span
+            draggable
+            onDragStart={(e) => drag.onDragStart(e, item.id)}
+            onDragEnd={drag.onDragEnd}
+            className="mt-0.5 flex-shrink-0 cursor-grab touch-none rounded p-0.5 text-foreground-muted hover:bg-background-secondary hover:text-foreground active:cursor-grabbing"
+            title="Drag to reorder"
+            aria-hidden
+          >
+            <GripVertical className="h-5 w-5" />
+          </span>
+        )
       )}
 
       {selectMode && (
         <input
           type="checkbox"
           checked={selected}
-          onChange={() => onSelect(item.id)}
+          onChange={() => undefined}
+          onClick={(e) => onSelect(item.id, e.shiftKey)}
           aria-label={`Select ${item.name}`}
           className="mt-1 h-4 w-4 flex-shrink-0 accent-[hsl(var(--primary))]"
         />

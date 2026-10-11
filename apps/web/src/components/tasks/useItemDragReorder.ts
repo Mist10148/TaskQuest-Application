@@ -13,6 +13,9 @@ export function useItemDragReorder(items: Item[], onReorder: (itemIds: number[])
     setDraggedItemId(itemId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", String(itemId));
+    // The handle starts the drag, but the whole row is what visibly moves.
+    const row = (e.currentTarget as HTMLElement).closest("[data-task-row]");
+    if (row) e.dataTransfer.setDragImage(row, 16, 16);
   };
 
   const handleDragEnd = () => {

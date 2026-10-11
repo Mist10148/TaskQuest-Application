@@ -7,6 +7,7 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
+import { applyItemOrder } from '@/lib/reorder';
 import { celebrate } from '@/lib/celebrate';
 import {
     userApi,
@@ -23,6 +24,7 @@ import {
     type CreateListData,
     type ItemInput,
     type LeaderboardBoard,
+    type ListWithItems,
     type RewardFields,
     type User,
 } from '@/lib/api';
@@ -217,8 +219,18 @@ export function useReorderItems() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ listId, itemIds }: { listId: number; itemIds: number[] }) => listsApi.reorder(listId, itemIds),
-        onSuccess: (_items, { listId }) => qc.invalidateQueries({ queryKey: ['lists', listId] }),
-        onError: showError,
+        // Optimistic: the list reorders at once and is rolled back if the server refuses. No success toast per drop.
+        onMutate: async ({ listId, itemIds }) => {
+            await qc.cancelQueries({ queryKey: ['lists', listId] });
+            const previous = qc.getQueryData<ListWithItems>(['lists', listId]);
+            if (previous) qc.setQueryData<ListWithItems>(['lists', listId], { ...previous, items: applyItemOrder(previous.items, itemIds) });
+            return { previous };
+        },
+        onError: (error, { listId }, context) => {
+            if (context?.previous) qc.setQueryData(['lists', listId], context.previous);
+            showError(error);
+        },
+        onSettled: (_items, _error, { listId }) => qc.invalidateQueries({ queryKey: ['lists', listId] }),
     });
 }
 

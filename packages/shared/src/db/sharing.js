@@ -237,7 +237,9 @@ async function setRole(actorId, listId, memberKey, role) {
 async function dropMember(conn, listId, discordId) {
     await conn.query('DELETE FROM list_members WHERE list_id = ? AND discord_id = ?', [listId, discordId]);
     await conn.query('DELETE FROM list_reminders WHERE list_id = ? AND discord_id = ?', [listId, discordId]);
-    await conn.query('DELETE ir FROM item_reminders ir JOIN items i ON i.id = ir.item_id WHERE i.list_id = ? AND ir.discord_id = ?', [listId, discordId]);
+    // Read the task ids first (a plain consistent read), so this transaction never takes row locks on items while it holds the list lock.
+    const [tasks] = await conn.query('SELECT id FROM items WHERE list_id = ?', [listId]);
+    if (tasks.length) await conn.query('DELETE FROM item_reminders WHERE discord_id = ? AND item_id IN (?)', [discordId, tasks.map((t) => t.id)]);
 }
 
 /** Remove a member from a list the actor manages. Only the owner removes a manager. */

@@ -2763,5 +2763,38 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_members WHERE party_id = ?', [party.id]))[0].n, 0);
     });
 
+
+    await t.test('sharing: races between answering, inviting, removing and working never corrupt anything', async () => {
+        const R = { own: '200000000000000901', a: '200000000000000902', b: '200000000000000903' };
+        for (const [k, id] of Object.entries(R)) await db.users.ensureUser(id, { username: `race_${k}`, avatar: null });
+        const { list } = await db.tasks.createList(R.own, { name: 'Race' });
+        // Two invitations of the same person at once: exactly one is created.
+        const both = await Promise.allSettled([db.sharing.invite(R.own, list.id, { discordId: R.a, role: 'editor' }), db.sharing.invite(R.own, list.id, { discordId: R.a, role: 'editor' })]);
+        assert.deepEqual(both.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+        assert.equal(both.find((r) => r.status === 'rejected').reason.code, 'CONFLICT');
+        const invite = (await db.sharing.listInvites(R.a))[0];
+        // Accepting twice at once: one joins, the other is refused, one member row.
+        const twice = await Promise.allSettled([db.sharing.respond(R.a, invite.id, true), db.sharing.respond(R.a, invite.id, true)]);
+        assert.deepEqual(twice.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [list.id]))[0].n, 1);
+        // Working while being removed: every call either succeeds before the removal or is NOT_FOUND after it.
+        const key = (await db.sharing.listMembers(R.own, list.id)).members.find((m) => m.name === 'race_a').memberKey;
+        const items = [];
+        for (let n = 0; n < 6; n++) items.push((await db.tasks.addItem(R.own, list.id, { name: `r${n}` })).item.id);
+        const results = await Promise.allSettled([
+            ...items.map((id) => db.tasks.setItemCompleted(R.a, id)),
+            db.sharing.removeMember(R.own, list.id, key),
+            db.tasks.addItem(R.a, list.id, { name: 'late' })
+        ]);
+        for (const r of results) if (r.status === 'rejected') assert.equal(r.reason.code, 'NOT_FOUND', `only NOT_FOUND may fail: ${r.reason && r.reason.message}`);
+        assert.equal(await db.tasks.getList(R.a, list.id), null, 'the member is gone');
+        // The invitee who accepted a list that was deleted a moment later gets a clean answer.
+        const gone = await db.tasks.createList(R.own, { name: 'Doomed' });
+        const inv = await db.sharing.invite(R.own, gone.list.id, { discordId: R.b });
+        const settled = await Promise.allSettled([db.sharing.respond(R.b, inv.id, true), db.tasks.deleteList(R.own, gone.list.id)]);
+        for (const r of settled) if (r.status === 'rejected') assert.ok(['NOT_FOUND', 'CONFLICT'].includes(r.reason.code), r.reason && r.reason.message);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [gone.list.id]))[0].n, 0);
+    });
+
     await db.closePool();
 });

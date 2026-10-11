@@ -254,9 +254,9 @@ export const gamesApi = {
     rps: (choice: RpsChoice) => post<RpsResult>('/api/games/rps', { choice }),
     hangmanStart: () => post<HangmanActive>('/api/games/hangman/start'),
     hangmanGuess: (letter: string) => post<HangmanResult>('/api/games/hangman/guess', { letter }),
-    arcadeStart: (type: ArcadeType) => post<{ sessionId: number }>(`/api/games/arcade/${type}/start`),
-    arcadeFinish: (type: ArcadeType, sessionId: number, score: number) =>
-        post<ArcadeResult>(`/api/games/arcade/${type}/finish`, { sessionId, score }),
+    arcadeStart: (type: ArcadeType) => post<{ sessionId: number; seed: number }>(`/api/games/arcade/${type}/start`),
+    arcadeFinish: (type: ArcadeType, sessionId: number, run: { score: number; ticks: number; inputs: number[] }) =>
+        post<ArcadeResult>(`/api/games/arcade/${type}/finish`, { sessionId, score: run.score, ticks: run.ticks, inputs: run.inputs }),
     quit: (type: 'hangman' | ArcadeType) => post<{ success: boolean }>(`/api/games/${type}/quit`),
 };
 

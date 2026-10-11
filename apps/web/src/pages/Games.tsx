@@ -1,4 +1,4 @@
-import { clampBet, parseBetInput, pickFreeCell } from "@/lib/gameHelpers";
+import { clampBet, parseBetInput } from "@/lib/gameHelpers";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -10,6 +10,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGameHistory, useGameAllowance, invalidateProgress, showAchievementNotifications, showError } from "@/hooks/useApi";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { startFixedLoop } from "@/lib/gameLoop";
+import { createRecorder, type ArcadeTelemetry } from "@/lib/arcade";
+import * as snakeSim from "@/lib/arcade/snake";
+import * as dinoSim from "@/lib/arcade/dino";
+import * as invadersSim from "@/lib/arcade/invaders";
 import { playSound, setSoundEnabled } from "@/lib/sound";
 import { TouchPad } from "@/components/game/TouchPad";
 import {
@@ -588,51 +592,45 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
 //  🐍 SNAKE GAME (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => Promise<boolean>; onResult: (r: string, points: number) => void }) => {
+/** What every arcade game component receives: begin a run (resolves the server's seed, or null when it cannot be recorded) and report the finished run's telemetry. */
+type ArcadeGameProps = { onBack: () => void; onStart: () => Promise<number | null>; onResult: (run: ArcadeTelemetry) => void };
+
+const GRID_SIZE = snakeSim.GRID_SIZE;
+const CELL_SIZE = 15;
+
+const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [starting, setStarting] = useState(false);
-  
-  const gameRef = useRef({
-    snake: [{ x: 10, y: 10 }],
-    dir: { x: 1, y: 0 },
-    food: { x: 15, y: 15 },
-    score: 0,
-    gameOver: false,
-    lastDir: { x: 1, y: 0 }
-  });
 
-  const GRID_SIZE = 20;
-  const CELL_SIZE = 15;
+  // The simulation is shared with the server, which replays the recorded inputs to derive the score.
+  const simRef = useRef<snakeSim.SnakeState>(snakeSim.create(1));
+  const pendingRef = useRef<number[]>([]);
+  const recorderRef = useRef(createRecorder());
 
-  // The run only begins once the server has issued its session id, otherwise the XP would be lost.
+  // The run only begins once the server has issued its session and seed, otherwise the XP would be lost.
   const startGame = async () => {
     if (starting) return;
     setStarting(true);
-    const ok = await onStart();
+    const seed = await onStart();
     setStarting(false);
-    if (!ok) return;
-    gameRef.current = {
-      snake: [{ x: 10, y: 10 }],
-      dir: { x: 1, y: 0 },
-      food: pickFreeCell(GRID_SIZE, [{ x: 10, y: 10 }]) ?? { x: 15, y: 15 },
-      score: 0,
-      gameOver: false,
-      lastDir: { x: 1, y: 0 }
-    };
+    if (seed === null) return;
+    simRef.current = snakeSim.create(seed);
+    pendingRef.current = [];
+    recorderRef.current = createRecorder();
     setScore(0);
     setGameState("playing");
   };
 
-  const endGame = useCallback((finalScore: number) => {
+  const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
-    setScore(finalScore);
-    if (finalScore > highScore) setHighScore(finalScore);
-    // Report pellets eaten; the server converts points to XP and caps it.
+    setScore(run.score);
+    if (run.score > highScore) setHighScore(run.score);
+    // Report the recorded inputs; the server replays them, derives the pellets eaten, converts them to XP and caps it.
     playSound("lose");
-    onResult("won", finalScore);
+    onResult(run);
   }, [highScore, onResult]);
 
   useEffect(() => {
@@ -643,13 +641,14 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Inputs are queued here and handed to the simulation (and the recorder) on the next step.
     const handleKeyDown = (e: KeyboardEvent) => {
-      const g = gameRef.current;
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) e.preventDefault();
-      if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { if (g.lastDir.y !== 1) g.dir = { x: 0, y: -1 }; }
-      else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { if (g.lastDir.y !== -1) g.dir = { x: 0, y: 1 }; }
-      else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") { if (g.lastDir.x !== 1) g.dir = { x: -1, y: 0 }; }
-      else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") { if (g.lastDir.x !== -1) g.dir = { x: 1, y: 0 }; }
+      if (e.repeat) return;
+      if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") pendingRef.current.push(snakeSim.INPUT.UP);
+      else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") pendingRef.current.push(snakeSim.INPUT.DOWN);
+      else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") pendingRef.current.push(snakeSim.INPUT.LEFT);
+      else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") pendingRef.current.push(snakeSim.INPUT.RIGHT);
     };
 
     // Mobile touch controls (swipe)
@@ -660,20 +659,17 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
       touchStartY = e.touches[0].clientY;
     };
     const handleTouchEnd = (e: TouchEvent) => {
-      const touchEndX = e.changedTouches[0].clientX;
-      const touchEndY = e.changedTouches[0].clientY;
-      const diffX = touchEndX - touchStartX;
-      const diffY = touchEndY - touchStartY;
-      const g = gameRef.current;
+      const diffX = e.changedTouches[0].clientX - touchStartX;
+      const diffY = e.changedTouches[0].clientY - touchStartY;
 
       if (Math.abs(diffX) > Math.abs(diffY)) {
         // Horizontal swipe
-        if (diffX > 30 && g.lastDir.x !== -1) g.dir = { x: 1, y: 0 }; // Right
-        else if (diffX < -30 && g.lastDir.x !== 1) g.dir = { x: -1, y: 0 }; // Left
+        if (diffX > 30) pendingRef.current.push(snakeSim.INPUT.RIGHT);
+        else if (diffX < -30) pendingRef.current.push(snakeSim.INPUT.LEFT);
       } else {
         // Vertical swipe
-        if (diffY > 30 && g.lastDir.y !== -1) g.dir = { x: 0, y: 1 }; // Down
-        else if (diffY < -30 && g.lastDir.y !== 1) g.dir = { x: 0, y: -1 }; // Up
+        if (diffY > 30) pendingRef.current.push(snakeSim.INPUT.DOWN);
+        else if (diffY < -30) pendingRef.current.push(snakeSim.INPUT.UP);
       }
     };
 
@@ -682,38 +678,20 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
     canvas.addEventListener("touchend", handleTouchEnd);
 
     const stopLoop = startFixedLoop(() => {
-      const g = gameRef.current;
-      if (g.gameOver) return;
+      const g = simRef.current;
+      if (g.over) return;
 
-      // Move snake
-      const head = { x: g.snake[0].x + g.dir.x, y: g.snake[0].y + g.dir.y };
-      g.lastDir = { ...g.dir };
-
-      // Check collisions
-      if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE || 
-          g.snake.some(s => s.x === head.x && s.y === head.y)) {
-        g.gameOver = true;
-        endGame(g.score);
-        return;
-      }
-
-      g.snake.unshift(head);
-
-      // Check food
-      if (head.x === g.food.x && head.y === g.food.y) {
-        g.score++;
+      const inputs = pendingRef.current.splice(0);
+      for (const code of inputs) recorderRef.current.record(g.tick, code);
+      const before = g.score;
+      snakeSim.step(g, inputs);
+      if (g.score > before) {
         playSound("eat");
         setScore(g.score);
-        const free = pickFreeCell(GRID_SIZE, g.snake);
-        if (!free) {
-          // The snake fills the board: nothing left to eat.
-          g.gameOver = true;
-          endGame(g.score);
-          return;
-        }
-        g.food = free;
-      } else {
-        g.snake.pop();
+      }
+      if (g.over) {
+        endGame(recorderRef.current.finish(g.score, g.tick));
+        return;
       }
 
       // Draw
@@ -762,7 +740,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
         ctx.fillRect(seg.x * CELL_SIZE + 1, seg.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
       });
       ctx.shadowBlur = 0;
-    }, 100);
+    }, snakeSim.STEP_MS);
 
     return () => {
       stopLoop();
@@ -841,63 +819,53 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Dino Runner physics and canvas size (module scope: stable identities for the hooks below).
-const GROUND_Y = 160;
-const GRAVITY = 0.9;
-const JUMP_FORCE = -16;
-const CANVAS_WIDTH = 600;
-const CANVAS_HEIGHT = 200;
+const GROUND_Y = dinoSim.GROUND_Y;
+const CANVAS_WIDTH = dinoSim.CANVAS_WIDTH;
+const CANVAS_HEIGHT = dinoSim.CANVAS_HEIGHT;
 
-const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => Promise<boolean>; onResult: (r: string, points: number) => void }) => {
+const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [starting, setStarting] = useState(false);
-  
-  const gameRef = useRef({
-    dino: { y: 150, vy: 0, jumping: false, frame: 0 },
-    obstacles: [] as { x: number; type: 'cactus' | 'bird'; passed: boolean; height: number }[],
-    score: 0,
-    speed: 6,
-    gameOver: false,
-    frameCount: 0,
-    groundOffset: 0
-  });
 
-  // The run only begins once the server has issued its session id, otherwise the XP would be lost.
+  // The simulation is shared with the server, which replays the recorded inputs to derive the score.
+  const simRef = useRef<dinoSim.DinoState>(dinoSim.create(1));
+  const pendingRef = useRef<number[]>([]);
+  const recorderRef = useRef(createRecorder());
+  // Scrolling ground offset: purely visual, not part of the simulation.
+  const viewRef = useRef({ ground: 0 });
+
+  // The run only begins once the server has issued its session and seed, otherwise the XP would be lost.
   const startGame = async () => {
     if (starting) return;
     setStarting(true);
-    const ok = await onStart();
+    const seed = await onStart();
     setStarting(false);
-    if (!ok) return;
-    gameRef.current = {
-      dino: { y: GROUND_Y, vy: 0, jumping: false, frame: 0 },
-      obstacles: [],
-      score: 0,
-      speed: 6,
-      gameOver: false,
-      frameCount: 0,
-      groundOffset: 0
-    };
+    if (seed === null) return;
+    simRef.current = dinoSim.create(seed);
+    pendingRef.current = [];
+    recorderRef.current = createRecorder();
+    viewRef.current = { ground: 0 };
     setScore(0);
     setGameState("playing");
   };
 
-  const endGame = useCallback((finalScore: number) => {
+  const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
-    setScore(finalScore);
-    if (finalScore > highScore) setHighScore(finalScore);
+    setScore(run.score);
+    if (run.score > highScore) setHighScore(run.score);
     playSound("lose");
-    onResult("won", finalScore);
+    onResult(run);
   }, [highScore, onResult]);
 
   const jump = useCallback(() => {
-    const g = gameRef.current;
-    if (!g.dino.jumping && gameState === "playing") {
-      g.dino.vy = JUMP_FORCE;
+    const g = simRef.current;
+    // Only a jump the simulation will accept is recorded: on the ground, and not already queued this step.
+    if (gameState === "playing" && !g.over && !g.dino.jumping && !pendingRef.current.includes(dinoSim.INPUT.JUMP)) {
+      pendingRef.current.push(dinoSim.INPUT.JUMP);
       playSound("jump");
-      g.dino.jumping = true;
     }
   }, [gameState]);
 
@@ -1045,69 +1013,18 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     canvas.addEventListener("touchstart", handleTouchStart);
 
     const stopLoop = startFixedLoop(() => {
-      const g = gameRef.current;
-      if (g.gameOver) return;
+      const g = simRef.current;
+      if (g.over) return;
 
-      g.frameCount++;
-      g.dino.frame++;
-      g.groundOffset = (g.groundOffset + g.speed) % 20;
-
-      // Increase speed over time
-      g.speed = 6 + Math.floor(g.score / 10) * 0.5;
-
-      // Dino physics
-      g.dino.vy += GRAVITY;
-      g.dino.y += g.dino.vy;
-      if (g.dino.y >= GROUND_Y) {
-        g.dino.y = GROUND_Y;
-        g.dino.vy = 0;
-        g.dino.jumping = false;
-      }
-
-      // Spawn obstacles randomly
-      const lastObstacle = g.obstacles[g.obstacles.length - 1];
-      const minGap = 200 + Math.random() * 150;
-      if (!lastObstacle || lastObstacle.x < CANVAS_WIDTH - minGap) {
-        if (Math.random() < 0.02) {
-          const type = Math.random() > 0.75 ? 'bird' : 'cactus';
-          const height = type === 'cactus' ? 30 + Math.random() * 25 : 0;
-          g.obstacles.push({ 
-            x: CANVAS_WIDTH + 50, 
-            type, 
-            passed: false,
-            height
-          });
-        }
-      }
-
-      // Move obstacles and check for passed
-      g.obstacles.forEach(o => {
-        o.x -= g.speed;
-        // Score when obstacle passes dino
-        if (!o.passed && o.x + 40 < 50) {
-          o.passed = true;
-          g.score++;
-          setScore(g.score);
-        }
-      });
-      g.obstacles = g.obstacles.filter(o => o.x > -60);
-
-      // Collision detection
-      const dinoBox = { x: 55, y: g.dino.y - 42, w: 35, h: 42 };
-      for (const o of g.obstacles) {
-        let oBox;
-        if (o.type === 'cactus') {
-          oBox = { x: o.x, y: GROUND_Y - o.height, w: 20, h: o.height };
-        } else {
-          oBox = { x: o.x, y: GROUND_Y - 50, w: 35, h: 16 };
-        }
-        
-        if (dinoBox.x < oBox.x + oBox.w && dinoBox.x + dinoBox.w > oBox.x &&
-            dinoBox.y < oBox.y + oBox.h && dinoBox.y + dinoBox.h > oBox.y) {
-          g.gameOver = true;
-          endGame(g.score);
-          return;
-        }
+      const inputs = pendingRef.current.splice(0);
+      for (const code of inputs) recorderRef.current.record(g.tick, code);
+      const before = g.score;
+      dinoSim.step(g, inputs);
+      viewRef.current.ground = (viewRef.current.ground + g.speed) % 20;
+      if (g.score > before) setScore(g.score);
+      if (g.over) {
+        endGame(recorderRef.current.finish(g.score, g.tick));
+        return;
       }
 
       // Draw background
@@ -1121,7 +1038,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
       // Stars
       ctx.fillStyle = "#475569";
       for (let i = 0; i < 30; i++) {
-        const x = (i * 47 + g.frameCount * 0.2) % CANVAS_WIDTH;
+        const x = (i * 47 + g.tick * 0.2) % CANVAS_WIDTH;
         const y = (i * 31) % 100;
         ctx.fillRect(x, y, 2, 2);
       }
@@ -1137,7 +1054,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
       // Ground details
       ctx.fillStyle = "#475569";
       for (let i = 0; i < 40; i++) {
-        const x = ((i * 30 - g.groundOffset) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
+        const x = ((i * 30 - viewRef.current.ground) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
         ctx.fillRect(x, GROUND_Y + 15, 10, 2);
       }
 
@@ -1146,12 +1063,12 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
         if (o.type === 'cactus') {
           drawCactus(ctx, o.x, GROUND_Y, o.height);
         } else {
-          drawBird(ctx, o.x, GROUND_Y - 45, g.frameCount);
+          drawBird(ctx, o.x, GROUND_Y - 45, g.tick);
         }
       });
 
       // Draw dino
-      drawDino(ctx, 50, g.dino.y, g.dino.jumping ? 0 : g.frameCount);
+      drawDino(ctx, 50, g.dino.y, g.dino.jumping ? 0 : g.tick);
 
       // Score display with glow
       ctx.shadowColor = "#f59e0b";
@@ -1160,7 +1077,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
       ctx.font = "bold 20px monospace";
       ctx.fillText(`🏆 ${g.score}`, CANVAS_WIDTH - 80, 35);
       ctx.shadowBlur = 0;
-    }, 1000 / 60);
+    }, dinoSim.STEP_MS);
 
     return () => {
       stopLoop();
@@ -1241,69 +1158,46 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
 //  👾 SPACE INVADERS (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => Promise<boolean>; onResult: (r: string, points: number) => void }) => {
+const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [starting, setStarting] = useState(false);
   const [aliensKilled, setAliensKilled] = useState(0);
-  
-  const gameRef = useRef({
-    player: { x: 225, y: 350 },
-    bullets: [] as { x: number; y: number }[],
-    aliens: [] as { x: number; y: number; alive: boolean }[],
-    alienDir: 1,
-    alienSpeed: 1,
-    score: 0,
-    kills: 0,
-    gameOver: false,
-    won: false,
-    keys: { left: false, right: false },
-    lastShot: 0
-  });
 
-  // The run only begins once the server has issued its session id, otherwise the XP would be lost.
+  // The simulation is shared with the server, which replays the recorded inputs to derive the score.
+  const simRef = useRef<invadersSim.InvadersState>(invadersSim.create(1));
+  const pendingRef = useRef<number[]>([]);
+  const recorderRef = useRef(createRecorder());
+  // Which movement keys are held right now, so only changes (not key auto-repeat) become inputs.
+  const heldRef = useRef({ left: false, right: false });
+
+  // The run only begins once the server has issued its session and seed, otherwise the XP would be lost.
   const startGame = async () => {
     if (starting) return;
     setStarting(true);
-    const ok = await onStart();
+    const seed = await onStart();
     setStarting(false);
-    if (!ok) return;
-    const aliens: { x: number; y: number; alive: boolean }[] = [];
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 8; col++) {
-        aliens.push({ x: 60 + col * 50, y: 40 + row * 40, alive: true });
-      }
-    }
-    
-    gameRef.current = {
-      player: { x: 225, y: 350 },
-      bullets: [],
-      aliens,
-      alienDir: 1,
-      alienSpeed: 1,
-      score: 0,
-      kills: 0,
-      gameOver: false,
-      won: false,
-      keys: { left: false, right: false },
-      lastShot: 0
-    };
+    if (seed === null) return;
+    simRef.current = invadersSim.create(seed);
+    pendingRef.current = [];
+    recorderRef.current = createRecorder();
+    heldRef.current = { left: false, right: false };
     setScore(0);
     setAliensKilled(0);
     setGameState("playing");
   };
 
-  const endGame = useCallback((won: boolean, kills: number) => {
+  const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
-    setAliensKilled(kills);
-    const finalScore = kills * 3;
+    setAliensKilled(run.score);
+    const finalScore = run.score * 3;
     setScore(finalScore);
     if (finalScore > highScore) setHighScore(finalScore);
-    // Report aliens destroyed; the server converts points to XP and caps it.
+    // Report the recorded inputs; the server replays them, derives the aliens destroyed, converts them to XP and caps it.
     playSound("lose");
-    onResult("won", kills);
+    onResult(run);
   }, [highScore, onResult]);
 
   useEffect(() => {
@@ -1314,55 +1208,56 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Inputs are queued here and handed to the simulation (and the recorder) on the next step.
+    const setHeld = (side: "left" | "right", down: boolean) => {
+      const held = heldRef.current;
+      if (held[side] === down) return;
+      held[side] = down;
+      const I = invadersSim.INPUT;
+      pendingRef.current.push(side === "left" ? (down ? I.LEFT_DOWN : I.LEFT_UP) : (down ? I.RIGHT_DOWN : I.RIGHT_UP));
+    };
+    // Only a shot the simulation will accept (cooldown over, not already queued this step) is recorded.
+    const fire = () => {
+      if (simRef.current.over || !invadersSim.canShoot(simRef.current) || pendingRef.current.includes(invadersSim.INPUT.SHOOT)) return;
+      pendingRef.current.push(invadersSim.INPUT.SHOOT);
+      playSound("shoot");
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      const g = gameRef.current;
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") g.keys.left = true;
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") g.keys.right = true;
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") setHeld("left", true);
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") setHeld("right", true);
       if (e.code === "Space") {
         e.preventDefault();
-        const now = Date.now();
-        if (now - g.lastShot > 250) {
-          g.bullets.push({ x: g.player.x + 15, y: g.player.y });
-          playSound("shoot");
-          g.lastShot = now;
-        }
+        fire();
       }
     };
-    
+
     const handleKeyUp = (e: KeyboardEvent) => {
-      const g = gameRef.current;
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") g.keys.left = false;
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") g.keys.right = false;
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") setHeld("left", false);
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") setHeld("right", false);
     };
 
     // Mobile touch controls
     const handleTouchStart = (e: TouchEvent) => {
       const rect = canvas.getBoundingClientRect();
       const touchX = e.touches[0].clientX - rect.left;
-      const g = gameRef.current;
 
       // Tap to shoot
-      const now = Date.now();
-      if (now - g.lastShot > 250) {
-        g.bullets.push({ x: g.player.x + 15, y: g.player.y });
-          playSound("shoot");
-        g.lastShot = now;
-      }
+      fire();
 
       // Left/right movement based on tap position
       if (touchX < canvas.width / 2) {
-        g.keys.left = true;
-        g.keys.right = false;
+        setHeld("left", true);
+        setHeld("right", false);
       } else {
-        g.keys.right = true;
-        g.keys.left = false;
+        setHeld("right", true);
+        setHeld("left", false);
       }
     };
 
     const handleTouchEnd = () => {
-      const g = gameRef.current;
-      g.keys.left = false;
-      g.keys.right = false;
+      setHeld("left", false);
+      setHeld("right", false);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1371,58 +1266,19 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     canvas.addEventListener("touchend", handleTouchEnd);
 
     const stopLoop = startFixedLoop(() => {
-      const g = gameRef.current;
-      if (g.gameOver) return;
+      const g = simRef.current;
+      if (g.over) return;
 
-      // Move player
-      if (g.keys.left && g.player.x > 0) g.player.x -= 5;
-      if (g.keys.right && g.player.x < 450) g.player.x += 5;
-
-      // Move bullets
-      g.bullets.forEach(b => b.y -= 8);
-      g.bullets = g.bullets.filter(b => b.y > 0);
-
-      // Move aliens
-      let moveDown = false;
-      g.aliens.forEach(a => {
-        if (a.alive) {
-          a.x += g.alienDir * g.alienSpeed;
-          if (a.x < 10 || a.x > 470) moveDown = true;
-        }
-      });
-      
-      if (moveDown) {
-        g.alienDir *= -1;
-        g.aliens.forEach(a => { if (a.alive) a.y += 20; });
-        g.alienSpeed = Math.min(g.alienSpeed + 0.2, 4);
+      const inputs = pendingRef.current.splice(0);
+      for (const code of inputs) recorderRef.current.record(g.tick, code);
+      const before = g.score;
+      invadersSim.step(g, inputs);
+      if (g.score > before) {
+        setScore(g.score * 3);
+        setAliensKilled(g.score);
       }
-
-      // Check bullet-alien collisions
-      g.bullets.forEach((b, bi) => {
-        g.aliens.forEach(a => {
-          if (a.alive && b.x > a.x && b.x < a.x + 30 && b.y > a.y && b.y < a.y + 25) {
-            a.alive = false;
-            g.bullets.splice(bi, 1);
-            g.kills++;
-            g.score = g.kills * 3;
-            setScore(g.score);
-            setAliensKilled(g.kills);
-          }
-        });
-      });
-
-      // Check win condition
-      if (g.aliens.every(a => !a.alive)) {
-        g.gameOver = true;
-        g.won = true;
-        endGame(true, g.kills);
-        return;
-      }
-
-      // Check lose condition (aliens reach bottom)
-      if (g.aliens.some(a => a.alive && a.y > 320)) {
-        g.gameOver = true;
-        endGame(false, g.kills);
+      if (g.over) {
+        endGame(recorderRef.current.finish(g.score, g.tick));
         return;
       }
 
@@ -1473,7 +1329,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
           ctx.fillRect(a.x + 18, a.y + 8, 5, 5);
         }
       });
-    }, 1000 / 60);
+    }, invadersSim.STEP_MS);
 
     return () => {
       stopLoop();
@@ -1534,8 +1390,8 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
           
           {gameState === "ended" && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
-              <p className={cn("text-2xl font-heading font-bold mb-2", gameRef.current.won ? "text-success" : "text-destructive-text")}>
-                {gameRef.current.won ? "🎉 Victory!" : "💀 Game Over!"}
+              <p className={cn("text-2xl font-heading font-bold mb-2", simRef.current.won ? "text-success" : "text-destructive-text")}>
+                {simRef.current.won ? "🎉 Victory!" : "💀 Game Over!"}
               </p>
               <p className="text-foreground-muted mb-2">Aliens destroyed: {aliensKilled}</p>
               <p className="text-lg font-bold text-success mb-4">+{aliensKilled * 3} XP</p>
@@ -1584,7 +1440,7 @@ const Games = () => {
   const [game, setGame] = useState<GameType>("menu");
   const [bet, setBet] = useState(BLACKJACK_CONFIG.MIN_BET);
   const arcadeRun = useRef<number | null>(null);
-  const arcadeStarting = useRef<Promise<number> | null>(null);
+  const arcadeStarting = useRef<Promise<{ sessionId: number; seed: number }> | null>(null);
   const notifyAchievements = useNotifyAchievements();
 
   const xp = Number(user?.user?.player_xp) || 0;
@@ -1597,25 +1453,26 @@ const Games = () => {
     qc.invalidateQueries({ queryKey: ['games'] });
   }, [qc]);
 
-  // Resolves true once the server issued a session id; false (after a toast) when the run cannot be recorded.
-  const arcadeStart = useCallback((type: ArcadeType): Promise<boolean> => {
+  // Resolves the run's seed once the server issued a session; null (after a toast) when the run cannot be recorded.
+  const arcadeStart = useCallback((type: ArcadeType): Promise<number | null> => {
     arcadeRun.current = null;
-    const started = gamesApi.arcadeStart(type).then((r) => r.sessionId);
+    const started = gamesApi.arcadeStart(type);
     arcadeStarting.current = started;
     return started.then(
-      (id) => { arcadeRun.current = id; return true; },
-      (err) => { showError(err); return false; }
+      (run) => { arcadeRun.current = run.sessionId; return run.seed; },
+      (err) => { showError(err); return null; }
     );
   }, []);
 
-  const arcadeFinish = useCallback(async (type: ArcadeType, points: number) => {
+  const arcadeFinish = useCallback(async (type: ArcadeType, run: ArcadeTelemetry) => {
     // Wait for the start request if it is somehow still in flight.
-    const sessionId = arcadeRun.current ?? (await arcadeStarting.current?.catch(() => null)) ?? null;
+    const sessionId = arcadeRun.current ?? (await arcadeStarting.current?.catch(() => null))?.sessionId ?? null;
     arcadeRun.current = null;
     arcadeStarting.current = null;
     if (!sessionId) return;
+    const points = run.score;
     try {
-      const r = await gamesApi.arcadeFinish(type, sessionId, points);
+      const r = await gamesApi.arcadeFinish(type, sessionId, run);
       if (r.xpGained > 0) toast.success(`🎮 ${GAME_NAMES[type]} +${r.xpGained} XP!`, { description: r.bonusInfo?.details || undefined });
       else toast.info(points > 0 ? 'Daily free-game XP cap reached.' : `${GAME_NAMES[type]} - Game over! Try again.`);
       notifyAchievements(r.achievements);
@@ -1640,9 +1497,9 @@ const Games = () => {
   if (game === "blackjack") return <DashboardLayout><BlackjackGame onBack={back} bet={Math.min(bet, Math.max(maxBet, BLACKJACK_CONFIG.MIN_BET))} onSettled={onSettled} /></DashboardLayout>;
   if (game === "rps") return <DashboardLayout><RPSGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
   if (game === "hangman") return <DashboardLayout><HangmanGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
-  if (game === "snake") return <DashboardLayout><SnakeGame onBack={back} onStart={() => arcadeStart("snake")} onResult={(_r, p) => arcadeFinish("snake", p)} /></DashboardLayout>;
-  if (game === "dino") return <DashboardLayout><DinoGame onBack={back} onStart={() => arcadeStart("dino")} onResult={(_r, p) => arcadeFinish("dino", p)} /></DashboardLayout>;
-  if (game === "invaders") return <DashboardLayout><SpaceInvadersGame onBack={back} onStart={() => arcadeStart("invaders")} onResult={(_r, p) => arcadeFinish("invaders", p)} /></DashboardLayout>;
+  if (game === "snake") return <DashboardLayout><SnakeGame onBack={back} onStart={() => arcadeStart("snake")} onResult={(run) => arcadeFinish("snake", run)} /></DashboardLayout>;
+  if (game === "dino") return <DashboardLayout><DinoGame onBack={back} onStart={() => arcadeStart("dino")} onResult={(run) => arcadeFinish("dino", run)} /></DashboardLayout>;
+  if (game === "invaders") return <DashboardLayout><SpaceInvadersGame onBack={back} onStart={() => arcadeStart("invaders")} onResult={(run) => arcadeFinish("invaders", run)} /></DashboardLayout>;
 
   return (
     <DashboardLayout>

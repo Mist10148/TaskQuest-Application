@@ -419,8 +419,8 @@ function helpEmbed() {
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },
             { name: 'Classes', value: '`/class` `/shop` `/leaderboard` `/prestige`', inline: true },
             { name: 'Settings', value: '`/toggle` `/automation` `/timezone` `/weekly`', inline: true },
-            { name: 'Web App', value: '`/app` Open dashboard', inline: true },
-            { name: 'AI', value: '`/summary` `/prioritize` `/ask`', inline: true }
+            { name: 'Web App', value: '`/app` Open dashboard\n`/ping` Latency', inline: true },
+            { name: 'AI', value: '`/summary` `/prioritize` `/ask` `/forget` `/ai-format`', inline: true }
         )
         .setFooter({ text: 'TaskQuest v4.0' });
 }

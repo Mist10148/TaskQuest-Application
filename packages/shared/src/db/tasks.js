@@ -487,20 +487,32 @@ async function markDeadlineNotified(listId) {
  * their deadline is long gone: they stay visible as overdue.
  * @returns {Promise<Array<{ id: number, discord_id: string }>>} the lists that were deleted
  */
-async function cleanupOldLists(days = 5) {
-    const where = `u.auto_delete_old_lists = TRUE
+async function cleanupOldLists(days = 5, { onCandidates } = {}) {
+    const eligible = `u.auto_delete_old_lists = TRUE
          AND s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY)`;
     const from = `FROM lists l
          JOIN users u ON u.discord_id = l.discord_id
          LEFT JOIN (
              SELECT list_id, COUNT(*) AS total, SUM(completed) AS done, MAX(updated_at) AS last_change
              FROM items GROUP BY list_id
-         ) s ON s.list_id = l.id
-         WHERE ${where}`;
-    const [doomed] = await getPool().query(`SELECT l.id, l.discord_id ${from}`, [days]);
-    if (!doomed.length) return [];
-    await getPool().query('DELETE FROM lists WHERE id IN (?)', [doomed.map((l) => l.id)]);
-    return doomed.map((l) => ({ id: Number(l.id), discord_id: String(l.discord_id) }));
+         ) s ON s.list_id = l.id`;
+    const [candidates] = await getPool().query(`SELECT l.id ${from} WHERE ${eligible}`, [days]);
+    if (onCandidates) await onCandidates(candidates); // test hook: lets a test race a write in here
+    const deleted = [];
+    for (const { id } of candidates) {
+        // Lock the list, then re-check the whole predicate inside the same transaction: a task
+        // added (or un-checked) since the SELECT blocks the delete instead of losing the list.
+        await withTransaction(async (conn) => {
+            const [[list]] = await conn.query('SELECT id, discord_id FROM lists WHERE id = ? FOR UPDATE', [id]);
+            if (!list) return;
+            await conn.query('SELECT id FROM items WHERE list_id = ? FOR UPDATE', [id]);
+            const [[still]] = await conn.query(`SELECT l.id ${from} WHERE l.id = ? AND ${eligible}`, [id, days]);
+            if (!still) return;
+            await conn.query('DELETE FROM lists WHERE id = ?', [id]);
+            deleted.push({ id: Number(list.id), discord_id: String(list.discord_id) });
+        });
+    }
+    return deleted;
 }
 
 module.exports = {

@@ -536,5 +536,29 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await progress('DAILY_ADD_3'), addsBefore);
     });
 
+    await t.test('cleanup re-checks a list under lock: a task added after the select saves it', async () => {
+        const CID = '100000000000000012';
+        await db.users.ensureUser(CID);
+        await db.query('UPDATE users SET auto_delete_old_lists = 1 WHERE discord_id = ?', [CID]);
+        const make = async (name) => {
+            const { list } = await db.tasks.createList(CID, { name });
+            const { item } = await db.tasks.addItem(CID, list.id, { name: 'done' });
+            await db.tasks.setItemCompleted(CID, item.id, true);
+            await db.getPool().query('UPDATE items SET updated_at = updated_at - INTERVAL 10 DAY WHERE id = ?', [item.id]);
+            return list;
+        };
+        const raced = await make('raced');
+        const plain = await make('plain');
+        const removed = await db.tasks.cleanupOldLists(5, {
+            onCandidates: async (rows) => {
+                assert.ok(rows.some((r) => r.id === raced.id), 'was a candidate when selected');
+                await db.tasks.addItem(CID, raced.id, { name: 'new unfinished task' });
+            }
+        });
+        assert.ok(await db.tasks.getList(CID, raced.id), 'the list that got a new task survives');
+        assert.equal(await db.tasks.getList(CID, plain.id), null);
+        assert.deepEqual(removed.filter((r) => r.discord_id === CID).map((r) => r.id), [plain.id]);
+    });
+
     await db.closePool();
 });

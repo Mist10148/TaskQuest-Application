@@ -247,3 +247,23 @@ async def test_create_list_preview_shows_every_field_and_subtask(seeded):
     add = TOOLS["add_item"]
     text_ = await add.preview(ctx(), add.args(list_id="L1", name="Extra", description="with notes"))
     assert "Extra" in text_ and "Math homework" in text_ and "with notes" in text_
+
+
+async def test_requests_failing_validation_or_erroring_early_spend_nothing(seeded):
+    """The quota is reserved before the body is validated; the gate must hand it back on any early failure."""
+    app = create_app()
+    app.dependency_overrides[get_llm_factory] = lambda: lambda **kw: ScriptedLLM([])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ai") as c:
+        for path, body, feature in (
+            ("/v1/summary", {"mode": "bogus"}, "summary"),
+            ("/v1/prioritize", {"limit": 999}, "prioritize"),
+            ("/v1/converse", {"channelId": "not-a-channel", "message": "hi"}, "chat"),
+            ("/v1/chat", {"message": ""}, "chat"),
+        ):
+            r = await c.post(path, json=body, headers=auth())
+            assert r.status_code == 422, path
+            assert await usage_row(feature) == (0, 0, 0), path
+        # a list that is not theirs: 404 from the chain, refunded exactly once (never below zero for a neighbour)
+        r = await c.post("/v1/summary", json={"mode": "list", "listId": 4}, headers=auth())
+        assert r.status_code == 404
+        assert await usage_row("summary") == (0, 0, 0)

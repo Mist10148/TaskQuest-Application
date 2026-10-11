@@ -43,6 +43,7 @@ async def summary(
             reserved=True,
         )
     except summarize_chain.NotFound:
+        access.settled = True  # the chain already handed the request back
         raise HTTPException(status_code=404, detail="List not found") from None
 
 
@@ -53,9 +54,9 @@ class PrioritizeBody(BaseModel):
 @router.post("/prioritize")
 async def prioritize(
     body: PrioritizeBody | None = None,
-    access: AIAccess = Depends(require_ai("prioritize")),
+    access: AIAccess = Depends(require_ai("prioritize", degrade_on_quota=True)),
     llm_factory: Callable[..., Any] = Depends(get_llm_factory),
 ):
     return await prioritize_graph.prioritize(
-        access.discord_id, llm_factory, limit=body.limit if body else None, reserved=True
+        access.discord_id, llm_factory, limit=body.limit if body else None, reserved=access.reserved
     )

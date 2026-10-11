@@ -207,3 +207,26 @@ async def test_endpoint(seeded):
         assert r.status_code == 200 and len(r.json()["ranked"]) == 2
         assert (await c.post("/v1/prioritize", json={"limit": 99}, headers=auth(UID))).status_code == 422
         assert (await c.post("/v1/prioritize", json={})).status_code == 401
+
+
+async def test_endpoint_degrades_to_the_heuristic_when_quota_is_used_up(seeded, monkeypatch):
+    monkeypatch.setattr(get_settings(), "ai_daily_request_limit", 0)
+    llm = ScriptedLLM([])
+    app = create_app()
+    app.dependency_overrides[get_llm_factory] = lambda: factory_for(llm)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ai") as c:
+        r = await c.post("/v1/prioritize", json={}, headers=auth(UID))
+        assert r.status_code == 200 and r.json()["usedFallback"] is True and len(r.json()["ranked"]) == 3
+        assert llm.calls == []
+    async with seeded.connect() as conn:  # nothing was booked for the degraded answer
+        assert (await conn.execute(text("SELECT COALESCE(SUM(requests), 0) FROM ai_usage"))).scalar() == 0
+
+
+async def test_endpoint_still_refuses_opted_out_users(seeded):
+    async with seeded.begin() as conn:
+        await conn.execute(text("UPDATE users SET ai_enabled = 0 WHERE discord_id = :u"), {"u": UID})
+    app = create_app()
+    app.dependency_overrides[get_llm_factory] = lambda: factory_for(ScriptedLLM([]))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ai") as c:
+        r = await c.post("/v1/prioritize", json={}, headers=auth(UID))
+        assert r.status_code == 403 and r.json()["code"] == "AI_OPTED_OUT"

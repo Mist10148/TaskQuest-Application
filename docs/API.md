@@ -59,7 +59,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET 🔒 | `/api/user` | — | Same as `/me` without `discord`/`userAchievements` |
-| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?, weekly_digest?}` (booleans), `{timezone?: IANA name\|null, reminder_hour?: 0–23}`; ≥1 field. An unknown zone is `400`. | Updated `users` row |
+| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?, weekly_digest?}` (booleans), `{timezone?: IANA name\|null, reminder_hour?: 0–23}`; ≥1 field. An unknown zone is `400`. The zone sets when your day, week and month start (daily caps, quests, weekly review, stats), so a second change within 24 hours of the last one is `400` ("once every 24 hours"); saving the zone you already have is fine. | Updated `users` row |
 | POST 🔒 | `/api/user/daily` | — | See below |
 | GET 🔒 | `/api/user/xp-history` (alias `/api/xp/history`) | — | Last 50 `xp_transactions` |
 | POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, task templates, achievements, skills, games and XP history, and resets stats (including `xp_spent` and streak freezes). Also asks the AI service to forget the user's vectors, chat threads and cached summaries. `{success, message}` |
@@ -110,7 +110,7 @@ Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadline
 
 **Task details.** A task can have its own `due_date`, `priority` (used for class and skill effects instead of the list's) and up to 5 `tags` (letters, numbers, `-` and `_`, ≤ 20 characters, stored lower-case as `"work,home"`). `recurrence` repeats it: completing a repeating task for the first time creates the next copy in the same transaction (monthly repeats clamp to short months, and a late completion never creates an already-overdue copy). A repeat grants no creation XP and is not counted as an added task. `parent_id` makes a task a **subtask**: the parent must be a top-level task of the same list, nesting is one level deep, and a task that has subtasks cannot become a subtask. Deleting a parent deletes its subtasks.
 
-Completing tasks pays XP for the first **50 completions per UTC day** (like list and task creation, so an add / complete / delete loop cannot farm XP). A capped completion is still recorded and cannot be re-earned by un-checking and re-checking.
+Completing tasks pays XP for the first **50 completions per day (in your time zone)** (like list and task creation, so an add / complete / delete loop cannot farm XP). A capped completion is still recorded and cannot be re-earned by un-checking and re-checking.
 
 ## Templates
 
@@ -133,12 +133,12 @@ All routes are 🔒 and owner-scoped (another user's template ID is `404`). A te
 | GET | `/api/skills` | 🔒 | `{skillTrees:[{classKey,name,emoji,description,classOwned,skills:[{id,name,emoji,description,maxLevel,cost,requires,currentLevel}]}], skillPoints, userXP, playerClass}` |
 | POST | `/api/skills/:skillId/unlock` | 🔒 | Unlocks or levels up one skill (cost per level). The tree is derived on the server; any `classKey` in the body is ignored. `{success, skill:{skill_id, skill_level}, balance}` |
 | GET | `/api/achievements` | 🔒 | `{achievements:[{key,name,emoji,description,category,unlocked,unlockedAt}], unlockedCount, totalCount}` |
-| GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, prestige, prestigeTitle, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]` (`lifetimeXp` is the never-reset total). `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs. |
+| GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, prestige, prestigeTitle, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]` (`lifetimeXp` is the never-reset total). `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only; one global week for everyone, not per viewer), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs. |
 | GET | `/api/leaderboard/me?by=&class=` | 🔒 | `{rank}` on that board, within the class when `class` is given (null when XP is off, no score on `weekly`/`streak`, or you are not that class) |
 
 ## Quests
 
-Daily, weekly and monthly quests (periods are UTC: the day; Monday 00:00 to Monday 00:00; the 1st to the 1st). Progress is computed from your real activity; a claim pays flat XP (no class or skill modifiers) once per period. Exactly one of the four rotating weekly quests (`WEEKLY_ROT_A`..`D`, chosen by ISO week number mod 4) is listed and claimable each week; the other three answer `404` and are not listed. `BOSS_COMPLETE_50` is the monthly boss.
+Daily, weekly and monthly quests (periods follow your time zone: your day; Monday 00:00 to Monday 00:00 your time; the 1st to the 1st; `periodStart` is that local date and `resetsAt` the next local boundary). Progress is computed from your real activity; a claim pays flat XP (no class or skill modifiers) once per period. Exactly one of the four rotating weekly quests (`WEEKLY_ROT_A`..`D`, chosen by ISO week number mod 4) is listed and claimable each week; the other three answer `404` and are not listed. `BOSS_COMPLETE_50` is the monthly boss.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -159,12 +159,12 @@ A server-timed work timer. The server measures the time; the client only says st
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET 🔒 | `/api/review` | — | `{weekStart, resetsAt, completed, xpEarned, claimed, claimable, streak, reward}` for the current UTC week |
+| GET 🔒 | `/api/review` | — | `{weekStart, resetsAt, completed, xpEarned, claimed, claimable, streak, reward}` for the current week in your time zone (`weekStart` is its Monday, a local date) |
 | POST 🔒 | `/api/review/claim` | — | `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. Once per week (`409`); `400` unless you finished at least one task this week; `403` when XP is off. |
 
 ## Statistics
 
-Read-only numbers for the web Stats page. Days are UTC days; only your own data is ever read.
+Read-only numbers for the web Stats page. Days are days in your time zone (UTC when unset); only your own data is ever read.
 
 | Method | Path | Query | Response |
 |---|---|---|---|
@@ -184,7 +184,7 @@ All routes are 🔒. Outcomes, shuffles and payouts are decided on the server. C
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/games/config` | — | Bet limits, rewards, arcade caps, cooldown |
-| GET | `/api/games/allowance` | — | `{cap, usedXP, remainingXP, resetsAt}`: today's shared free-game XP allowance |
+| GET | `/api/games/allowance` | — | `{cap, usedXP, remainingXP, resetsAt}`: today's shared free-game XP allowance (`resetsAt` is your next local midnight) |
 | GET | `/api/games/history` | — | Last 20 finished: `[{id, game_type, bet_amount, payout, net, state, created_at, ended_at}]` |
 | GET | `/api/games/active` | — | `{blackjack: {sessionId, view}\|null, hangman: {sessionId, view}\|null}` |
 | POST | `/api/games/blackjack/start` | `{bet: int}` | `BlackjackResult`. If a hand is already in progress, it is returned with `resumed:true` and no new bet is taken. |

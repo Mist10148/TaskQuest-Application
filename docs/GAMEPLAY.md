@@ -30,9 +30,9 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 
 | Action | Base XP | Notes |
 |---|---|---|
-| Create a list | 10 | Only the first 10 list creations per UTC day are rewarded |
-| Add a task | 5 | Only the first 50 per UTC day are rewarded |
-| Complete a task | 10 | **Once per task, ever**, and only the first **50 completions per UTC day** are rewarded (so add, complete, delete loops can't farm XP). Un-completing and re-completing pays nothing. A repeating task's next copy is a new task that can earn its own completion XP, within the same daily cap. |
+| Create a list | 10 | Only the first 10 list creations per day are rewarded |
+| Add a task | 5 | Only the first 50 per day are rewarded |
+| Complete a task | 10 | **Once per task, ever**, and only the first **50 completions per day** are rewarded (so add, complete, delete loops can't farm XP). Un-completing and re-completing pays nothing. A repeating task's next copy is a new task that can earn its own completion XP, within the same daily cap. |
 | Claim a quest | 15–120 | Flat reward, once per period (see §5b) |
 | Daily reward | 100 | Plus streak and skill bonuses (see §5) |
 | RPS win | 10 | Free game |
@@ -61,7 +61,7 @@ The class mechanic sees more than the base XP: the **action** (create list, add 
 
 Each toast or embed shows a breakdown like `Base: 10 | 🎯 Hit x4 +10 💥+32 | 📚 Skill +10`.
 
-Time-based class rules (Assassin decay, Monk Rhythm) use UTC. Ranger and Necromancer compare due dates with *your* calendar day (your time zone setting, UTC when unset).
+Assassin decay is a rolling clock. Monk Rhythm counts **your** days, and Ranger and Necromancer compare due dates with **your** calendar day (your time zone setting, UTC when unset). See [your day](#your-day).
 
 ## 3. Classes
 
@@ -76,7 +76,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🔮 **Wizard** | 700 | Wisdom = level × 5. The 3rd action in a cycle adds +Wisdom (Combo). The 5th adds +2 × Wisdom (Burst). Then the cycle restarts. |
 | 🏹 **Archer** | 600 | Hit chance is min(97%, 80% + 0.5% × level). A **hit** raises the streak by 1 (max 15) and adds ⌊base × streak × 8%⌋ + 3 + streak. On a hit, a *headshot* triggers if the roll is under min(30, hit% × 0.2) and adds 2 × base + 3 × streak. A 5% *perfect shot* adds 4 × base + 10 × streak. A **miss** lowers the streak by 2. |
 | 🛡️ **Tank** | 500 | +1 shield stack per action, capped at min(15, 3 + ⌊level / 3⌋) (plus 2 per Absorb level). Bonus is ⌊base × stacks × 4%⌋ + ⌊stacks / 2⌋. |
-| 🧘 **Monk** | 550 | **Rhythm** (max 14, counted in UTC days). The first rewarded action on a new day continues the Rhythm if you were active yesterday (+1), otherwise it restarts at 1. Further actions the same day keep it. Bonus on every action = ⌊base × Rhythm × 3%⌋ + Rhythm. |
+| 🧘 **Monk** | 550 | **Rhythm** (max 14, counted in your days). The first rewarded action on a new day continues the Rhythm if you were active yesterday (+1), otherwise it restarts at 1. Further actions the same day keep it. Bonus on every action = ⌊base × Rhythm × 3%⌋ + Rhythm. |
 | 🛠️ **Artisan** | 650 | **Project** (max 10). Every action adds 1 progress and pays +2 XP per progress. Completing the last open task of a list that has at least 3 tasks finishes the project: +5 XP per progress on top, then progress resets to 0. Repeating tasks and subtasks never count as the last task. |
 | 🧭 **Ranger** | 600 | **Deadline Hunter.** Completing a task with a due date *early* by d days (up to 7) pays ⌊base × 10% × d⌋ + 2 × d. *Due today* pays ⌊base × 25%⌋. *Overdue* pays nothing. Every other action (including completing a task with no due date) pays +3. No counter. |
 | 💀 **Necromancer** | 600 | **Revive.** Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 5%⌋ to *every* action (counted after the new soul). Souls do not decay. |
@@ -228,7 +228,7 @@ There are 62 skills in 12 trees (Default plus the eleven classes).
 
 ### Leaderboard boards
 
-The leaderboard defaults to **lifetime XP** (the never-reset total, so buying a class or skill never lowers your rank and prestiging doesn't either). Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins, quests, the bonus sources, focus sessions and the weekly review since Monday 00:00 UTC; bets and refunds don't count), **daily streak** (a streak whose claim window has passed shows as 0 instead of lingering until your next claim), and **current balance**. Any board can be filtered by class, and your own rank respects that filter.
+The leaderboard defaults to **lifetime XP** (the never-reset total, so buying a class or skill never lowers your rank and prestiging doesn't either). Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins, quests, the bonus sources, focus sessions and the weekly review since Monday 00:00 UTC; bets and refunds don't count. This board is global, so its week is the UTC week for everyone, not yours), **daily streak** (a streak whose claim window has passed shows as 0 instead of lingering until your next claim), and **current balance**. Any board can be filtered by class, and your own rank respects that filter.
 
 ### Streak freeze
 
@@ -236,7 +236,7 @@ A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price i
 
 ## 5b. Quests
 
-Daily, weekly and monthly quests, with periods in UTC (daily: the UTC day; weekly: Monday 00:00 to Monday 00:00; monthly: the 1st to the 1st). Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers).
+Daily, weekly and monthly quests, with periods in **your** time zone (daily: your day; weekly: Monday 00:00 to Monday 00:00 your time; monthly: the 1st to the 1st). The rotating weekly quest is picked by your local ISO week. Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers).
 
 | Quest | Period | Goal | Reward |
 |---|---|---|---|
@@ -264,7 +264,7 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 
 | Source (`xp_transactions.source`) | Amount | Cap |
 |---|---|---|
-| `first_of_day` | +10 for the first task you complete each UTC day | Once per day |
+| `first_of_day` | +10 for the first task you complete each day (yours) | Once per day |
 | `list_cleared` | +25 when your completion leaves a list of 3+ top-level tasks all done | Once per list, 5 lists a day |
 | `early_finish` | +5 per day early (max +20 per task) for a task with a due date | Shares 100 XP a day with `overdue_clear` |
 | `overdue_clear` | +10 for completing an overdue task | Shares 100 XP a day with `early_finish` |
@@ -285,7 +285,7 @@ A server-timed work timer. `POST /api/focus/start {minutes}` (10 to 90) starts a
 
 ## 5e. Weekly review
 
-Once per UTC week (Monday to Monday) you can claim **+40 XP** after finishing at least one task that week (first completions only; imported and auto-created copies don't count). `GET /api/review` shows the week's finished tasks, the XP earned and whether the review is claimable; `POST /api/review/claim` pays it.
+Once per week of yours (Monday to Monday in your time zone) you can claim **+40 XP** after finishing at least one task that week (first completions only; imported and auto-created copies don't count). `GET /api/review` shows the week's finished tasks, the XP earned and whether the review is claimable; `POST /api/review/claim` pays it.
 
 ## 5f. Prestige
 
@@ -349,29 +349,36 @@ You get a random 5–6 letter word and 6 lives. A wrong letter costs a life. Win
 | 🦖 Dino Runner | obstacles passed | 1 | 100 | 2 |
 | 👾 Space Invaders | aliens destroyed | 3 | 150 | 3 |
 
-A run must be started on the server before playing. A score above `seconds × rate + 1` is rejected, and each run can be submitted once. Starting a run uses the same 3-second cooldown as RPS and Hangman, and a run that scores 0 is recorded as a loss, not a win.
+A run must be started on the server before playing; the server issues a random seed and the game is a deterministic simulation from that seed. Your browser records every input with the step it was given on and sends that timeline with the score when the run ends. **The server replays the timeline and pays on the score it derives itself**, so a score cannot simply be edited or made up. A run is rejected (and cancelled) if it does not replay to the claimed score, lasts longer than about 10 minutes, has inputs faster than a person can press them, or does not fit the real time elapsed since it started. A score above `seconds × rate + 1` is also rejected, and each run can be submitted once. If the game page was open before an update, the server asks you to refresh it. Starting a run uses the same 3-second cooldown as RPS and Hangman, and a run that scores 0 is recorded as a loss, not a win.
+
+The simulations use a fixed time step (Snake 10 steps a second, Dino Runner and Space Invaders 60). Space Invaders' fire rate is therefore counted in steps (one shot per 15 steps, about 4 a second), and the seed shifts its alien formation. Each bullet destroys at most one alien.
 
 ## 8. Limits and anti-farming
 
+### Your day
+
+Every "per day" below, the quests, the weekly review and the Stats page use **your** time zone (`/timezone` or web Settings; UTC until you set one): a day starts at 00:00 local time, a week on Monday 00:00 and a month on the 1st. A daylight-saving day is 23 or 25 hours long. Two players can therefore reset at different moments, and the daily reward is **not** tied to the calendar: its 24-hour cooldown and streak windows are rolling clocks. Nothing is rewritten when you move: past XP keeps its instant, and from the change on the new zone decides what "today" is, so a change can move the start of today's window (and re-open or close a cap for a few hours). To stop zone-hopping from resetting caps, **a zone change is allowed once every 24 hours** (the first change, and saving the same zone, are always allowed). The one exception is the weekly leaderboard, which is global and always starts its week Monday 00:00 UTC.
+
 | Limit | Value |
 |---|---|
-| Rewarded list creations per UTC day | 10 |
-| Rewarded task additions per UTC day | 50 |
-| Rewarded task completions per UTC day | 50 (and once per task, ever) |
+| Rewarded list creations per day | 10 |
+| Rewarded task additions per day | 50 |
+| Rewarded task completions per day | 50 (and once per task, ever) |
 | Streak freezes held | 3 (5 with Freeze Cache) |
 | Quest claims | Once per quest per period (daily, weekly or monthly) |
-| First-of-day bonus | Once per UTC day |
+| First-of-day bonus | Once per day |
 | List-cleared bonus | Once per list, 5 a day |
 | Early-finish + overdue-clear bonuses | 100 XP a day together |
 | Subtasks-done bonus | Once per parent, 10 XP a day |
 | Habit bonus | 20 XP per completion, 60 XP a day |
 | Focus sessions | 10 to 90 minutes each, 100 XP and 8 sessions a day, one active session |
-| Weekly review | Once per UTC week |
+| Weekly review | Once per week |
 | Streak chests | Once per streak run (7, 14, 30 days) |
 | Achievement rewards | 25 XP, once per achievement |
 | Prestige | Level 30, at most 10 times |
 | Import / export | Imports never grant XP, counters or achievements |
-| Free-game XP (RPS + Hangman + arcade) per UTC day | 500 |
+| Free-game XP (RPS + Hangman + arcade) per day | 500 |
+| Time zone changes | Once every 24 hours |
 | Cooldown between RPS and Hangman rounds | 3 seconds |
 | Abandoned game session timeout | 30 minutes |
 | Web API rate limit | 900 requests / 15 min; games 90 / min |

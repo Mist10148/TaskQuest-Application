@@ -43,6 +43,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `012_xp_sources` | New XP sources: `lists.cleared_at` (a list pays the list-cleared bonus once), `users.last_chest_streak` (streak chests pay once per run), `items.habit_streak` (habit streaks), `items.first_completed_early` / `first_completed_overdue` (quest facts recorded at the first completion), `users.prestige` and `users.lifetime_xp_total` (backfilled from `lifetime_xp`), and the `focus_sessions` table |
 | `013_task_reminders` | `items.reminded_at` (the task's due-day DM went out) and `items.remind_at` (snooze); a new due date clears both |
 | `014_templates` | The `task_templates` table |
+| `015_timezone_days` | `users.timezone_changed_at` (throttles zone changes now that the zone sets the user's day) |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -92,11 +93,12 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 | `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
 | `assassin_streak`, `assassin_stacks`, `wizard_counter`, `archer_streak`, `tank_stacks`, `gambler_streak`, `monk_rhythm`, `artisan_progress`, `necro_souls` | INT | Class counters, reset when switching class (`CLASS_COUNTER_RESET` in `db/progression.js`) |
 | `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 36 h (48 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
-| `monk_day` | DATE NULL | Last UTC day the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
+| `monk_day` | DATE NULL | Last day (in the user's time zone) the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
 | `assassin_bleed` | INT | Actions left with the Bleed bonus after a crit. Not tied to a class, so it survives a class switch; cleared by a progress reset. |
 | `total_lists_created`, `total_items_added`, `total_items_completed` | INT | Monotonic counters for achievements |
 | `skill_points` | INT | Legacy. Unused, kept for compatibility. |
-| `timezone` | VARCHAR(64) NULL | IANA zone for reminders and the digest (NULL = UTC). Validated with `Intl`. |
+| `timezone` | VARCHAR(64) NULL | IANA zone (NULL = UTC), validated with `Intl`. Defines the user's day for daily caps, quests, the weekly review, stats and reminders. Changing it moves the day from then on (nothing is rewritten) and is limited to once per 24 hours. |
+| `timezone_changed_at` | DATETIME NULL | When the zone last changed (NULL: never set). Enforces the 24-hour limit. |
 | `reminder_hour` | TINYINT UNSIGNED, default 9 | Local hour reminders and the digest are sent |
 | `weekly_digest`, `last_digest_at` | BOOLEAN / TIMESTAMP | Opt-in Monday summary DM and when it last went out |
 | `calendar_token` | CHAR(32) NULL, unique | Secret of the calendar feed URL; NULL = feed off |
@@ -216,6 +218,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 See [`packages/shared/src/db/pool.js`](../packages/shared/src/db/pool.js):
 
 - **Sessions run in UTC.** `timezone: 'Z'` plus `SET time_zone = '+00:00'` on every connection.
+- **Days are per user, not per session.** Sessions stay UTC, but every "today", week and month is a `[from, to)` pair of instants computed in JS from `users.timezone` (`packages/shared/src/tz.js`) and bound as parameters: daily caps and the focus count read `xp_transactions` / `focus_sessions` in that window, quest and review claims store the local date of the period start in `quest_claims.period_start`, and stats group 15-minute buckets into local days in JS. The weekly leaderboard is the exception: one global UTC week.
 - **DATE columns are strings.** They come back as `'YYYY-MM-DD'`, which avoids timezone day-shifts.
 - **Large BIGINTs stay exact.** `supportBigNumbers` is on, so values beyond 2^53 return as strings instead of losing precision.
 - **TLS applies to `DB_URL` too.** `DB_SSL=true` enables it, and `DB_SSL_CA` supplies a PEM bundle. Certificate verification stays on unless `DB_SSL_REJECT_UNAUTHORIZED=false`, which logs a warning.

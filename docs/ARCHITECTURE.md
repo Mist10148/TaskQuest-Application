@@ -75,7 +75,7 @@ packages/shared/src
 ├── xp.js            levelFromXP, calculateClassXP, getSkillBonuses, calculateFinalXP, calculateDailyReward (incl. streak freezes)
 ├── achievements.js  evaluateAchievements(stats, unlocked, events)
 ├── dates.js         date-only helpers: todayInZone, isPastDeadline, formatDeadline, nextOccurrence (no zone shifts)
-├── quests.js        questPeriod (UTC day / Monday-to-Monday week)
+├── quests.js        questPeriod (the user's local day / Monday-to-Monday week / month); tz.js has the DST-safe local-midnight helpers
 ├── quickAdd.js      parseQuickAdd: "Finish report fri !high #work" -> task fields
 ├── ics.js           buildIcs: the calendar feed (RFC 5545)
 ├── games/           blackjack.js · rps.js · hangman.js · arcade.js   (pure engines)

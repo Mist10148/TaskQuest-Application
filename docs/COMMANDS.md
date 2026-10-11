@@ -19,7 +19,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/leaderboard` | `by` (lifetime XP / earned this week / daily streak / current balance) | Public | Top 10. Defaults to lifetime XP, so spending XP doesn't lower your rank. |
 | `/toggle` | — | Ephemeral | Turn the XP system on or off |
 | `/automation` | — | Ephemeral | Turn deadline reminder DMs on or off |
-| `/timezone` | `zone` (autocomplete, IANA name), `hour` (0–23, default 9) | Ephemeral | 🕒 When "today" starts for you and when in the day reminders and the weekly digest arrive. With no options it shows the current settings. |
+| `/timezone` | `zone` (autocomplete, IANA name), `hour` (0–23, default 9) | Ephemeral | 🕒 Your time zone: when "today" starts for you (daily limits, quests, the weekly review, Stats) and when in the day reminders and the weekly digest arrive. A zone can change once every 24 hours. With no options it shows the current settings. |
 | `/weekly` | — | Ephemeral | 📅 Turn the Monday weekly summary DM on or off |
 | `/quick` | `text` (required, ≤ 300), `list` (autocomplete, required) | Ephemeral | ⚡ Add a task from one line: dates (`today`, `tomorrow`, `fri`, `in 3 days`, `2030-05-04`, `jan 5`), `!high`/`!med`/`!low`, `#tags` (max 5) and repeats (`daily`, `every week`, `monthly`) are read from the text and the rest is the name. |
 | `/help` | — | Public | Command overview |

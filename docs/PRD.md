@@ -154,8 +154,8 @@ TaskQuest addresses this in three ways:
 | FR1 | All XP changes go through one service that locks the user row and writes an `xp_transactions` entry | Done |
 | FR2 | Lifetime XP is tracked separately from the spendable balance | Done |
 | FR3 | Class and skill effects are computed by one shared function on both platforms | Done |
-| FR4 | Rewards are capped per UTC day: 10 list creations, 50 task creations and 50 task completions | Done |
-| FR5 | Free games (RPS, Hangman, arcade) share a cap of 500 XP per UTC day | Done |
+| FR4 | Rewards are capped per day in the user's time zone: 10 list creations, 50 task creations and 50 task completions | Done |
+| FR5 | Free games (RPS, Hangman, arcade) share a cap of 500 XP per day in the user's time zone | Done |
 | FR6 | Game state is persisted in `game_sessions.game_data`, so games survive restarts | Done |
 | FR7 | Schema changes happen only through versioned migrations, and legacy databases are upgraded automatically | Done |
 | FR8 | Bot interactions that show XP or achievements are ephemeral | Done |

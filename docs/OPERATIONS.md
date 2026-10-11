@@ -86,7 +86,7 @@ Start with the health checks: web `GET /api/health` (`{status:"ok", database:"co
 | Bot online but nothing happens | Discord interaction took more than 3 s, or the bot can't reach the database | Check the bot logs for `INTERACTION` errors and run `npm run db:migrate` to confirm the DB connects. |
 | Deadline DMs never arrive | `/automation` is off, the user's DMs are closed, or their reminder hour hasn't come yet | Check the user's `automation_enabled`, `timezone` and `reminder_hour`. A closed inbox is skipped by design (Discord error 50007). |
 | A reminder arrived a day early or late | The user's time zone isn't set, so UTC dates are used | Ask them to run `/timezone` (or set it in Settings). |
-| Finishing a task pays no XP (the web shows "capped") | The daily cap of 50 rewarded completions (per UTC day) is reached, or XP is turned off | Expected; the cap resets at 00:00 UTC. |
+| Finishing a task pays no XP (the web shows "capped") | The daily cap of 50 rewarded completions (per day in the user's time zone) is reached, or XP is turned off | Expected; the cap resets at the user's local midnight (`users.timezone`, UTC when unset). |
 | Games: "cooldown" or wins paying 0 | 3-second cooldown, or the 500 XP daily free-game cap is used up | The Games page shows how much allowance is left. |
 | AI: 503 `AI_UNAVAILABLE` / `AI_DISABLED` | The AI service is down or timing out, or `AI_ENABLED` is not `true` on the web server | Check `GET /health` on the AI service, `AI_SERVICE_URL`, and that `AI_INTERNAL_TOKEN` is identical everywhere. |
 | AI: 429 `AI_QUOTA` | The user hit `AI_DAILY_REQUEST_LIMIT` | It resets at 00:00 UTC; raise the limit if it is too tight. |

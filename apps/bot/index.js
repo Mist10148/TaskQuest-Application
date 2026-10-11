@@ -17,6 +17,7 @@ require('@taskquest/shared/env').loadEnv(__dirname);
 const http = require('http');
 const { Client, GatewayIntentBits, Events, ActivityType, MessageFlags, Partials } = require('discord.js');
 const db = require('@taskquest/shared/db');
+const { createPushClient } = require('@taskquest/shared/push');
 const { version } = require('./package.json');
 const listCommand = require('./commands/list');
 const { job: runJob } = require('./utils/job');
@@ -62,9 +63,12 @@ const client = new Client({ intents, partials: [Partials.Channel] });
 /** Run a job, logging (not crashing on) failures, never overlapping itself. */
 const job = (name, fn) => runJob(name, fn, log);
 
+// Web push (optional): the web server holds the VAPID keys; the bot only asks it, best effort. Off without WEB_PUSH_INTERNAL_URL.
+const push = createPushClient();
+
 const checkDeadlines = job('DEADLINE', async () => {
-    await reminders.sendDeadlineReminders({ db, client, log });
-    await reminders.sendTaskReminders({ db, client, log });
+    await reminders.sendDeadlineReminders({ db, client, log, push });
+    await reminders.sendTaskReminders({ db, client, log, push });
 });
 
 const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));

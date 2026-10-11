@@ -2091,5 +2091,42 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(db.users.updateSettings(H, { timezone: 'Pacific/Pago_Pago' }), { code: 'VALIDATION' });
     });
 
+    await t.test('web push subscriptions: validated, one row per endpoint, capped, moved, pruned and cascaded', async () => {
+        const P = '100000000000000501';
+        const Q = '100000000000000502';
+        await db.users.ensureUser(P);
+        await db.users.ensureUser(Q);
+        const keys = { p256dh: Buffer.alloc(65, 5).toString('base64url'), auth: Buffer.alloc(16, 6).toString('base64url') };
+        const sub = (n) => ({ endpoint: `https://push.example.com/send/${n}`, keys });
+        assert.equal((await db.users.getUser(P)).web_push, 1, 'on by default');
+        await assert.rejects(db.push.addSubscription(P, { endpoint: 'http://push.example.com/x', keys }), { code: 'VALIDATION' });
+        assert.equal((await db.push.addSubscription(P, sub(1))).count, 1);
+        assert.equal((await db.push.addSubscription(P, sub(1))).count, 1, 'the same endpoint is the same row');
+        const refreshed = { endpoint: sub(1).endpoint, keys: { p256dh: Buffer.alloc(65, 8).toString('base64url'), auth: keys.auth } };
+        await db.push.addSubscription(P, refreshed);
+        assert.equal((await db.push.listSubscriptions(P))[0].p256dh, refreshed.keys.p256dh, 'a re-subscribe refreshes the keys');
+        const long = { endpoint: `https://push.example.com/${'a'.repeat(2000)}`, keys };
+        await db.push.addSubscription(P, long); // a long endpoint fits (TEXT) and is indexed by hash
+        for (let n = 2; n <= 9; n++) await db.push.addSubscription(P, sub(n));
+        assert.equal(await db.push.countSubscriptions(P), 10);
+        await assert.rejects(db.push.addSubscription(P, sub(99)), { code: 'VALIDATION' });
+        assert.equal((await db.push.addSubscription(P, sub(1))).count, 10, 'refreshing an existing one still works at the cap');
+
+        // An endpoint that shows up under another account moves there (a shared browser).
+        assert.equal((await db.push.addSubscription(Q, sub(2))).count, 1);
+        assert.equal(await db.push.countSubscriptions(P), 9);
+        assert.equal(await db.push.removeSubscription(P, sub(2).endpoint), false, 'P no longer owns it');
+        assert.equal(await db.push.removeSubscription(Q, sub(2).endpoint), true);
+        assert.equal(await db.push.removeSubscription(Q, sub(2).endpoint), false);
+
+        const [first] = await db.push.listSubscriptions(P);
+        await db.push.touchSubscription(first.id);
+        assert.ok((await db.query('SELECT last_used_at FROM push_subscriptions WHERE id = ?', [first.id]))[0].last_used_at);
+        await db.push.deleteSubscriptionById(first.id);
+        assert.equal(await db.push.countSubscriptions(P), 8);
+        await db.query('DELETE FROM users WHERE discord_id = ?', [P]);
+        assert.equal(await db.push.countSubscriptions(P), 0, 'subscriptions go with the user');
+    });
+
     await db.closePool();
 });

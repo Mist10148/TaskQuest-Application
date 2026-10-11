@@ -238,3 +238,55 @@ test('an overdue task reminder says so; the snooze button snoozes the task, not 
     assert.deepEqual(calls, [['42', '5', NOW.getTime() + SNOOZE_MS]]);
     assert.match(replies[0].content, /Snoozed/);
 });
+
+// ─── Web push mirror (best effort) ───────────────────────────────────────────
+
+const { pushForList, pushForTask } = require('../utils/reminders');
+
+const fakePush = (over = {}) => {
+    const calls = [];
+    return { calls, enabled: true, notify: async (id, msg) => (calls.push([id, msg]), true), ...over };
+};
+
+test('a list reminder is also pushed once the DM is final, and not for finished lists', async () => {
+    const push = fakePush();
+    const ctx = setup({ lists: [list(), list({ id: 2, name: 'Done', items_done: 2, items_total: 2 })] });
+    await sendDeadlineReminders({ ...ctx, push, now: NOW });
+    assert.equal(push.calls.length, 1, 'the finished list sends nothing, so it pushes nothing');
+    assert.equal(push.calls[0][0], '42');
+    assert.deepEqual(push.calls[0][1], { title: 'Deadline today', body: 'Taxes: 1/2 tasks done', url: '/tasks' });
+});
+
+test('a temporary DM failure retries without pushing; a permanent one still pushes once', async () => {
+    const retry = fakePush();
+    await sendDeadlineReminders({ ...setup({ lists: [list()], sendError: Object.assign(new Error('x'), { code: 0 }) }), push: retry, now: NOW });
+    assert.equal(retry.calls.length, 0);
+    const closed = fakePush();
+    await sendDeadlineReminders({ ...setup({ lists: [list()], sendError: Object.assign(new Error('x'), { code: 50007 }) }), push: closed, now: NOW });
+    assert.equal(closed.calls.length, 1);
+});
+
+test('a broken or disabled push client never breaks the reminder', async () => {
+    const throwing = fakePush({ notify: async () => { throw new Error('boom'); } });
+    const ctx = setup({ lists: [list()] });
+    const res = await sendDeadlineReminders({ ...ctx, push: throwing, now: NOW });
+    assert.deepEqual(res, { sent: 1, skipped: 0, retry: 0 });
+    assert.deepEqual(ctx.marked, [[1, 'due', false]]);
+    const off = fakePush({ enabled: false });
+    await sendDeadlineReminders({ ...setup({ lists: [list()] }), push: off, now: NOW });
+    assert.equal(off.calls.length, 0);
+    const res2 = await sendDeadlineReminders({ ...setup({ lists: [list()] }), now: NOW });
+    assert.equal(res2.sent, 1, 'no push client at all is fine');
+});
+
+test('task reminders push too, titled by lateness', async () => {
+    const push = fakePush();
+    const db = { tasks: { getTaskReminderCandidates: async () => [task()], markTaskReminderSent: async () => {} } };
+    const client = { users: { fetch: async () => ({ send: async () => {} }) } };
+    await sendTaskReminders({ db, client, log: () => {}, push, now: NOW });
+    assert.equal(push.calls.length, 1);
+    assert.match(push.calls[0][1].body, /Pay rent/);
+    assert.equal(pushForTask(task({ due_date: '2030-03-08' }), 'due', NOW).title, 'Task overdue');
+    assert.equal(pushForTask(task(), 'snooze', NOW).title, 'Task reminder');
+    assert.equal(pushForList(list({ deadline: '2030-03-08' }), 'overdue', NOW).title, 'Overdue');
+});

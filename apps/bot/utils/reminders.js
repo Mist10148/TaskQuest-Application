@@ -14,12 +14,42 @@
  * Tasks with their own due date follow the same rules (sendTaskReminders): one DM on the
  * due day (up to 3 days late) at the owner's reminder hour, plus the snooze button. A
  * task due on its list's deadline day is covered by the list reminder instead.
+ *
+ * When a push client is passed (WEB_PUSH_INTERNAL_URL set), every reminder that is decided on is also
+ * offered to the web server as a web push, best effort and only once the reminder is final (sent, or
+ * can never be sent), so a retried DM never repeats the push. The server skips users without subscriptions.
  */
 
 'use strict';
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { isPastDeadline, formatDeadline, todayInZone, hourInZone } = require('@taskquest/shared');
+
+/** Title and body of the web push that mirrors a list reminder. */
+function pushForList(list, kind, now = new Date()) {
+    const today = todayInZone(list.timezone, now);
+    const late = isPastDeadline(list.deadline, today);
+    const title = kind === 'overdue' ? 'Overdue' : kind === 'snooze' ? 'Reminder' : late ? 'Deadline passed' : 'Deadline today';
+    return { title, body: `${list.name}: ${Number(list.items_done)}/${Number(list.items_total)} tasks done`, url: '/tasks' };
+}
+
+/** Title and body of the web push that mirrors a task reminder. */
+function pushForTask(task, kind, now = new Date()) {
+    const today = todayInZone(task.timezone, now);
+    const late = isPastDeadline(String(task.due_date).slice(0, 10), today);
+    const title = kind === 'snooze' ? 'Task reminder' : late ? 'Task overdue' : 'Task due today';
+    return { title, body: task.list_name ? `${task.name} (${task.list_name})` : String(task.name), url: '/tasks' };
+}
+
+/** Offer a reminder to the web push client, if there is one. Never throws and never waits on a broken server for long. */
+async function pushReminder(push, discordId, message) {
+    if (!push?.enabled) return;
+    try {
+        await push.notify(discordId, message);
+    } catch {
+        /* best effort: the DM path is the reminder */
+    }
+}
 
 /** Discord error codes where retrying cannot help. */
 const PERMANENT_DM_ERRORS = new Set([50007 /* cannot DM this user */, 10013 /* unknown user */]);
@@ -97,7 +127,7 @@ function taskReminderMessage(task, kind, now = new Date()) {
  * DM the owners of tasks that are due. Same retry rules as the list reminders.
  * @returns {Promise<{ sent: number, skipped: number, retry: number }>}
  */
-async function sendTaskReminders({ db, client, log, now = new Date() }) {
+async function sendTaskReminders({ db, client, log, push, now = new Date() }) {
     const result = { sent: 0, skipped: 0, retry: 0 };
     for (const task of await db.tasks.getTaskReminderCandidates(now)) {
         const kind = decideTaskReminder(task, now);
@@ -116,6 +146,7 @@ async function sendTaskReminders({ db, client, log, now = new Date() }) {
                 continue;
             }
         }
+        await pushReminder(push, task.discord_id, pushForTask(task, kind, now));
         await db.tasks.markTaskReminderSent(task.id, now);
     }
     return result;
@@ -166,7 +197,7 @@ function reminderMessage(list, kind, now = new Date()) {
  * @param {object} deps { db, client, log, now? }
  * @returns {Promise<{ sent: number, skipped: number, retry: number }>}
  */
-async function sendDeadlineReminders({ db, client, log, now = new Date() }) {
+async function sendDeadlineReminders({ db, client, log, push, now = new Date() }) {
     const result = { sent: 0, skipped: 0, retry: 0 };
     for (const list of await db.tasks.getReminderCandidates(now)) {
         const kind = decideReminder(list, now);
@@ -194,6 +225,7 @@ async function sendDeadlineReminders({ db, client, log, now = new Date() }) {
                 continue; // leave it unmarked
             }
         }
+        await pushReminder(push, list.discord_id, pushForList(list, kind, now));
         await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline });
     }
     return result;
@@ -219,4 +251,4 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
     return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.', flags: MessageFlags.SuppressNotifications });
 }
 
-module.exports = { sendDeadlineReminders, sendTaskReminders, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };
+module.exports = { sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };

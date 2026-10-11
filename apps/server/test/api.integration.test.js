@@ -647,6 +647,76 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await set({ timezone: 'Pacific/Pago_Pago' })).status, 200);
     });
 
+    await t.test('web push: off by default, subscribe rules, internal send with pruning', async () => {
+        const { default: config } = await import('../config.js');
+        const { createPushService, setPushService } = await import('../lib/push.js');
+        const pushId = '200000000000000031';
+        const pat = await login(db, pushId);
+        const keys = { p256dh: Buffer.alloc(65, 3).toString('base64url'), auth: Buffer.alloc(16, 4).toString('base64url') };
+        const subscription = (n) => ({ endpoint: `https://push.example.com/send/${n}`, expirationTime: null, keys });
+        const TOKEN = 'p'.repeat(40);
+        const saved = { ...config.push };
+        try {
+            // Off: no VAPID keys.
+            assert.deepEqual(await (await call('GET', '/api/push/config')).json(), { enabled: false });
+            assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: subscription(1) } })).status, 404);
+            assert.equal((await call('POST', '/internal/push', { body: { discordId: pushId, title: 'x' }, origin: null, headers: { 'x-ai-token': TOKEN } })).status, 404);
+
+            Object.assign(config.push, { enabled: true, publicKey: 'B'.repeat(87), privateKey: 'k'.repeat(43), subject: 'mailto:ops@example.com', internalToken: TOKEN });
+            assert.deepEqual(await (await call('GET', '/api/push/config')).json(), { enabled: true, publicKey: 'B'.repeat(87) });
+            assert.equal((await call('POST', '/api/push/subscribe', { body: { subscription: subscription(1) } })).status, 401);
+            assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, origin: 'http://evil.example', body: { subscription: subscription(1) } })).status, 403, 'CSRF');
+
+            const ok = await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: subscription(1) } });
+            assert.equal(ok.status, 201);
+            assert.equal((await ok.json()).subscriptions, 1);
+            assert.equal((await (await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: subscription(1) } })).json()).subscriptions, 1, 'the same browser twice is one row');
+            for (const bad of [{ ...subscription(2), endpoint: 'http://push.example.com/x' }, { ...subscription(2), endpoint: 'https://127.0.0.1/x' }, { ...subscription(2), keys: { p256dh: 'x', auth: 'y' } }, { ...subscription(2), endpoint: `https://push.example.com/${'a'.repeat(2100)}` }]) {
+                assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: bad } })).status, 400);
+            }
+            assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: { ...subscription(2), extra: 1 } } })).status, 400);
+            for (let n = 2; n <= 10; n++) assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: subscription(n) } })).status, 201);
+            assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: subscription(11) } })).status, 400, 'at most 10 browsers');
+
+            // Internal send: token required; a mocked sender reports one dead browser.
+            const sent = [];
+            setPushService(
+                createPushService({
+                    sender: async (s, payload) => {
+                        sent.push({ endpoint: s.endpoint, payload: JSON.parse(payload) });
+                        if (s.endpoint.endsWith('/3')) throw Object.assign(new Error('gone'), { statusCode: 410 });
+                    },
+                    store: { list: (id) => db.push.listSubscriptions(id), remove: (id) => db.push.deleteSubscriptionById(id), touch: (id) => db.push.touchSubscription(id) },
+                    wantsPush: async (id) => Boolean((await db.users.getUser(id)).web_push)
+                })
+            );
+            const internal = (body, token = TOKEN) => call('POST', '/internal/push', { body, origin: null, headers: { 'x-ai-token': token } });
+            assert.equal((await internal({ discordId: pushId, title: 'Due' }, 'wrong'.padEnd(40, 'x'))).status, 401);
+            assert.equal((await internal({ discordId: pushId, title: 'Due' }, '')).status, 401);
+            assert.equal((await internal({ discordId: pushId })).status, 400, 'a title is required');
+            assert.equal((await internal({ discordId: pushId, title: 'Due', extra: 1 })).status, 400);
+            const r = await (await internal({ discordId: pushId, title: 'Due today', body: 'Taxes', url: '/tasks' })).json();
+            assert.deepEqual([r.sent, r.pruned, r.failed], [9, 1, 0]);
+            assert.equal(sent.length, 10);
+            assert.deepEqual(sent[0].payload, { title: 'Due today', body: 'Taxes', url: '/tasks' });
+            assert.equal(await db.push.countSubscriptions(pushId), 9, 'the 410 subscription was pruned');
+
+            // Opting out stops sends; unsubscribing removes only the caller's own browser.
+            await db.query('UPDATE users SET web_push = 0 WHERE discord_id = ?', [pushId]);
+            assert.equal((await (await internal({ discordId: pushId, title: 'Due' })).json()).skipped, 'opted-out');
+            await db.query('UPDATE users SET web_push = 1 WHERE discord_id = ?', [pushId]);
+            const other = await login(db, '200000000000000032');
+            assert.equal((await (await call('DELETE', '/api/push/subscribe', { cookie: other, body: { endpoint: subscription(1).endpoint } })).json()).removed, false, 'cannot remove someone else browser');
+            assert.equal((await (await call('DELETE', '/api/push/subscribe', { cookie: pat, body: { endpoint: subscription(1).endpoint } })).json()).removed, true);
+            assert.equal(await db.push.countSubscriptions(pushId), 8);
+            assert.equal((await call('DELETE', '/api/push/subscribe', { cookie: pat, body: { endpoint: 'x'.repeat(2049) } })).status, 400);
+            assert.equal((await call('PATCH', '/api/user', { cookie: pat, body: { web_push: false } })).status, 200);
+        } finally {
+            setPushService(null);
+            Object.assign(config.push, saved);
+        }
+    });
+
     server.close();
     await db.closePool();
 });

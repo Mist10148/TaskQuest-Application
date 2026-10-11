@@ -16,6 +16,7 @@ import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } fr
 import gamesRouter from './routes/games.js';
 import questsRouter from './routes/quests.js';
 import cosmeticsRouter from './routes/cosmetics.js';
+import { pushConfig, pushRouter, requirePushToken, internalPushRouter } from './routes/push.js';
 import focusRouter from './routes/focus.js';
 import reviewRouter from './routes/review.js';
 import statsRouter from './routes/stats.js';
@@ -36,6 +37,7 @@ export function createApp() {
 
     app.use(securityHeaders());
     // Service-to-service (AI chat write tools): token-protected, no session or CSRF.
+    app.use('/internal/push', express.json({ limit: '4kb' }), requirePushToken, internalPushRouter); // the bot asks for a web push (own token check)
     app.use('/internal', express.json({ limit: '16kb' }), requireInternalToken, internalRouter);
     // Imports carry whole lists, so that one route gets a bigger body limit (the shared service caps its size).
     app.use('/api/user/import', express.json({ limit: '1mb' }));
@@ -66,6 +68,7 @@ export function createApp() {
     app.use('/api/auth', authRouter);
     app.use('/api/leaderboard', leaderboardRouter);
     app.use('/api/calendar', calendarRouter);
+    app.get('/api/push/config', pushConfig);
 
     // ── Authenticated endpoints ──────────────────────────────────────────────
     app.use('/api/user', requireAuth, userRouter);
@@ -79,6 +82,7 @@ export function createApp() {
     app.use('/api/games', requireAuth, gamesRouter);
     app.use('/api/quests', requireAuth, questsRouter);
     app.use('/api/cosmetics', requireAuth, cosmeticsRouter);
+    app.use('/api/push', requireAuth, pushRouter);
     app.use('/api/focus', requireAuth, focusRouter);
     app.use('/api/review', requireAuth, reviewRouter);
     app.use('/api/stats', requireAuth, statsRouter);

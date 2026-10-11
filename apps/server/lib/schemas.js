@@ -33,6 +33,7 @@ export const settingsBody = z
         auto_delete_old_lists: z.boolean().optional(),
         ai_enabled: z.boolean().optional(),
         weekly_digest: z.boolean().optional(),
+        web_push: z.boolean().optional(),
         timezone: z.string().min(1).max(64).nullable().optional(),
         reminder_hour: z.number().int().min(0).max(23).optional()
     })
@@ -42,6 +43,28 @@ export const settingsBody = z
 /** A spreadsheet import: the CSV text itself (1 MB), optionally just checked without writing. */
 export const csvImportBody = z.object({ csv: z.string().min(1).max(1_000_000), dryRun: z.boolean().optional() }).strict();
 
+/** A PushSubscription as the browser serialises it. The service re-validates the endpoint (https, public host, 2048 chars) and the keys. */
+export const subscribeBody = z
+    .object({
+        subscription: z
+            .object({
+                endpoint: z.string().min(1).max(2048),
+                expirationTime: z.number().nullable().optional(),
+                keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(200) }).strict()
+            })
+            .strict()
+    })
+    .strict();
+export const unsubscribeBody = z.object({ endpoint: z.string().min(1).max(2048) }).strict();
+/** The bot's request to push a reminder to one user. */
+export const internalPushBody = z
+    .object({
+        discordId: z.string().regex(/^\d{5,32}$/),
+        title: z.string().min(1).max(100),
+        body: z.string().max(300).optional(),
+        url: z.string().max(200).optional()
+    })
+    .strict();
 export const resetBody = z.object({ confirm: z.literal('RESET') }).strict();
 export const prestigeBody = z.object({ confirm: z.literal('PRESTIGE') }).strict();
 

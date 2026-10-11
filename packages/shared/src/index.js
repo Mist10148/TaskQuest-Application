@@ -12,6 +12,7 @@ const validation = require('./validation');
 const random = require('./random');
 const dates = require('./dates');
 const cosmetics = require('./cosmetics');
+const push = require('./push');
 const { questPeriod, isoWeek, activeRotatingQuest } = require('./quests');
 const tz = require('./tz');
 const { buildIcs } = require('./ics');
@@ -33,6 +34,7 @@ module.exports = {
     random,
     ...dates,
     ...cosmetics,
+    push,
     tz,
     questPeriod,
     isoWeek,

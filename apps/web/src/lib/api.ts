@@ -61,6 +61,15 @@ export const userApi = {
     buyStreakFreeze: () => post<{ success: boolean; freezes: number; cost: number; max?: number; newBalance: number; newAchievements: AchievementUnlock[] }>('/api/user/streak-freeze'),
 };
 
+export interface CsvPreviewRow { row: number; list: string; task: string; due_date: string | null; priority: string | null; tags: string | null; completed: boolean }
+export interface CsvImportCheck { ok: boolean; rows: number; lists: number; items: number; preview: CsvPreviewRow[]; errors: Array<{ row: number; message: string }>; errorCount: number }
+
+export const importApi = {
+    /** Validate a CSV without writing anything. */
+    checkCsv: (csv: string) => post<CsvImportCheck>('/api/import/csv', { csv, dryRun: true }),
+    importCsv: (csv: string) => post<{ success: boolean; rows: number; lists: number; items: number }>('/api/import/csv', { csv }),
+};
+
 // ─── Lists & items ───────────────────────────────────────────────────────────
 
 export const listsApi = {
@@ -194,6 +203,16 @@ export const gamesApi = {
     arcadeFinish: (type: ArcadeType, sessionId: number, score: number) =>
         post<ArcadeResult>(`/api/games/arcade/${type}/finish`, { sessionId, score }),
     quit: (type: 'hangman' | ArcadeType) => post<{ success: boolean }>(`/api/games/${type}/quit`),
+};
+
+export const statsApi = {
+    xpHistory: (days: HistoryRange = 30) => apiFetch<XPHistoryDay[]>(`/api/stats/xp-history?days=${days}`),
+    summary: () => apiFetch<StatsSummary>('/api/stats/summary'),
+};
+
+export const reviewApi = {
+    get: () => apiFetch<WeeklyReview>('/api/review'),
+    claim: () => post<ReviewClaimResult>('/api/review/claim'),
 };
 
 export const xpApi = {
@@ -624,6 +643,43 @@ export interface QuestClaimResult {
     key: string;
     name: string;
     reward: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
+}
+
+export type HistoryRange = 7 | 30 | 90;
+
+export interface XPHistoryDay {
+    /** UTC day, YYYY-MM-DD. */
+    date: string;
+    xp: number;
+    tasksCompleted: number;
+}
+
+export interface StatsSummary {
+    streak: number;
+    tasksCompleted7d: number;
+    xpBySource30d: { source: string; label: string; xp: number }[];
+    busiestWeekday: { index: number; name: string; count: number } | null;
+}
+
+export interface WeeklyReview {
+    weekStart: string;
+    resetsAt: string;
+    completed: number;
+    xpEarned: number;
+    claimed: boolean;
+    claimable: boolean;
+    streak: number;
+    reward: number;
+}
+
+export interface ReviewClaimResult {
+    success: boolean;
+    weekStart: string;
+    xp: number;
     balance: number;
     level: number;
     leveledUp: boolean;

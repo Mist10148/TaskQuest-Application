@@ -12,6 +12,7 @@ import { celebrate } from '@/lib/celebrate';
 import { describeChest } from '@/lib/classInfo';
 import {
     userApi,
+    importApi,
     listsApi,
     itemsApi,
     classesApi,
@@ -20,9 +21,12 @@ import {
     leaderboardApi,
     gamesApi,
     questsApi,
+    statsApi,
+    reviewApi,
     aiApi,
     type AchievementUnlock,
     type CreateListData,
+    type HistoryRange,
     type ItemInput,
     type LeaderboardBoard,
     type ListWithItems,
@@ -64,6 +68,8 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['skills'] });
     qc.invalidateQueries({ queryKey: ['leaderboard'] });
     qc.invalidateQueries({ queryKey: ['quests'] });
+    qc.invalidateQueries({ queryKey: ['review'] });
+    qc.invalidateQueries({ queryKey: ['stats'] });
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -136,6 +142,15 @@ export function useImportData() {
         onSuccess: () => qc.invalidateQueries(),
         onError: showError,
     });
+}
+
+export function useCsvImport() {
+    const qc = useQueryClient();
+    return {
+        // The check only reads; problems come back in the result, so nothing toasts here.
+        check: useMutation({ mutationFn: (csv: string) => importApi.checkCsv(csv) }),
+        run: useMutation({ mutationFn: (csv: string) => importApi.importCsv(csv), onSuccess: () => qc.invalidateQueries() }),
+    };
 }
 
 export function useBuyStreakFreeze() {
@@ -326,6 +341,36 @@ export function useClaimQuest() {
             invalidateProgress(qc);
             celebrate(result.leveledUp ? 'level' : 'quest');
             toast.success(`🎁 ${result.name} claimed +${result.reward} XP!`, {
+                description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
+            });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
+// ─── Stats & weekly review ───────────────────────────────────────────────────
+
+export function useXpHistory(days: HistoryRange) {
+    return useQuery({ queryKey: ['stats', 'xp-history', days], queryFn: () => statsApi.xpHistory(days) });
+}
+
+export function useStatsSummary() {
+    return useQuery({ queryKey: ['stats', 'summary'], queryFn: statsApi.summary });
+}
+
+export function useReview() {
+    return useQuery({ queryKey: ['review'], queryFn: reviewApi.get });
+}
+
+export function useClaimReview() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: reviewApi.claim,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            celebrate(result.leveledUp ? 'level' : 'quest');
+            toast.success(`📋 Weekly review claimed +${result.xp} XP!`, {
                 description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
             });
             showAchievementNotifications(result.newAchievements, qc);

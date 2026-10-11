@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DAILY_COOLDOWN_MS, formatCountdown, nextClaimAt } from "./countdown";
+import { DAILY_COOLDOWN_MS, formatCountdown, formatLongCountdown, nextClaimAt } from "./countdown";
 
 describe("formatCountdown", () => {
   it("formats hours and minutes", () => {
@@ -27,5 +27,16 @@ describe("nextClaimAt", () => {
   it("is null when never claimed", () => {
     expect(nextClaimAt(0)).toBeNull();
     expect(nextClaimAt(null)).toBeNull();
+  });
+});
+
+describe("formatLongCountdown", () => {
+  it("adds days for long waits", () => {
+    expect(formatLongCountdown(3 * 86_400_000 + 4 * 3600_000)).toBe("3d 4h");
+    expect(formatLongCountdown(2 * 86_400_000)).toBe("2d");
+  });
+  it("matches formatCountdown below a day and says now when over", () => {
+    expect(formatLongCountdown(5 * 3600_000 + 12 * 60_000)).toBe("5h 12m");
+    expect(formatLongCountdown(0)).toBe("now");
   });
 });

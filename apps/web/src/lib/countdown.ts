@@ -16,3 +16,13 @@ export function formatCountdown(ms: number): string {
   if (h === 0) return `${m}m`;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
+
+/** Like formatCountdown but with days for long waits: "3d 4h", "5h 12m", "12m". */
+export function formatLongCountdown(ms: number): string {
+  if (!(ms > 0)) return "now";
+  const totalMinutes = Math.ceil(ms / 60_000);
+  const d = Math.floor(totalMinutes / 1440);
+  if (d === 0) return formatCountdown(ms);
+  const h = Math.floor((totalMinutes % 1440) / 60);
+  return h === 0 ? `${d}d` : `${d}d ${h}h`;
+}

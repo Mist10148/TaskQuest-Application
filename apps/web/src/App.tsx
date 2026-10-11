@@ -22,6 +22,8 @@ const Achievements = lazy(() => import("./pages/Achievements"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const Games = lazy(() => import("./pages/Games"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Review = lazy(() => import("./pages/Review"));
+const Stats = lazy(() => import("./pages/Stats"));
 const Chat = lazy(() => import("./pages/Chat"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -65,6 +67,8 @@ const App = () => (
             <Route path="/skills" element={<Skills />} />
             <Route path="/achievements" element={<Achievements />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/review" element={<Review />} />
+            <Route path="/stats" element={<Stats />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/chat/:threadId" element={<Chat />} />
             <Route path="/settings" element={<Settings />} />

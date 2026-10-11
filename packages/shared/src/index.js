@@ -11,7 +11,9 @@ const achievements = require('./achievements');
 const validation = require('./validation');
 const random = require('./random');
 const dates = require('./dates');
+const cosmetics = require('./cosmetics');
 const { questPeriod, isoWeek, activeRotatingQuest } = require('./quests');
+const tz = require('./tz');
 const { buildIcs } = require('./ics');
 const { parseQuickAdd } = require('./quickAdd');
 const { parseCsv, csvToImport } = require('./csv');
@@ -30,6 +32,8 @@ module.exports = {
     validation,
     random,
     ...dates,
+    ...cosmetics,
+    tz,
     questPeriod,
     isoWeek,
     activeRotatingQuest,

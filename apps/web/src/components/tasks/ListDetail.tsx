@@ -5,6 +5,7 @@ import type { Item, ListWithItems } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { SummarizeButton } from "@/components/ai/SummarizeButton";
 import { formatDeadline } from "@/lib/dates";
+import { completeOrder } from "@/lib/reorder";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import { cn } from "@/lib/utils";
 import { CATEGORIES } from "./constants";
@@ -60,8 +61,10 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   }, [items]);
 
   // Reordering moves whole groups: the parent order changes, subtasks keep their order under their parent.
+  // The server needs every task id of the list, so tasks hidden by a pending undo-delete are appended last.
+  const reorderAll = (visibleOrder: number[]) => onReorder(completeOrder(visibleOrder, (list.items || []).map((i: Item) => i.id)));
   const saveTopLevelOrder = (topIds: number[]) =>
-    onReorder(topIds.flatMap((id) => [id, ...(childrenOf.get(id) || []).map((c) => c.id)]));
+    reorderAll(topIds.flatMap((id) => [id, ...(childrenOf.get(id) || []).map((c) => c.id)]));
   const drag = useItemDragReorder(topLevel, saveTopLevelOrder);
 
   // Select several tasks to complete or delete them together.
@@ -101,7 +104,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
     if (!parentId) return void saveTopLevelOrder(reordered.map((s) => s.id));
     // Subtasks: rewrite the whole list with this parent's children in their new order.
     const flat = topLevel.flatMap((t) => [t.id, ...(t.id === parentId ? reordered : childrenOf.get(t.id) || []).map((c) => c.id)]);
-    void onReorder(flat);
+    void reorderAll(flat);
   };
 
   const row = (item: Item, siblings: Item[], isSubtask: boolean) => {

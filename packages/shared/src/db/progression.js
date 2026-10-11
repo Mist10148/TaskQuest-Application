@@ -16,7 +16,8 @@ const {
     classOwnershipColumn,
     findSkill,
     LIMITS,
-    SPEND_SOURCES
+    SPEND_SOURCES,
+    STREAK_CHESTS
 } = require('../constants');
 const { levelFromXP, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
@@ -26,7 +27,8 @@ const UPDATABLE_COLUMNS = new Set([
     'assassin_streak', 'assassin_stacks', 'assassin_last_at', 'assassin_bleed', 'gambler_streak', 'wizard_counter', 'archer_streak', 'tank_stacks',
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
     'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes',
-    'owns_monk', 'monk_rhythm', 'monk_day', 'owns_artisan', 'artisan_progress', 'owns_ranger', 'owns_necromancer', 'owns_paladin', 'necro_souls'
+    'owns_monk', 'monk_rhythm', 'monk_day', 'owns_artisan', 'artisan_progress', 'owns_ranger', 'owns_necromancer', 'owns_paladin', 'necro_souls',
+    'last_chest_streak'
 ]);
 
 const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, artisan_progress: 0, necro_souls: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
@@ -225,15 +227,24 @@ async function claimDaily(discordId) {
         const reward = calculateDailyReward(user, skills, Date.now());
         if (!reward.eligible) return { claimed: false, remainingMs: reward.remainingMs, streak: reward.streak };
 
+        // A streak chest pays once per streak run: only above the last chest paid, which a reset streak clears.
+        const lastChest = Number(user.last_chest_streak) || 0;
+        const chestXP = STREAK_CHESTS[reward.newStreak] && lastChest < reward.newStreak ? STREAK_CHESTS[reward.newStreak] : 0;
         const tx = await applyXP(conn, user, reward.totalXP, 'daily', {
             userUpdates: {
                 ...reward.xp.userUpdates,
+                last_chest_streak: chestXP ? reward.newStreak : reward.newStreak < lastChest ? 0 : lastChest,
                 ...(reward.freezeUsed ? { streak_freezes: Number(user.streak_freezes) - 1 } : {}),
                 streak_count: reward.newStreak,
                 last_daily_claim: new Date(),
                 last_active_day: new Date().toISOString().slice(0, 10)
             }
         });
+        let chest = null;
+        if (chestXP) {
+            await applyXP(conn, user, chestXP, 'streak_chest', { referenceId: reward.newStreak });
+            chest = { streak: reward.newStreak, xp: chestXP };
+        }
         const achievements = await unlockAchievements(conn, user);
 
         return {
@@ -243,15 +254,17 @@ async function claimDaily(discordId) {
             classBonus: reward.xp.finalXP - reward.xp.baseXP,
             streakBonus: reward.streakBonus,
             skillDailyBonus: reward.skillDailyBonus,
+            surpriseBonus: reward.surpriseBonus,
+            chest,
             bonusInfo: reward.xp.bonusInfo,
             streak: reward.newStreak,
             previousStreak,
             streakBroken: reward.streakBroken,
             streakPreserved: reward.streakPreserved,
             freezeUsed: reward.freezeUsed,
-            balance: tx.balanceAfter,
-            level: tx.level,
-            leveledUp: tx.leveledUp,
+            balance: Number(user.player_xp),
+            level: Number(user.player_level),
+            leveledUp: Number(user.player_level) > tx.previousLevel,
             achievements
         };
     });

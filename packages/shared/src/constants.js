@@ -346,6 +346,9 @@ const REWARDS = {
     SUBTASKS_DONE: 10
 };
 
+/** Streak milestones: the daily claim that reaches the day pays the chest once per streak run. */
+const STREAK_CHESTS = { 7: 100, 14: 250, 30: 600 };
+
 /**
  * Bonuses paid on top of a task's first completion. The key is the xp_transactions source; UIs
  * show `label` next to the XP in the completion result's `bonuses` list.
@@ -355,7 +358,8 @@ const BONUS_LABELS = {
     list_cleared: 'List cleared',
     early_finish: 'Finished early',
     overdue_clear: 'Overdue cleared',
-    subtasks_done: 'All subtasks done'
+    subtasks_done: 'All subtasks done',
+    streak_chest: 'Streak chest'
 };
 
 /**
@@ -374,7 +378,7 @@ const QUESTS = {
 const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
     'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
-    'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done'
+    'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest'
 ];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
@@ -507,6 +511,7 @@ module.exports = {
     XP_PER_LEVEL,
     REWARDS,
     BONUS_LABELS,
+    STREAK_CHESTS,
     STREAK_FREEZE,
     STREAK_FREEZE_CACHE,
     CLASS_RULES,

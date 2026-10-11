@@ -59,6 +59,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         for (const c of ['first_completed_at', 'counts_for_quests', 'first_completed_high', 'repeat_anchor_day']) assert.ok(items.includes(c), `items.${c}`);
         assert.ok(users.includes('assassin_last_at'));
         assert.ok((await cols('lists')).includes('cleared_at'));
+        assert.ok(users.includes('last_chest_streak'));
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -1091,6 +1092,47 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(capped.xp.capped, true);
         assert.deepEqual(capped.bonuses, []);
     });
+
+
+    await t.test('streak chests: 7, 14 and 30 pay once per streak run, and a reset streak can earn them again', async () => {
+        const U = '100000000000000111';
+        await db.users.ensureUser(U);
+        const setStreak = (streak, hoursAgo = 25) =>
+            db.query('UPDATE users SET streak_count = ?, last_daily_claim = UTC_TIMESTAMP() - INTERVAL ? HOUR WHERE discord_id = ?', [streak, hoursAgo, U]);
+
+        await setStreak(5);
+        const six = await db.progression.claimDaily(U);
+        assert.equal(six.streak, 6);
+        assert.equal(six.chest, null);
+        assert.equal(six.surpriseBonus, 0);
+
+        await setStreak(6);
+        const seven = await db.progression.claimDaily(U);
+        assert.deepEqual(seven.chest, { streak: 7, xp: 100 });
+        assert.equal(await sumSource(U, 'streak_chest'), 100);
+        assert.equal(seven.balance, Number((await db.users.getUser(U)).player_xp), 'the returned balance includes the chest');
+
+        // Farming attempt: rewind the streak by hand and claim again without ever breaking it.
+        await setStreak(6);
+        assert.equal((await db.progression.claimDaily(U)).chest, null, 'the same milestone does not pay twice in one run');
+        assert.equal(await sumSource(U, 'streak_chest'), 100);
+
+        await setStreak(13);
+        assert.deepEqual((await db.progression.claimDaily(U)).chest, { streak: 14, xp: 250 });
+        await setStreak(29);
+        assert.deepEqual((await db.progression.claimDaily(U)).chest, { streak: 30, xp: 600 });
+        assert.equal(await sumSource(U, 'streak_chest'), 950);
+
+        // Break the streak (no freeze), then climb to 7 again: a new run, a new chest.
+        await setStreak(30, 100);
+        const broken = await db.progression.claimDaily(U);
+        assert.equal(broken.streak, 1);
+        assert.equal(Number((await db.users.getUser(U)).last_chest_streak), 0);
+        await setStreak(6);
+        assert.deepEqual((await db.progression.claimDaily(U)).chest, { streak: 7, xp: 100 });
+        assert.equal(await sumSource(U, 'streak_chest'), 1050);
+    });
+
 
     await db.closePool();
 });

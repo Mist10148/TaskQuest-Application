@@ -732,3 +732,9 @@ test('bonus XP sources: every task bonus is labelled, counted on the weekly boar
     assert.equal(LIMITS.DEADLINE_BONUS_XP_PER_DAY, 100);
     assert.equal(LIMITS.SUBTASKS_DONE_XP_PER_DAY, 10);
 });
+
+test('streak chests: 7, 14 and 30 days pay 100, 250 and 600 XP and count for the weekly board', () => {
+    const { STREAK_CHESTS, WEEKLY_XP_SOURCES } = require('../src/constants');
+    assert.deepEqual(STREAK_CHESTS, { 7: 100, 14: 250, 30: 600 });
+    assert.ok(WEEKLY_XP_SOURCES.includes('streak_chest'));
+});

@@ -18,6 +18,6 @@ npm run typecheck
 | `src/lib/api.ts` | Typed API client |
 | `src/hooks/useApi.ts` | React Query hooks and toast notifications |
 | `src/contexts/AuthContext.tsx` / `src/components/AuthGate.tsx` | Session state and login screen |
-| `src/pages/*` | Dashboard, Tasks, Games, Classes, Skills, Achievements, Leaderboard, Profile, Settings |
+| `src/pages/*` | Dashboard, Tasks, Games, Classes, Skills, Achievements, Leaderboard, Focus, Stats, Weekly review, Profile, Settings |
 
 The API is documented in [docs/API.md](../../docs/API.md).

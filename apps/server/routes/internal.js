@@ -38,12 +38,12 @@ router.post(
     '/lists',
     asyncRoute(async (req, res) => {
         const { discordId, items = [], ...fields } = parse(internalCreateListBody, req.body);
-        const created = await db.tasks.createList(discordId, fields);
+        // One transaction: a failing item rolls the new list back too, so the AI never reports a half-made quest.
+        const created = await db.tasks.createListWithItems(discordId, fields, items);
         const addedItems = [];
         let xp = created.xp;
         const achievements = [...(created.achievements || [])];
-        for (const name of items) {
-            const r = await db.tasks.addItem(discordId, created.list.id, { name });
+        for (const r of created.items) {
             addedItems.push(r.item);
             achievements.push(...(r.achievements || []));
             if (r.xp?.finalXP) xp = r.xp;

@@ -83,30 +83,48 @@ function parseListInput(input, { partial = false } = {}) {
  */
 async function createList(discordId, input) {
     const fields = parseListInput(input);
-    return withTransaction(async (conn) => {
-        const user = await lockUser(conn, discordId);
-        let insertId;
-        try {
-            const [res] = await conn.query(
-                'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
-                [user.discord_id, fields.name, fields.description, fields.category, fields.priority, fields.deadline]
-            );
-            insertId = res.insertId;
-        } catch (err) {
-            if (isDuplicate(err)) throw errors.conflict(`You already have a list called "${fields.name}".`);
-            throw err;
-        }
-        await conn.query('UPDATE users SET total_lists_created = total_lists_created + 1 WHERE discord_id = ?', [user.discord_id]);
-        user.total_lists_created = Number(user.total_lists_created) + 1;
+    return withTransaction((conn) => createListIn(conn, discordId, fields));
+}
 
-        const xp = await rewardAction(conn, user, 'list_create', REWARDS.LIST_CREATE, {
-            dailyLimit: LIMITS.LIST_CREATE_REWARDS_PER_DAY,
-            referenceId: insertId
-        });
-        const achievements = await unlockAchievements(conn, user);
-        const [[list]] = await conn.query('SELECT * FROM lists WHERE id = ?', [insertId]);
-        return { list, xp, achievements };
+/**
+ * Create a list and its first items in ONE transaction: if any item fails, the list (and the XP
+ * it earned) is rolled back too, so callers never see a half-created list.
+ * @returns {Promise<{ list: object, xp: object|null, achievements: object[], items: Array<{ item: object, xp: object|null, achievements: object[] }> }>}
+ */
+async function createListWithItems(discordId, input, names = []) {
+    const fields = parseListInput(input);
+    const parsed = names.map((name) => parseItemInput(0, { name }));
+    return withTransaction(async (conn) => {
+        const created = await createListIn(conn, discordId, fields);
+        const items = [];
+        for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: created.list.id }));
+        return { ...created, items };
     });
+}
+
+async function createListIn(conn, discordId, fields) {
+    const user = await lockUser(conn, discordId);
+    let insertId;
+    try {
+        const [res] = await conn.query(
+            'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.discord_id, fields.name, fields.description, fields.category, fields.priority, fields.deadline]
+        );
+        insertId = res.insertId;
+    } catch (err) {
+        if (isDuplicate(err)) throw errors.conflict(`You already have a list called "${fields.name}".`);
+        throw err;
+    }
+    await conn.query('UPDATE users SET total_lists_created = total_lists_created + 1 WHERE discord_id = ?', [user.discord_id]);
+    user.total_lists_created = Number(user.total_lists_created) + 1;
+
+    const xp = await rewardAction(conn, user, 'list_create', REWARDS.LIST_CREATE, {
+        dailyLimit: LIMITS.LIST_CREATE_REWARDS_PER_DAY,
+        referenceId: insertId
+    });
+    const achievements = await unlockAchievements(conn, user);
+    const [[list]] = await conn.query('SELECT * FROM lists WHERE id = ?', [insertId]);
+    return { list, xp, achievements };
 }
 
 async function updateList(discordId, listId, input) {
@@ -204,36 +222,44 @@ function parseParentId(value) {
     return unwrap(v.id(value));
 }
 
+/** Validate the fields of a new item (throws a validation error before any database work). */
+function parseItemInput(listId, input) {
+    return {
+        lid: listId === 0 ? 0 : unwrap(v.id(listId)),
+        name: unwrap(v.itemName(input.name)),
+        description: unwrap(v.description(input.description)),
+        extras: parseItemExtras(input),
+        parentId: parseParentId(input.parent_id)
+    };
+}
+
 async function addItem(discordId, listId, input) {
-    const lid = unwrap(v.id(listId));
-    const name = unwrap(v.itemName(input.name));
-    const description = unwrap(v.description(input.description));
-    const extras = parseItemExtras(input);
-    const parentId = parseParentId(input.parent_id);
+    const parsed = parseItemInput(listId, input);
+    return withTransaction((conn) => addItemIn(conn, discordId, parsed));
+}
 
-    return withTransaction(async (conn) => {
-        const user = await lockUser(conn, discordId);
-        const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, user.discord_id]);
-        if (!list) throw errors.notFound('List not found.');
-        await assertValidParent(conn, lid, parentId);
+async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }) {
+    const user = await lockUser(conn, discordId);
+    const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, user.discord_id]);
+    if (!list) throw errors.notFound('List not found.');
+    await assertValidParent(conn, lid, parentId);
 
-        const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
-        const [res] = await conn.query(
-            `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [lid, name, description, Number(pos.next), extras.due_date, extras.priority, extras.tags, extras.recurrence, parentId]
-        );
-        await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
-        user.total_items_added = Number(user.total_items_added) + 1;
+    const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
+    const [res] = await conn.query(
+        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [lid, name, description, Number(pos.next), extras.due_date, extras.priority, extras.tags, extras.recurrence, parentId]
+    );
+    await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
+    user.total_items_added = Number(user.total_items_added) + 1;
 
-        const xp = await rewardAction(conn, user, 'item_add', REWARDS.ITEM_ADD, {
-            dailyLimit: LIMITS.ITEM_ADD_REWARDS_PER_DAY,
-            referenceId: res.insertId
-        });
-        const achievements = await unlockAchievements(conn, user);
-        const [[item]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-        return { item, xp, achievements };
+    const xp = await rewardAction(conn, user, 'item_add', REWARDS.ITEM_ADD, {
+        dailyLimit: LIMITS.ITEM_ADD_REWARDS_PER_DAY,
+        referenceId: res.insertId
     });
+    const achievements = await unlockAchievements(conn, user);
+    const [[item]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
+    return { item, xp, achievements };
 }
 
 async function updateItem(discordId, itemId, input) {
@@ -551,6 +577,7 @@ module.exports = {
     getList,
     getListByName,
     createList,
+    createListWithItems,
     updateList,
     deleteList,
     searchLists,

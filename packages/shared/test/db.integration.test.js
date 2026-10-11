@@ -243,6 +243,21 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.users.getWeeklyStats(IVY, late)).listsOverdue, 0);
     });
 
+    await t.test('createListWithItems is all or nothing (the AI create_list tool)', async () => {
+        const KIT = '100000000000000093';
+        await db.users.ensureUser(KIT);
+        const ok = await db.tasks.createListWithItems(KIT, { name: 'Kit' }, ['one', 'two', 'three']);
+        assert.deepEqual(ok.items.map((r) => r.item.name), ['one', 'two', 'three']);
+        assert.deepEqual((await db.tasks.getItems(KIT, ok.list.id)).map((i) => i.position), [0, 1, 2]);
+
+        // A bad item name must not leave a list without its items behind.
+        await assert.rejects(db.tasks.createListWithItems(KIT, { name: 'Half made' }, ['fine', '   ']), { code: 'VALIDATION' });
+        assert.equal(await db.tasks.getListByName(KIT, 'Half made'), null);
+        // A duplicate list name fails before any item is written.
+        await assert.rejects(db.tasks.createListWithItems(KIT, { name: 'Kit' }, ['x']), { code: 'CONFLICT' });
+        assert.equal((await db.tasks.getItems(KIT, ok.list.id)).length, 3);
+    });
+
     await t.test('a snooze that fires after the deadline also settles the due/overdue notices', async () => {
         const JON = '100000000000000092';
         await db.users.ensureUser(JON);

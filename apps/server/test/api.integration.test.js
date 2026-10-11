@@ -152,6 +152,46 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.ok(history.length >= 1);
     });
 
+    await t.test('arcade: the server issues a seed and pays only for a replayable run', async () => {
+        const { playBot } = await import('../../../packages/shared/test/helpers/arcadeBots.js');
+        const aliceId = '200000000000000001';
+        const finish = (body, cookie = alice, type = 'dino') => call('POST', `/api/games/arcade/${type}/finish`, { cookie, body });
+        const begin = async (type, target) => {
+            await db.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [aliceId]);
+            const run = await (await call('POST', `/api/games/arcade/${type}/start`, { cookie: alice })).json();
+            return { ...run, play: playBot(type, run.seed, target) };
+        };
+        const age = (run, ms) => db.query('UPDATE game_sessions SET created_at = created_at - INTERVAL ? SECOND WHERE id = ?', [Math.ceil(ms / 1000) + 1, run.sessionId]);
+
+        // An old client (score only) is told to refresh.
+        const old = await begin('dino', 3);
+        assert.ok(Number.isInteger(old.seed) && old.seed > 0);
+        const refused = await finish({ sessionId: old.sessionId, score: 3 });
+        assert.equal(refused.status, 400);
+        assert.match((await refused.json()).error, /refresh the page/);
+
+        // A tampered score is rejected; so is a claim that does not fit the schema.
+        const bad = await begin('dino', 3);
+        await age(bad, (bad.play.ticks * 1000) / 60);
+        const tampered = await finish({ sessionId: bad.sessionId, score: bad.play.score + 2, ticks: bad.play.ticks, inputs: bad.play.inputs });
+        assert.equal(tampered.status, 400);
+        assert.match((await tampered.json()).error, /does not match/);
+        assert.equal((await finish({ sessionId: bad.sessionId, score: 1, ticks: 'x', inputs: [] })).status, 400);
+
+        // A legitimate recorded run is paid once, with the replayed score.
+        const good = await begin('dino', 3);
+        await age(good, (good.play.ticks * 1000) / 60);
+        const body = { sessionId: good.sessionId, score: good.play.score, ticks: good.play.ticks, inputs: good.play.inputs };
+        const ok = await finish(body);
+        assert.equal(ok.status, 200);
+        assert.equal((await ok.json()).score, 3);
+        assert.equal((await finish(body)).status, 404, 'double submit');
+
+        // The timeline gets a bigger body limit than other routes, but not an unlimited one.
+        const fat = await finish({ sessionId: good.sessionId, score: 0, ticks: 100, inputs: new Array(30_000).fill(1_000_000) });
+        assert.equal(fat.status, 413);
+    });
+
     await t.test('free-game allowance', async () => {
         const res = await call('GET', '/api/games/allowance', { cookie: alice });
         assert.equal(res.status, 200);

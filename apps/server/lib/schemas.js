@@ -121,8 +121,18 @@ export const blackjackActionBody = z.object({ action: z.enum(['hit', 'stand', 'd
 export const rpsBody = z.object({ choice: z.enum(['rock', 'paper', 'scissors']) }).strict();
 export const hangmanGuessBody = z.object({ letter: z.string().regex(/^[A-Za-z]$/) }).strict();
 export const arcadeParam = z.object({ type: z.enum(Object.keys(shared.ARCADE_CONFIG)) });
+const arcadeLimits = Object.values(shared.games.arcade.TELEMETRY_LIMITS);
+export const ARCADE_MAX_TICKS = Math.max(...arcadeLimits.map((l) => l.maxTicks));
+export const ARCADE_MAX_INPUT_VALUES = Math.max(...arcadeLimits.map((l) => l.maxInputs)) * 2;
+// ticks and inputs are optional here only so that an old client (score alone) gets the clear
+// "please refresh the page" error from the service instead of a generic validation failure.
 export const arcadeFinishBody = z
-    .object({ sessionId: z.number().int().positive(), score: z.number().int().min(0).max(1_000_000) })
+    .object({
+        sessionId: z.number().int().positive(),
+        score: z.number().int().min(0).max(1_000_000),
+        ticks: z.number().int().min(1).max(ARCADE_MAX_TICKS).optional(),
+        inputs: z.array(z.number().int().min(0).max(1_000_000)).max(ARCADE_MAX_INPUT_VALUES).optional()
+    })
     .strict();
 export const quitParam = z.object({ type: z.enum(GAME_TYPES) });
 

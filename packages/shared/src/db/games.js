@@ -280,7 +280,10 @@ async function quitGame(discordId, gameType) {
 
 // ─── Arcade (web) ────────────────────────────────────────────────────────────
 
-/** Begin an arcade run; the returned sessionId must be sent with the score. */
+/**
+ * Begin an arcade run. The server issues the run's seed (stored in game_data); the browser plays the
+ * deterministic simulator from it, and finishArcade() replays the recorded inputs from the same seed.
+ */
 async function startArcade(discordId, gameType) {
     if (!arcade.isArcadeGame(gameType)) throw errors.validation('Unknown arcade game.');
     return withTransaction(async (conn) => {
@@ -291,14 +294,19 @@ async function startArcade(discordId, gameType) {
             "UPDATE game_sessions SET state = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE discord_id = ? AND game_type = ? AND state = 'active'",
             [user.discord_id, gameType]
         );
-        const sessionId = await insertSession(conn, user.discord_id, gameType, { data: { type: gameType } });
+        const seed = arcade.newSeed();
+        const sessionId = await insertSession(conn, user.discord_id, gameType, { data: { type: gameType, seed } });
         await updateUserColumns(conn, user, { last_game_at: new Date() });
-        return { sessionId };
+        return { sessionId, seed };
     });
 }
 
-/** Submit the score for a run started with startArcade(). */
-async function finishArcade(discordId, sessionId, score) {
+/**
+ * Submit a finished run started with startArcade(). `claim` is { score, ticks, inputs }: the score is only
+ * a claim, the reward is based on the score the server derives by replaying the inputs from the run's seed.
+ * Any rejected submission cancels the run for good.
+ */
+async function finishArcade(discordId, sessionId, claim) {
     const id = Number(sessionId);
     if (!Number.isSafeInteger(id) || id <= 0) throw errors.validation('Invalid session.');
     const outcome = await withTransaction(async (conn) => {
@@ -311,7 +319,8 @@ async function finishArcade(discordId, sessionId, score) {
         );
         if (!session || !arcade.isArcadeGame(session.game_type)) throw errors.notFound('Arcade run not found or already submitted.');
 
-        const scored = arcade.scoreRun(session.game_type, Number(score), Number(session.elapsed_ms));
+        const seed = parseData(session.game_data)?.seed;
+        const scored = arcade.verifyRun(session.game_type, { seed, elapsedMs: Number(session.elapsed_ms) }, claim);
         if (!scored.ok) {
             // Cancel the run and commit; the error is thrown after the commit, because
             // throwing here would roll the cancellation back and let the run be retried.
@@ -322,7 +331,7 @@ async function finishArcade(discordId, sessionId, score) {
         const xp = await rewardFreeGame(conn, user, scored.baseXP, id);
         const gained = xp ? xp.finalXP : 0;
         // A run that scored nothing is not a win (it would count towards "win 10 games").
-        await finishSession(conn, id, scored.baseXP > 0 ? 'won' : 'lost', gained, { type: session.game_type, score: scored.score });
+        await finishSession(conn, id, scored.baseXP > 0 ? 'won' : 'lost', gained, { type: session.game_type, seed, score: scored.score, ticks: scored.ticks });
         const achievements = await unlockAchievements(conn, user, { gameWinXP: gained });
         return {
             sessionId: id,

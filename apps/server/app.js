@@ -41,6 +41,8 @@ export function createApp() {
     app.use('/api/user/import', express.json({ limit: '1mb' }));
     // A CSV of up to 1 MB of text grows a little once its line breaks and quotes are escaped as JSON.
     app.use('/api/import', express.json({ limit: '2mb' }));
+    // An arcade run carries its recorded input timeline (up to ~12k small integers).
+    app.use('/api/games/arcade', express.json({ limit: '128kb' }));
     app.use(express.json({ limit: '16kb' }));
     app.use(sessionMiddleware(SESSION_COOKIE));
     app.use('/api', apiLimiter, csrfProtection);

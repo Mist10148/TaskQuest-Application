@@ -553,22 +553,77 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual([fresh.remainingXP, fresh.usedXP], [500, 0]);
     });
 
-    await t.test('arcade scores must be plausible', async () => {
+    await t.test('arcade runs are verified by replaying the recorded inputs', async () => {
+        const { playBot } = require('./helpers/arcadeBots');
+        const STEP_MS = { snake: 100, dino: 1000 / 60, invaders: 1000 / 60 };
+        const stateOf = async (id) => (await pool.query('SELECT state, game_data FROM game_sessions WHERE id = ?', [id]))[0][0];
+        /** Start a run (clearing the cooldown first) and return it with the bot's recorded play for its seed. */
+        const begin = async (id, type, target) => {
+            await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [id]);
+            const run = await db.games.startArcade(id, type);
+            return { ...run, play: playBot(type, run.seed, target) };
+        };
+        /** Pretend the run took as long as playing it takes, plus a little. */
+        const age = (run, type, ticks) => pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL ? MICROSECOND WHERE id = ?', [Math.ceil((ticks * STEP_MS[type] + 500) * 1000), run.sessionId]);
+        const claim = (play, patch = {}) => ({ score: play.score, ticks: play.ticks, inputs: play.inputs, ...patch });
+
         await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [BOB]);
-        const run = await db.games.startArcade(BOB, 'snake');
+        const first = await db.games.startArcade(BOB, 'snake');
         await assert.rejects(db.games.startArcade(BOB, 'snake'), { code: 'COOLDOWN' });
-        await assert.rejects(db.games.finishArcade(BOB, run.sessionId, 10_000), { code: 'VALIDATION' });
-        const [[{ state }]] = await pool.query('SELECT state FROM game_sessions WHERE id = ?', [run.sessionId]);
-        assert.equal(state, 'cancelled', 'an implausible score cancels the run for good');
-        await assert.rejects(db.games.finishArcade(BOB, run.sessionId, 0), { code: 'NOT_FOUND' });
-        await assert.rejects(db.games.finishArcade(ALICE, run.sessionId, 0), { code: 'NOT_FOUND' });
-        await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [BOB]);
-        const run2 = await db.games.startArcade(BOB, 'dino');
-        const done = await db.games.finishArcade(BOB, run2.sessionId, 0);
-        assert.equal(done.xpGained, 0);
-        const [[zero]] = await pool.query('SELECT state FROM game_sessions WHERE id = ?', [run2.sessionId]);
-        assert.equal(zero.state, 'lost', 'a zero-score run is not a win');
-        await assert.rejects(db.games.finishArcade(BOB, run2.sessionId, 0), { code: 'NOT_FOUND' });
+        assert.ok(Number.isInteger(first.seed) && first.seed > 0, 'the server issues a seed');
+        assert.equal((JSON.parse((await stateOf(first.sessionId)).game_data) || {}).seed, first.seed, 'and keeps it in game_data');
+
+        // An old client sends only a score: told to refresh, and the run is cancelled.
+        await assert.rejects(db.games.finishArcade(BOB, first.sessionId, 10_000), { code: 'VALIDATION', message: /refresh the page/ });
+        assert.equal((await stateOf(first.sessionId)).state, 'cancelled');
+        await assert.rejects(db.games.finishArcade(BOB, first.sessionId, claim({ score: 0, ticks: 10, inputs: [] })), { code: 'NOT_FOUND' });
+        await assert.rejects(db.games.finishArcade(ALICE, first.sessionId, 0), { code: 'NOT_FOUND' });
+
+        // A legitimate recorded run pays on the replayed score, once.
+        // CAROL still has her whole daily free-game allowance (BOB's was spent by the cap tests above).
+        const good = await begin(CAROL, 'snake', 6);
+        await age(good, 'snake', good.play.ticks);
+        const paid = await db.games.finishArcade(CAROL, good.sessionId, claim(good.play));
+        assert.equal(paid.score, 6);
+        assert.ok(paid.xpGained > 0);
+        const done = await stateOf(good.sessionId);
+        assert.equal(done.state, 'won');
+        assert.deepEqual(JSON.parse(done.game_data), { type: 'snake', seed: good.seed, score: 6, ticks: good.play.ticks });
+        await assert.rejects(db.games.finishArcade(CAROL, good.sessionId, claim(good.play)), { code: 'NOT_FOUND' }, 'double submit');
+
+        // A zero-score run is not a win.
+        const zero = await begin(BOB, 'dino', 0);
+        await age(zero, 'dino', zero.play.ticks);
+        const lost = await db.games.finishArcade(BOB, zero.sessionId, claim(zero.play));
+        assert.equal(lost.xpGained, 0);
+        assert.equal((await stateOf(zero.sessionId)).state, 'lost');
+
+        // Every kind of cheating is rejected and cancels the run for good.
+        const rejects = async (label, id, type, build, message) => {
+            const run = await begin(id, type, 5);
+            const play = run.play;
+            if (label !== 'too fast') await age(run, type, play.ticks);
+            await assert.rejects(db.games.finishArcade(id, run.sessionId, await build(play, run)), { code: 'VALIDATION', message }, label);
+            assert.equal((await stateOf(run.sessionId)).state, 'cancelled', label + ': cancelled');
+        };
+        await rejects('score edited up', BOB, 'snake', (p) => claim(p, { score: p.score + 1 }), /does not match/);
+        await rejects('truncated', BOB, 'dino', (p) => claim(p, { ticks: p.ticks - 1 }), /does not end/);
+        await rejects('extended', BOB, 'invaders', (p) => claim(p, { ticks: p.ticks + 30 }), /does not end/);
+        await rejects('input after the end', BOB, 'snake', (p) => claim(p, { inputs: [...p.inputs, p.ticks, 1] }), /Invalid input timeline/);
+        await rejects('too fast', BOB, 'dino', (p) => claim(p), /faster than real time/);
+        await rejects('too long a run', BOB, 'snake', (p) => claim(p, { ticks: 6_001 }), /too long/);
+        await rejects('inputs per second', BOB, 'dino', (p) => ({ score: p.score, ticks: p.ticks, inputs: Array.from({ length: 12 }, (_, i) => [i, 1]).flat() }), /faster than a person/);
+        await rejects('wrong seed', BOB, 'dino', (p, run) => claim(playBot('dino', run.seed + 7, 5)), /does not (match|end)/);
+
+        // Someone else's recorded run cannot be replayed under a different seed.
+        await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [ALICE]);
+        const theirs = await db.games.startArcade(ALICE, 'snake');
+        const theirPlay = playBot('snake', theirs.seed, 6);
+        const mine = await begin(BOB, 'snake', 0);
+        await age(mine, 'snake', theirPlay.ticks);
+        await assert.rejects(db.games.finishArcade(BOB, mine.sessionId, claim(theirPlay)), { code: 'VALIDATION' });
+        await assert.rejects(db.games.finishArcade(BOB, theirs.sessionId, claim(theirPlay)), { code: 'NOT_FOUND' }, 'and not under their session id either');
+        assert.equal((await stateOf(theirs.sessionId)).state, 'active', 'their run is untouched');
     });
 
     await t.test('leaderboard, history, cleanup and reset', async () => {

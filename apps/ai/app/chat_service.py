@@ -160,7 +160,7 @@ async def converse_turn(
     """Run one Discord conversation turn to completion (no streaming: Discord gets one message)."""
     from app.graphs.converse import build_converse_graph, thread_id_for
 
-    thread_id = thread_id_for(discord_id, channel_id)
+    thread_id = thread_id_for(discord_id, channel_id, public=public)
     async with pool.connection() as conn:
         # Idempotent: two messages arriving together both "create" the thread without a duplicate-key error.
         await threads.create_thread(
@@ -204,8 +204,10 @@ async def forget_conversation(discord_id: str, channel_id: str) -> bool:
     """Wipe this user's memory in one channel. True if there was anything to forget."""
     from app.graphs.converse import thread_id_for
 
-    thread_id = thread_id_for(discord_id, channel_id)
-    async with pool.connection() as conn:
-        existed = await threads.delete_thread(conn, discord_id, thread_id, source=threads.DISCORD)
-    await MySQLCheckpointSaver(pool.get_engine()).adelete_thread(thread_id)
+    existed = False
+    for public in (False, True):  # a guild channel keeps its public and its older tool-bearing thread apart
+        thread_id = thread_id_for(discord_id, channel_id, public=public)
+        async with pool.connection() as conn:
+            existed |= await threads.delete_thread(conn, discord_id, thread_id, source=threads.DISCORD)
+        await MySQLCheckpointSaver(pool.get_engine()).adelete_thread(thread_id)
     return existed

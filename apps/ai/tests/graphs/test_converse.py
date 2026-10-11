@@ -70,7 +70,10 @@ def test_converse_binds_only_read_tools_and_uses_the_persona(monkeypatch):
     build_converse_graph(deps_for(Spy()), None)
     assert ("converse_system", {"persona": True}) in prompts
     tools = {t.name for t in C.langchain_tools() if not C.TOOLS[t.name].write}
-    assert tools and not {"create_list", "add_item", "update_item", "break_down_task", "complete_item", "update_list"} & tools
+    assert (
+        tools
+        and not {"create_list", "add_item", "update_item", "break_down_task", "complete_item", "update_list"} & tools
+    )
 
 
 async def test_memory_folds_after_twenty_messages(seeded):
@@ -160,3 +163,22 @@ async def test_http_converse_accepts_the_public_flag(http):  # noqa: F811
     async with http(make_llm([AIMessage("Hi.")], [RouterOut(intent="chitchat")])) as c:
         r = await c.post("/v1/converse", json={"channelId": CHANNEL, "message": "hi", "public": True}, headers=auth())
         assert r.status_code == 200
+
+
+async def test_public_conversations_never_reuse_tool_bearing_history(seeded):
+    # A guild-channel thread from before public mode (same id as a DM thread) holds quest data from a tool.
+    assert thread_id_for(UID, CHANNEL, public=True) != thread_id_for(UID, CHANNEL)
+    llm = make_llm([call("get_overdue", {}), AIMessage("Done.")], [RouterOut(intent="task_question")])
+    await chat_service.converse_turn(deps_for(llm), UID, CHANNEL, "what is overdue?")  # old, tool-bearing
+
+    llm2 = make_llm([AIMessage("Hi there.")], [RouterOut(intent="chitchat")])
+    await chat_service.converse_turn(deps_for(llm2), UID, CHANNEL, "hello", public=True)
+    graph = build_converse_graph(deps_for(llm2), MySQLCheckpointSaver(pool.get_engine()), public=True)
+    state = await graph.aget_state({"configurable": {"thread_id": thread_id_for(UID, CHANNEL, public=True)}})
+    humans = [m.content for m in state.values["messages"] if isinstance(m, HumanMessage)]
+    assert humans == ["hello"], "the public thread starts empty"
+    assert not any(getattr(m, "type", "") == "tool" for m in state.values["messages"])
+
+    assert await chat_service.forget_conversation(UID, CHANNEL) is True  # wipes both threads
+    after = await graph.aget_state({"configurable": {"thread_id": thread_id_for(UID, CHANNEL, public=True)}})
+    assert not after.values

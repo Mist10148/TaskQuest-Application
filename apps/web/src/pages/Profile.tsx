@@ -38,7 +38,8 @@ const Profile = () => {
   const playerClass = CLASS_INFO[classKey];
   const level = dbUser.player_level || 1;
   const totalXP = Number(dbUser.player_xp) || 0;
-  const currentXP = (Number(dbUser.lifetime_xp ?? totalXP) || 0) % 100;
+  const lifetimeXP = Number(dbUser.lifetime_xp ?? totalXP) || 0;
+  const currentXP = lifetimeXP % 100;
   const streak = dbUser.streak_count || 0;
   
   const totalTasks = parseInt(String(stats.items?.total)) || 0;
@@ -99,7 +100,8 @@ const Profile = () => {
                   <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-xp" />
                   <span className="text-xl sm:text-2xl font-heading font-bold text-xp">{totalXP.toLocaleString()}</span>
                 </div>
-                <p className="text-xs text-foreground-muted">Total XP</p>
+                <p className="text-xs text-foreground-muted">XP Balance</p>
+                <p className="text-[10px] sm:text-xs text-foreground-muted">{lifetimeXP.toLocaleString()} Lifetime XP</p>
               </div>
             </div>
 
@@ -121,7 +123,7 @@ const Profile = () => {
             { icon: ListTodo, label: 'Total Lists', value: stats.lists?.total || 0, color: 'blue', sub: 'Quest logs created' },
             { icon: Gamepad2, label: 'Games Played', value: gamesPlayed, color: 'purple', sub: `${winRate}% win rate` },
             { icon: Trophy, label: 'Achievements', value: stats.achievements || 0, color: 'yellow', sub: 'Badges earned' },
-            { icon: TrendingUp, label: 'Current Level', value: `Lv.${level}`, color: 'cyan', sub: `${totalXP.toLocaleString()} total XP` },
+            { icon: TrendingUp, label: 'Current Level', value: `Lv.${level}`, color: 'cyan', sub: `${lifetimeXP.toLocaleString()} lifetime XP` },
           ].map((stat, i) => (
             <motion.div
               key={stat.label}

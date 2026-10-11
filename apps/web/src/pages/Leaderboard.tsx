@@ -78,7 +78,7 @@ const Leaderboard = () => {
   const [classFilter, setClassFilter] = useState("ALL");
   const board = BOARDS.find((b) => b.value === by) ?? BOARDS[0];
   const { data: leaderboard, isLoading, isError, error, refetch, isFetching } = useLeaderboard(by, classFilter);
-  const { data: mine } = useMyRank(by);
+  const { data: mine, isLoading: mineLoading, isError: mineFailed } = useMyRank(by, classFilter);
   const entries = leaderboard || [];
   const scoreText = (entry: LeaderboardEntry | undefined) => (entry ? entry.score.toLocaleString() : "");
   const youInList = entries.some((e) => e.isYou);
@@ -132,10 +132,12 @@ const Leaderboard = () => {
         </div>
       </div>
 
+      {mineLoading && <p className="mb-4 px-4 text-sm text-foreground-muted sm:px-0" aria-busy="true">Checking your rank…</p>}
+      {mineFailed && <p className="mb-4 px-4 text-sm text-destructive sm:px-0" role="alert">Couldn't load your rank.</p>}
       {mine && (
         <p className="mb-4 px-4 text-sm text-foreground-muted sm:px-0" aria-live="polite">
           {mine.rank
-            ? <>Your rank: <span className="font-heading font-bold text-primary">#{mine.rank}</span>{!youInList && classFilter === "ALL" ? " (outside the top 10)" : ""}</>
+            ? <>Your rank: <span className="font-heading font-bold text-primary">#{mine.rank}</span>{!youInList ? " (outside the top 10)" : ""}</>
             : by === "weekly" || by === "streak"
               ? "You're not on this board yet. Earn some XP or claim your daily reward!"
               : "Turn on gamification to appear on the leaderboard."}

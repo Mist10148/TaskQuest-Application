@@ -320,8 +320,8 @@ export function useGameAllowance() {
 }
 
 /** The signed-in player's own rank on a board (null when they have no score there yet). */
-export function useMyRank(by: LeaderboardBoard = 'lifetime') {
-    return useQuery({ queryKey: ['leaderboard', 'me', by], queryFn: () => leaderboardApi.me(by) });
+export function useMyRank(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
+    return useQuery({ queryKey: ['leaderboard', 'me', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.me(by, playerClass) });
 }
 
 export function useGameHistory() {

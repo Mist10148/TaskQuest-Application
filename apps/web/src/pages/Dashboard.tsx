@@ -31,7 +31,8 @@ const Dashboard = () => {
   
   const level = dbUser.player_level || 1;
   const totalXP = Number(dbUser.player_xp) || 0;
-  const currentXP = (Number(dbUser.lifetime_xp ?? totalXP) || 0) % 100;
+  const lifetimeXP = Number(dbUser.lifetime_xp ?? totalXP) || 0;
+  const currentXP = lifetimeXP % 100;
   const streak = dbUser.streak_count || 0;
   
   const totalTasks = parseInt(String(user?.items?.total)) || 0;
@@ -113,7 +114,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <h2 className="font-heading font-semibold text-sm sm:text-base">Level {level}</h2>
-                  <p className="text-xs sm:text-sm text-foreground-muted">{totalXP.toLocaleString()} Total XP</p>
+                  <p className="text-xs sm:text-sm text-foreground-muted">{lifetimeXP.toLocaleString()} Lifetime XP · {totalXP.toLocaleString()} XP Balance</p>
                 </div>
               </div>
               <div className="text-left sm:text-right">
@@ -156,6 +157,10 @@ const Dashboard = () => {
 
           {listsQuery.isError ? (
             <ErrorCard what="your quests" error={listsQuery.error} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} />
+          ) : listsQuery.isLoading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" aria-busy="true" aria-live="polite">
+              {[0, 1, 2].map((n) => <div key={n} className="h-28 rounded-xl bg-card/50 animate-pulse" />)}
+            </div>
           ) : lists.length === 0 ? (
             <div className="rounded-xl border-2 border-dashed border-border p-8 sm:p-12 text-center">
               <ListTodo className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-foreground-muted mb-4" />

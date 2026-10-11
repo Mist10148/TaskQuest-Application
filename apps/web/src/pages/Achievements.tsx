@@ -3,7 +3,10 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Lock, Trophy, Sparkles, Star, Medal } from "lucide-react";
+import { useState } from "react";
 import { useAchievements } from "@/hooks/useApi";
+import { useAuth } from "@/contexts/AuthContext";
+import { achievementProgress, cappedDelay, type AchievementStats } from "@/lib/achievementProgress";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
@@ -20,14 +23,35 @@ const CATEGORY_LABELS: Record<string, { label: string; emoji: string; color: str
 
 const CATEGORY_ORDER = ['lists', 'productivity', 'completions', 'xp', 'streaks', 'levels', 'classes', 'games', 'economy'];
 
+type Filter = "all" | "unlocked" | "locked";
+const FILTERS: Array<{ value: Filter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "unlocked", label: "Unlocked" },
+  { value: "locked", label: "Locked" },
+];
+
 const Achievements = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useAchievements();
+  const { user } = useAuth();
+  const [filter, setFilter] = useState<Filter>("all");
+
+  // Numbers the page already has, for the "3/5 lists" hints on locked achievements.
+  const stats: AchievementStats = {
+    lists: Number(user?.lists?.total) || 0,
+    items: Number(user?.items?.total) || 0,
+    completed: Number(user?.items?.completed) || 0,
+    lifetimeXP: Number(user?.user?.lifetime_xp ?? user?.user?.player_xp) || 0,
+    level: Number(user?.user?.player_level) || 1,
+    streak: Number(user?.user?.streak_count) || 0,
+    gamesWon: Number(user?.games?.won) || 0,
+  };
 
   const achievements = data?.achievements || [];
   const unlockedCount = data?.unlockedCount || 0;
   const totalCount = data?.totalCount || achievements.length;
 
-  const grouped = achievements.reduce((acc: Record<string, Achievement[]>, ach: Achievement) => {
+  const shown = achievements.filter((a: Achievement) => filter === "all" || (filter === "unlocked" ? a.unlocked : !a.unlocked));
+  const grouped = shown.reduce((acc: Record<string, Achievement[]>, ach: Achievement) => {
     const cat = ach.category || 'other';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(ach);
@@ -92,6 +116,20 @@ const Achievements = () => {
         </div>
       </motion.div>
 
+      <div role="group" aria-label="Filter achievements" className="mb-6 flex w-fit gap-1 rounded-lg bg-background-secondary p-1">
+        {FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            aria-pressed={filter === f.value}
+            onClick={() => setFilter(f.value)}
+            className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", filter === f.value ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground")}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div>
         {isError ? (
           <ErrorCard what="your achievements" error={error} onRetry={() => void refetch()} retrying={isFetching} />
@@ -99,6 +137,10 @@ const Achievements = () => {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {[...Array(9)].map((_, i) => <div key={i} className="h-24 sm:h-32 rounded-xl bg-card/50 animate-pulse" />)}
           </div>
+        ) : sortedCategories.length === 0 ? (
+          <p className="py-12 text-center text-foreground-muted" role="status">
+            {filter === "unlocked" ? "Nothing unlocked yet. Finish a task to get started!" : filter === "locked" ? "Everything is unlocked. Legend!" : "No achievements to show."}
+          </p>
         ) : (
           sortedCategories.map((category, catIndex) => {
             const categoryInfo = CATEGORY_LABELS[category] || { label: category, emoji: '🏆', color: 'from-gray-500/20 to-gray-500/5' };
@@ -106,7 +148,7 @@ const Achievements = () => {
             const unlockedInCategory = categoryAchievements.filter((a: Achievement) => a.unlocked).length;
 
             return (
-              <motion.div key={category} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + catIndex * 0.1 }} className="mb-6 sm:mb-8">
+              <motion.div key={category} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: cappedDelay(0.15, catIndex, 0.05, 0.4) }} className="mb-6 sm:mb-8">
                 <div className="flex items-center justify-between mb-3 sm:mb-4">
                   <h2 className="text-lg sm:text-xl font-heading font-semibold flex items-center gap-2">
                     <span className="text-xl">{categoryInfo.emoji}</span>
@@ -123,7 +165,7 @@ const Achievements = () => {
                       key={ach.key}
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.2 + index * 0.05 }}
+                      transition={{ delay: cappedDelay(0.2, index, 0.03, 0.5) }}
                       whileHover={ach.unlocked ? { y: -2, scale: 1.02 } : {}}
                       className={cn(
                         "relative rounded-xl border p-3 sm:p-4 transition-all overflow-hidden group",
@@ -147,6 +189,17 @@ const Achievements = () => {
                         <div className="flex-1 min-w-0">
                           <h3 className={cn("font-heading font-semibold text-sm sm:text-base truncate", !ach.unlocked && "text-foreground-muted")}>{ach.name}</h3>
                           <p className="text-xs sm:text-sm text-foreground-muted line-clamp-2">{ach.description}</p>
+                          {!ach.unlocked && (() => {
+                            const p = achievementProgress(ach.key, stats);
+                            return p && (
+                              <div className="mt-1.5">
+                                <div className="h-1.5 overflow-hidden rounded-full bg-background-tertiary" role="progressbar" aria-label={`${ach.name} progress`} aria-valuemin={0} aria-valuemax={p.goal} aria-valuenow={p.current}>
+                                  <div className="h-full rounded-full bg-primary" style={{ width: `${p.percent}%` }} />
+                                </div>
+                                <p className="mt-0.5 text-[10px] sm:text-xs text-foreground-muted">{p.current.toLocaleString()}/{p.goal.toLocaleString()} {p.unit}</p>
+                              </div>
+                            );
+                          })()}
                           {ach.unlocked && ach.unlockedAt && (
                             <p className="text-[10px] sm:text-xs text-xp mt-1 flex items-center gap-1">
                               <Sparkles className="h-3 w-3" />

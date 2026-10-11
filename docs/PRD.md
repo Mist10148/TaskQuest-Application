@@ -32,7 +32,7 @@ Status legend: **Done** (works as described), **Partial** (works, with a noted g
 
 ## 1. Summary
 
-TaskQuest turns ordinary to-do lists into RPG-style progression. People create lists, add tasks and complete them, and every meaningful action earns XP. XP drives levels, a daily reward with streaks, seven character classes that change how XP is earned, 27 skills, 33 achievements, daily and weekly quests, and a small game centre where XP can be won or wagered.
+TaskQuest turns ordinary to-do lists into RPG-style progression. People create lists, add tasks and complete them, and every meaningful action earns XP. XP drives levels, a daily reward with streaks, twelve character classes (Default plus eleven to buy) that change how XP is earned, 62 skills, 33 achievements, daily and weekly quests, and a small game centre where XP can be won or wagered.
 
 TaskQuest is one product with two front ends that share one account (the Discord identity) and one database:
 
@@ -251,6 +251,6 @@ TaskQuest addresses this in three ways:
 | **Balance / XP** | Spendable XP (`player_xp`). |
 | **Lifetime XP** | Total XP ever earned (`lifetime_xp`). It sets the level and is never reduced by spending. |
 | **Base XP** | The reward before class and skill modifiers. |
-| **Class counters** | Per-class state (Assassin streak/stacks, Wizard counter, Archer streak, Tank stacks). |
+| **Class counters** | Per-class state (Assassin streak/stacks, Gambler streak, Wizard counter, Archer streak, Tank stacks, Monk Rhythm, Artisan progress, Necromancer souls). |
 | **Free games** | RPS, Hangman and the arcade games, which share the daily free-game XP cap. |
 | **Escrow** | The Blackjack bet is deducted when dealt and returned or paid out when the hand settles. |

@@ -41,30 +41,44 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 For every reward:
 
 ```
-1. classXP   = class mechanic(base XP)                         (§3)
-2. multiplier = 1 + Σ percentage skills (+ conditional skills)   (§4)
-3. final     = ⌊classXP × multiplier⌋ + Σ flat skill bonuses
+1. classXP    = class mechanic(base XP)                          (§3)
+2. multiplier = 1 + Σ percentage skills
+                  + conditional skills: Execute, Revenge, Crusade (class), Bleed, Momentum  (§4)
+3. final      = ⌊classXP × multiplier⌋ + Σ flat skill bonuses
+                  (Valor, Fortify, Arcane Study, and on task completions Multishot,
+                   Rally for HIGH priority, Anchor for recurring tasks)
 4. Hero Champion: ×2 if your level is a multiple of 5
-5. Crit (Assassin Critical Hit): +50 % (or +100 % with Shadow Step)
+5. Crit (Assassin Critical Hit): +50 % (or +100 % with Shadow Step); a crit arms Bleed
 6. Double Down skill: chance to ×2
 7. Jackpot skill: 1 % chance to ×10
 ```
 
+The class mechanic sees more than the base XP: the **action** (create list, add task, complete task, daily, game), the task's **priority**, whether it is **recurring**, its **due date**, how many days it was **overdue**, and whether completing it **cleared a list**. Task completions always carry all of these; other actions carry only the action.
+
 Each toast or embed shows a breakdown like `Base: 10 | 🎯 Hit x4 +10 💥+32 | 📚 Skill +10`.
+
+Time-based class rules (Assassin decay, Monk Rhythm) use UTC. Ranger and Necromancer compare due dates with *your* calendar day (your time zone setting, UTC when unset).
 
 ## 3. Classes
 
-The Default class is free. Buying a class also equips it. Switching class resets every class counter.
+The Default class is free. Buying a class also equips it. Switching class resets every class counter (streaks, stacks, charges, Rhythm, Project progress, souls).
 
 | Class | Cost | Mechanic (per rewarded action) |
 |---|---|---|
 | ⚪ **Default** | 0 | No modifier. |
-| ⚔️ **Hero** | 500 | +25 flat XP. |
-| 🎲 **Gambler** | 300 | Rolls a bonus of 0 to (base + 99). 20% of the time it is *bad luck* instead: the reward shrinks by min(bonus, base − 1), and never drops below 1 XP. |
-| 🗡️ **Assassin** | 400 | Each action raises the streak by 1. From streak 3, each action also adds a stack (max 10). Bonus is +5% per stack. |
+| ⚔️ **Hero** | 500 | +25 flat XP, but never more than 3 × the base reward (so a 5 XP action gets +15, not +25). |
+| 🎲 **Gambler** | 300 | Rolls a bonus of 0 to (base + 99). 20% of the time it is *bad luck* instead: the reward shrinks by min(bonus, base − 1), and never drops below 1 XP. Counts consecutive lucky rolls (`gambler_streak`) for Hot Hand. |
+| 🗡️ **Assassin** | 400 | Each action raises the streak by 1. From streak 3, each action also adds a stack (max 10). Bonus is +5% per stack. **Decay:** after more than 36 hours without a rewarded action the streak and stacks reset to 0 before the action is applied. |
 | 🔮 **Wizard** | 700 | Wisdom = level × 5. The 3rd action in a cycle adds +Wisdom (Combo). The 5th adds +2 × Wisdom (Burst). Then the cycle restarts. |
 | 🏹 **Archer** | 600 | Hit chance is min(97%, 80% + 0.5% × level). A **hit** raises the streak by 1 (max 15) and adds ⌊base × streak × 8%⌋ + 3 + streak. On a hit, a *headshot* triggers if the roll is under min(30, hit% × 0.2) and adds 2 × base + 3 × streak. A 5% *perfect shot* adds 4 × base + 10 × streak. A **miss** lowers the streak by 2. |
-| 🛡️ **Tank** | 500 | +1 shield stack per action, capped at max(3, 20 − level). Bonus is ⌊base × stacks × 4%⌋ + ⌊stacks / 2⌋. |
+| 🛡️ **Tank** | 500 | +1 shield stack per action, capped at min(15, 3 + ⌊level / 3⌋) (plus 2 per Absorb level). Bonus is ⌊base × stacks × 4%⌋ + ⌊stacks / 2⌋. |
+| 🧘 **Monk** | 550 | **Rhythm** (max 14, counted in UTC days). The first rewarded action on a new day continues the Rhythm if you were active yesterday (+1), otherwise it restarts at 1. Further actions the same day keep it. Bonus on every action = ⌊base × Rhythm × 3%⌋ + Rhythm. |
+| 🛠️ **Artisan** | 650 | **Project** (max 10). Every action adds 1 progress and pays +2 XP per progress. Completing the last open task of a list that has at least 3 tasks finishes the project: +5 XP per progress on top, then progress resets to 0. Repeating tasks and subtasks never count as the last task. |
+| 🧭 **Ranger** | 600 | **Deadline Hunter.** Completing a task with a due date *early* by d days (up to 7) pays ⌊base × 10% × d⌋ + 2 × d. *Due today* pays ⌊base × 25%⌋. *Overdue* pays nothing. Every other action (including completing a task with no due date) pays +3. No counter. |
+| 💀 **Necromancer** | 600 | **Revive.** Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 5%⌋ to *every* action (counted after the new soul). Souls do not decay. |
+| ⚜️ **Paladin** | 750 | **Vow.** Completing a HIGH priority task pays base + 10; every other action pays +5. Passive: your daily streak always has the Streak Shield window (72 hours) for free, including on the streak leaderboard. |
+
+All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
 ## 4. Skills
 
@@ -80,6 +94,9 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 📚 Quick Learner | 3 | 50 | +5% XP | — |
 | 🌅 Early Bird | 2 | 75 | +10 daily-reward XP | Quick Learner |
 | 🛡️ Streak Shield | 1 | 100 | The daily streak survives a missed day (72h window instead of 48h) | Early Bird |
+| 🔥 Momentum | 3 | 70 | +0.5% XP for each day of your current daily streak, counting up to 10 days (max +15% at level 3) | Quick Learner |
+| 🧊 Freeze Cache | 1 | 120 | Hold 5 streak freezes instead of 3, and each costs 120 XP instead of 150 | Streak Shield |
+| 🎁 Daily Surprise | 1 | 140 | The daily reward has a 15% chance to add +50 XP | Freeze Cache |
 
 ### ⚔️ Hero
 
@@ -89,6 +106,8 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | ✨ Inspire | 2 | 150 | +8% XP | Valor |
 | 👑 Champion | 1 | 200 | ×2 XP while your level is a multiple of 5 | Inspire |
 | 🏆 Legendary | 1 | 300 | +25% XP | Champion |
+| 🛡️ Oath | 1 | 250 | Hero bonus becomes min(25 + level, 50), still capped at 3 × base *(class)* | Legendary |
+| 📣 Rally | 1 | 220 | +15 flat XP when you complete a HIGH priority task | Oath |
 
 ### 🎲 Gambler
 
@@ -98,6 +117,8 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🎰 Double Down | 2 | 120 | 10% chance to double an action's XP | Lucky Streak |
 | 🪢 Safety Net | 2 | 150 | Bad-luck losses 25% smaller *(class)* | Double Down |
 | 💎 Jackpot | 1 | 250 | 1% chance for ×10 XP | Safety Net |
+| 🎟️ Insurance | 1 | 200 | Bad luck can never cut a reward below 60% of the base XP *(class)* | Jackpot |
+| 🔁 Hot Hand | 1 | 230 | After 3 lucky rolls in a row the next roll cannot be bad luck, then the run restarts *(class)* | Insurance |
 
 ### 🗡️ Assassin
 
@@ -107,6 +128,8 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🎯 Critical Hit | 2 | 130 | +10% chance to crit for +50% XP | Swift Strike |
 | 🌑 Shadow Step | 1 | 180 | Crits grant +100% instead of +50% | Critical Hit |
 | ☠️ Execute | 1 | 280 | +100% XP at 10/10 stacks *(class)* | Shadow Step |
+| 🌙 Night Owl | 1 | 200 | The streak decay window is 48 hours instead of 36 *(class)* | Execute |
+| 🩸 Bleed | 1 | 240 | After a crit, your next 3 actions get +20% XP (any class that crits; the counter is `assassin_bleed`) | Night Owl |
 
 ### 🔮 Wizard
 
@@ -116,6 +139,8 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🔥 Spell Combo | 2 | 150 | Combo bonus +50% *(class)* | Arcane Study |
 | 🧘 Focus | 2 | 200 | +10% XP | Spell Combo |
 | 🌟 Arcane Mastery | 1 | 350 | Burst = 3 × Wisdom instead of 2 × *(class)* | Focus |
+| 🕯️ Overcharge | 1 | 300 | After a Burst the cycle restarts at 2 charges instead of 0 *(class)* | Arcane Mastery |
+| 📚 Tome | 1 | 260 | Wisdom + ⌊tasks ever completed / 20⌋ *(class)* | Overcharge |
 
 ### 🏹 Archer
 
@@ -125,6 +150,8 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🏹 Multishot | 2 | 140 | +5 XP on task completions | Steady Aim |
 | 💫 Piercing Shot | 1 | 190 | Misses don't reduce the streak *(class)* | Multishot |
 | 🦅 Sniper | 1 | 300 | Completing a task in a HIGH-priority list is always a hit and headshot *(class)* | Piercing Shot |
+| 🪶 Quiver | 2 | 150 | +3% hit chance per level, still capped at 97% *(class)* | Sniper |
+| 🦉 Eagle Eye | 1 | 260 | Headshot chance × 1.5 *(class)* | Quiver |
 
 ### 🛡️ Tank
 
@@ -134,16 +161,65 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 💪 Absorb | 2 | 145 | +2 max shield stacks *(class)* | Fortify |
 | ⚡ Revenge | 2 | 200 | +10% XP while at max stacks *(class)* | Absorb |
 | 🚀 Unstoppable | 1 | 320 | The daily streak never resets. A missed day just continues it. | Revenge |
+| 🏰 Bulwark | 1 | 240 | Each action adds 2 shield stacks instead of 1 *(class)* | Unstoppable |
+| ⚓ Anchor | 1 | 260 | +8 flat XP when you complete a recurring task | Bulwark |
+
+### 🧘 Monk
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🌬️ Steady Breath | 3 | 120 | +1 XP per Rhythm day on every action, per level *(class)* | — |
+| 🧠 Inner Focus | 2 | 180 | Monk bonus +25% per level *(class)* | Steady Breath |
+| 🪷 Discipline | 1 | 260 | Maximum Rhythm +4 (14 → 18) *(class)* | Inner Focus |
+| ☯️ Serenity | 1 | 340 | Rhythm survives one missed day (a gap of 2 days continues it) *(class)* | Discipline |
+
+### 🛠️ Artisan
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🔧 Toolkit | 3 | 130 | +1 XP per progress on every action, per level *(class)* | — |
+| 📐 Blueprint | 2 | 190 | Maximum progress +3 per level (10 → 16) *(class)* | Toolkit |
+| 🏭 Assembly Line | 1 | 280 | Each action adds 2 progress instead of 1 *(class)* | Blueprint |
+| 🏆 Masterwork | 1 | 360 | Completing a project pays +50% more *(class)* | Assembly Line |
+
+### 🧭 Ranger
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🔭 Scout | 3 | 130 | +2 XP per day early on early completions, per level *(class)* | — |
+| 🗺️ Long Sight | 1 | 220 | The early bonus counts up to 10 days instead of 7 *(class)* | Scout |
+| 🎯 Bullseye | 1 | 280 | +10 XP when you complete a task on its due date *(class)* | Long Sight |
+| 🌅 Second Wind | 1 | 330 | Overdue completions pay half the due-today bonus *(class)* | Bullseye |
+
+### 💀 Necromancer
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🫧 Siphon | 3 | 130 | Each soul adds +2% more of the base XP per level *(class)* | — |
+| 🏺 Soul Jar | 1 | 210 | Hold up to 8 souls instead of 5 *(class)* | Siphon |
+| 🕯️ Dark Ritual | 1 | 280 | Reviving pays +50% more *(class)* | Soul Jar |
+| ☠️ Lichdom | 1 | 350 | Reviving also pays +3 XP per soul you hold *(class)* | Dark Ritual |
+
+### ⚜️ Paladin
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| ✨ Holy Aura | 3 | 140 | +2 XP on every action, per level *(class)* | — |
+| ⚔️ Smite | 2 | 210 | The HIGH priority Vow bonus is +25% larger per level *(class)* | Holy Aura |
+| 📯 Crusade | 1 | 290 | +20% XP when you complete a HIGH priority task *(class)* | Smite |
+| 🏛️ Sanctuary | 1 | 350 | Your daily streak survives two missed days (96h window) *(class)* | Crusade |
+
+There are 62 skills in 12 trees (Default plus the eleven classes).
 
 ## 5. Daily reward
 
 - **Cooldown:** 24 hours from your last claim.
 - **Streak:**
   - Claiming within 48 hours of the last claim continues the streak.
-  - With Streak Shield, the window is 72 hours.
+  - With Streak Shield (or as a Paladin), the window is 72 hours. Paladin with Sanctuary: 96 hours.
   - With Unstoppable, the streak always continues.
   - Otherwise the streak resets to 1.
-- **XP** = class and skill modifiers applied to 100, plus min((streak − 1) × 5, 50), plus Early Bird (10 per level).
+- **XP** = class and skill modifiers applied to 100 (Momentum uses your streak before this claim), plus min((streak − 1) × 5, 50), plus Early Bird (10 per level), plus Daily Surprise (15% chance of +50).
 
 ### Leaderboard boards
 
@@ -151,7 +227,7 @@ The leaderboard defaults to **lifetime XP**, so buying a class or skill never lo
 
 ### Streak freeze
 
-A **streak freeze** costs 150 XP (hold at most 3). It is used automatically when you claim your daily reward after a gap that would otherwise reset a streak of 2 or more days. Order of protection: Unstoppable (free, always) first, then Streak Shield's longer window, then a freeze. A freeze never gets spent while your streak is alive or when the streak is 1.
+A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price is 120 XP and you can hold 5. It is used automatically when you claim your daily reward after a gap that would otherwise reset a streak of 2 or more days. Order of protection: Unstoppable (free, always) first, then the longer window (Streak Shield, Paladin, Sanctuary), then a freeze. A freeze never gets spent while your streak is alive or when the streak is 1.
 
 ## 5b. Quests
 
@@ -179,7 +255,7 @@ There are 33 achievements. They unlock in the same transaction as the action tha
 | XP (lifetime) | `XP_100` · `XP_500` · `XP_1000` · `XP_5000` · `XP_10000` |
 | Levels | `LEVEL_5` · `LEVEL_10` · `LEVEL_25` · `LEVEL_50` |
 | Streaks (daily) | `STREAK_3` · `STREAK_7` · `STREAK_14` · `STREAK_30` |
-| Classes | `FIRST_CLASS` (any purchased class) · `ALL_CLASSES` (all six) |
+| Classes | `FIRST_CLASS` (any purchased class) · `ALL_CLASSES` (own every class; achievements are never revoked, so adding classes does not take it away from anyone who had it) |
 | Games | `FIRST_GAME` (1 finished game) · `GAME_WIN_10` (10 wins) · `BLACKJACK` (a natural) · `HIGH_ROLLER` (500+ net XP in one game) |
 | Economy (XP spent on classes, skills and streak freezes) | `SPEND_1000` · `SPEND_5000` · `SPEND_10000` |
 
@@ -228,7 +304,7 @@ A run must be started on the server before playing. A score above `seconds × ra
 | Rewarded list creations per UTC day | 10 |
 | Rewarded task additions per UTC day | 50 |
 | Rewarded task completions per UTC day | 50 (and once per task, ever) |
-| Streak freezes held | 3 |
+| Streak freezes held | 3 (5 with Freeze Cache) |
 | Quest claims | Once per quest per period |
 | Import / export | Imports never grant XP, counters or achievements |
 | Free-game XP (RPS + Hangman + arcade) per UTC day | 500 |

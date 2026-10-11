@@ -39,6 +39,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `008_user_prefs` | `users.timezone`, `reminder_hour`, `weekly_digest`, `last_digest_at`, `calendar_token` (unique), `streak_freezes`, `xp_spent` (backfilled from `xp_transactions`); `lists.remind_at` and `overdue_notified` |
 | `009_quest_claims` | `quest_claims`, the claim log that keeps a quest to one payout per period |
 | `010_quest_integrity` | `items.first_completed_at`, `first_completed_high`, `counts_for_quests` (what quests count) and `repeat_anchor_day` (monthly repeats keep their day) |
+| `011_class_rework` | Class rebalance and five new classes: `users.assassin_last_at` (Assassin decay), `gambler_streak` (Hot Hand), `assassin_bleed` (Bleed), `owns_monk` / `owns_artisan` / `owns_ranger` / `owns_necromancer` / `owns_paladin`, counters `monk_rhythm`, `monk_day`, `artisan_progress`, `necro_souls`, and `player_class` extended with MONK, ARTISAN, RANGER, NECROMANCER, PALADIN |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -78,12 +79,15 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 | `player_xp` | BIGINT | Spendable balance |
 | `lifetime_xp` | BIGINT | Total ever earned. Drives the level and XP achievements. |
 | `player_level` | BIGINT | ⌊lifetime_xp / 100⌋ + 1 (kept in sync by `applyXP`) |
-| `player_class` | ENUM(DEFAULT, HERO, GAMBLER, ASSASSIN, WIZARD, ARCHER, TANK) | Equipped class |
+| `player_class` | ENUM(DEFAULT, HERO, GAMBLER, ASSASSIN, WIZARD, ARCHER, TANK, MONK, ARTISAN, RANGER, NECROMANCER, PALADIN) | Equipped class (the last five arrived with migration 011) |
 | `gamification_enabled`, `automation_enabled`, `auto_delete_old_lists` | BOOLEAN | Settings (default on) |
 | `streak_count`, `last_daily_claim`, `last_active_day` | INT / DATETIME / DATE | Daily reward |
 | `last_game_at` | DATETIME(3) | Free-game cooldown |
-| `owns_hero` … `owns_tank` | BOOLEAN | Class ownership |
-| `assassin_streak`, `assassin_stacks`, `wizard_counter`, `archer_streak`, `tank_stacks` | INT | Class counters, reset when switching class |
+| `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
+| `assassin_streak`, `assassin_stacks`, `wizard_counter`, `archer_streak`, `tank_stacks`, `gambler_streak`, `monk_rhythm`, `artisan_progress`, `necro_souls` | INT | Class counters, reset when switching class (`CLASS_COUNTER_RESET` in `db/progression.js`) |
+| `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 36 h (48 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
+| `monk_day` | DATE NULL | Last UTC day the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
+| `assassin_bleed` | INT | Actions left with the Bleed bonus after a crit. Not tied to a class, so it survives a class switch; cleared by a progress reset. |
 | `total_lists_created`, `total_items_added`, `total_items_completed` | INT | Monotonic counters for achievements |
 | `skill_points` | INT | Legacy. Unused, kept for compatibility. |
 | `timezone` | VARCHAR(64) NULL | IANA zone for reminders and the digest (NULL = UTC). Validated with `Intl`. |

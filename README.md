@@ -30,8 +30,8 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 |---|---|
 | **Tasks** | Lists with description, category, priority and deadline. Tasks have their own due date, priority, tags, subtasks and a repeat rule, and can be added (also from one line of text), edited, reordered, completed in bulk, deleted with undo and searched. |
 | **Progression** | XP for creating lists, adding tasks and completing tasks. Levels come from lifetime XP. There is a daily reward with streaks, streak freezes, and daily and weekly quests. |
-| **Classes** | Seven classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank), each changing how XP is earned. |
-| **Skills** | 27 skills in 7 trees, all with real effects that work the same on both platforms. |
+| **Classes** | Twelve classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank, Monk, Artisan, Ranger, Necromancer, Paladin), each changing how XP is earned. |
+| **Skills** | 62 skills in 12 trees, all with real effects that work the same on both platforms. |
 | **Achievements** | 33 achievements for lists, tasks, XP, levels, streaks, classes, games and spending. |
 | **Games** | Blackjack (bet XP, with double down), Rock Paper Scissors and Hangman on both platforms; Snake, Dino Runner and Space Invaders on the web. Every outcome is decided by the server. |
 | **Automation** | Deadline reminder DMs at your own reminder hour and time zone (with Snooze), an overdue notice, an opt-in weekly summary DM, and optional clean-up of finished lists. |

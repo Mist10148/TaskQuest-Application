@@ -1,4 +1,6 @@
-import { Keyboard } from "lucide-react";
+import { Keyboard, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { openCommandPalette } from "@/lib/commands";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const SHORTCUTS: Array<[string, string]> = [
@@ -7,6 +9,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["s", "Select several tasks (inside a quest)"],
   ["Esc", "Leave select mode or go back to the quest log"],
   ["?", "Show this list"],
+  ["Ctrl K", "Command palette: go to a page, new quest or task, switch theme (works anywhere)"],
 ];
 
 /** Keyboard shortcut cheat sheet, opened with "?". */
@@ -25,6 +28,9 @@ export const ShortcutsDialog = ({ open, onOpenChange }: { open: boolean; onOpenC
           </div>
         ))}
       </dl>
+      <Button variant="outline" size="sm" className="gap-2 self-start" onClick={() => { onOpenChange(false); openCommandPalette(); }}>
+        <Search className="h-4 w-4" aria-hidden /> Open command palette
+      </Button>
     </DialogContent>
   </Dialog>
 );

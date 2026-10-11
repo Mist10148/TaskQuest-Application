@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { useUpdateSettings, useResetProgress } from "@/hooks/useApi";
+import { resetTour, startTour } from "@/lib/tour";
 
 // Optional: set VITE_BOT_INVITE_URL at build time to show an "Add the bot" button.
 const BOT_INVITE_URL = /^https:\/\//.test(import.meta.env.VITE_BOT_INVITE_URL || "") ? (import.meta.env.VITE_BOT_INVITE_URL as string) : "";
@@ -92,6 +93,9 @@ const Settings = () => {
           </SettingRow>
           <SwitchRow label="Reduce motion" description="Turn off animations and the confetti. Your system setting is respected too." checked={reduceMotion} onChange={setReduceMotion} />
           <SwitchRow label="Game sounds" description="Short sound effects in the arcade games." checked={sound} onChange={setSound} />
+          <SettingRow label="Welcome tour" description="A four-step intro to quests, XP, classes and shortcuts.">
+            <Button variant="outline" size="sm" onClick={() => { resetTour(); startTour(); }}>Replay tour</Button>
+          </SettingRow>
         </SettingsSection>
 
         <SettingsSection icon={<Sparkles className="h-5 w-5 text-xp" />} title="Gamification" description="XP rewards and leveling" tint="bg-xp/20" delay={0.1}>

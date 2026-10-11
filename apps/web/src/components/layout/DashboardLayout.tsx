@@ -1,33 +1,20 @@
 import type { User as UserRecord } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
-import {
-  LayoutDashboard, ListTodo, User, Sword, Sparkles, Trophy, BarChart3,
-  Settings, LogOut, Menu, Flame, Gamepad2, Bot,
-} from "lucide-react";
+import { Sword, Sparkles, Settings, LogOut, Menu, Flame, Search } from "lucide-react";
 import { useState } from "react";
 import { ClassBadge, PlayerClass } from "@/components/game/ClassBadge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useAuth, getAvatarUrl } from "@/contexts/AuthContext";
+import { CommandPalette } from "@/components/layout/CommandPalette";
+import { OnboardingTour } from "@/components/layout/OnboardingTour";
+import { AI_NAV_ITEM, NAV_ITEMS } from "@/components/layout/navItems";
+import { openCommandPalette } from "@/lib/commands";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
-
-const navItems = [
-  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/tasks", icon: ListTodo, label: "Tasks" },
-  { path: "/games", icon: Gamepad2, label: "Games" },
-  { path: "/profile", icon: User, label: "Profile" },
-  { path: "/classes", icon: Sword, label: "Classes" },
-  { path: "/skills", icon: Sparkles, label: "Skills" },
-  { path: "/achievements", icon: Trophy, label: "Achievements" },
-  { path: "/leaderboard", icon: BarChart3, label: "Leaderboard" },
-];
-
-// Shown only when the server has AI enabled for this user.
-const aiNavItem = { path: "/chat", icon: Bot, label: "AI Chat" };
 
 const XP_PER_LEVEL = 100; // mirrors packages/shared XP_PER_LEVEL
 
@@ -63,7 +50,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
   const playerClass = (dbUser.player_class || "DEFAULT") as PlayerClass;
   const level = dbUser.player_level || 1;
   const streak = dbUser.streak_count || 0;
-  const items = user?.features?.ai ? [...navItems.slice(0, 2), aiNavItem, ...navItems.slice(2)] : navItems;
+  const items = user?.features?.ai ? [...NAV_ITEMS.slice(0, 2), AI_NAV_ITEM, ...NAV_ITEMS.slice(2)] : NAV_ITEMS;
 
   return (
     <div className="flex h-full flex-col">
@@ -98,6 +85,18 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
           </div>
         </div>
         <LevelBar lifetimeXP={Number(dbUser.lifetime_xp ?? dbUser.player_xp) || 0} level={level} className="mt-3" />
+      </div>
+
+      <div className="px-2 pt-2 sm:px-4 sm:pt-4">
+        <button
+          type="button"
+          onClick={() => { onNavigate?.(); openCommandPalette(); }}
+          className="flex w-full items-center gap-2 rounded-lg border border-border bg-background-secondary px-3 py-2 text-sm text-foreground-muted hover:text-foreground"
+        >
+          <Search className="h-4 w-4" aria-hidden />
+          <span className="flex-1 text-left">Search…</span>
+          <kbd className="hidden rounded border border-border px-1.5 text-[10px] font-mono lg:inline">Ctrl K</kbd>
+        </button>
       </div>
 
       <nav aria-label="Main" className="flex-1 p-2 sm:p-4 space-y-0.5 sm:space-y-1 overflow-y-auto">
@@ -184,6 +183,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       <aside className="hidden lg:block sticky top-0 h-screen w-72 shrink-0 bg-sidebar border-r border-sidebar-border">
         <SidebarContent />
       </aside>
+
+      <CommandPalette aiEnabled={Boolean(user?.features?.ai)} />
+      <OnboardingTour />
 
       <main id="main" tabIndex={-1} className="flex-1 min-h-screen w-full min-w-0 focus:outline-none">
         <div className="pt-[4.5rem] lg:pt-4 pb-4 px-4 lg:px-8">{children}</div>

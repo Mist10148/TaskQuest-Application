@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Item, ListWithItems } from "@/lib/api";
@@ -34,7 +34,7 @@ const Tasks = () => {
   const deleteItem = useDeleteItem();
 
   // /tasks?list=42 opens a quest directly (used by links from AI answers).
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedListId, setSelectedListId] = useState<number | null>(() => Number(searchParams.get("list")) || null);
   const { data: selectedList, refetch: refetchList, isLoading: listLoading, isError: listFailed, error: listError, isFetching: listFetching } = useList(selectedListId || 0);
   const filters = useListFilters(lists);
@@ -47,6 +47,18 @@ const Tasks = () => {
     await deleteItem.mutateAsync(id);
     refetchList();
   });
+
+  // /tasks?new=quest or ?new=task comes from the command palette: open the matching dialog, then drop the param.
+  const wantsNew = searchParams.get("new");
+  useEffect(() => {
+    if (!wantsNew) return;
+    if (wantsNew === "quest") setListDialog("create");
+    else if (wantsNew === "task") {
+      if (selectedListId) setItemDialog({ mode: "create" });
+      else toast("Open a quest first, then press N or use Add Task.");
+    }
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("new"); return next; }, { replace: true });
+  }, [wantsNew, selectedListId, setSearchParams]);
 
   const editListInitial = useMemo<ListFormValues>(
     () =>

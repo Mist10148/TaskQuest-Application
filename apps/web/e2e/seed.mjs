@@ -8,7 +8,7 @@
  * the matching signed cookie (see helpers.ts). Production code has no test login route.
  */
 
-import { SERVER_ENV, USER_ID, SESSION_ID } from './env.mjs';
+import { SERVER_ENV, USER_ID, SESSION_ID, PLAYERS } from './env.mjs';
 
 Object.assign(process.env, SERVER_ENV);
 
@@ -41,6 +41,24 @@ try {
         Math.floor(Date.now() / 1000) + 86_400,
         data,
     ]);
+    // Two more players for the shared-list specs. The captain owns "Viewer board" and has already invited the ally to it as
+    // a viewer (accepted), so the read-only experience can be checked without any setup in the test itself.
+    for (const p of Object.values(PLAYERS)) {
+        await db.users.ensureUser(p.id, { username: p.username, avatar: null });
+        await db.query('INSERT INTO web_sessions (session_id, expires, data) VALUES (?, ?, ?)', [
+            p.sessionId,
+            Math.floor(Date.now() / 1000) + 86_400,
+            JSON.stringify({
+                cookie: { path: '/', httpOnly: true, originalMaxAge: 86_400_000 },
+                user: { discordId: p.id, username: p.username, globalName: p.globalName, avatar: null },
+            }),
+        ]);
+    }
+    const board = (await db.tasks.createList(PLAYERS.captain.id, { name: 'Viewer board' })).list;
+    await db.tasks.addItem(PLAYERS.captain.id, board.id, { name: 'Read only task' });
+    const invitation = await db.sharing.invite(PLAYERS.captain.id, board.id, { username: PLAYERS.ally.username, role: 'viewer' });
+    await db.sharing.respond(PLAYERS.ally.id, invitation.id, true);
+
     console.log(`e2e: seeded ${SERVER_ENV.DB_NAME} (user ${USER_ID}, session ${SESSION_ID})`);
 } finally {
     await db.closePool();

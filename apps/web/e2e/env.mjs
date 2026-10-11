@@ -24,6 +24,16 @@ export const COOKIE_NAME = 'tq.sid';
 export const USER_ID = '900000000000000001';
 export const SESSION_ID = 'e2e00000000000000000000000000001';
 
+/**
+ * Two more players for the shared-list specs, so the first player's XP (which the shop and class specs depend on) is never
+ * touched: a "captain" who owns shared quests and an "ally" who is invited to them. `username` is the stored display name
+ * an invitation is addressed to.
+ */
+export const PLAYERS = {
+    captain: { id: '900000000000000002', sessionId: 'e2e00000000000000000000000000002', username: 'e2e_captain', globalName: 'E2E Captain' },
+    ally: { id: '900000000000000003', sessionId: 'e2e00000000000000000000000000003', username: 'e2e_ally', globalName: 'E2E Ally' },
+};
+
 /** Environment for the API server (also read by seed.mjs, which uses the same database). */
 export const SERVER_ENV = {
     ...DB,

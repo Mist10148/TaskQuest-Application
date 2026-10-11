@@ -246,6 +246,9 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const frozen = await (await call('POST', '/api/user/streak-freeze', { cookie: alice })).json();
         assert.equal(frozen.freezes, 1);
         assert.equal(frozen.newBalance, 850);
+        assert.equal(frozen.max, 3);
+        const limits = (await (await call('GET', '/api/user', { cookie: alice })).json()).freezeLimits;
+        assert.deepEqual(limits, { COST: 150, MAX: 3 });
 
         const settings = await call('PATCH', '/api/user', { cookie: alice, body: { timezone: 'Asia/Manila', reminder_hour: 7, weekly_digest: true } });
         assert.equal(settings.status, 200);

@@ -344,8 +344,13 @@ const REWARDS = {
     EARLY_FINISH_PER_DAY: 5,
     OVERDUE_CLEAR: 10,
     SUBTASKS_DONE: 10,
-    ACHIEVEMENT: 25
+    ACHIEVEMENT: 25,
+    HABIT_PER_STREAK: 2,
+    HABIT_MIN_STREAK: 2
 };
+
+/** How early (in days) a repeating task may be finished and still continue its habit streak: under one period. */
+const HABIT_PERIOD_DAYS = { daily: 1, weekly: 7, monthly: 28 };
 
 /** Streak milestones: the daily claim that reaches the day pays the chest once per streak run. */
 const STREAK_CHESTS = { 7: 100, 14: 250, 30: 600 };
@@ -361,7 +366,8 @@ const BONUS_LABELS = {
     overdue_clear: 'Overdue cleared',
     subtasks_done: 'All subtasks done',
     streak_chest: 'Streak chest',
-    achievement_reward: 'Achievement reward'
+    achievement_reward: 'Achievement reward',
+    habit_bonus: 'Habit streak'
 };
 
 /**
@@ -381,7 +387,7 @@ const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
     'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
     'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest',
-    'achievement_reward'
+    'achievement_reward', 'habit_bonus'
 ];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
@@ -435,6 +441,10 @@ const LIMITS = {
     DEADLINE_BONUS_XP_PER_DAY: 100,
     /** subtasks_done pays at most this many XP a day (one parent). */
     SUBTASKS_DONE_XP_PER_DAY: 10,
+    /** habit_bonus pays 2 XP per streak step, at most this per completion... */
+    HABIT_MAX: 20,
+    /** ...and at most this much a day. */
+    HABIT_XP_PER_DAY: 60,
     /** Total XP that free games (RPS, Hangman, arcade) may award per day. */
     FREE_GAME_XP_PER_DAY: 500,
     /** Minimum time between two free-game rounds. */
@@ -514,6 +524,7 @@ module.exports = {
     XP_PER_LEVEL,
     REWARDS,
     BONUS_LABELS,
+    HABIT_PERIOD_DAYS,
     STREAK_CHESTS,
     STREAK_FREEZE,
     STREAK_FREEZE_CACHE,

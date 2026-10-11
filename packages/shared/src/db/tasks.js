@@ -10,7 +10,7 @@ const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const { rewardAction, unlockAchievements, awardFlat, countToday } = require('./progression');
 const { errors } = require('../errors');
-const { REWARDS, LIMITS, BONUS_LABELS } = require('../constants');
+const { REWARDS, LIMITS, BONUS_LABELS, HABIT_PERIOD_DAYS } = require('../constants');
 const v = require('../validation');
 const { nextDueOnOrAfter, todayInZone, daysBetween } = require('../dates');
 
@@ -361,7 +361,7 @@ async function deleteItem(discordId, itemId) {
  * grants no creation XP or counters and never counts towards quests (counts_for_quests = 0),
  * so repeating tasks cannot be used to farm.
  */
-async function spawnNextOccurrence(conn, item, user) {
+async function spawnNextOccurrence(conn, item, user, habitStreak = 0) {
     const today = todayInZone(user.timezone);
     const base = item.due_date ? String(item.due_date).slice(0, 10) : today;
     const anchor = item.recurrence === 'monthly' ? item.repeat_anchor_day || Number(base.slice(8, 10)) : null;
@@ -369,9 +369,9 @@ async function spawnNextOccurrence(conn, item, user) {
     if (!due) return null;
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id, anchor]
+        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests, habit_streak)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
     return created;
@@ -444,6 +444,20 @@ async function completionBonuses(conn, user, item, ctx) {
 }
 
 /**
+ * What finishing a repeating task now does to its habit streak. Late resets it; finishing on or before
+ * the due date adds one, unless it is a whole period early (a copy finished the moment it spawns),
+ * which neither adds nor resets, so ticking copies off ahead of time cannot grow a streak.
+ * @returns {{ streak: number, counted: boolean }}
+ */
+function habitOutcome(item, ctx) {
+    const streak = Number(item.habit_streak) || 0;
+    if (ctx.dueDate && ctx.dueDate < ctx.today) return { streak: 0, counted: false };
+    const early = ctx.dueDate ? daysBetween(ctx.today, ctx.dueDate) : 0;
+    if (early >= (HABIT_PERIOD_DAYS[item.recurrence] || 1)) return { streak, counted: false };
+    return { streak: streak + 1, counted: true };
+}
+
+/**
  * Mark an item complete/incomplete (toggle when `completed` is undefined).
  * Completion XP and the completion counter are granted only the first time
  * an item is ever completed, so toggling cannot farm XP.
@@ -484,8 +498,17 @@ async function setItemCompleted(discordId, itemId, completed) {
             });
             // Bonuses ride on a completion that was actually paid, so the daily completion cap bounds them too.
             if (xp && xp.finalXP > 0) bonuses = await completionBonuses(conn, user, item, ctx);
+            let habit = { streak: 0, counted: false };
+            if (item.recurrence) {
+                habit = habitOutcome(item, ctx);
+                if (xp && xp.finalXP > 0 && habit.counted && Number(item.habit_streak) >= REWARDS.HABIT_MIN_STREAK) {
+                    const amount = Math.min(LIMITS.HABIT_MAX, REWARDS.HABIT_PER_STREAK * Number(item.habit_streak));
+                    const paid = await awardFlat(conn, user, 'habit_bonus', amount, { dailyCap: LIMITS.HABIT_XP_PER_DAY, referenceId: id });
+                    if (paid) bonuses.push({ key: 'habit_bonus', label: BONUS_LABELS.habit_bonus, xp: paid.xp });
+                }
+            }
             achievements = await unlockAchievements(conn, user);
-            if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user);
+            if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user, habit.streak);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
         return { item: updated, completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };

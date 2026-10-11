@@ -745,3 +745,12 @@ test('achievement rewards: a flat 25 XP, counted on the weekly board', () => {
     assert.ok(WEEKLY_XP_SOURCES.includes('achievement_reward'));
     assert.ok(BONUS_LABELS.achievement_reward);
 });
+
+test('habit streaks: constants', () => {
+    const { REWARDS, LIMITS, HABIT_PERIOD_DAYS, WEEKLY_XP_SOURCES } = require('../src/constants');
+    assert.equal(REWARDS.HABIT_PER_STREAK, 2);
+    assert.equal(LIMITS.HABIT_MAX, 20);
+    assert.equal(LIMITS.HABIT_XP_PER_DAY, 60);
+    assert.deepEqual(HABIT_PERIOD_DAYS, { daily: 1, weekly: 7, monthly: 28 });
+    assert.ok(WEEKLY_XP_SOURCES.includes('habit_bonus'));
+});

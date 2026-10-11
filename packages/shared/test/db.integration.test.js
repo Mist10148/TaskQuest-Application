@@ -63,6 +63,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(users.includes('assassin_last_at'));
         assert.ok((await cols('lists')).includes('cleared_at'));
         assert.ok(users.includes('last_chest_streak'));
+        assert.ok(items.includes('habit_streak'));
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -1176,6 +1177,58 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(first.length > 15);
         assert.equal(await db.progression.checkAchievements(U).then((r) => r.length), 0);
         assert.ok((await sumSource(U, 'achievement_reward')) <= Object.keys(shared.ACHIEVEMENTS).length * shared.REWARDS.ACHIEVEMENT);
+    });
+
+
+    await t.test('habit streaks: on-time completions of a repeating task grow a streak that pays from the third', async () => {
+        const U = '100000000000000131';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Habits' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'stretch', recurrence: 'daily', due_date: dayOffset(0) });
+        const streakOf = async (id) => Number((await db.query('SELECT habit_streak AS n FROM items WHERE id = ?', [id]))[0].n);
+        const dueToday = (id) => db.query('UPDATE items SET due_date = ? WHERE id = ?', [dayOffset(0), id]);
+
+        let r = await db.tasks.setItemCompleted(U, item.id);
+        assert.equal(await streakOf(r.nextItem.id), 1, 'the copy carries streak 1');
+        assert.ok(!bonusKeys(r).includes('habit_bonus'));
+        // Farming attempt: finishing the copy the moment it spawns (a day early) neither grows nor pays.
+        const early = await db.tasks.setItemCompleted(U, r.nextItem.id);
+        assert.equal(await streakOf(early.nextItem.id), 1, 'carried, not incremented');
+        assert.ok(!bonusKeys(early).includes('habit_bonus'));
+
+        // Next day: the copy is due today.
+        await dueToday(early.nextItem.id);
+        r = await db.tasks.setItemCompleted(U, early.nextItem.id);
+        assert.equal(await streakOf(r.nextItem.id), 2);
+        assert.ok(!bonusKeys(r).includes('habit_bonus'), 'streak 1 at completion does not pay yet');
+        await dueToday(r.nextItem.id);
+        r = await db.tasks.setItemCompleted(U, r.nextItem.id);
+        assert.equal(r.bonuses.find((b) => b.key === 'habit_bonus').xp, 4, '2 XP x the streak of 2');
+        assert.equal(await streakOf(r.nextItem.id), 3);
+
+        // Late completion resets the streak and pays nothing.
+        await db.query('UPDATE items SET due_date = ? WHERE id = ?', [dayOffset(-1), r.nextItem.id]);
+        const late = await db.tasks.setItemCompleted(U, r.nextItem.id);
+        assert.ok(!bonusKeys(late).includes('habit_bonus'));
+        assert.equal(await streakOf(late.nextItem.id), 0);
+    });
+
+    await t.test('habit streaks: max 20 XP per completion and 60 XP a day', async () => {
+        const U = '100000000000000132';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Long habits' });
+        const results = [];
+        for (let n = 0; n < 5; n++) {
+            const { item } = await db.tasks.addItem(U, list.id, { name: `h${n}`, recurrence: 'daily', due_date: dayOffset(0) });
+            await db.query('UPDATE items SET habit_streak = 40 WHERE id = ?', [item.id]);
+            results.push(await db.tasks.setItemCompleted(U, item.id));
+        }
+        assert.deepEqual(results.map((r) => r.bonuses.find((b) => b.key === 'habit_bonus')?.xp ?? 0), [20, 20, 20, 0, 0]);
+        assert.equal(await sumSource(U, 'habit_bonus'), 60);
+        await ageXP(U);
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'tomorrow', recurrence: 'daily', due_date: dayOffset(0) });
+        await db.query('UPDATE items SET habit_streak = 3 WHERE id = ?', [item.id]);
+        assert.equal((await db.tasks.setItemCompleted(U, item.id)).bonuses.find((b) => b.key === 'habit_bonus').xp, 6, 'the cap resets the next day');
     });
 
     await db.closePool();

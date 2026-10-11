@@ -55,6 +55,10 @@ export function useChat(initialThreadId: string | null) {
     const threadRef = useRef<string | null>(initialThreadId);
     // The thread whose history is already on screen (a new thread is adopted when its first turn ends).
     const loadedFor = useRef<string | null>(null);
+    // Set once the user sends before history resolves, so the late history never overwrites live messages.
+    const touchedRef = useRef(false);
+    // Id of a thread the stream itself just created (the only case where the URL should adopt it).
+    const [createdThreadId, setCreatedThreadId] = useState<string | null>(null);
 
     // Load history (and any confirmation still waiting) when a thread is opened.
     useEffect(() => {
@@ -62,6 +66,8 @@ export function useChat(initialThreadId: string | null) {
         loadedFor.current = initialThreadId;
         abortRef.current?.abort();
         threadRef.current = initialThreadId;
+        touchedRef.current = false;
+        setCreatedThreadId(null);
         setThreadId(initialThreadId);
         setPending([]);
         if (!initialThreadId) {
@@ -72,7 +78,7 @@ export function useChat(initialThreadId: string | null) {
         aiApi
             .thread(initialThreadId)
             .then((t) => {
-                if (cancelled) return;
+                if (cancelled || touchedRef.current) return;
                 setMessages(t.messages.map((m) => ({ id: newId(), role: m.role, text: m.text, sources: [], tools: [] })));
                 setPending(t.pendingConfirm);
             })
@@ -99,6 +105,7 @@ export function useChat(initialThreadId: string | null) {
                 }
             }
             if (event.event === 'done') {
+                if (threadRef.current !== event.data.threadId) setCreatedThreadId(event.data.threadId);
                 threadRef.current = event.data.threadId;
                 loadedFor.current = event.data.threadId;
                 setThreadId(event.data.threadId);
@@ -132,6 +139,7 @@ export function useChat(initialThreadId: string | null) {
         async (text: string) => {
             const message = text.trim();
             if (!message || isStreaming || pending.length) return;
+            touchedRef.current = true;
             setMessages((prev) => [
                 ...prev,
                 { id: newId(), role: 'user', text: message, sources: [], tools: [] },
@@ -160,5 +168,5 @@ export function useChat(initialThreadId: string | null) {
         setMessages((prev) => prev.map((m) => ({ ...m, streaming: false })));
     }, []);
 
-    return { threadId, messages, pending, isStreaming, send, respond, stop };
+    return { threadId, createdThreadId, messages, pending, isStreaming, send, respond, stop };
 }

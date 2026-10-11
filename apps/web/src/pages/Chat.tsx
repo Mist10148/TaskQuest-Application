@@ -9,7 +9,7 @@ import { ConfirmActionCard } from "@/components/ai/ConfirmActionCard";
 import { useSlow } from "@/components/ai/useSlow";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/hooks/useChat";
-import { useChatThreads, useDeleteThread } from "@/hooks/useApi";
+import { showError, useChatThreads, useDeleteThread } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = ["What should I do first today?", "What is due this week?", "How do I earn XP?", "Add a task to my newest quest"];
@@ -32,8 +32,8 @@ const Chat = () => {
 
   // A brand-new conversation gets its id when the first turn ends; reflect it in the URL.
   useEffect(() => {
-    if (chat.threadId && chat.threadId !== routeThreadId && !chat.isStreaming) navigate(`/chat/${chat.threadId}`, { replace: true });
-  }, [chat.threadId, chat.isStreaming, routeThreadId, navigate]);
+    if (chat.createdThreadId && chat.createdThreadId !== routeThreadId && !chat.isStreaming) navigate(`/chat/${chat.createdThreadId}`, { replace: true });
+  }, [chat.createdThreadId, chat.isStreaming, routeThreadId, navigate]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -67,8 +67,12 @@ const Chat = () => {
                   aria-label={`Delete ${t.title}`}
                   className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-foreground-muted hover:text-destructive"
                   onClick={async () => {
-                    await deleteThread.mutateAsync(t.id);
-                    if (t.id === routeThreadId) navigate("/chat");
+                    try {
+                      await deleteThread.mutateAsync(t.id);
+                      if (t.id === routeThreadId) navigate("/chat");
+                    } catch (err) {
+                      showError(err);
+                    }
                   }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

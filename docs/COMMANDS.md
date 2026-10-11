@@ -8,8 +8,8 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 |---|---|---|---|
 | `/list` | `name` (autocomplete, optional) | Public overview / view | Your lists. With `name`, opens that list directly. |
 | `/game` | — | Ephemeral | Game centre (Blackjack, Rock Paper Scissors, Hangman). Resumes an unfinished hand. |
-| `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. |
-| `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held) |
+| `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. The reply also shows the Daily Surprise and any milestone chest. |
+| `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill) |
 | `/quests` | — | Ephemeral | 📜 Daily and weekly quests with progress bars and Claim buttons |
 | `/profile` | `user` (optional) | Ephemeral | Level, balance and lifetime XP, focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet". |
 | `/achievements` | — | Ephemeral | Paginated achievement list |

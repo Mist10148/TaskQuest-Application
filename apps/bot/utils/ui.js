@@ -8,7 +8,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
-const { TEXT_LIMITS, validation, levelProgress, isPastDeadline, formatDeadline } = require('@taskquest/shared');
+const { TEXT_LIMITS, CLASSES, CLASS_RULES, validation, levelProgress, isPastDeadline, formatDeadline } = require('@taskquest/shared');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🎨 COLOR SYSTEM
@@ -31,10 +31,57 @@ const COLORS = {
     // Class Colors
     DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6, ASSASSIN: 0x2C3E50,
     WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C,
+    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1,
     
     // Skill Colors
     skill: 0x9B59B6, locked: 0x2C3E50, unlocked: 0x27AE60
 };
+
+/** Emoji for a class key; unknown keys fall back to the Default icon. */
+const classEmoji = (key) => CLASSES[key]?.emoji || '⚪';
+
+/**
+ * One line describing the equipped class's live counter (Monk rhythm, Artisan progress,
+ * Necromancer souls), or '' for classes without one. The caps depend on the owner's skills.
+ */
+function classCounterLine(user, userSkills = [], now = Date.now()) {
+    const levels = new Map((userSkills || []).map((s) => [s.skill_id, Number(s.skill_level) || 0]));
+    const lvl = (id) => levels.get(id) || 0;
+    switch (user.player_class) {
+        case 'MONK': {
+            const m = CLASS_RULES.MONK;
+            const cap = m.MAX_RHYTHM + (lvl('monk_discipline') ? m.DISCIPLINE_CAP : 0);
+            const rhythm = Math.min(cap, Number(user.monk_rhythm) || 0);
+            const last = user.monk_day ? new Date(user.monk_day).toISOString().slice(0, 10) : null;
+            const today = new Date(now).toISOString().slice(0, 10);
+            const gap = last ? Math.round((Date.parse(today) - Date.parse(last)) / 86400000) : null;
+            const lapsed = rhythm > 0 && gap !== null && gap > (lvl('monk_serenity') ? 2 : 1);
+            return `🧘 Rhythm **${rhythm}/${cap}**${lapsed ? ' (lapsed, restarts at 1)' : ''}`;
+        }
+        case 'ARTISAN': {
+            const a = CLASS_RULES.ARTISAN;
+            const cap = a.MAX_PROGRESS + lvl('artisan_blueprint') * a.BLUEPRINT_CAP;
+            return `🛠️ Project **${Math.min(cap, Number(user.artisan_progress) || 0)}/${cap}**`;
+        }
+        case 'NECROMANCER': {
+            const n = CLASS_RULES.NECROMANCER;
+            const cap = n.MAX_SOULS + (lvl('necro_jar') ? n.JAR_SOULS : 0);
+            return `💀 Souls **${Math.min(cap, Number(user.necro_souls) || 0)}/${cap}**`;
+        }
+        default:
+            return '';
+    }
+}
+
+/** Human text for a daily milestone chest, whatever shape the shared result gives it. */
+function describeChest(chest) {
+    if (!chest) return '';
+    if (typeof chest === 'number') return `+${chest} XP`;
+    if (typeof chest === 'string') return chest;
+    const xp = chest.xp ?? chest.bonusXP ?? chest.amount;
+    const label = chest.label ?? chest.name ?? (chest.streak ? `${chest.streak}-day streak` : '');
+    return [label, xp !== undefined ? `+${xp} XP` : ''].filter(Boolean).join(': ');
+}
 
 // Priority indicators (minimal, clean)
 const PRIORITY_DOT = { HIGH: '🔴', MEDIUM: '🟡', LOW: '🟢', NONE: '⚪', null: '⚪' };
@@ -210,11 +257,10 @@ function profileEmbed(user, stats, member) {
     const items = parseInt(stats.items.total) || 0;
     const done = parseInt(stats.items.completed) || 0;
     const rate = items > 0 ? Math.round((done / items) * 100) : 0;
-    const emoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     
     return new EmbedBuilder()
         .setColor(COLORS[user.player_class])
-        .setTitle(`${emoji[user.player_class]} ${member?.displayName || 'Player'}`)
+        .setTitle(`${classEmoji(user.player_class)} ${member?.displayName || 'Player'}`)
         .setThumbnail(member?.user?.displayAvatarURL?.() || null)
         .setDescription(`**Level ${user.player_level}** ${user.player_class}`)
         .addFields(
@@ -247,13 +293,12 @@ function achievementUnlockEmbed(ach) {
 }
 
 function classShopEmbed(user, classes) {
-    const classEmoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     const currentClass = classes[user.player_class] || classes.DEFAULT;
     
     const embed = new EmbedBuilder()
         .setColor(COLORS[user.player_class] || COLORS.primary)
         .setTitle('⚔️ Class Shop')
-        .setDescription(`💰 **${user.player_xp} XP** Available\n\n**Current Class:** ${classEmoji[user.player_class]} ${user.player_class}`);
+        .setDescription(`💰 **${user.player_xp} XP** Available\n\n**Current Class:** ${classEmoji(user.player_class)} ${user.player_class}`);
     
     Object.entries(classes).forEach(([k, c]) => {
         if (k === 'DEFAULT') return;
@@ -597,8 +642,22 @@ function searchModal() {
 //  🌳 SKILL TREE UI
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** Split text on blank lines into embed fields of at most 1024 characters (Discord's limit). */
+function chunkFieldValue(text, limit = 1024) {
+    const fields = [];
+    let current = '';
+    for (const block of text.split('\n\n').filter(Boolean)) {
+        if (current && current.length + block.length + 2 > limit) {
+            fields.push({ name: '​', value: current, inline: false });
+            current = '';
+        }
+        current = current ? `${current}\n\n${block}` : block;
+    }
+    if (current) fields.push({ name: '​', value: current.slice(0, limit), inline: false });
+    return fields;
+}
+
 function skillTreeEmbed(user, classKey, skillTree, userSkills) {
-    const classEmoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     const tree = skillTree[classKey];
     if (!tree) return error('Invalid Class', 'Skill tree not found');
     
@@ -606,7 +665,7 @@ function skillTreeEmbed(user, classKey, skillTree, userSkills) {
     
     const embed = new EmbedBuilder()
         .setColor(COLORS[classKey] || COLORS.primary)
-        .setTitle(`${classEmoji[classKey]} ${tree.name} Skills`)
+        .setTitle(`${classEmoji(classKey)} ${tree.name} Skills`)
         .setDescription(`*${tree.description}*\n\n💰 **XP Available:** ${user.player_xp.toLocaleString()}`);
     
     // Build skill tree visualization with progress
@@ -637,7 +696,7 @@ function skillTreeEmbed(user, classKey, skillTree, userSkills) {
         skillList += `└ ${effectText} • ${skill.cost} XP\n\n`;
     });
     
-    embed.addFields({ name: '\u200B', value: skillList || '*No skills available*', inline: false });
+    embed.addFields(...chunkFieldValue(skillList || '*No skills available*'));
     embed.setFooter({ text: '🔓 Available • 🔶 Upgradeable • ✅ Maxed • 🔒 Locked' });
     
     return embed;
@@ -681,7 +740,6 @@ function skillInfoEmbed(skill, skillId, userSkillLevel, requirementMet) {
 }
 
 function classOverviewEmbed(user, classes, skillTrees) {
-    const classEmoji = { DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️' };
     const currentClass = user.player_class;
     const currentInfo = classes[currentClass];
     
@@ -689,7 +747,7 @@ function classOverviewEmbed(user, classes, skillTrees) {
         .setColor(COLORS[currentClass] || COLORS.primary)
         .setTitle('⚔️ Class System')
         .setDescription([
-            `**Current Class:** ${classEmoji[currentClass]} **${currentClass}**`,
+            `**Current Class:** ${classEmoji(currentClass)} **${currentClass}**`,
             `*${currentInfo?.description || 'No bonus'}*`,
             ``,
             `💰 **XP Available:** ${user.player_xp.toLocaleString()}`
@@ -720,12 +778,7 @@ function classOverviewEmbed(user, classes, skillTrees) {
 }
 
 // Video game style class detail view - one class at a time
-function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, totalClasses) {
-    const classColors = {
-        DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6,
-        ASSASSIN: 0x2C3E50, WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C
-    };
-    
+function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, totalClasses, userSkills = []) {
     const owned = classKey === 'DEFAULT' || user[`owns_${classKey.toLowerCase()}`];
     const equipped = user.player_class === classKey;
     const canAfford = user.player_xp >= (classInfo.cost || 0);
@@ -739,7 +792,7 @@ function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, tota
     else statusBadge = '🔒 LOCKED';
     
     const embed = new EmbedBuilder()
-        .setColor(classColors[classKey] || 0x5865F2)
+        .setColor(COLORS[classKey] || COLORS.primary)
         .setTitle(`${classInfo.emoji} ${classInfo.name}`)
         .setDescription([
             `### ${statusBadge}`,
@@ -748,22 +801,14 @@ function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, tota
             ``
         ].join('\n'));
     
-    // Playstyle summary
-    const playstyles = {
-        DEFAULT: 'Balanced gameplay with no bonuses or penalties. Great for learning the system.',
-        HERO: 'Consistent XP gains on every action. Reliable progress for steady players.',
-        GAMBLER: 'Random XP multipliers ranging from 0.5x to 2x. High risk, high reward gameplay.',
-        ASSASSIN: 'Build streaks to stack bonuses. Perfect for consistent daily players.',
-        WIZARD: 'Every third task gives double XP. Strategic task completion.',
-        ARCHER: 'Precision-based multipliers and crits. Rewards careful planning.',
-        TANK: 'Shield stacking system. Strong early game with momentum building.'
-    };
-    
+    // Playstyle and live counter come from the shared data, so new classes need no UI change.
     embed.addFields({
         name: '🎮 Playstyle',
-        value: playstyles[classKey] || 'Unique gameplay mechanics.',
+        value: classInfo.playstyle || 'Unique gameplay mechanics.',
         inline: false
     });
+    const counter = equipped ? classCounterLine(user, userSkills) : '';
+    if (counter) embed.addFields({ name: '📈 Current', value: counter, inline: false });
     
     // Cost and skills
     embed.addFields(
@@ -787,7 +832,7 @@ function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, tota
     // Skill preview
     if (skillTree && Object.keys(skillTree.skills).length > 0) {
         const skillPreview = Object.values(skillTree.skills)
-            .slice(0, 3)
+            .slice(0, 6)
             .map(s => `${s.emoji} ${s.name}`)
             .join(' • ');
         embed.addFields({
@@ -836,6 +881,9 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     const canAfford = user.player_xp >= (classInfo.cost || 0);
     
     const rows = [];
+    
+    // Jump straight to any class (12 classes fit one select menu, the limit is 25).
+    rows.push(classSelectMenu(CLASSES, user, classKey));
     
     // Navigation row: Previous / Class Count / Next
     const navRow = new ActionRowBuilder().addComponents(
@@ -913,12 +961,11 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     return rows;
 }
 
-function classSelectMenu(classes, user) {
+function classSelectMenu(classes, user, browsing = null) {
     const options = [];
     
-    Object.entries(classes).forEach(([k, c]) => {
-        if (k === 'DEFAULT') return;
-        const owned = user[`owns_${k.toLowerCase()}`];
+    Object.entries(classes).slice(0, 25).forEach(([k, c]) => {
+        const owned = k === 'DEFAULT' || user[`owns_${k.toLowerCase()}`];
         const eq = user.player_class === k;
         
         options.push({
@@ -926,7 +973,7 @@ function classSelectMenu(classes, user) {
             value: k,
             emoji: c.emoji,
             description: eq ? 'Equipped' : owned ? 'Owned' : `${c.cost} XP to unlock`,
-            default: eq
+            default: browsing ? k === browsing : eq
         });
     });
     
@@ -1000,7 +1047,7 @@ function skillActionButtons(skillId, skill, userSkillLevel, requirementMet, user
 }
 
 module.exports = {
-    COLORS, PRIORITY_DOT, bar, smoothBar, fancyBar, xpBar,
+    COLORS, classEmoji, classCounterLine, describeChest, chunkFieldValue, PRIORITY_DOT, bar, smoothBar, fancyBar, xpBar,
     // Embeds
     listViewEmbed, listsOverviewEmbed, profileEmbed, achievementsEmbed, achievementUnlockEmbed,
     classShopEmbed, leaderboardEmbed, xpEmbed, pingEmbed, helpEmbed,

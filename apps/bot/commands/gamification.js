@@ -18,7 +18,7 @@
 
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { users, progression } = require('@taskquest/shared/db');
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, levelProgress } = require('@taskquest/shared');
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -50,14 +50,14 @@ const dailyData = new SlashCommandBuilder()
 
 const freezeData = new SlashCommandBuilder()
     .setName('freeze')
-    .setDescription(`🧊 Buy a streak freeze (${STREAK_FREEZE.COST} XP) that saves your daily streak once`);
+    .setDescription(`🧊 Buy a streak freeze (${STREAK_FREEZE.COST} XP, ${STREAK_FREEZE_CACHE.COST} with Freeze Cache) to save your streak`);
 
 async function freeze(interaction) {
     await interaction.deferReply(EPHEMERAL);
     try {
         const r = await progression.buyStreakFreeze(interaction.user.id);
         await interaction.editReply({
-            embeds: [ui.success('Streak freeze bought', `You now hold **${r.freezes}/${STREAK_FREEZE.MAX}**. It is used automatically if you miss a day. Balance: ${Number(r.balance).toLocaleString()} XP.`)]
+            embeds: [ui.success('Streak freeze bought', `You now hold **${r.freezes}/${r.max}** (each costs ${r.cost} XP). It is used automatically if you miss a day. Balance: ${Number(r.balance).toLocaleString()} XP.`)]
         });
         await sendRewards(interaction, { achievements: r.achievements });
     } catch (err) {
@@ -104,6 +104,7 @@ async function daily(interaction) {
     if (r.streakBonus > 0) description += ` + **+${r.streakBonus} XP** streak bonus`;
     if (r.skillDailyBonus > 0) description += ` + **+${r.skillDailyBonus} XP** Early Bird`;
     description += `!\n**Total: ${r.totalXP} XP**`;
+    if (r.surpriseBonus > 0) description += `\n🎉 **Daily Surprise: +${r.surpriseBonus} XP**`;
     if (r.bonusInfo?.details) description += `\n-# ${r.bonusInfo.details}`;
 
     const embed = new EmbedBuilder()
@@ -117,6 +118,8 @@ async function daily(interaction) {
         )
         .setFooter({ text: 'Come back in 24 hours to keep your streak!' });
 
+    const chestText = ui.describeChest(r.chest);
+    if (chestText) embed.addFields({ name: '🎁 Milestone Chest', value: chestText, inline: false });
     if (r.leveledUp) embed.addFields({ name: '🎉 Level Up!', value: `You reached **Level ${r.level}**!`, inline: false });
     if (r.streakBroken) embed.addFields({ name: '💔 Streak Lost', value: `Your ${r.previousStreak}-day streak was reset. Start again!`, inline: false });
     if (r.freezeUsed) embed.addFields({ name: '🧊 Streak Freeze Used', value: 'You missed a day, but a streak freeze saved your streak!', inline: false });
@@ -186,9 +189,8 @@ function bar(current, max, length = 20) {
 }
 
 // Class info
-const CLASS_COLORS = { DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6, ASSASSIN: 0x2C3E50, WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C };
 const CLASS_INFO = Object.fromEntries(
-    Object.entries(CLASSES).map(([key, c]) => [key, { emoji: c.emoji, color: CLASS_COLORS[key], name: c.name, desc: c.description, playstyle: c.playstyle }])
+    Object.entries(CLASSES).map(([key, c]) => [key, { emoji: c.emoji, color: ui.COLORS[key], name: c.name, desc: c.description, playstyle: c.playstyle }])
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -233,6 +235,7 @@ async function profile(interaction) {
     // Class info
     const classInfo = CLASS_INFO[user.player_class] || CLASS_INFO.DEFAULT;
     const skillCount = userSkills?.length || 0;
+    const counterLine = ui.classCounterLine(user, userSkills);
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  PRODUCTIVITY METRICS
@@ -263,6 +266,7 @@ async function profile(interaction) {
     embed.setDescription([
         `### ${classInfo.emoji} ${classInfo.name} · Level ${user.player_level}`,
         `-# ${classInfo.desc}`,
+        ...(counterLine ? [counterLine] : []),
         ``
     ].join('\n'));
 
@@ -404,7 +408,18 @@ const classData = new SlashCommandBuilder()
 const classViewState = new Map();
 
 // List of all classes for browsing
-const CLASS_ORDER = ['DEFAULT', 'HERO', 'GAMBLER', 'ASSASSIN', 'WIZARD', 'ARCHER', 'TANK'];
+const CLASS_ORDER = Object.keys(CLASSES);
+
+/** Embed and components of the class browser for one class (loads the user's skills for the counters). */
+async function classView(userId, user, classKey) {
+    const classInfo = CLASSES[classKey];
+    const index = Math.max(0, CLASS_ORDER.indexOf(classKey));
+    const userSkills = await users.getUserSkills(userId);
+    return {
+        embeds: [ui.classDetailEmbed(user, classKey, classInfo, SKILL_TREES[classKey], index, CLASS_ORDER.length, userSkills)],
+        components: ui.classBrowserButtons(user, classKey, classInfo, index, CLASS_ORDER.length)
+    };
+}
 
 async function classShop(interaction) {
     const userId = interaction.user.id;
@@ -419,12 +434,9 @@ async function classShop(interaction) {
     });
 
     const classKey = user.player_class;
-    const classInfo = CLASSES[classKey];
-    const skillTree = SKILL_TREES[classKey];
 
     await interaction.reply({
-        embeds: [ui.classDetailEmbed(user, classKey, classInfo, skillTree, currentIndex >= 0 ? currentIndex : 0, CLASS_ORDER.length)],
-        components: ui.classBrowserButtons(user, classKey, classInfo, currentIndex >= 0 ? currentIndex : 0, CLASS_ORDER.length),
+        ...(await classView(userId, user, classKey)),
         flags: MessageFlags.Ephemeral
     });
 }
@@ -459,12 +471,9 @@ async function routeClassButton(interaction) {
         classViewState.set(userId, state);
 
         const classKey = CLASS_ORDER[newIndex];
-        const classInfo = CLASSES[classKey];
-        const skillTree = SKILL_TREES[classKey];
 
         return interaction.update({
-            embeds: [ui.classDetailEmbed(user, classKey, classInfo, skillTree, newIndex, CLASS_ORDER.length)],
-            components: ui.classBrowserButtons(user, classKey, classInfo, newIndex, CLASS_ORDER.length)
+            ...(await classView(userId, user, classKey))
         });
     }
 
@@ -474,15 +483,12 @@ async function routeClassButton(interaction) {
         const index = state.browseIndex || 0;
 
         const classKey = CLASS_ORDER[index];
-        const classInfo = CLASSES[classKey];
-        const skillTree = SKILL_TREES[classKey];
 
         state.view = 'browse';
         classViewState.set(userId, state);
 
         return interaction.update({
-            embeds: [ui.classDetailEmbed(user, classKey, classInfo, skillTree, index, CLASS_ORDER.length)],
-            components: ui.classBrowserButtons(user, classKey, classInfo, index, CLASS_ORDER.length)
+            ...(await classView(userId, user, classKey))
         });
     }
 
@@ -505,12 +511,9 @@ async function routeClassButton(interaction) {
         state.selectedClass = 'DEFAULT';
         classViewState.set(userId, state);
 
-        const classInfo = CLASSES['DEFAULT'];
-        const skillTree = SKILL_TREES['DEFAULT'];
 
         await interaction.update({
-            embeds: [ui.classDetailEmbed(updatedUser, 'DEFAULT', classInfo, skillTree, 0, CLASS_ORDER.length)],
-            components: ui.classBrowserButtons(updatedUser, 'DEFAULT', classInfo, 0, CLASS_ORDER.length)
+            ...(await classView(userId, updatedUser, 'DEFAULT'))
         });
 
         return interaction.followUp({
@@ -622,8 +625,7 @@ async function routeClassButton(interaction) {
         classViewState.set(userId, { browseIndex: classIndex, selectedClass: classKey });
 
         await interaction.update({
-            embeds: [ui.classDetailEmbed(user, classKey, cls, SKILL_TREES[classKey], classIndex, CLASS_ORDER.length)],
-            components: ui.classBrowserButtons(user, classKey, cls, classIndex, CLASS_ORDER.length)
+            ...(await classView(userId, user, classKey))
         });
         await interaction.followUp({ embeds: [ui.success('Purchased!', `Now a ${cls.emoji} **${cls.name}**!`)], ...EPHEMERAL });
         await sendRewards(interaction, { achievements: newAchs });
@@ -642,8 +644,7 @@ async function routeClassButton(interaction) {
         classViewState.set(userId, { browseIndex: classIndex, selectedClass: classKey });
 
         await interaction.update({
-            embeds: [ui.classDetailEmbed(user, classKey, cls, SKILL_TREES[classKey], classIndex, CLASS_ORDER.length)],
-            components: ui.classBrowserButtons(user, classKey, cls, classIndex, CLASS_ORDER.length)
+            ...(await classView(userId, user, classKey))
         });
         await interaction.followUp({ embeds: [ui.success('Equipped!', `Now a ${cls.emoji} **${cls.name}**!`)], ...EPHEMERAL });
     }
@@ -653,18 +654,18 @@ async function routeClassButton(interaction) {
 async function handleClassSelect(interaction) {
     const userId = interaction.user.id;
     const selectedClass = interaction.values[0];
+    if (!Object.prototype.hasOwnProperty.call(CLASSES, selectedClass)) {
+        return interaction.reply({ embeds: [ui.error('Unknown class', 'That class is not available.')], ...EPHEMERAL });
+    }
 
     const user = await users.getUser(userId);
     const classIndex = CLASS_ORDER.indexOf(selectedClass);
 
     classViewState.set(userId, { browseIndex: classIndex >= 0 ? classIndex : 0, selectedClass: selectedClass });
 
-    const classInfo = CLASSES[selectedClass];
-    const skillTree = SKILL_TREES[selectedClass];
 
     await interaction.update({
-        embeds: [ui.classDetailEmbed(user, selectedClass, classInfo, skillTree, classIndex >= 0 ? classIndex : 0, CLASS_ORDER.length)],
-        components: ui.classBrowserButtons(user, selectedClass, classInfo, classIndex >= 0 ? classIndex : 0, CLASS_ORDER.length)
+        ...(await classView(userId, user, selectedClass))
     });
 }
 

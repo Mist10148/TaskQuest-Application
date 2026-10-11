@@ -58,6 +58,8 @@ export const userApi = {
     createCalendarToken: () => post<{ token: string }>('/api/user/calendar-token'),
     revokeCalendarToken: () => del<{ success: boolean }>('/api/user/calendar-token'),
     importData: (data: unknown) => post<{ success: boolean; lists: number; items: number }>('/api/user/import', data),
+    getPrestige: () => apiFetch<PrestigeStatus>('/api/user/prestige'),
+    prestige: () => post<PrestigeResult>('/api/user/prestige', { confirm: 'PRESTIGE' }),
     buyStreakFreeze: () => post<{ success: boolean; freezes: number; cost: number; max?: number; newBalance: number; newAchievements: AchievementUnlock[] }>('/api/user/streak-freeze'),
 };
 
@@ -241,6 +243,11 @@ export interface User {
     discord_avatar: string | null;
     player_xp: number;
     lifetime_xp: number;
+    /** Never-reset total XP; lifetime_xp restarts with each prestige and drives the level. */
+    lifetime_xp_total?: number;
+    /** Times the player has prestiged (0-10) and the title that earns. */
+    prestige?: number;
+    prestige_title?: string;
     player_level: number;
     player_class: PlayerClass;
     skill_points: number;
@@ -471,6 +478,8 @@ export interface LeaderboardEntry {
     avatarUrl: string | null;
     xp: number;
     lifetimeXp: number;
+    prestige?: number;
+    prestigeTitle?: string;
     /** The value this board ranks by (XP, XP earned this week, or streak days). */
     score: number;
     level: number;
@@ -631,6 +640,30 @@ export interface DailyClaimResult {
     newLevel?: number;
     leveledUp?: boolean;
     newAchievements?: AchievementUnlock[];
+}
+
+export interface PrestigeStatus {
+    prestige: number;
+    title: string;
+    nextTitle: string | null;
+    bonusPercent: number;
+    nextBonusPercent: number | null;
+    level: number;
+    minLevel: number;
+    max: number;
+    eligible: boolean;
+}
+
+export interface PrestigeResult {
+    success: boolean;
+    prestige: number;
+    title: string;
+    bonusPercent: number;
+    levelBefore: number;
+    balanceLost: number;
+    balance: number;
+    level: number;
+    newAchievements: AchievementUnlock[];
 }
 
 export interface Quest {

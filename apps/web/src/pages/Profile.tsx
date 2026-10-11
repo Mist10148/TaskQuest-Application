@@ -12,6 +12,9 @@ import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { Button } from "@/components/ui/button";
 import { useClasses } from "@/hooks/useApi";
 import { classCounter, freezeLimits } from "@/lib/classInfo";
+import { PrestigeCard } from "@/components/game/PrestigeCard";
+import { PrestigeTag } from "@/components/game/PrestigeTag";
+import { lifetimeTotal } from "@/lib/prestige";
 
 const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   DEFAULT: { name: 'Default', emoji: '⚪' },
@@ -55,8 +58,9 @@ const Profile = () => {
   const freeze = freezeLimits(user?.freezeLimits);
   const level = dbUser.player_level || 1;
   const totalXP = Number(dbUser.player_xp) || 0;
-  const lifetimeXP = Number(dbUser.lifetime_xp ?? totalXP) || 0;
-  const currentXP = lifetimeXP % 100;
+  const levelXP = Number(dbUser.lifetime_xp ?? totalXP) || 0; // restarts with each prestige and drives the level
+  const lifetimeXP = lifetimeTotal(dbUser); // the never-reset total
+  const currentXP = levelXP % 100;
   const streak = dbUser.streak_count || 0;
   
   const totalTasks = parseInt(String(stats.items?.total)) || 0;
@@ -117,7 +121,10 @@ const Profile = () => {
 
               {/* Info */}
               <div className="flex-1 text-center sm:text-left">
-                <h1 className="text-xl sm:text-2xl font-heading font-bold">{discord.globalName || discord.username}</h1>
+                <h1 className="text-xl sm:text-2xl font-heading font-bold flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  {discord.globalName || discord.username}
+                  <PrestigeTag prestige={dbUser.prestige} title={dbUser.prestige_title} className="text-xs" />
+                </h1>
                 <p className="text-foreground-muted text-sm">@{discord.username}</p>
                 <div className="flex items-center gap-2 mt-1 justify-center sm:justify-start">
                   <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: classColor(classKey, 0.19), color: classColor(classKey) }}>
@@ -157,6 +164,8 @@ const Profile = () => {
           <Button asChild variant="outline" size="sm"><Link to="/classes">Change class</Link></Button>
           <Button asChild variant="outline" size="sm"><Link to="/skills">Skill trees</Link></Button>
         </div>
+
+        <PrestigeCard gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
 
         <StreakFreezeCard freezes={Number(dbUser.streak_freezes) || 0} cost={freeze.cost} max={freeze.max} balance={totalXP} gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
 

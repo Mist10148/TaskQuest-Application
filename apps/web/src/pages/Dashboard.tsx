@@ -20,6 +20,7 @@ import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist"
 import { QuestsCard } from "@/components/dashboard/QuestsCard";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { dailyDescription } from "@/lib/classInfo";
+import { lifetimeTotal } from "@/lib/prestige";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -35,8 +36,9 @@ const Dashboard = () => {
   
   const level = dbUser.player_level || 1;
   const totalXP = Number(dbUser.player_xp) || 0;
-  const lifetimeXP = Number(dbUser.lifetime_xp ?? totalXP) || 0;
-  const currentXP = lifetimeXP % 100;
+  const levelXP = Number(dbUser.lifetime_xp ?? totalXP) || 0; // restarts with each prestige and drives the level
+  const lifetimeXP = lifetimeTotal(dbUser); // the never-reset total
+  const currentXP = levelXP % 100;
   const streak = dbUser.streak_count || 0;
   
   const totalTasks = parseInt(String(user?.items?.total)) || 0;

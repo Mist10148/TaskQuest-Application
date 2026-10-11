@@ -11,6 +11,7 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { AI_NAV_ITEM, NAV_ITEMS } from "@/components/layout/navItems";
 import { openCommandPalette } from "@/lib/commands";
+import { PrestigeTag } from "@/components/game/PrestigeTag";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -70,7 +71,10 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
         <div className="flex items-center gap-2 sm:gap-3">
           <img src={avatarUrl} alt="" className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-2 border-primary shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold truncate text-sm sm:text-base">{username}</p>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="font-semibold truncate text-sm sm:text-base">{username}</p>
+              <PrestigeTag prestige={dbUser.prestige} title={dbUser.prestige_title} />
+            </div>
             <ClassBadge playerClass={playerClass} size="sm" />
           </div>
         </div>

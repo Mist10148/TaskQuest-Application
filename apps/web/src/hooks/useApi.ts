@@ -391,6 +391,30 @@ export function useClaimReview() {
     });
 }
 
+// ─── Prestige ────────────────────────────────────────────────────────────────
+
+export function usePrestigeStatus() {
+    return useQuery({ queryKey: ['prestige'], queryFn: userApi.getPrestige });
+}
+
+export function useDoPrestige() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: userApi.prestige,
+        onSuccess: (result) => {
+            // Balance, level, classes, skills and freezes all changed.
+            qc.invalidateQueries();
+            celebrate('level');
+            toast.success(`🌟 Prestige ${result.prestige}: ${result.title}!`, {
+                description: `Your XP bonus is now +${result.bonusPercent}% for good. You start again at level ${result.level}.`,
+                duration: 6000,
+            });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
 // ─── Focus ───────────────────────────────────────────────────────────────────
 
 export function useFocus() {

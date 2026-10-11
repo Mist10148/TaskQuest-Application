@@ -7,6 +7,8 @@
  * VITE_API_URL is only needed for unusual split deployments.
  */
 
+import type { ListRole, MemberLike, SharingFields } from './sharing';
+
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 export class ApiError extends Error {
@@ -97,6 +99,62 @@ export const listsApi = {
     update: (id: number, data: Partial<CreateListData>) => patch<List>(`/api/lists/${id}`, data),
     delete: (id: number) => del<{ success: boolean }>(`/api/lists/${id}`),
     reorder: (id: number, itemIds: number[]) => patch<Item[]>(`/api/lists/${id}/reorder`, { itemIds }),
+};
+
+// ─── Shared lists: members and invitations ───────────────────────────────────
+
+export interface ListMember extends MemberLike {
+    name: string | null;
+    since?: string;
+}
+
+export interface ListInvite {
+    id: number;
+    inviteeName: string | null;
+    role: ListRole;
+    createdAt: string;
+    expiresAt: string;
+}
+
+export interface ListMembers {
+    list: { id: number; name: string };
+    role: ListRole;
+    isOwner: boolean;
+    members: ListMember[];
+    /** Pending invitations (managers only, otherwise empty). */
+    invites: ListInvite[];
+    /** Most people besides the owner (members plus pending invitations). */
+    limit: number;
+}
+
+export interface MyInvite {
+    id: number;
+    listName: string;
+    ownerName: string | null;
+    invitedByName: string | null;
+    role: ListRole;
+    createdAt: string;
+    expiresAt: string;
+}
+
+export interface InviteResponse {
+    accepted: boolean;
+    list?: { id: number; name: string };
+    role?: ListRole;
+}
+
+export const sharingApi = {
+    members: (listId: number) => apiFetch<ListMembers>(`/api/lists/${listId}/members`),
+    invite: (listId: number, body: { username: string; role: ListRole }) =>
+        post<{ id: number; role: ListRole; expiresAt: string; inviteeName: string | null }>(`/api/lists/${listId}/invites`, body),
+    setRole: (listId: number, memberKey: string, role: ListRole) =>
+        patch<{ memberKey: string; role: ListRole }>(`/api/lists/${listId}/members/${memberKey}`, { role }),
+    removeMember: (listId: number, memberKey: string) => del<{ success: boolean }>(`/api/lists/${listId}/members/${memberKey}`),
+    leave: (listId: number) => post<{ success: boolean }>(`/api/lists/${listId}/leave`),
+    myInvites: () => apiFetch<MyInvite[]>('/api/invites'),
+    accept: (id: number) => post<InviteResponse>(`/api/invites/${id}/accept`),
+    decline: (id: number) => post<InviteResponse>(`/api/invites/${id}/decline`),
+    revoke: (id: number) => del<{ success: boolean }>(`/api/invites/${id}`),
 };
 
 export const questsApi = {
@@ -423,9 +481,10 @@ export interface RewardFields {
 
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH';
 
-export interface List {
+export interface List extends SharingFields {
     id: number;
-    discord_id: string;
+    /** Absent on a quest somebody else owns. */
+    discord_id?: string;
     name: string;
     description: string | null;
     category: string | null;
@@ -453,6 +512,8 @@ export interface Item {
     tags?: string | null;
     parent_id?: number | null;
     recurrence?: Recurrence | null;
+    /** Display name of the person who finished it (shared quests only). */
+    completed_by_name?: string | null;
 }
 
 export type Recurrence = 'daily' | 'weekly' | 'monthly';

@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tansta
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
 import { applyItemOrder } from '@/lib/reorder';
+import type { ListRole } from '@/lib/sharing';
 import { celebrate } from '@/lib/celebrate';
 import { describeChest } from '@/lib/classInfo';
 import { achievementDescription, rewardDescription } from '@/lib/bonuses';
@@ -16,6 +17,7 @@ import {
     importApi,
     templatesApi,
     listsApi,
+    sharingApi,
     itemsApi,
     classesApi,
     cosmeticsApi,
@@ -269,6 +271,82 @@ export function useDeleteList() {
             qc.invalidateQueries({ queryKey: ['auth'] });
         },
         onError: showError,
+    });
+}
+
+// ─── Shared lists ────────────────────────────────────────────────────────────
+
+export function useListMembers(listId: number, enabled = true) {
+    return useQuery({ queryKey: ['list-members', listId], queryFn: () => sharingApi.members(listId), enabled: enabled && listId > 0, retry: false });
+}
+
+export function useMyInvites() {
+    return useQuery({ queryKey: ['invites'], queryFn: sharingApi.myInvites, retry: false });
+}
+
+/** Everything that shows who is on a quest or what I may do on it. */
+function refreshSharing(qc: QueryClient, listId?: number) {
+    qc.invalidateQueries({ queryKey: ['lists'] });
+    qc.invalidateQueries({ queryKey: ['invites'] });
+    if (listId) qc.invalidateQueries({ queryKey: ['list-members', listId] });
+}
+
+export function useInviteMember(listId: number) {
+    const qc = useQueryClient();
+    // No error toast: the dialog shows the server's message beside the form.
+    return useMutation({
+        mutationFn: (body: { username: string; role: ListRole }) => sharingApi.invite(listId, body),
+        onSuccess: () => refreshSharing(qc, listId),
+    });
+}
+
+export function useSetMemberRole(listId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ memberKey, role }: { memberKey: string; role: ListRole }) => sharingApi.setRole(listId, memberKey, role),
+        onSuccess: () => refreshSharing(qc, listId),
+        onError: (error) => { showError(error); refreshSharing(qc, listId); },
+    });
+}
+
+export function useRemoveMember(listId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (memberKey: string) => sharingApi.removeMember(listId, memberKey),
+        onSuccess: () => refreshSharing(qc, listId),
+        onError: (error) => { showError(error); refreshSharing(qc, listId); },
+    });
+}
+
+export function useLeaveList(listId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: () => sharingApi.leave(listId),
+        onSuccess: () => {
+            qc.removeQueries({ queryKey: ['lists', listId] });
+            qc.removeQueries({ queryKey: ['list-members', listId] });
+            refreshSharing(qc);
+        },
+        onError: showError,
+    });
+}
+
+export function useRevokeInvite(listId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (inviteId: number) => sharingApi.revoke(inviteId),
+        onSuccess: () => refreshSharing(qc, listId),
+        onError: (error) => { showError(error); refreshSharing(qc, listId); },
+    });
+}
+
+export function useRespondToInvite() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, accept }: { id: number; accept: boolean }) => (accept ? sharingApi.accept(id) : sharingApi.decline(id)),
+        onSuccess: () => refreshSharing(qc),
+        // An expired or withdrawn invitation answers 404: show why and drop it from the banner.
+        onError: (error) => { showError(error); refreshSharing(qc); },
     });
 }
 

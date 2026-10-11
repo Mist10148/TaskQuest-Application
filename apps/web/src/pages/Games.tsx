@@ -643,6 +643,8 @@ const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
 
     // Inputs are queued here and handed to the simulation (and the recorder) on the next step.
     const handleKeyDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // typing elsewhere on the page
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) e.preventDefault();
       if (e.repeat) return;
       if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") pendingRef.current.push(snakeSim.INPUT.UP);

@@ -114,22 +114,26 @@ export const DataSettings = () => {
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
-    if (file.size > MAX_IMPORT_BYTES) return void toast.error("That file is too large to import (1 MB limit).");
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(await file.text());
-    } catch {
-      return void toast.error("That file isn't valid JSON. Import a TaskQuest export.");
+      if (file.size > MAX_IMPORT_BYTES) return void toast.error("That file is too large to import (1 MB limit).");
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await file.text());
+      } catch {
+        return void toast.error("That file isn't valid JSON. Import a TaskQuest export.");
+      }
+      try {
+        const result = await importData.mutateAsync(parsed);
+        toast.success(`Imported ${result.lists} quest${result.lists === 1 ? "" : "s"} and ${result.items} task${result.items === 1 ? "" : "s"}`, {
+          description: "Imports never award XP.",
+        });
+      } catch {
+        /* error toast shown by the mutation hook */
+      }
+    } finally {
+      // Reset so picking the same file again fires onChange.
+      if (fileRef.current) fileRef.current.value = "";
     }
-    try {
-      const result = await importData.mutateAsync(parsed);
-      toast.success(`Imported ${result.lists} quest${result.lists === 1 ? "" : "s"} and ${result.items} task${result.items === 1 ? "" : "s"}`, {
-        description: "Imports never award XP.",
-      });
-    } catch {
-      /* error toast shown by the mutation hook */
-    }
-    if (fileRef.current) fileRef.current.value = "";
   };
 
   return (
@@ -154,7 +158,7 @@ export const DataSettings = () => {
 };
 
 /** Subscribe to your deadlines from Google Calendar, Apple Calendar or Outlook. */
-export const CalendarFeed = ({ token }: { token: string | null | undefined }) => {
+export const CalendarFeed = ({ token, loading = false }: { token: string | null | undefined; loading?: boolean }) => {
   const { create, revoke } = useCalendarToken();
   const [shown, setShown] = useState(false);
   const url = token ? feedUrl(token) : "";
@@ -167,6 +171,15 @@ export const CalendarFeed = ({ token }: { token: string | null | undefined }) =>
       toast.error("Couldn't copy. Select the address and copy it by hand.");
     }
   };
+
+  // The token is fetched separately; until it arrives "Create feed" must not show (it would rotate an existing feed).
+  if (loading && !token) {
+    return (
+      <SettingRow label="Calendar feed" description="Loading your feed...">
+        <div className="h-8 w-24 animate-pulse rounded-md bg-muted" role="status" aria-label="Loading calendar feed" />
+      </SettingRow>
+    );
+  }
 
   if (!token) {
     return (

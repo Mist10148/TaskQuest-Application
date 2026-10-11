@@ -42,6 +42,8 @@ export const OnboardingTour = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Every page mounts its own layout (and so its own tour), so following a step's link counts as
+  // leaving the tour; otherwise it would restart at step 1 on the next route.
   const finish = () => {
     markTourSeen();
     setOpen(false);
@@ -65,7 +67,7 @@ export const OnboardingTour = () => {
       <h2 className="mt-1 pr-6 font-heading text-lg font-semibold">{current.title}</h2>
       <p className="mt-1 text-sm text-foreground-muted">{current.body}</p>
       {current.to && (
-        <Link to={current.to} className="mt-2 inline-block text-sm font-medium text-primary-text underline underline-offset-2">{current.toLabel}</Link>
+        <Link to={current.to} onClick={finish} className="mt-2 inline-block text-sm font-medium text-primary-text underline underline-offset-2">{current.toLabel}</Link>
       )}
       <div className="mt-4 flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" onClick={finish}>Skip</Button>

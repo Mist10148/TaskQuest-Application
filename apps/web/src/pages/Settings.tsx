@@ -124,7 +124,7 @@ const Settings = () => {
         )}
 
         <SettingsSection icon={<CalendarDays className="h-5 w-5 text-primary-text" />} title="Calendar feed" description="Deadlines in Google, Apple or Outlook Calendar" delay={0.17}>
-          <CalendarFeed token={dbUser.has_calendar_token ? calendar.data?.token : null} />
+          <CalendarFeed token={dbUser.has_calendar_token ? calendar.data?.token : null} loading={Boolean(dbUser.has_calendar_token) && calendar.isPending} />
         </SettingsSection>
 
         <SettingsSection icon={<Database className="h-5 w-5 text-primary-text" />} title="Your data" description="Export and import" delay={0.18}>

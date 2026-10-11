@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useAchievements } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { achievementProgress, cappedDelay, type AchievementStats } from "@/lib/achievementProgress";
+import { lifetimeTotal } from "@/lib/prestige";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
@@ -40,7 +41,7 @@ const Achievements = () => {
     lists: Number(user?.lists?.total) || 0,
     items: Number(user?.items?.total) || 0,
     completed: Number(user?.items?.completed) || 0,
-    lifetimeXP: Number(user?.user?.lifetime_xp ?? user?.user?.player_xp) || 0,
+    lifetimeXP: user?.user ? lifetimeTotal(user.user) : 0, // the never-reset total, as the server unlocks on
     level: Number(user?.user?.player_level) || 1,
     streak: Number(user?.user?.streak_count) || 0,
     gamesWon: Number(user?.games?.won) || 0,

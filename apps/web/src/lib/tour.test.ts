@@ -6,6 +6,23 @@ const fake = (): TourStorage & { data: Map<string, string> } => {
   return { data, getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) };
 };
 
+describe("tour steps", () => {
+  it("link only to in-app routes, each with a label", () => {
+    for (const step of TOUR_STEPS) {
+      if (step.to) {
+        expect(step.to.startsWith("/")).toBe(true);
+        expect(step.toLabel).toBeTruthy();
+      }
+    }
+  });
+  it("following a step link marks the tour seen, so a remounted layout does not restart it", () => {
+    const s = fake();
+    expect(hasSeenTour(s)).toBe(false);
+    markTourSeen(s); // what OnboardingTour's link click does via finish()
+    expect(hasSeenTour(s)).toBe(true);
+  });
+});
+
 describe("tour flag", () => {
   it("is unseen until marked, and can be reset", () => {
     const s = fake();

@@ -81,6 +81,7 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['review'] });
     qc.invalidateQueries({ queryKey: ['focus'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
+    qc.invalidateQueries({ queryKey: ['prestige'] });
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────

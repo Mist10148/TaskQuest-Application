@@ -195,7 +195,10 @@ const Tasks = () => {
     const item = selectedList?.items.find((i: Item) => i.id === id);
     if (!item || togglingIds.current.has(id)) return;
     togglingIds.current.add(id);
-    toggleItem.mutate({ itemId: id, completed: !item.completed }, { onSettled: () => togglingIds.current.delete(id) });
+    // mutate()'s per-call callbacks only fire for the latest call, so release the guard on the promise.
+    toggleItem.mutateAsync({ itemId: id, completed: !item.completed })
+      .catch(() => { /* error toast shown by the mutation hook */ })
+      .finally(() => togglingIds.current.delete(id));
   };
 
   const openItemEditor = (itemId: number) => {

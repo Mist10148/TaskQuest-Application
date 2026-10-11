@@ -754,3 +754,14 @@ test('habit streaks: constants', () => {
     assert.deepEqual(HABIT_PERIOD_DAYS, { daily: 1, weekly: 7, monthly: 28 });
     assert.ok(WEEKLY_XP_SOURCES.includes('habit_bonus'));
 });
+
+test('focus sessions: constants', () => {
+    const { REWARDS, LIMITS, WEEKLY_XP_SOURCES } = require('../src/constants');
+    assert.equal(REWARDS.FOCUS_XP_PER_MINUTE, 0.6);
+    assert.deepEqual([LIMITS.FOCUS_MIN_MINUTES, LIMITS.FOCUS_MAX_MINUTES], [10, 90]);
+    assert.equal(LIMITS.FOCUS_XP_PER_DAY, 100);
+    assert.equal(LIMITS.FOCUS_SESSIONS_PER_DAY, 8);
+    assert.equal(LIMITS.FOCUS_EXPIRE_MINUTES, 180);
+    assert.ok(WEEKLY_XP_SOURCES.includes('focus_session'));
+    assert.equal(Math.floor(90 * REWARDS.FOCUS_XP_PER_MINUTE), 54);
+});

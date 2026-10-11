@@ -64,6 +64,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await cols('lists')).includes('cleared_at'));
         assert.ok(users.includes('last_chest_streak'));
         assert.ok(items.includes('habit_streak'));
+        assert.equal((await pool.query("SHOW TABLES LIKE 'focus_sessions'"))[0].length, 1);
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -1229,6 +1230,80 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { item } = await db.tasks.addItem(U, list.id, { name: 'tomorrow', recurrence: 'daily', due_date: dayOffset(0) });
         await db.query('UPDATE items SET habit_streak = 3 WHERE id = ?', [item.id]);
         assert.equal((await db.tasks.setItemCompleted(U, item.id)).bonuses.find((b) => b.key === 'habit_bonus').xp, 6, 'the cap resets the next day');
+    });
+
+
+    await t.test('focus sessions: server-measured minutes, 0.6 XP each, one active session', async () => {
+        const U = '100000000000000141';
+        const V = '100000000000000142';
+        await db.users.ensureUser(U);
+        await db.users.ensureUser(V);
+        const age = (id, minutes) => db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL ? MINUTE WHERE id = ?', [minutes, id]);
+        for (const bad of [9, 91, 10.5, null, 0, NaN]) await assert.rejects(db.focus.startFocus(U, bad), { code: 'VALIDATION' }, `minutes ${bad}`);
+
+        // Finishing at once credits nothing and closes the session (no XP for a start/finish loop).
+        const quick = await db.focus.startFocus(U, 25);
+        const none = await db.focus.finishFocus(U, quick.sessionId);
+        assert.deepEqual([none.state, none.minutesCredited, none.xp], ['cancelled', 0, 0]);
+        await assert.rejects(db.focus.finishFocus(U, quick.sessionId), { code: 'CONFLICT' });
+
+        // A full session pays floor(25 * 0.6) = 15; the credit never exceeds the plan.
+        const full = await db.focus.startFocus(U, 25);
+        await age(full.sessionId, 40);
+        const done = await db.focus.finishFocus(U, full.sessionId);
+        assert.deepEqual([done.state, done.minutesCredited, done.xp], ['finished', 25, 15]);
+        assert.equal(await sumSource(U, 'focus_session'), 15);
+        assert.equal(done.balance, Number((await db.users.getUser(U)).player_xp));
+        await assert.rejects(db.focus.finishFocus(U, full.sessionId), { code: 'CONFLICT' }, 'a session settles once');
+        assert.equal(await sumSource(U, 'focus_session'), 15);
+
+        // Finishing early credits the time that really passed.
+        const part = await db.focus.startFocus(U, 60);
+        await age(part.sessionId, 20);
+        const partial = await db.focus.finishFocus(U, part.sessionId);
+        assert.deepEqual([partial.minutesCredited, partial.xp], [20, 12]);
+
+        // Nobody else can finish it; starting a new session cancels the old one.
+        const mine = await db.focus.startFocus(U, 30);
+        await assert.rejects(db.focus.finishFocus(V, mine.sessionId), { code: 'NOT_FOUND' });
+        const replacement = await db.focus.startFocus(U, 30);
+        await assert.rejects(db.focus.finishFocus(U, mine.sessionId), { code: 'CONFLICT' });
+        assert.equal((await db.focus.getFocusStatus(U)).active.sessionId, replacement.sessionId);
+
+        // Sessions left running past 3 hours expire without credit.
+        await age(replacement.sessionId, 4 * 60);
+        const expired = await db.focus.finishFocus(U, replacement.sessionId);
+        assert.deepEqual([expired.state, expired.minutesCredited, expired.xp], ['expired', 0, 0]);
+        assert.equal((await db.focus.getFocusStatus(U)).active, null);
+    });
+
+    await t.test('focus sessions: 100 XP and 8 sessions a day', async () => {
+        const U = '100000000000000143';
+        await db.users.ensureUser(U);
+        const session = async (minutes) => {
+            const s = await db.focus.startFocus(U, minutes);
+            await db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL ? MINUTE WHERE id = ?', [minutes, s.sessionId]);
+            return db.focus.finishFocus(U, s.sessionId);
+        };
+        const a = await session(90);
+        const b = await session(90);
+        const c = await session(90);
+        assert.deepEqual([a.xp, b.xp, c.xp], [54, 46, 0], 'the daily 100 XP cap trims the second and empties the third');
+        assert.equal(b.capped, true);
+        assert.equal(await sumSource(U, 'focus_session'), 100);
+        assert.equal((await db.focus.getFocusStatus(U)).today.remainingXP, 0);
+
+        const W = '100000000000000144';
+        await db.users.ensureUser(W);
+        for (let n = 0; n < 8; n++) {
+            const s = await db.focus.startFocus(W, 10);
+            await db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL 10 MINUTE WHERE id = ?', [s.sessionId]);
+            assert.equal((await db.focus.finishFocus(W, s.sessionId)).xp, 6);
+        }
+        await assert.rejects(db.focus.startFocus(W, 10), { code: 'CONFLICT' }, 'the ninth session of the day is refused');
+        await db.query("UPDATE focus_sessions SET finished_at = finished_at - INTERVAL 1 DAY WHERE discord_id = ?", [W]);
+        await db.query('UPDATE xp_transactions SET created_at = created_at - INTERVAL 1 DAY WHERE discord_id = ?', [W]);
+        assert.ok((await db.focus.startFocus(W, 10)).sessionId, 'a new day opens the cap again');
     });
 
     await db.closePool();

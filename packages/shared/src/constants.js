@@ -346,7 +346,8 @@ const REWARDS = {
     SUBTASKS_DONE: 10,
     ACHIEVEMENT: 25,
     HABIT_PER_STREAK: 2,
-    HABIT_MIN_STREAK: 2
+    HABIT_MIN_STREAK: 2,
+    FOCUS_XP_PER_MINUTE: 0.6
 };
 
 /** How early (in days) a repeating task may be finished and still continue its habit streak: under one period. */
@@ -387,7 +388,7 @@ const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
     'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
     'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest',
-    'achievement_reward', 'habit_bonus'
+    'achievement_reward', 'habit_bonus', 'focus_session'
 ];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
@@ -445,6 +446,12 @@ const LIMITS = {
     HABIT_MAX: 20,
     /** ...and at most this much a day. */
     HABIT_XP_PER_DAY: 60,
+    /** Focus sessions: allowed lengths, the XP and session caps per day, and when an unfinished one expires. */
+    FOCUS_MIN_MINUTES: 10,
+    FOCUS_MAX_MINUTES: 90,
+    FOCUS_XP_PER_DAY: 100,
+    FOCUS_SESSIONS_PER_DAY: 8,
+    FOCUS_EXPIRE_MINUTES: 180,
     /** Total XP that free games (RPS, Hangman, arcade) may award per day. */
     FREE_GAME_XP_PER_DAY: 500,
     /** Minimum time between two free-game rounds. */

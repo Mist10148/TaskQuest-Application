@@ -96,6 +96,9 @@ export const arcadeFinishBody = z
     .strict();
 export const quitParam = z.object({ type: z.enum(GAME_TYPES) });
 
+export const focusStartBody = z.object({ minutes: z.number().int().min(shared.LIMITS.FOCUS_MIN_MINUTES).max(shared.LIMITS.FOCUS_MAX_MINUTES) }).strict();
+export const focusFinishBody = z.object({ sessionId: z.number().int().positive() }).strict();
+
 // ── AI ───────────────────────────────────────────────────────────────────────
 export const uuidParam = z.object({ threadId: z.string().uuid() });
 export const aiSummaryBody = z

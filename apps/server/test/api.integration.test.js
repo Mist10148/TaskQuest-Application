@@ -286,6 +286,44 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('GET', `/api/calendar/${token}.ics`)).status, 404, 'revoked feeds stop working');
     });
 
+    await t.test('task bonuses are returned by the toggle route', async () => {
+        const list = await (await call('POST', '/api/lists', { cookie: alice, body: { name: 'Bonus API' } })).json();
+        const item = await (await call('POST', `/api/lists/${list.id}/items`, { cookie: alice, body: { name: 'early', due_date: '2099-01-01' } })).json();
+        const done = await (await call('PATCH', `/api/items/${item.id}/toggle`, { cookie: alice })).json();
+        assert.ok(Array.isArray(done.bonuses));
+        assert.deepEqual(done.bonuses.find((b) => b.key === 'early_finish'), { key: 'early_finish', label: 'Finished early', xp: 20 });
+        const again = await (await call('PATCH', `/api/items/${item.id}/toggle`, { cookie: alice, body: { completed: false } })).json();
+        assert.deepEqual(again.bonuses, []);
+    });
+
+    await t.test('focus sessions: validation, one finish per session, no pay for a quick finish', async () => {
+        assert.equal((await call('POST', '/api/focus/start', { body: { minutes: 25 } })).status, 401);
+        for (const minutes of [9, 91, 25.5, '25']) {
+            assert.equal((await call('POST', '/api/focus/start', { cookie: alice, body: { minutes } })).status, 400, String(minutes));
+        }
+        assert.equal((await call('POST', '/api/focus/start', { cookie: alice, body: { minutes: 25, extra: 1 } })).status, 400);
+        const start = await call('POST', '/api/focus/start', { cookie: alice, body: { minutes: 25 } });
+        assert.equal(start.status, 200);
+        const { sessionId, endsAt } = await start.json();
+        assert.ok(sessionId > 0 && endsAt);
+        const status = await (await call('GET', '/api/focus', { cookie: alice })).json();
+        assert.equal(status.active.sessionId, sessionId);
+        assert.equal(status.config.maxMinutes, 90);
+
+        assert.equal((await call('POST', '/api/focus/finish', { cookie: mallory, body: { sessionId } })).status, 404);
+        assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: 'x' } })).status, 400);
+        const quick = await (await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId } })).json();
+        assert.deepEqual([quick.state, quick.xp, quick.minutesCredited], ['cancelled', 0, 0]);
+        assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId } })).status, 409);
+
+        // A real 25 minutes pays 15 XP, exactly once.
+        const real = await (await call('POST', '/api/focus/start', { cookie: alice, body: { minutes: 25 } })).json();
+        await db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL 26 MINUTE WHERE id = ?', [real.sessionId]);
+        const paid = await (await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).json();
+        assert.deepEqual([paid.state, paid.minutesCredited, paid.xp], ['finished', 25, 15]);
+        assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).status, 409);
+    });
+
     await t.test('logout destroys the session', async () => {
         const res = await call('POST', '/api/auth/logout', { cookie: mallory });
         assert.equal(res.status, 200);

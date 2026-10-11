@@ -15,5 +15,6 @@ const tasks = require('./tasks');
 const games = require('./games');
 const quests = require('./quests');
 const transfer = require('./transfer');
+const focus = require('./focus');
 
-module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer };
+module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus };

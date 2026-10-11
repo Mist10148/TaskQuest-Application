@@ -27,10 +27,13 @@ const dayNumber = (ymd) => Math.floor(Date.parse(`${String(ymd).slice(0, 10)}T00
 
 /**
  * What (if anything) to send for a candidate list right now.
- * @returns {'snooze'|'due'|'overdue'|null}
+ * 'snooze_done' / 'due_done' mean the reminder is due but every task is already finished:
+ * nothing is sent, the list is just marked handled (and its snooze cleared).
+ * @returns {'snooze'|'due'|'overdue'|'snooze_done'|'due_done'|null}
  */
 function decideReminder(list, now = new Date()) {
-    if (list.remind_at && new Date(list.remind_at).getTime() <= now.getTime()) return 'snooze';
+    const complete = Number(list.items_total) > 0 && Number(list.items_done) >= Number(list.items_total);
+    if (list.remind_at && new Date(list.remind_at).getTime() <= now.getTime()) return complete ? 'snooze_done' : 'snooze';
 
     const hour = Number.isInteger(Number(list.reminder_hour)) ? Number(list.reminder_hour) : 9;
     if (hourInZone(list.timezone, now) < hour) return null;
@@ -38,7 +41,8 @@ function decideReminder(list, now = new Date()) {
     const today = todayInZone(list.timezone, now);
 
     if (!list.deadline_notified && list.deadline <= today) {
-        return dayNumber(today) - dayNumber(list.deadline) <= MAX_LATE_DAYS ? 'due' : null;
+        if (dayNumber(today) - dayNumber(list.deadline) > MAX_LATE_DAYS) return null;
+        return complete ? 'due_done' : 'due';
     }
     const unfinished = Number(list.items_total) > Number(list.items_done);
     if (list.deadline_notified && !list.overdue_notified && list.deadline < today && unfinished) return 'overdue';
@@ -95,7 +99,15 @@ async function sendDeadlineReminders({ db, client, log, now = new Date() }) {
     for (const list of await db.tasks.getReminderCandidates(now)) {
         const kind = decideReminder(list, now);
         if (!kind) continue;
-        const late = kind === 'due' && isPastDeadline(list.deadline, todayInZone(list.timezone, now));
+        const today = todayInZone(list.timezone, now);
+        const late = (kind === 'due' || kind === 'due_done' || kind === 'snooze') && isPastDeadline(list.deadline, today);
+        const pastDeadline = Boolean(list.deadline) && String(list.deadline).slice(0, 10) <= today;
+        if (kind.endsWith('_done')) {
+            // Everything is finished: no DM, but stop the list from being picked up again.
+            await db.tasks.markReminderSent(list.id, kind === 'due_done' ? 'due' : 'snooze', { late, pastDeadline });
+            result.skipped++;
+            continue;
+        }
         try {
             const user = await client.users.fetch(list.discord_id);
             await user.send(reminderMessage(list, kind, now));
@@ -110,7 +122,7 @@ async function sendDeadlineReminders({ db, client, log, now = new Date() }) {
                 continue; // leave it unmarked
             }
         }
-        await db.tasks.markReminderSent(list.id, kind, { late });
+        await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline });
     }
     return result;
 }

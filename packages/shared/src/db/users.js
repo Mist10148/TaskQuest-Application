@@ -5,7 +5,7 @@
 const { getPool, withTransaction } = require('./pool');
 const { LEADERBOARDS, WEEKLY_XP_SOURCES } = require('../constants');
 const { errors } = require('../errors');
-const { isValidTimeZone } = require('../dates');
+const { isValidTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
 
 const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled', 'weekly_digest'];
@@ -234,8 +234,9 @@ async function getWeeklyStats(discordId, now = new Date()) {
     const id = String(discordId);
     const since = new Date(now.getTime() - 7 * 86400e3);
     const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
-    const today = now.toISOString().slice(0, 10);
-    const [[done], [xp], [open], user] = await Promise.all([
+    const user = await getUser(id);
+    const today = todayInZone(user?.timezone, now); // "overdue" is the user's own calendar day
+    const [[done], [xp], [open]] = await Promise.all([
         run(
             null,
             `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
@@ -255,12 +256,28 @@ async function getWeeklyStats(discordId, now = new Date()) {
              FROM lists l JOIN items i ON i.list_id = l.id AND i.completed = 0
              WHERE l.discord_id = ?`,
             [today, id]
-        ),
-        getUser(id)
+        )
     ]);
     return {
         completed: Number(done.n),
         xpEarned: Number(xp.n),
+/**
+ * Atomically claim this week's digest: true for exactly one caller, so two overlapping
+ * runs cannot both send it. Pair with releaseDigest() if the send fails and should be retried.
+ */
+async function claimDigest(discordId, now = new Date()) {
+    const [res] = await getPool().query(
+        'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND (last_digest_at IS NULL OR last_digest_at < ?)',
+        [now, String(discordId), new Date(now.getTime() - 6 * 86400e3)]
+    );
+    return res.affectedRows > 0;
+}
+
+/** Undo a claimDigest() after a temporary send failure (only if nobody claimed again since). */
+async function releaseDigest(discordId, claimedAt, previous = null) {
+    await run(null, 'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND last_digest_at = ?', [previous, String(discordId), claimedAt]);
+}
+
         listsOpen: Number(open.lists_open),
         listsOverdue: Number(open.lists_overdue),
         streak: user ? Number(user.streak_count) : 0,
@@ -321,3 +338,5 @@ module.exports = {
     markDigestSent,
     getWeeklyStats
 };
+    claimDigest,
+    releaseDigest,

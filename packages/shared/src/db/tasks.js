@@ -453,12 +453,21 @@ async function getReminderCandidates(now = new Date()) {
     ).then((rows) => rows.map((r) => ({ ...r, items_total: Number(r.items_total), items_done: Number(r.items_done) })));
 }
 
-/** Record that a reminder went out. `kind`: 'due' | 'overdue' | 'snooze'. Keeps updated_at: it is not an edit. */
-async function markReminderSent(listId, kind, { late = false } = {}) {
+/**
+ * Record that a reminder went out. `kind`: 'due' | 'overdue' | 'snooze'. Keeps updated_at: it is not an edit.
+ * `late`: the deadline day is over; `pastDeadline`: the deadline is today or earlier.
+ */
+async function markReminderSent(listId, kind, { late = false, pastDeadline = late } = {}) {
     const sets = {
         due: late ? 'deadline_notified = TRUE, overdue_notified = TRUE' : 'deadline_notified = TRUE',
         overdue: 'deadline_notified = TRUE, overdue_notified = TRUE',
-        snooze: 'remind_at = NULL'
+        // A snooze that fires on/after the deadline counts as the due (and, once the day is over,
+        // the overdue) notice, so another DM does not follow within the hour.
+        snooze: late
+            ? 'remind_at = NULL, deadline_notified = TRUE, overdue_notified = TRUE'
+            : pastDeadline
+              ? 'remind_at = NULL, deadline_notified = TRUE'
+              : 'remind_at = NULL'
     }[kind];
     if (!sets) throw new Error(`Unknown reminder kind ${kind}`);
     await run(`UPDATE lists SET ${sets}, updated_at = updated_at WHERE id = ?`, [listId]);

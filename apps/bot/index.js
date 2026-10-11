@@ -18,6 +18,7 @@ const { Client, GatewayIntentBits, Events, ActivityType, MessageFlags, Partials 
 const db = require('@taskquest/shared/db');
 const { version } = require('./package.json');
 const listCommand = require('./commands/list');
+const { job: runJob } = require('./utils/job');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
@@ -54,16 +55,8 @@ const client = new Client({ intents, partials: [Partials.Channel] });
 
 // ─── Background jobs ─────────────────────────────────────────────────────────
 
-/** Run a job, logging (not crashing on) failures. */
-function job(name, fn) {
-    return async () => {
-        try {
-            await fn();
-        } catch (err) {
-            log('❌', name, err.stack || err.message);
-        }
-    };
-}
+/** Run a job, logging (not crashing on) failures, never overlapping itself. */
+const job = (name, fn) => runJob(name, fn, log);
 
 const checkDeadlines = job('DEADLINE', () => reminders.sendDeadlineReminders({ db, client, log }));
 

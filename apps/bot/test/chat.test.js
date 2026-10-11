@@ -165,3 +165,20 @@ test('users who picked /ai-format embed get embeds', async () => {
         user = { discord_id: '42', ai_enabled: 1 };
     }
 });
+
+test('cooldown entries are pruned so the map cannot grow without bound', async () => {
+    chat._setClient(stubAi());
+    let t = 1000;
+    for (let n = 0; n < 5; n++) {
+        const m = fakeMessage();
+        m.author.id = `u${n}`;
+        await chat.handleMessage(m, { now: () => t });
+        t += 10;
+    }
+    assert.equal(chat._lastSeenSize(), 5);
+    t += 120_000; // far past the cooldown and the prune interval
+    const late = fakeMessage();
+    late.author.id = 'late';
+    await chat.handleMessage(late, { now: () => t });
+    assert.equal(chat._lastSeenSize(), 1, 'only the fresh entry remains');
+});

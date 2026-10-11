@@ -138,3 +138,34 @@ test('the snooze button defers 24 hours; stop turns reminders off', async () => 
     await handleButton(interaction('remind_off'), { db, now: NOW });
     assert.deepEqual(calls[1], ['settings', '42', { automation_enabled: false }]);
 });
+
+test('a due snooze or first due reminder is skipped when every task is already done', () => {
+    const done = { items_done: 2, items_total: 2 };
+    assert.equal(decideReminder(list({ ...done, deadline_notified: 1, overdue_notified: 1, remind_at: '2030-03-09T03:00:00Z' }), NOW), 'snooze_done');
+    assert.equal(decideReminder(list(done), NOW), 'due_done');
+    assert.equal(decideReminder(list({ items_done: 0, items_total: 0 }), NOW), 'due', 'an empty list is still reminded');
+});
+
+test('finished lists get no DM but are marked handled so they are not picked up every hour', async () => {
+    const ctx = setup({
+        lists: [list({ items_done: 2, items_total: 2 }), list({ id: 2, items_done: 2, items_total: 2, deadline_notified: 1, overdue_notified: 1, remind_at: '2030-03-09T00:00:00Z' })]
+    });
+    const res = await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.equal(ctx.sent.length, 0);
+    assert.equal(res.sent, 0);
+    assert.deepEqual(ctx.marked.map(([id, kind]) => [id, kind]), [[1, 'due'], [2, 'snooze']]);
+});
+
+test('a snooze that fires after the deadline also marks the deadline as notified', async () => {
+    const ctx = setup({ lists: [list({ deadline: '2030-03-08', deadline_notified: 1, overdue_notified: 1, remind_at: '2030-03-09T00:00:00Z' })] });
+    const calls = [];
+    ctx.db.tasks.markReminderSent = async (id, kind, opts) => calls.push([id, kind, opts]);
+    await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.deepEqual(calls, [[1, 'snooze', { late: true, pastDeadline: true }]]);
+
+    const today = setup({ lists: [list({ remind_at: '2030-03-09T00:00:00Z' })] });
+    const t = [];
+    today.db.tasks.markReminderSent = async (id, kind, opts) => t.push(opts);
+    await sendDeadlineReminders({ ...today, now: NOW });
+    assert.deepEqual(t, [{ late: false, pastDeadline: true }], 'due today: counts as the due notice only');
+});

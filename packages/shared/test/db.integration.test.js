@@ -221,6 +221,38 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await db.users.getDigestCandidates(new Date(now.getTime() + 7 * 86400e3))).some((u) => u.discord_id === GINA), 'due again next week');
     });
 
+    await t.test('digest claim is atomic, releasable, and overdue follows the user zone', async () => {
+        const IVY = '100000000000000091';
+        await db.users.ensureUser(IVY);
+        await db.users.toggleSetting(IVY, 'weekly_digest');
+        const now = new Date('2030-06-10T12:00:00Z');
+        const claims = await Promise.all([db.users.claimDigest(IVY, now), db.users.claimDigest(IVY, now), db.users.claimDigest(IVY, now)]);
+        assert.equal(claims.filter(Boolean).length, 1, 'exactly one overlapping run wins');
+        assert.equal(await db.users.claimDigest(IVY, new Date(now.getTime() + 3600e3)), false, 'not again within the week');
+        await db.users.releaseDigest(IVY, now, null);
+        assert.equal(await db.users.claimDigest(IVY, now), true, 'released claims can be retaken');
+
+        // 2030-06-10 23:30 UTC is already June 11 in Manila: a June 10 deadline is overdue there only.
+        await db.users.updateSettings(IVY, { timezone: 'Asia/Manila' });
+        const { list } = await db.tasks.createList(IVY, { name: 'Zone', deadline: '2030-06-10' });
+        await db.tasks.addItem(IVY, list.id, { name: 'open' });
+        const late = new Date('2030-06-10T23:30:00Z');
+        assert.equal((await db.users.getWeeklyStats(IVY, late)).listsOverdue, 1);
+        await db.users.updateSettings(IVY, { timezone: 'America/New_York' });
+        assert.equal((await db.users.getWeeklyStats(IVY, late)).listsOverdue, 0);
+    });
+
+    await t.test('a snooze that fires after the deadline also settles the due/overdue notices', async () => {
+        const JON = '100000000000000092';
+        await db.users.ensureUser(JON);
+        const { list } = await db.tasks.createList(JON, { name: 'Snoozed', deadline: '2030-06-08' });
+        await db.tasks.markReminderSent(list.id, 'snooze', { late: true, pastDeadline: true });
+        const row = await db.tasks.getList(JON, list.id);
+        assert.equal(Boolean(row.deadline_notified), true);
+        assert.equal(Boolean(row.overdue_notified), true);
+        assert.equal(row.remind_at, null);
+    });
+
     await t.test('export, import (reward-free) and the calendar feed', async () => {
         const HANNA = '100000000000000008';
         await db.users.ensureUser(HANNA);

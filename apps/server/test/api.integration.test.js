@@ -142,6 +142,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const h = await (await call('POST', '/api/games/hangman/start', { cookie: alice })).json();
         assert.equal(h.view.word, null);
 
+        await db.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', ['200000000000000001']);
         const run = await (await call('POST', '/api/games/arcade/snake/start', { cookie: alice })).json();
         assert.equal(
             (await call('POST', '/api/games/arcade/snake/finish', { cookie: mallory, body: { sessionId: run.sessionId, score: 0 } })).status,

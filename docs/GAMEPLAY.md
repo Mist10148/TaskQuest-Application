@@ -34,7 +34,7 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 | RPS win | 10 | Free game |
 | Hangman win | max(10, 10 × lives left) | Free game |
 | Arcade run | points × rate, capped | Free game (web) |
-| Blackjack win | your winnings | Bonuses apply to the winnings, not the returned bet |
+| Blackjack win | your winnings | Flat 1:1 (3:2 for a natural). Class and skill bonuses do **not** apply |
 
 ## 2. How XP is calculated
 
@@ -193,12 +193,13 @@ Counters never decrease, so deleting lists or tasks doesn't undo achievements.
 
 | Outcome | Returned to you |
 |---|---|
-| Natural blackjack (player only) | bet + ⌊1.5 × bet × bonuses⌋ |
-| Win | bet + bet with class and skill bonuses |
+| Natural blackjack (player only) | bet + ⌊1.5 × bet⌋ |
+| Win | bet + bet |
 | Push (incl. both naturals) | bet |
 | Loss / bust / dealer natural | nothing |
 
-- Hands left unfinished for 30 minutes are expired and the bet is refunded.
+- Hands left unfinished for 30 minutes expire. A hand you never acted on is refunded. If you had already hit or doubled, the dealer plays out the hand with you standing and it is settled normally, so walking away from a bad hand costs the bet.
+- Class and skill bonuses never apply to blackjack: paying more than 1:1 would make the game a positive-expectation XP farm.
 
 ### Rock Paper Scissors
 
@@ -216,7 +217,7 @@ You get a random 5–6 letter word and 6 lives. A wrong letter costs a life. Win
 | 🦖 Dino Runner | obstacles passed | 1 | 100 | 2 |
 | 👾 Space Invaders | aliens destroyed | 3 | 150 | 3 |
 
-A run must be started on the server before playing. A score above `seconds × rate + 1` is rejected, and each run can be submitted once.
+A run must be started on the server before playing. A score above `seconds × rate + 1` is rejected, and each run can be submitted once. Starting a run uses the same 3-second cooldown as RPS and Hangman, and a run that scores 0 is recorded as a loss, not a win.
 
 ## 8. Limits and anti-farming
 

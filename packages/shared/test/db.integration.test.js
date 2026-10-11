@@ -352,6 +352,61 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(after - before, 50);
     });
 
+    // Replace the active hand with a fixed one so the outcome is known.
+    async function rigHand(id, sessionId, player, dealer, extra = {}) {
+        const card = (r) => ({ rank: r, suit: '♠' });
+        const [[row]] = await pool.query('SELECT game_data FROM game_sessions WHERE id = ?', [sessionId]);
+        const data = typeof row.game_data === 'string' ? JSON.parse(row.game_data) : row.game_data;
+        const state = { ...data, deck: [], playerHand: player.map(card), dealerHand: dealer.map(card), finished: false, outcome: null, ...extra };
+        await pool.query('UPDATE game_sessions SET game_data = ? WHERE id = ?', [JSON.stringify(state), sessionId]);
+    }
+
+    await t.test('blackjack pays a flat 1:1 whatever the class or skills', async () => {
+        await setXP(BOB, 1000);
+        await pool.query("UPDATE users SET player_class = 'HERO', owns_hero = 1 WHERE discord_id = ?", [BOB]);
+        let s = await db.games.startBlackjack(BOB, 100);
+        while (s.settlement) s = await db.games.startBlackjack(BOB, 100);
+        const before = Number((await db.users.getUser(BOB)).player_xp);
+        await rigHand(BOB, s.sessionId, ['10', 'K'], ['10', '7']);
+        const done = await db.games.blackjackAction(BOB, 'stand');
+        assert.equal(done.settlement.credited, 200, 'bet back plus exactly the bet, no Hero +25');
+        assert.equal(done.settlement.bonusInfo, null);
+        assert.equal(Number((await db.users.getUser(BOB)).player_xp) - before, 200);
+        await pool.query("UPDATE users SET player_class = 'DEFAULT' WHERE discord_id = ?", [BOB]);
+    });
+
+    await t.test('an expired hand the player already acted on is settled, not refunded', async () => {
+        await setXP(BOB, 1000);
+        let s = await db.games.startBlackjack(BOB, 100);
+        while (s.settlement) s = await db.games.startBlackjack(BOB, 100);
+        const before = Number((await db.users.getUser(BOB)).player_xp);
+        await rigHand(BOB, s.sessionId, ['5', '5', 'K'], ['10', '8']); // 20 vs 18 after a hit: would win on stand
+        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id = ?', [s.sessionId]);
+        assert.equal(await db.games.expireStaleSessions(), 1);
+        assert.equal(Number((await db.users.getUser(BOB)).player_xp) - before, 200);
+        const [[row]] = await pool.query('SELECT state FROM game_sessions WHERE id = ?', [s.sessionId]);
+        assert.equal(row.state, 'won');
+
+        let t2 = await db.games.startBlackjack(BOB, 100);
+        while (t2.settlement) t2 = await db.games.startBlackjack(BOB, 100);
+        const mid = Number((await db.users.getUser(BOB)).player_xp);
+        await rigHand(BOB, t2.sessionId, ['10', '6', '9'], ['10', '8']); // would bust: the bet is lost, not refunded
+        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id = ?', [t2.sessionId]);
+        await db.games.expireStaleSessions();
+        assert.equal(Number((await db.users.getUser(BOB)).player_xp), mid);
+    });
+
+    await t.test('games refuse to settle while XP is off', async () => {
+        await setXP(BOB, 1000);
+        let s = await db.games.startBlackjack(BOB, 50);
+        while (s.settlement) s = await db.games.startBlackjack(BOB, 50);
+        await pool.query('UPDATE users SET gamification_enabled = 0 WHERE discord_id = ?', [BOB]);
+        await assert.rejects(db.games.blackjackAction(BOB, 'stand'), { code: 'GAMIFICATION_DISABLED' });
+        await assert.rejects(db.games.hangmanGuess(BOB, 'E'), { code: 'GAMIFICATION_DISABLED' });
+        await pool.query('UPDATE users SET gamification_enabled = 1 WHERE discord_id = ?', [BOB]);
+        await pool.query('UPDATE game_sessions SET state = ? WHERE id = ?', ['cancelled', s.sessionId]);
+    });
+
     await t.test('free games: cooldown, daily cap, hangman hides the word', async () => {
         await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [BOB]);
         const round = await db.games.playRps(BOB, 'rock');
@@ -389,15 +444,20 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('arcade scores must be plausible', async () => {
+        await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [BOB]);
         const run = await db.games.startArcade(BOB, 'snake');
+        await assert.rejects(db.games.startArcade(BOB, 'snake'), { code: 'COOLDOWN' });
         await assert.rejects(db.games.finishArcade(BOB, run.sessionId, 10_000), { code: 'VALIDATION' });
         const [[{ state }]] = await pool.query('SELECT state FROM game_sessions WHERE id = ?', [run.sessionId]);
         assert.equal(state, 'cancelled', 'an implausible score cancels the run for good');
         await assert.rejects(db.games.finishArcade(BOB, run.sessionId, 0), { code: 'NOT_FOUND' });
         await assert.rejects(db.games.finishArcade(ALICE, run.sessionId, 0), { code: 'NOT_FOUND' });
+        await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [BOB]);
         const run2 = await db.games.startArcade(BOB, 'dino');
         const done = await db.games.finishArcade(BOB, run2.sessionId, 0);
         assert.equal(done.xpGained, 0);
+        const [[zero]] = await pool.query('SELECT state FROM game_sessions WHERE id = ?', [run2.sessionId]);
+        assert.equal(zero.state, 'lost', 'a zero-score run is not a win');
         await assert.rejects(db.games.finishArcade(BOB, run2.sessionId, 0), { code: 'NOT_FOUND' });
     });
 

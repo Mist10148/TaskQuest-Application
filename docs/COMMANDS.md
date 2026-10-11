@@ -61,13 +61,13 @@ Overview ──select list──▶ View (read-only) ──Edit──▶ Edit (a
 
 | Game | How to play | Reward |
 |---|---|---|
-| 🃏 Blackjack | Choose a bet (quick buttons, Custom, or MAX), then Hit / Stand / Double Down | Win 1:1, blackjack 3:2, push returns the bet. Class and skill bonuses apply to winnings. |
+| 🃏 Blackjack | Choose a bet (quick buttons, Custom, or MAX), then Hit / Stand / Double Down | Win 1:1, blackjack 3:2, push returns the bet. No class or skill bonuses. |
 | ✊ Rock Paper Scissors | Pick rock, paper or scissors | +10 base XP per win. Losing costs nothing. |
 | 📝 Hangman | Pick letters from two menus (A–M, N–Z). Quit at any time. | max(10, 10 × lives left) base XP |
 
 - Bets range from 10 to min(25% of balance, 1000).
 - RPS and Hangman have a 3-second cooldown and share a 500 XP per day cap with the web arcade games.
-- Unfinished Blackjack hands are refunded after 30 minutes.
+- Unfinished Blackjack hands expire after 30 minutes: untouched hands are refunded, hands you already acted on are settled with you standing.
 - Game state lives in the database, so restarts don't lose games, and a hand started in Discord can be finished on the web.
 
 ## `/class`

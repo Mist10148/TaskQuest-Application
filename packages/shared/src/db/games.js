@@ -13,11 +13,10 @@
 'use strict';
 
 const { getPool, withTransaction } = require('./pool');
-const { lockUser, getUserSkills } = require('./users');
+const { lockUser } = require('./users');
 const { applyXP, rewardAction, remainingFreeGameXP, unlockAchievements, requireGamification, updateUserColumns } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS, ARCADE_CONFIG } = require('../constants');
-const { calculateFinalXP } = require('../xp');
 const blackjack = require('../games/blackjack');
 const rps = require('../games/rps');
 const hangman = require('../games/hangman');
@@ -76,19 +75,20 @@ async function rewardFreeGame(conn, user, baseXP, sessionId) {
 
 // ─── Blackjack ───────────────────────────────────────────────────────────────
 
+/**
+ * Pay out a finished hand. Blackjack pays flat 1:1 (3:2 for a natural): class and skill bonuses do
+ * not apply, because a win that pays more than 1:1 would turn the game into a positive-expectation
+ * XP farm that the daily free-game cap does not cover.
+ */
 async function settleBlackjack(conn, user, session, state) {
     const { winnings } = blackjack.settle(state);
     let credited = 0;
-    let bonus = null;
 
     if (state.outcome === 'won' || state.outcome === 'blackjack') {
-        const skills = await getUserSkills(user.discord_id, conn);
-        bonus = calculateFinalXP(user, skills, winnings, { context: { action: 'game' } });
-        credited = state.bet + bonus.finalXP;
+        credited = state.bet + winnings;
         await applyXP(conn, user, credited, state.outcome === 'blackjack' ? 'blackjack_blackjack' : 'blackjack_win', {
-            lifetimeDelta: bonus.finalXP,
-            referenceId: session.id,
-            userUpdates: bonus.userUpdates
+            lifetimeDelta: winnings,
+            referenceId: session.id
         });
     } else if (state.outcome === 'push') {
         credited = state.bet;
@@ -101,7 +101,7 @@ async function settleBlackjack(conn, user, session, state) {
         blackjack: state.outcome === 'blackjack',
         gameWinXP: Math.max(0, net)
     });
-    return { credited, net, bonusInfo: bonus ? bonus.bonusInfo : null, achievements };
+    return { credited, net, bonusInfo: null, achievements };
 }
 
 function blackjackResult(session, state, user, settlement = null) {
@@ -157,6 +157,7 @@ async function blackjackAction(discordId, action) {
     if (!['hit', 'stand', 'double'].includes(action)) throw errors.validation('Unknown action.');
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
+        requireGamification(user);
         const session = await lockActiveSession(conn, user.discord_id, 'blackjack');
         if (!session || !session.game_data) throw errors.notFound('No active blackjack hand. Start a new game.');
 
@@ -233,6 +234,7 @@ async function startHangman(discordId) {
 async function hangmanGuess(discordId, letter) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
+        requireGamification(user);
         const session = await lockActiveSession(conn, user.discord_id, 'hangman');
         if (!session) throw errors.notFound('No active hangman game. Start a new one.');
 
@@ -283,11 +285,13 @@ async function startArcade(discordId, gameType) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         requireGamification(user);
+        enforceCooldown(user);
         await conn.query(
             "UPDATE game_sessions SET state = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE discord_id = ? AND game_type = ? AND state = 'active'",
             [user.discord_id, gameType]
         );
         const sessionId = await insertSession(conn, user.discord_id, gameType, { data: { type: gameType } });
+        await updateUserColumns(conn, user, { last_game_at: new Date() });
         return { sessionId };
     });
 }
@@ -298,6 +302,7 @@ async function finishArcade(discordId, sessionId, score) {
     if (!Number.isSafeInteger(id) || id <= 0) throw errors.validation('Invalid session.');
     const outcome = await withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
+        requireGamification(user);
         const [[session]] = await conn.query(
             `SELECT *, TIMESTAMPDIFF(MICROSECOND, created_at, CURRENT_TIMESTAMP(3)) DIV 1000 AS elapsed_ms
              FROM game_sessions WHERE id = ? AND discord_id = ? AND state = 'active' FOR UPDATE`,
@@ -315,7 +320,8 @@ async function finishArcade(discordId, sessionId, score) {
 
         const xp = await rewardFreeGame(conn, user, scored.baseXP, id);
         const gained = xp ? xp.finalXP : 0;
-        await finishSession(conn, id, 'won', gained, { type: session.game_type, score: scored.score });
+        // A run that scored nothing is not a win (it would count towards "win 10 games").
+        await finishSession(conn, id, scored.baseXP > 0 ? 'won' : 'lost', gained, { type: session.game_type, score: scored.score });
         const achievements = await unlockAchievements(conn, user, { gameWinXP: gained });
         return {
             sessionId: id,
@@ -357,7 +363,18 @@ async function expireStaleSessions(ttlMinutes = LIMITS.GAME_SESSION_TTL_MINUTES)
             const user = await lockUser(conn, row.discord_id);
             const [[session]] = await conn.query("SELECT * FROM game_sessions WHERE id = ? AND state = 'active' FOR UPDATE", [row.id]);
             if (!session) return;
-            if (session.game_type === 'blackjack' && Number(session.bet_amount) > 0) {
+            const data = parseData(session.game_data);
+            if (session.game_type === 'blackjack' && data && !data.finished) {
+                if (data.playerHand.length > 2 || data.doubled) {
+                    // The player already acted on this hand: stand for them and settle normally, so
+                    // walking away from a bad hand costs the bet instead of refunding it.
+                    const state = blackjack.act(data, 'stand');
+                    await conn.query('UPDATE game_sessions SET bet_amount = ?, game_data = ? WHERE id = ?', [state.bet, JSON.stringify(state), session.id]);
+                    await settleBlackjack(conn, user, session, state);
+                    expired++;
+                    return;
+                }
+                // Untouched hand: nothing was decided yet, so the bet comes back.
                 await applyXP(conn, user, Number(session.bet_amount), 'blackjack_refund', { lifetimeDelta: 0, referenceId: session.id });
             }
             await conn.query(

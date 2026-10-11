@@ -49,7 +49,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('migrations 007-013 are idempotent and add the new columns', async () => {
         await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
         const again = await db.runMigrations({ log: () => {} });
-        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources', '013_task_reminders', '014_templates']);
+        assert.deepEqual(again.filter((id) => id >= '007' && id <= '014_z'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources', '013_task_reminders', '014_templates']);
         const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
@@ -1795,6 +1795,121 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(db.templates.createTemplate(U, { name: 'one too many', items: [{ name: 'x' }] }), { code: 'VALIDATION' });
         await db.users.resetProgress(U);
         assert.equal((await db.templates.listTemplates(U)).length, 0, 'a progress reset removes templates with the quests');
+    });
+
+    await t.test('cosmetics: buy, requirements, equip, double click, prestige keeps and reset clears', async () => {
+        const K = '100000000000000401';
+        await db.users.ensureUser(K);
+        const { COSMETICS, SPEND_SOURCES } = require('../src/constants');
+        assert.ok(SPEND_SOURCES.includes('cosmetic_purchase'));
+        await assert.rejects(db.cosmetics.buyCosmetic(K, 'title_nope'), { code: 'NOT_FOUND' });
+        await assert.rejects(db.cosmetics.buyCosmetic(K, '__proto__'), { code: 'NOT_FOUND' });
+        await assert.rejects(db.cosmetics.buyCosmetic(K, 'title_diligent'), { code: 'INSUFFICIENT_XP' });
+        await setXP(K, 5000);
+        await assert.rejects(db.cosmetics.buyCosmetic(K, 'title_relentless'), { code: 'FORBIDDEN' }, 'level 20 needed');
+        await assert.rejects(db.cosmetics.buyCosmetic(K, 'frame_prestige'), { code: 'FORBIDDEN' });
+        await assert.rejects(db.cosmetics.buyCosmetic(K, 'title_taskbreaker'), { code: 'FORBIDDEN' }, 'achievement needed');
+
+        const spentBefore = Number((await db.users.getUser(K)).xp_spent);
+        const results = await Promise.allSettled([db.cosmetics.buyCosmetic(K, 'title_diligent'), db.cosmetics.buyCosmetic(K, 'title_diligent')]);
+        assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1, 'a double click buys once');
+        assert.equal(results.find((r) => r.status === 'rejected').reason.code, 'CONFLICT');
+        const after = await db.users.getUser(K);
+        const cost = COSMETICS.title_diligent.cost;
+        assert.equal(Number(after.xp_spent) - spentBefore, cost, 'cosmetics count as spending');
+        const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'cosmetic_purchase'", [K]);
+        assert.equal(Number(n), 1);
+
+        // Equip: only owned, only the right kind; null unequips.
+        await assert.rejects(db.cosmetics.equipCosmetic(K, 'title', 'title_night_owl'), { code: 'FORBIDDEN' });
+        await assert.rejects(db.cosmetics.equipCosmetic(K, 'frame', 'title_diligent'), { code: 'NOT_FOUND' });
+        await assert.rejects(db.cosmetics.equipCosmetic(K, 'hat', null), { code: 'VALIDATION' });
+        const eq = await db.cosmetics.equipCosmetic(K, 'title', 'title_diligent');
+        assert.equal(eq.equipped.title, 'the Diligent');
+        await db.cosmetics.buyCosmetic(K, 'accent_ocean');
+        await db.cosmetics.equipCosmetic(K, 'accent', 'accent_ocean');
+        let shop = await db.cosmetics.listCosmetics(K);
+        const byId = Object.fromEntries(shop.items.map((i) => [i.id, i]));
+        assert.ok(byId.title_diligent.owned && byId.title_diligent.equipped);
+        assert.ok(byId.frame_prestige.locked && /prestige/i.test(byId.frame_prestige.lockedReason));
+        assert.ok(byId.frame_bronze.affordable && !byId.frame_bronze.locked);
+        assert.equal(shop.equipped.accent.id, 'accent_ocean');
+        const board = await db.users.getLeaderboard(50);
+        const row = board.find((r) => r.discord_id === K);
+        assert.equal(row.equipped_title, 'title_diligent');
+
+        // A prestige keeps what was bought (and what is equipped); a progress reset clears both.
+        await db.query('UPDATE users SET player_level = 30, lifetime_xp = 100000, lifetime_xp_total = 100000 WHERE discord_id = ?', [K]);
+        await db.progression.prestige(K);
+        shop = await db.cosmetics.listCosmetics(K);
+        assert.ok(shop.items.find((i) => i.id === 'title_diligent').owned, 'owned after prestige');
+        assert.equal(shop.equipped.title, 'the Diligent');
+        await db.cosmetics.equipCosmetic(K, 'title', null);
+        assert.equal((await db.cosmetics.listCosmetics(K)).equipped.title, null);
+        await db.cosmetics.equipCosmetic(K, 'title', 'title_diligent');
+        await db.users.resetProgress(K);
+        shop = await db.cosmetics.listCosmetics(K);
+        assert.ok(shop.items.every((i) => !i.owned && !i.equipped));
+        assert.deepEqual(shop.equipped, { title: null, frame: null, accent: null });
+        // XP off: no purchases.
+        await db.users.updateSettings(K, { gamification_enabled: false });
+        await assert.rejects(db.cosmetics.buyCosmetic(K, 'accent_ocean'), { code: 'GAMIFICATION_DISABLED' });
+    });
+
+    await t.test('time zones: daily caps use each user\'s own day', async () => {
+        const KIRI = '100000000000000501'; // UTC+14
+        const PAGO = '100000000000000502'; // UTC-11
+        const UTCU = '100000000000000503';
+        for (const id of [KIRI, PAGO, UTCU]) await db.users.ensureUser(id);
+        await db.query('UPDATE users SET timezone = ? WHERE discord_id = ?', ['Pacific/Kiritimati', KIRI]);
+        await db.query('UPDATE users SET timezone = ? WHERE discord_id = ?', ['Pacific/Pago_Pago', PAGO]);
+        const pool = db.getPool();
+        const tx = (id, source, amount, at) => db.query('INSERT INTO xp_transactions (discord_id, amount, source, created_at) VALUES (?, ?, ?, ?)', [id, amount, source, new Date(at)]);
+        const I = new Date('2030-06-01T11:30:00Z'); // Kiritimati: Jun 2 01:30 (day began 10:00Z), Pago Pago: Jun 1 00:30 (day began 11:00Z)
+        for (const id of [KIRI, PAGO, UTCU]) {
+            await tx(id, 'item_add', 3, '2030-06-01T10:30:00Z');
+            await tx(id, 'game_reward', 200, '2030-06-01T10:30:00Z');
+        }
+        const { countToday, sumToday, remainingFreeGameXP } = db.progression;
+        assert.equal(await countToday(pool, KIRI, 'item_add', I), 1, 'Kiritimati: 10:30Z is already its Jun 2');
+        assert.equal(await countToday(pool, PAGO, 'item_add', I), 0, 'Pago Pago: 10:30Z was still its May 31');
+        assert.equal(await countToday(pool, UTCU, 'item_add', I), 1, 'UTC: same UTC day');
+        assert.equal(await sumToday(pool, KIRI, 'game_reward', I), 200);
+        assert.equal(await sumToday(pool, PAGO, 'game_reward', I), 0);
+        assert.equal(await remainingFreeGameXP(pool, KIRI, I), 300);
+        assert.equal(await remainingFreeGameXP(pool, PAGO, I), 500);
+        // A user row can be passed instead of an id (no lookup).
+        assert.equal(await countToday(pool, { discord_id: KIRI, timezone: 'UTC' }, 'item_add', I), 1);
+
+        // The cap resets at that user's local midnight, not at 00:00 UTC.
+        assert.equal(await countToday(pool, KIRI, 'item_add', new Date('2030-06-02T09:59:59Z')), 1);
+        assert.equal(await countToday(pool, KIRI, 'item_add', new Date('2030-06-02T10:00:00Z')), 0);
+        await tx(PAGO, 'list_create', 1, '2030-06-01T12:00:00Z');
+        assert.equal(await countToday(pool, PAGO, 'list_create', new Date('2030-06-02T10:59:59Z')), 1);
+        assert.equal(await countToday(pool, PAGO, 'list_create', new Date('2030-06-02T11:00:00Z')), 0);
+
+        // The allowance reports the user's own midnight.
+        const kiri = await db.games.getFreeGameAllowance(KIRI, I);
+        const pago = await db.games.getFreeGameAllowance(PAGO, I);
+        assert.equal(kiri.resetsAt, '2030-06-02T10:00:00.000Z');
+        assert.equal(pago.resetsAt, '2030-06-02T11:00:00.000Z');
+
+        // Real flow: list creations are capped at 10 per local day. Ten earlier today (local) cap the 11th;
+        // ten from just before local midnight do not.
+        const zone = 'Pacific/Kiritimati';
+        const start = require('../src/tz').dayStart(zone, new Date());
+        const before = '100000000000000504';
+        const today = '100000000000000505';
+        for (const id of [before, today]) {
+            await db.users.ensureUser(id);
+            await db.query('UPDATE users SET timezone = ? WHERE discord_id = ?', [zone, id]);
+        }
+        for (let i = 0; i < 10; i++) {
+            await tx(before, 'list_create', 1, start.getTime() - 60e3);
+            await tx(today, 'list_create', 1, start.getTime() + 1000);
+        }
+        assert.ok((await db.tasks.createList(before, { name: 'fresh day' })).xp.finalXP > 0, 'yesterday\'s creations do not count');
+        assert.equal((await db.tasks.createList(today, { name: 'capped' })).xp.capped, true, 'today\'s creations do');
     });
 
     await db.closePool();

@@ -814,3 +814,26 @@ test('prestige: +2% XP per prestige (max 10) in the final multiplier, and a titl
     const keys = shared.evaluateAchievements({ lifetime_xp: 20, lifetime_xp_total: 5200 }, []).map((a) => a.key);
     assert.ok(keys.includes('XP_5000') && !keys.includes('XP_10000'));
 });
+
+test('cosmetics: a well-formed catalogue, requirement text and what an equipped row draws', () => {
+    const { COSMETICS, COSMETIC_KINDS } = shared;
+    for (const [id, c] of Object.entries(COSMETICS)) {
+        assert.ok(id.startsWith(`${c.kind}_`), `${id} is named after its kind`);
+        assert.ok(COSMETIC_KINDS.includes(c.kind));
+        assert.ok(Number.isInteger(c.cost) && c.cost > 0 && c.name);
+        if (c.kind !== 'title') assert.ok(c.color, `${id} has a colour`);
+        if (c.kind === 'accent') assert.match(c.colorDark, /^#[0-9a-f]{6}$/, `${id} has a dark-theme colour`);
+        for (const key of Object.keys(c.requires || {})) assert.ok(['level', 'prestige', 'achievement'].includes(key));
+        if (c.requires?.achievement) assert.ok(shared.ACHIEVEMENTS[c.requires.achievement], `${id} names a real achievement`);
+    }
+    assert.ok(shared.SPEND_SOURCES.includes('cosmetic_purchase'));
+    assert.equal(shared.requirementText({ level: 20 }), 'Reach level 20');
+    assert.equal(shared.meetsRequirement({ level: 20 }, { player_level: 19 }, new Set()), false);
+    assert.equal(shared.meetsRequirement({ achievement: 'FIRST_COMPLETE' }, {}, new Set(['FIRST_COMPLETE'])), true);
+    const drawn = shared.describeEquipped({ equipped_title: 'title_diligent', equipped_frame: 'title_diligent', equipped_accent: 'accent_ocean', discord_id: '1' });
+    assert.equal(drawn.title, 'the Diligent');
+    assert.equal(drawn.frame, null, 'an id of the wrong kind is ignored');
+    assert.equal(drawn.accent.id, 'accent_ocean');
+    assert.ok(!JSON.stringify(drawn).includes('discord_id'));
+    assert.deepEqual(shared.describeEquipped({ equipped_title: 'gone' }), { title: null, frame: null, accent: null });
+});

@@ -445,7 +445,40 @@ const SKILL_RULES = {
 };
 
 /** xp_transactions sources that count as "spending" for xp_spent and the spending achievements. */
-const SPEND_SOURCES = ['class_purchase', 'skill_purchase', 'streak_freeze'];
+const SPEND_SOURCES = ['class_purchase', 'skill_purchase', 'streak_freeze', 'cosmetic_purchase'];
+
+/**
+ * Cosmetics: an XP sink with no gameplay effect. A title shows beside the name, a frame rings the avatar,
+ * an accent colours the profile. Each costs XP once and is owned for good (kept through prestige, cleared
+ * by a progress reset). `requires` makes a few of them earned first: { level }, { prestige } or { achievement }.
+ * `color`: frames, a CSS background for the ring; accents, a hex readable as text on the light cards (colorDark: on the dark ones;
+ * both pass 4.5:1, which lib/theme.test.ts in the web app checks).
+ */
+const COSMETIC_KINDS = ['title', 'frame', 'accent'];
+const COSMETICS = {
+    title_diligent: { kind: 'title', name: 'the Diligent', cost: 300 },
+    title_taskbreaker: { kind: 'title', name: 'Taskbreaker', cost: 600, requires: { achievement: 'FIRST_COMPLETE' } },
+    title_night_owl: { kind: 'title', name: 'Night Owl', cost: 400 },
+    title_early_bird: { kind: 'title', name: 'Early Bird', cost: 400 },
+    title_organiser: { kind: 'title', name: 'the Organiser', cost: 500, requires: { achievement: 'TEN_LISTS' } },
+    title_relentless: { kind: 'title', name: 'the Relentless', cost: 1200, requires: { level: 20 } },
+    title_completionist: { kind: 'title', name: 'Completionist', cost: 1500, requires: { achievement: 'HUNDRED_COMPLETE' } },
+    title_reborn: { kind: 'title', name: 'the Reborn', cost: 2000, requires: { prestige: 1 } },
+    frame_bronze: { kind: 'frame', name: 'Bronze ring', cost: 250, color: 'linear-gradient(135deg, #b8733a, #e9a766)' },
+    frame_silver: { kind: 'frame', name: 'Silver ring', cost: 400, color: 'linear-gradient(135deg, #9aa4b2, #e3e8ef)' },
+    frame_gold: { kind: 'frame', name: 'Gold ring', cost: 600, requires: { level: 10 }, color: 'linear-gradient(135deg, #c9951c, #f8dc7a)' },
+    frame_aurora: { kind: 'frame', name: 'Aurora ring', cost: 750, requires: { level: 15 }, color: 'linear-gradient(135deg, #2dd4bf, #6366f1, #d946ef)' },
+    frame_ember: { kind: 'frame', name: 'Ember ring', cost: 800, requires: { achievement: 'FIFTY_COMPLETE' }, color: 'linear-gradient(135deg, #ef4444, #f59e0b)' },
+    frame_prestige: { kind: 'frame', name: 'Ascendant ring', cost: 1000, requires: { prestige: 1 }, color: 'linear-gradient(135deg, #7c3aed, #f0abfc, #7c3aed)' },
+    accent_ocean: { kind: 'accent', name: 'Ocean', cost: 200, color: '#1d6fa5', colorDark: '#5bb0e6' },
+    accent_forest: { kind: 'accent', name: 'Forest', cost: 200, color: '#2f7d4a', colorDark: '#5fc283' },
+    accent_plum: { kind: 'accent', name: 'Plum', cost: 300, color: '#8a3fa0', colorDark: '#c58ad9' },
+    accent_ember: { kind: 'accent', name: 'Ember', cost: 300, color: '#b8460f', colorDark: '#ee8a52' },
+    accent_rose: { kind: 'accent', name: 'Rose', cost: 400, requires: { level: 5 }, color: '#b8305f', colorDark: '#ee7aa0' },
+    accent_slate: { kind: 'accent', name: 'Slate', cost: 500, requires: { level: 10 }, color: '#4b5d78', colorDark: '#98aac6' }
+};
+/** users column holding the equipped cosmetic of each kind. */
+const COSMETIC_COLUMNS = { title: 'equipped_title', frame: 'equipped_frame', accent: 'equipped_accent' };
 
 /** Anti-farming limits (per user, per UTC day unless noted). */
 const LIMITS = {
@@ -565,6 +598,9 @@ module.exports = {
     CLASS_RULES,
     SKILL_RULES,
     SPEND_SOURCES,
+    COSMETICS,
+    COSMETIC_KINDS,
+    COSMETIC_COLUMNS,
     QUESTS,
     ROTATING_QUESTS,
     PRESTIGE,

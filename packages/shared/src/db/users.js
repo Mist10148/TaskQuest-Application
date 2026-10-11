@@ -8,6 +8,7 @@ const { errors } = require('../errors');
 const { isValidTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
 const { prestigeTitle } = require('../xp');
+const { describeEquipped } = require('../cosmetics');
 
 const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled', 'weekly_digest'];
 
@@ -41,6 +42,10 @@ async function ensureUser(discordId, profile, conn) {
 /** Lock (and create if missing) a user row inside a transaction. */
 async function lockUser(conn, discordId) {
     const id = String(discordId);
+    // Lock first: an INSERT IGNORE on an existing row takes a shared lock, and two requests that
+    // each hold one and then want the exclusive lock deadlock (a double click on a purchase).
+    const [existing] = await conn.query('SELECT * FROM users WHERE discord_id = ? FOR UPDATE', [id]);
+    if (existing[0]) return existing[0];
     await conn.query('INSERT IGNORE INTO users (discord_id) VALUES (?)', [id]);
     const [rows] = await conn.query('SELECT * FROM users WHERE discord_id = ? FOR UPDATE', [id]);
     return rows[0];
@@ -131,7 +136,7 @@ async function getUserStats(discordId) {
     // from GET /api/user/calendar-token, which only returns it when asked.
     const { calendar_token: calendarToken, ...safeUser } = user;
     return {
-        user: { ...safeUser, has_calendar_token: Boolean(calendarToken), prestige_title: prestigeTitle(safeUser.prestige) },
+        user: { ...safeUser, has_calendar_token: Boolean(calendarToken), prestige_title: prestigeTitle(safeUser.prestige), cosmetics: describeEquipped(safeUser) },
         lists: { total: Number(lists.total) },
         items: { total: Number(items.total), completed: Number(items.completed) },
         achievements: Number(achs.count),
@@ -209,7 +214,7 @@ async function getLeaderboard(limit = 10, { by = 'lifetime', playerClass, now } 
     const rows = await run(
         null,
         `SELECT u.discord_id, u.discord_username, u.discord_avatar, u.player_xp, u.lifetime_xp, GREATEST(u.lifetime_xp_total, u.lifetime_xp) AS lifetime_xp_total, u.prestige, u.player_level,
-                u.player_class, u.streak_count, u.total_items_completed,
+                u.player_class, u.streak_count, u.total_items_completed, u.equipped_title, u.equipped_frame, u.equipped_accent,
                 ${score.sql} AS score,
                 (SELECT COUNT(*) FROM game_sessions g
                   WHERE g.discord_id = u.discord_id AND g.state IN ('won','blackjack','lost','push')) AS games_played
@@ -331,7 +336,7 @@ async function resetProgress(discordId) {
     const id = String(discordId);
     return withTransaction(async (conn) => {
         await lockUser(conn, id);
-        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates']) {
+        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates', 'user_cosmetics']) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }
         await conn.query(
@@ -339,7 +344,7 @@ async function resetProgress(discordId) {
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,
                 total_lists_created = 0, total_items_added = 0, total_items_completed = 0,
                 owns_hero = FALSE, owns_gambler = FALSE, owns_assassin = FALSE, owns_wizard = FALSE,
-                owns_archer = FALSE, owns_tank = FALSE, owns_monk = FALSE, monk_rhythm = 0, monk_day = NULL, owns_artisan = FALSE, artisan_progress = 0, owns_ranger = FALSE, owns_necromancer = FALSE, owns_paladin = FALSE, necro_souls = 0, xp_spent = 0, streak_freezes = 0, last_chest_streak = 0,
+                owns_archer = FALSE, owns_tank = FALSE, owns_monk = FALSE, monk_rhythm = 0, monk_day = NULL, owns_artisan = FALSE, artisan_progress = 0, owns_ranger = FALSE, owns_necromancer = FALSE, owns_paladin = FALSE, necro_souls = 0, xp_spent = 0, streak_freezes = 0, last_chest_streak = 0, equipped_title = NULL, equipped_frame = NULL, equipped_accent = NULL,
                 assassin_streak = 0, assassin_stacks = 0, assassin_last_at = NULL, assassin_bleed = 0, gambler_streak = 0, wizard_counter = 0, archer_streak = 0, tank_stacks = 0
              WHERE discord_id = ?`,
             [id]

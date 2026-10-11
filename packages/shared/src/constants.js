@@ -186,7 +186,7 @@ const SKILL_TREES = {
             archer_aim: { name: 'Steady Aim', emoji: '🎯', description: '+3% XP per level', maxLevel: 3, cost: 85, requires: null },
             archer_multishot: { name: 'Multishot', emoji: '🏹', description: '+5 XP per level when completing a task', maxLevel: 2, cost: 140, requires: 'archer_aim' },
             archer_piercing: { name: 'Piercing Shot', emoji: '💫', description: 'Archer misses no longer reduce your streak', maxLevel: 1, cost: 190, requires: 'archer_multishot' },
-            archer_sniper: { name: 'Sniper', emoji: '🦅', description: 'Completing a task in a HIGH priority list is always a headshot (Archer)', maxLevel: 1, cost: 300, requires: 'archer_piercing' },
+            archer_sniper: { name: 'Sniper', emoji: '🦅', description: 'Completing a HIGH-priority task (its own priority, else the priority of its list) is always a headshot (Archer)', maxLevel: 1, cost: 300, requires: 'archer_piercing' },
             archer_quiver: { name: 'Quiver', emoji: '🪶', description: '+3% Archer hit chance per level (still capped at 97%)', maxLevel: 2, cost: 150, requires: 'archer_sniper' },
             archer_eagle: { name: 'Eagle Eye', emoji: '🦉', description: 'Archer headshot chance ×1.5', maxLevel: 1, cost: 260, requires: 'archer_quiver' }
         }

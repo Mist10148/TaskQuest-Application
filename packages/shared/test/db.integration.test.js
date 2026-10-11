@@ -2948,5 +2948,28 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.addItem(Q, base.id, { name: 'fits now' });
     });
 
+    await t.test('a re-opened list does not pay the Artisan clear bonus or list_cleared a second time', async () => {
+        const R = '100000000000000631';
+        await db.users.ensureUser(R);
+        await setXP(R, 700);
+        await db.progression.buyClass(R, 'artisan');
+        const { list } = await db.tasks.createList(R, { name: 'Reopen' });
+        const ids = [];
+        for (const name of ['a', 'b', 'c']) ids.push((await db.tasks.addItem(R, list.id, { name })).item.id);
+        await db.tasks.setItemCompleted(R, ids[0]);
+        await db.tasks.setItemCompleted(R, ids[1]);
+        const cleared = await db.tasks.setItemCompleted(R, ids[2]);
+        assert.equal(cleared.xp.bonusInfo.type, 'ARTISAN_CLEAR');
+        assert.ok(bonusKeys(cleared).includes('list_cleared'));
+        // Re-open with new tasks and clear it again: the list is already marked cleared.
+        const again = [];
+        for (const name of ['d', 'e', 'f']) again.push((await db.tasks.addItem(R, list.id, { name })).item.id);
+        for (const id of again.slice(0, 2)) await db.tasks.setItemCompleted(R, id);
+        const second = await db.tasks.setItemCompleted(R, again[2]);
+        assert.equal(second.xp.bonusInfo.type, 'ARTISAN', 'no second project bonus');
+        assert.ok(!bonusKeys(second).includes('list_cleared'));
+        assert.ok(Number((await db.users.getUser(R)).artisan_progress) > 0, 'progress keeps building instead of resetting');
+    });
+
     await db.closePool();
 });

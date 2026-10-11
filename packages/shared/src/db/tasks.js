@@ -531,6 +531,9 @@ async function completionContext(conn, item, user, now = new Date()) {
         'SELECT COUNT(*) AS total, COALESCE(SUM(completed = 0), 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
         [item.list_id]
     );
+    // A list that was cleared once never counts as cleared again (same rule as the list_cleared XP), so re-opening it
+    // by adding or un-checking a task and finishing it again cannot repeat the Artisan's project bonus.
+    const [[marked]] = await conn.query('SELECT cleared_at FROM lists WHERE id = ?', [item.list_id]);
     return {
         priority: item.priority || item.list_priority,
         recurring: Boolean(item.recurrence),
@@ -539,7 +542,7 @@ async function completionContext(conn, item, user, now = new Date()) {
         // The stored date whatever its age: habit streaks follow the schedule, not the bonuses.
         scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null,
         overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
-        listCleared: !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0
+        listCleared: !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0 && !(marked && marked.cleared_at)
     };
 }
 

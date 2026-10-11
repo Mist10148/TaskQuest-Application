@@ -155,7 +155,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🎯 Steady Aim | 3 | 85 | +3% XP | — |
 | 🏹 Multishot | 2 | 140 | +5 XP on task completions | Steady Aim |
 | 💫 Piercing Shot | 1 | 190 | Misses don't reduce the streak *(class)* | Multishot |
-| 🦅 Sniper | 1 | 300 | Completing a task in a HIGH-priority list is always a hit and headshot *(class)* | Piercing Shot |
+| 🦅 Sniper | 1 | 300 | Completing a HIGH-priority task (its own priority, else the priority of its list) is always a hit and headshot *(class)* | Piercing Shot |
 | 🪶 Quiver | 2 | 150 | +3% hit chance per level, still capped at 97% *(class)* | Sniper |
 | 🦉 Eagle Eye | 1 | 260 | Headshot chance × 1.5 *(class)* | Quiver |
 
@@ -271,7 +271,7 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | Source (`xp_transactions.source`) | Amount | Cap |
 |---|---|---|
 | `first_of_day` | +10 for the first task you complete each day (yours) | Once per day |
-| `list_cleared` | +25 when your completion leaves a list of 3+ top-level tasks all done | Once per list, 5 lists a day |
+| `list_cleared` | +25 when your completion leaves a list of 3+ top-level tasks all done | Once per list, ever (re-opening a cleared list by adding or un-checking tasks does not reset it; the Artisan's project bonus follows the same rule), 5 lists a day |
 | `early_finish` | +5 per day early (max +20 per task) for a task with a due date | Shares 100 XP a day with `overdue_clear` |
 | `overdue_clear` | +10 for completing an overdue task | Shares 100 XP a day with `early_finish` |
 | `subtasks_done` | +10 when you finish the last open subtask of a parent | Once per parent, 10 XP a day |

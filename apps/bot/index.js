@@ -72,8 +72,10 @@ const job = (name, fn) => runJob(name, fn, log);
 const push = createPushClient();
 
 const checkDeadlines = job('DEADLINE', async () => {
-    await reminders.sendDeadlineReminders({ db, client, log, push });
-    await reminders.sendTaskReminders({ db, client, log, push });
+    const budget = reminders.createBudget(); // one cap per person across list and task reminders
+    await reminders.sendDeadlineReminders({ db, client, log, push, budget });
+    await reminders.sendTaskReminders({ db, client, log, push, budget });
+    await reminders.flushOverflow({ client, log, budget });
 });
 
 const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));

@@ -528,6 +528,8 @@ const LIMITS = {
     INVITES_PER_DAY: 30,
     /** After someone declines an invitation, the same inviter cannot invite the same person again for this many days. */
     INVITE_DECLINE_COOLDOWN_DAYS: 7,
+    /** A changed due date or deadline clears everybody's reminder state for it; that can happen this many times a day per task or list. */
+    REMINDER_REARMS_PER_DAY: 3,
     /** Parties: members including the owner. A user is in at most one party. */
     MAX_PARTY_MEMBERS: 6
 };

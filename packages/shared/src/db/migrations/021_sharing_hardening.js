@@ -12,15 +12,23 @@
  *                          Backfilled randomly; unique.
  *   users.accept_invites   1 (default) lets other people invite this account to a list or a party; 0 refuses every invitation, silently
  *                          (the inviter gets the same neutral answer as for an unknown name)
+ *   items/lists.rearm_count, rearm_day   how many times today (UTC) a changed due date or deadline re-armed the reminders of everyone
+ *                          on the item or list. A re-arm clears other members' reminder state, so it is limited per day (a member
+ *                          editing the date back and forth cannot make everybody's reminders fire again and again)
  */
 
-exports.description = 'sharing hardening: users.discord_handle, users.accept_invites, party_members.public_id';
+exports.description = 'sharing hardening: users.discord_handle, users.accept_invites, party_members.public_id, reminder re-arm counters';
 
 exports.up = async (h) => {
     await h.addColumnIfMissing('users', 'discord_handle', 'VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL');
     await h.addIndexIfMissing('users', 'unique_users_discord_handle', 'UNIQUE KEY unique_users_discord_handle (discord_handle)');
 
     await h.addColumnIfMissing('users', 'accept_invites', 'TINYINT(1) NOT NULL DEFAULT 1');
+
+    for (const table of ['items', 'lists']) {
+        await h.addColumnIfMissing(table, 'rearm_count', 'TINYINT UNSIGNED NOT NULL DEFAULT 0');
+        await h.addColumnIfMissing(table, 'rearm_day', 'DATE NULL DEFAULT NULL');
+    }
 
     await h.addColumnIfMissing('party_members', 'public_id', 'CHAR(12) NULL DEFAULT NULL');
     await h.exec("UPDATE party_members SET public_id = LEFT(SHA2(CONCAT(UUID(), '-', party_id, '-', discord_id), 256), 12) WHERE public_id IS NULL");

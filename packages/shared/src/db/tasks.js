@@ -178,22 +178,34 @@ async function createListIn(conn, discordId, fields) {
     return { list: shapeList(list, user.discord_id), xp, achievements };
 }
 
+/**
+ * Whether a changed date may re-arm reminders now, for a list or item row carrying rearm_count / rearm_day. Returns the new counter
+ * columns to write (the day's count goes up by one) or null when it may not (the date did not change, or it already re-armed
+ * LIMITS.REMINDER_REARMS_PER_DAY times today, UTC).
+ */
+function rearmAllowed(row, dateChanged, now = new Date()) {
+    if (!dateChanged) return null;
+    const today = now.toISOString().slice(0, 10);
+    const used = String(row.rearm_day || '').slice(0, 10) === today ? Number(row.rearm_count) || 0 : 0;
+    if (used >= LIMITS.REMINDER_REARMS_PER_DAY) return null;
+    return { rearm_count: used + 1, rearm_day: today };
+}
+
 async function updateList(discordId, listId, input) {
     const id = unwrap(v.id(listId));
     const fields = parseListInput(input, { partial: true });
     const keys = Object.keys(fields);
     if (!keys.length) throw errors.validation('Nothing to update.');
-    if (keys.includes('deadline')) {
-        // A new deadline re-arms every reminder (due, overdue and any snooze).
-        Object.assign(fields, { deadline_notified: 0, overdue_notified: 0, remind_at: null });
-        keys.push('deadline_notified', 'overdue_notified', 'remind_at');
-    }
     try {
         await withTransaction(async (conn) => {
-            await access.forList(conn, discordId, id, 'manager', { lock: true });
-            await conn.query(`UPDATE lists SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map((k) => fields[k]), id]);
-            // Every member's reminders are re-armed along with the owner's.
-            if (keys.includes('deadline')) await conn.query('DELETE FROM list_reminders WHERE list_id = ?', [id]);
+            const { list } = await access.forList(conn, discordId, id, 'manager', { lock: true });
+            // A deadline that really changed re-arms every reminder (due, overdue and any snooze), the owner's and every member's, but at
+            // most REMINDER_REARMS_PER_DAY times a day: an edit that keeps the date, or the fourth change today, leaves them alone.
+            const rearm = keys.includes('deadline') && rearmAllowed(list, String(list.deadline || '').slice(0, 10) !== (fields.deadline || ''));
+            const sets = { ...fields, ...(rearm ? { deadline_notified: 0, overdue_notified: 0, remind_at: null, ...rearm } : {}) };
+            const cols = Object.keys(sets);
+            await conn.query(`UPDATE lists SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => sets[k]), id]);
+            if (rearm) await conn.query('DELETE FROM list_reminders WHERE list_id = ?', [id]);
         });
     } catch (err) {
         if (isDuplicate(err)) throw errors.conflict(`A list called "${fields.name}" already exists.`);
@@ -418,14 +430,21 @@ async function updateItem(discordId, itemId, input) {
             // A new due date or rule starts a new monthly anchor.
             // A new due date also re-arms the task's reminder (due-day DM and any snooze).
             let cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
-            if (keys.includes('due_date')) cols = [...cols, 'reminded_at', 'remind_at'];
+            const dateChanged = keys.includes('due_date') && String(item.due_date || '').slice(0, 10) !== (fields.due_date || '');
             // Only a changed date restarts the 24-hour clock that early/overdue effects need (see trustedDueDate).
-            if (keys.includes('due_date') && String(item.due_date || '').slice(0, 10) !== (fields.due_date || '')) {
+            if (dateChanged) {
                 fields.due_date_set_at = fields.due_date ? new Date() : null;
                 cols = [...cols, 'due_date_set_at'];
             }
+            // A changed date also re-arms the task's reminder (due-day DM and any snooze) for the owner and every member, but at most
+            // REMINDER_REARMS_PER_DAY times a day: re-saving the same date, or the fourth change today, leaves everyone's state alone.
+            const rearm = rearmAllowed(item, dateChanged);
+            if (rearm) {
+                Object.assign(fields, rearm);
+                cols = [...cols, 'reminded_at', 'remind_at', 'rearm_count', 'rearm_day'];
+            }
             await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
-            if (keys.includes('due_date')) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
+            if (rearm) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
         });
     }
     if (position !== undefined) await moveItem(discordId, id, position);

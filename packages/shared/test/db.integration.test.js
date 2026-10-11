@@ -222,7 +222,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(!(await db.tasks.getReminderCandidates(later)).some((l) => l.id === today.id));
         await assert.rejects(db.tasks.snoozeList(BOB, today.id, later), { code: 'NOT_FOUND' });
 
-        // Changing the deadline re-arms everything.
+        // Changing the deadline re-arms everything (saving the same date again does not: see the re-arm limits test).
+        await db.tasks.updateList(FRANK, today.id, { deadline: '2030-06-09' });
         await db.tasks.updateList(FRANK, today.id, { deadline: '2030-06-10' });
         assert.ok((await ids()).includes(today.id));
     });
@@ -268,7 +269,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(!(await ids(later)).includes(dueToday.id));
 
         // Moving the due date re-arms the reminder.
-        await db.tasks.updateItem(FRANK, dueToday.id, { due_date: '2030-07-10' });
+        await db.tasks.updateItem(FRANK, dueToday.id, { due_date: '2030-07-11' });
         assert.ok((await ids()).includes(dueToday.id));
 
         // Automation off: nothing is a candidate.
@@ -2539,7 +2540,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await rows()).find((r) => r.discord_id === RM.editor).remind_at, null);
         await assert.rejects(db.tasks.snoozeList('200000000000000349', list.id, new Date()), { code: 'NOT_FOUND' });
 
-        // A new deadline re-arms everyone.
+        // A new deadline re-arms everyone (an unchanged one does not, see the re-arm limits test).
+        await db.tasks.updateList(RM.owner, list.id, { deadline: new Date(Date.parse(`${today}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10) });
         await db.tasks.updateList(RM.owner, list.id, { deadline: today });
         assert.deepEqual((await rows()).map((r) => Number(r.deadline_notified)), [0, 0, 0]);
 
@@ -2836,6 +2838,64 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await PA.leave(Y);
         assert.equal((await PA.listInvites(Z)).length, 0);
         await PA.disband(O);
+    });
+
+    await t.test('reminder re-arm limits: only a changed date re-arms everyone, at most three times a day', async () => {
+        const S = db.sharing;
+        const { LIMITS } = require('../src');
+        assert.equal(LIMITS.REMINDER_REARMS_PER_DAY, 3);
+        const mk = async (n) => {
+            const id = `2000000000000014${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(id, { username: `rearm_${n}`, handle: `rearm_${n}`, avatar: null });
+            return id;
+        };
+        const [O, E] = [await mk(1), await mk(2)];
+        const { list } = await db.tasks.createList(O, { name: 'Rearm', deadline: '2031-05-01' });
+        await S.respond(E, (await S.invite(O, list.id, { discordId: E, role: 'editor' })).id, true);
+        const { item } = await db.tasks.addItem(O, list.id, { name: 'Dated', due_date: '2031-05-01' });
+        const itemRows = async () => Number((await db.query('SELECT COUNT(*) AS n FROM item_reminders WHERE item_id = ?', [item.id]))[0].n);
+        const listRows = async () => Number((await db.query('SELECT COUNT(*) AS n FROM list_reminders WHERE list_id = ?', [list.id]))[0].n);
+        const arm = async () => {
+            await db.tasks.snoozeTask(E, item.id, new Date(Date.now() + 3600e3));
+            await db.tasks.snoozeList(E, list.id, new Date(Date.now() + 3600e3));
+            await db.tasks.markTaskReminderSent(item.id, new Date()); // the owner's own state
+            await db.tasks.markReminderSent(list.id, 'due');
+        };
+        const ownerFlags = async () => ({
+            item: (await db.query('SELECT reminded_at FROM items WHERE id = ?', [item.id]))[0].reminded_at !== null,
+            list: Number((await db.query('SELECT deadline_notified FROM lists WHERE id = ?', [list.id]))[0].deadline_notified) === 1
+        });
+
+        // Saving the same date (by anyone) clears nobody's reminder state.
+        await arm();
+        await db.tasks.updateItem(E, item.id, { due_date: '2031-05-01', name: 'Dated again' });
+        await db.tasks.updateList(O, list.id, { deadline: '2031-05-01', name: 'Rearm 2' });
+        assert.deepEqual([await itemRows(), await listRows(), await ownerFlags()], [1, 1, { item: true, list: true }], 'an unchanged date re-arms nothing');
+
+        // A changed date re-arms the owner's and everyone else's state, three times a day.
+        const days = ['2031-05-02', '2031-05-03', '2031-05-04'];
+        for (const d of days) {
+            await arm();
+            await db.tasks.updateItem(E, item.id, { due_date: d });
+            await db.tasks.updateList(O, list.id, { deadline: d });
+            assert.deepEqual([await itemRows(), await listRows(), await ownerFlags()], [0, 0, { item: false, list: false }], `${d}: re-armed`);
+        }
+        // The fourth change today still moves the date but leaves everybody's state alone.
+        await arm();
+        await db.tasks.updateItem(E, item.id, { due_date: '2031-05-05' });
+        await db.tasks.updateList(O, list.id, { deadline: '2031-05-05' });
+        assert.deepEqual([await itemRows(), await listRows(), await ownerFlags()], [1, 1, { item: true, list: true }], 'over the daily limit: not re-armed');
+        assert.equal((await db.tasks.getItem(O, item.id)).due_date, '2031-05-05', 'but the date itself changed');
+        assert.equal((await db.tasks.getList(O, list.id)).deadline, '2031-05-05');
+        assert.equal((await db.query('SELECT rearm_count FROM items WHERE id = ?', [item.id]))[0].rearm_count, 3);
+
+        // The next day the allowance is back.
+        await db.query("UPDATE items SET rearm_day = UTC_DATE() - INTERVAL 1 DAY WHERE id = ?", [item.id]);
+        await db.query("UPDATE lists SET rearm_day = UTC_DATE() - INTERVAL 1 DAY WHERE id = ?", [list.id]);
+        await db.tasks.updateItem(E, item.id, { due_date: '2031-05-06' });
+        await db.tasks.updateList(O, list.id, { deadline: '2031-05-06' });
+        assert.deepEqual([await itemRows(), await listRows(), await ownerFlags()], [0, 0, { item: false, list: false }], 'a new day: re-armed again');
+        assert.equal((await db.query('SELECT rearm_count FROM items WHERE id = ?', [item.id]))[0].rearm_count, 1);
     });
 
 

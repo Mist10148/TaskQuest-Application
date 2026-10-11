@@ -16,6 +16,11 @@
  * due day (up to 3 days late) at the owner's reminder hour, plus the snooze button. A
  * task due on its list's deadline day is covered by the list reminder instead.
  *
+ * Fan-out is capped: one person gets at most MAX_DMS_PER_USER_PER_RUN reminder DMs per run (a big shared list or a hostile one cannot
+ * turn the bot into a spammer). The rest are collapsed into ONE digest DM ("N more reminders due: see /list") and then marked as
+ * handled, so they are not repeated every hour. Names in every message are escaped (they can be written by other people), and no
+ * reminder can ping anybody.
+ *
  * When a push client is passed (WEB_PUSH_INTERNAL_URL set), every reminder that is decided on is also
  * offered to the web server as a web push, best effort and only once the reminder is final (sent, or
  * can never be sent), so a retried DM never repeats the push. The server skips users without subscriptions.
@@ -24,7 +29,7 @@
 'use strict';
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
-const { isPastDeadline, formatDeadline, todayInZone, hourInZone } = require('@taskquest/shared');
+const { isPastDeadline, formatDeadline, todayInZone, hourInZone, escapeDiscord } = require('@taskquest/shared');
 
 /** Title and body of the web push that mirrors a list reminder. */
 function pushForList(list, kind, now = new Date()) {
@@ -56,6 +61,61 @@ async function pushReminder(push, discordId, message) {
 const PERMANENT_DM_ERRORS = new Set([50007 /* cannot DM this user */, 10013 /* unknown user */]);
 
 const MAX_LATE_DAYS = 3;
+
+/** Reminder DMs one person may get in one run; everything past it becomes a single digest DM. */
+const MAX_DMS_PER_USER_PER_RUN = 20;
+
+/**
+ * Counts what each person has been sent in this run and remembers, per person, the reminders that went over the cap (as the
+ * function that marks each one handled). Share one budget between sendDeadlineReminders and sendTaskReminders so the cap is per
+ * person, not per kind, then call flushOverflow once.
+ */
+function createBudget(max = MAX_DMS_PER_USER_PER_RUN) {
+    const used = new Map();
+    const overflow = new Map();
+    return {
+        max,
+        /** True while the person is under the cap (and counts this reminder). */
+        take(userId) {
+            const n = used.get(String(userId)) || 0;
+            if (n >= max) return false;
+            used.set(String(userId), n + 1);
+            return true;
+        },
+        defer(userId, mark) {
+            const list = overflow.get(String(userId)) || [];
+            list.push(mark);
+            overflow.set(String(userId), list);
+        },
+        overflow
+    };
+}
+
+/**
+ * Send each person with overflow their one digest DM, then mark the collapsed reminders handled. A temporary DM failure leaves them
+ * unmarked, so the next run tries again; closed DMs mark them (nothing could ever be delivered).
+ * @returns {Promise<{ digests: number, collapsed: number }>}
+ */
+async function flushOverflow({ client, log, budget }) {
+    const out = { digests: 0, collapsed: 0 };
+    for (const [userId, marks] of budget.overflow) {
+        const n = marks.length;
+        try {
+            const user = await client.users.fetch(userId);
+            await user.send({ content: `📬 ${n} more reminder${n === 1 ? '' : 's'} due: see /list`, allowedMentions: { parse: [] } });
+            out.digests++;
+        } catch (err) {
+            if (!PERMANENT_DM_ERRORS.has(err.code)) {
+                log('⚠️', 'DEADLINE', `digest for ${userId}: ${err.message} (will retry)`);
+                continue;
+            }
+        }
+        for (const mark of marks) await mark();
+        out.collapsed += n;
+    }
+    budget.overflow.clear();
+    return out;
+}
 
 /**
  * A candidate row is for a member (not the owner) of a shared list when the recipient (discord_id) differs from the owner_id the
@@ -117,11 +177,12 @@ function taskReminderMessage(task, kind, now = new Date()) {
             {
                 color: 0xff6b6b,
                 title,
-                description: `Your task **${String(task.name).slice(0, 200)}** ${when}.`,
-                fields: [{ name: '📁 List', value: String(task.list_name || 'None').slice(0, 100), inline: true }],
+                description: `Your task **${escapeDiscord(task.name, { max: 200 })}** ${when}.`,
+                fields: [{ name: '📁 List', value: escapeDiscord(task.list_name, { max: 100 }) || 'None', inline: true }],
                 footer: { text: 'TaskQuest • /timezone sets when reminders arrive' }
             }
         ],
+        allowedMentions: { parse: [] },
         components: [
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`task_remind_snooze_${task.id}`).setLabel('Snooze 1 day').setEmoji('😴').setStyle(ButtonStyle.Secondary),
@@ -135,11 +196,16 @@ function taskReminderMessage(task, kind, now = new Date()) {
  * DM the owners of tasks that are due. Same retry rules as the list reminders.
  * @returns {Promise<{ sent: number, skipped: number, retry: number }>}
  */
-async function sendTaskReminders({ db, client, log, push, now = new Date() }) {
+async function sendTaskReminders({ db, client, log, push, now = new Date(), budget: shared }) {
     const result = { sent: 0, skipped: 0, retry: 0 };
+    const budget = shared || createBudget();
     for (const task of await db.tasks.getTaskReminderCandidates(now)) {
         const kind = decideTaskReminder(task, now);
         if (!kind) continue;
+        if (!budget.take(task.discord_id)) {
+            budget.defer(task.discord_id, () => db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : [])));
+            continue;
+        }
         try {
             const user = await client.users.fetch(task.discord_id);
             await user.send(taskReminderMessage(task, kind, now));
@@ -157,6 +223,7 @@ async function sendTaskReminders({ db, client, log, push, now = new Date() }) {
         await pushReminder(push, task.discord_id, pushForTask(task, kind, now));
         await db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : []));
     }
+    if (!shared) await flushOverflow({ client, log, budget });
     return result;
 }
 
@@ -165,19 +232,20 @@ function reminderMessage(list, kind, now = new Date()) {
     const late = isPastDeadline(list.deadline, today);
     const done = Number(list.items_done);
     const total = Number(list.items_total);
+    const name = escapeDiscord(list.name, { max: 100 });
     let title = '⏰ Deadline Today!';
-    let description = `Your list **${list.name}** is due today!`;
+    let description = `Your list **${name}** is due today!`;
     if (kind === 'overdue') {
         title = '⚠️ Overdue';
-        description = `Your list **${list.name}** was due on ${formatDeadline(list.deadline, today)} and still has open tasks.`;
+        description = `Your list **${name}** was due on ${formatDeadline(list.deadline, today)} and still has open tasks.`;
     } else if (kind === 'snooze') {
         title = '⏰ Reminder';
         description = late
-            ? `Your list **${list.name}** was due on ${formatDeadline(list.deadline, today)}.`
-            : `Your list **${list.name}** is due ${list.deadline ? formatDeadline(list.deadline, today) : 'soon'}.`;
+            ? `Your list **${name}** was due on ${formatDeadline(list.deadline, today)}.`
+            : `Your list **${name}** is due ${list.deadline ? formatDeadline(list.deadline, today) : 'soon'}.`;
     } else if (late) {
         title = '⏰ Deadline Passed';
-        description = `Your list **${list.name}** was due on ${formatDeadline(list.deadline, today)}.`;
+        description = `Your list **${name}** was due on ${formatDeadline(list.deadline, today)}.`;
     }
     return {
         embeds: [
@@ -187,11 +255,12 @@ function reminderMessage(list, kind, now = new Date()) {
                 description,
                 fields: [
                     { name: '📊 Progress', value: `${done}/${total} tasks`, inline: true },
-                    { name: '📁 Category', value: list.category || 'None', inline: true }
+                    { name: '📁 Category', value: escapeDiscord(list.category, { max: 100 }) || 'None', inline: true }
                 ],
                 footer: { text: 'TaskQuest • /timezone sets when reminders arrive' }
             }
         ],
+        allowedMentions: { parse: [] },
         components: [
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`remind_snooze_${list.id}`).setLabel('Snooze 1 day').setEmoji('😴').setStyle(ButtonStyle.Secondary),
@@ -205,8 +274,9 @@ function reminderMessage(list, kind, now = new Date()) {
  * @param {object} deps { db, client, log, now? }
  * @returns {Promise<{ sent: number, skipped: number, retry: number }>}
  */
-async function sendDeadlineReminders({ db, client, log, push, now = new Date() }) {
+async function sendDeadlineReminders({ db, client, log, push, now = new Date(), budget: shared }) {
     const result = { sent: 0, skipped: 0, retry: 0 };
+    const budget = shared || createBudget();
     for (const list of await db.tasks.getReminderCandidates(now)) {
         const kind = decideReminder(list, now);
         if (!kind) continue;
@@ -217,6 +287,10 @@ async function sendDeadlineReminders({ db, client, log, push, now = new Date() }
             // Everything is finished: no DM, but stop the list from being picked up again.
             await db.tasks.markReminderSent(list.id, kind === 'due_done' ? 'due' : 'snooze', { late, pastDeadline, ...forMember(list) });
             result.skipped++;
+            continue;
+        }
+        if (!budget.take(list.discord_id)) {
+            budget.defer(list.discord_id, () => db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) }));
             continue;
         }
         try {
@@ -236,6 +310,7 @@ async function sendDeadlineReminders({ db, client, log, push, now = new Date() }
         await pushReminder(push, list.discord_id, pushForList(list, kind, now));
         await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) });
     }
+    if (!shared) await flushOverflow({ client, log, budget });
     return result;
 }
 
@@ -259,4 +334,4 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
     return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.', flags: MessageFlags.SuppressNotifications });
 }
 
-module.exports = { sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };
+module.exports = { createBudget, flushOverflow, MAX_DMS_PER_USER_PER_RUN, sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };

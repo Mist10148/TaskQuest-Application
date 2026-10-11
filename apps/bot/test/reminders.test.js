@@ -309,3 +309,78 @@ test('a member of a shared list is marked for themselves; the owner keeps the li
     await sendTaskReminders({ db, client: ctx.client, log: () => {}, now: new Date('2030-03-10T10:00:00Z') });
     assert.deepEqual(marked, [[], ['77']]);
 });
+
+// ─── Fan-out cap, digest and safe names ──────────────────────────────────────
+
+const { createBudget, flushOverflow, MAX_DMS_PER_USER_PER_RUN, reminderMessage } = require('../utils/reminders');
+
+test('one person gets at most 20 reminder DMs per run; the rest become ONE digest DM and are marked handled', async () => {
+    assert.equal(MAX_DMS_PER_USER_PER_RUN, 20);
+    const lists = Array.from({ length: 27 }, (_, n) => list({ id: n + 1, name: `L${n + 1}` }));
+    lists.push(list({ id: 100, discord_id: '99', name: 'Someone else' })); // another person is not held back by the first one's cap
+    const ctx = setup({ lists });
+    const sentTo = [];
+    ctx.client.users.fetch = async (id) => ({ send: async (m) => sentTo.push([id, m]) });
+    const res = await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.deepEqual(res, { sent: 21, skipped: 0, retry: 0 });
+    const mine = sentTo.filter(([id]) => id === '42');
+    assert.equal(mine.length, 21, '20 reminders and one digest');
+    assert.match(mine.at(-1)[1].content, /^📬 7 more reminders due: see \/list$/);
+    assert.deepEqual(mine.at(-1)[1].allowedMentions, { parse: [] });
+    assert.equal(sentTo.filter(([id]) => id === '99').length, 1);
+    assert.equal(ctx.marked.length, 28, 'the collapsed ones are marked handled too, so they do not repeat every hour');
+});
+
+test('the cap is per person across list and task reminders, and a failed digest leaves the rest for the next run', async () => {
+    const budget = createBudget(2);
+    const marks = [];
+    const db = {
+        tasks: {
+            getReminderCandidates: async () => [list({ id: 1 }), list({ id: 2 })],
+            markReminderSent: async (id) => marks.push(['list', id]),
+            getTaskReminderCandidates: async () => [task({ id: 7 }), task({ id: 8 })],
+            markTaskReminderSent: async (id) => marks.push(['task', id])
+        }
+    };
+    const sent = [];
+    let digestFails = true;
+    const client = {
+        users: {
+            fetch: async () => ({
+                send: async (m) => {
+                    if (m.content && digestFails) throw Object.assign(new Error('Service unavailable'), { code: 0 });
+                    sent.push(m);
+                }
+            })
+        }
+    };
+    const logs = [];
+    const log = (...a) => logs.push(a);
+    await sendDeadlineReminders({ db, client, log, now: NOW, budget });
+    await sendTaskReminders({ db, client, log, now: NOW, budget });
+    assert.equal(sent.length, 2, 'two lists used the whole budget, no task reminder went out');
+    assert.deepEqual(marks, [['list', 1], ['list', 2]]);
+    assert.deepEqual(await flushOverflow({ client, log, budget }), { digests: 0, collapsed: 0 });
+    assert.deepEqual(marks, [['list', 1], ['list', 2]], 'the digest failed: nothing is marked, the next run tries again');
+    digestFails = false;
+    const again = createBudget(0);
+    again.defer('42', async () => marks.push(['task', 7]));
+    again.defer('42', async () => marks.push(['task', 8]));
+    assert.deepEqual(await flushOverflow({ client, log, budget: again }), { digests: 1, collapsed: 2 });
+    assert.match(sent.at(-1).content, /2 more reminders due/);
+    assert.deepEqual(marks.slice(2), [['task', 7], ['task', 8]]);
+});
+
+test('names written by other people cannot add links, formatting or pings to a reminder DM', () => {
+    const hostile = '[Win a prize](https://evil.example) @everyone **boom**';
+    const l = reminderMessage(list({ name: hostile, category: '@here' }), 'due', NOW);
+    const t = taskReminderMessage(task({ name: hostile, list_name: hostile }), 'due', NOW);
+    for (const m of [l, t]) {
+        const text = JSON.stringify(m.embeds[0]);
+        assert.equal(/\]\(/.test(text), false, 'no masked link');
+        assert.equal(/https?:\/\//.test(text), false, 'no clickable link');
+        assert.equal(/@(everyone|here)/.test(text), false, 'no mention');
+        assert.deepEqual(m.allowedMentions, { parse: [] });
+    }
+    assert.match(l.embeds[0].description, /\\\*\\\*boom\\\*\\\*/);
+});

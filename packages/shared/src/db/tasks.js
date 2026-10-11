@@ -51,8 +51,27 @@ function isDuplicate(err) {
 /** Columns that hold other people's Discord IDs never leave this module. */
 const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by'];
 
-function shapeItem(row) {
+/**
+ * What a person who does not own the list may see of a task: what the UI draws, nothing of the owner's private state (their reminder
+ * and snooze times, notification flags, re-arm counters) or of the reward bookkeeping (xp_awarded, counts_for_quests, first_completed_*,
+ * due_date_set_at, the repeat anchor and habit streak). The owner keeps getting the whole row (minus other people's IDs).
+ */
+const MEMBER_ITEM_FIELDS = [
+    'id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id',
+    'recurrence', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'
+];
+/** The same for a list: the fields the UI draws, the sharing fields, and the item counts. No reminder or notification state. */
+const MEMBER_LIST_FIELDS = [
+    'id', 'name', 'description', 'category', 'priority', 'deadline', 'created_at', 'updated_at',
+    'role', 'is_owner', 'owner_name', 'member_count', 'shared', 'items_total', 'items_completed'
+];
+
+const pick = (row, fields) => Object.fromEntries(fields.filter((f) => f in row).map((f) => [f, row[f]]));
+
+/** @param {boolean} [isOwner] false for a member: they get only MEMBER_ITEM_FIELDS */
+function shapeItem(row, isOwner = true) {
     if (!row) return row;
+    if (!isOwner) return pick(row, MEMBER_ITEM_FIELDS);
     const out = { ...row };
     for (const c of HIDDEN_ITEM_COLUMNS) delete out[c];
     return out;
@@ -62,7 +81,7 @@ function shapeItem(row) {
 function shapeList(row, me) {
     if (!row) return row;
     const { cleared_by: clearedBy, owner_id: ownerId, member_role: memberRole, ...out } = row; // eslint-disable-line no-unused-vars
-    if (String(out.discord_id) !== String(me)) delete out.discord_id;
+    if (String(out.discord_id) !== String(me)) return pick(out, MEMBER_LIST_FIELDS); // a member: no owner ID, no reminder state
     return out;
 }
 
@@ -285,14 +304,14 @@ async function getItems(discordId, listId, { sortBy = 'position', order = 'ASC' 
     const join = list.shared ? 'LEFT JOIN users cu ON cu.discord_id = i.completed_by' : '';
     const rows = await run(`SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ? ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`, [list.id]);
     // can_delete tells the UI which delete buttons to offer (the server decides again on every delete).
-    return rows.map((row) => ({ ...shapeItem(row), can_delete: mayDelete(list.role, row, discordId) }));
+    return rows.map((row) => ({ ...shapeItem({ ...row, can_delete: mayDelete(list.role, row, discordId) }, list.is_owner), ...(list.is_owner ? { can_delete: true } : {}) }));
 }
 
 /** One item (with its list's name/priority) if it is on a list the user owns or is a member of. */
 async function getItem(discordId, itemId) {
     try {
-        const { item, role } = await access.forItem(getPool(), discordId, itemId);
-        return { ...shapeItem(item), can_delete: mayDelete(role, item, discordId) };
+        const { item, role, isOwner } = await access.forItem(getPool(), discordId, itemId);
+        return shapeItem({ ...item, can_delete: mayDelete(role, item, discordId) }, isOwner);
     } catch (err) {
         if (err.code === 'NOT_FOUND') return null;
         throw err;
@@ -359,11 +378,11 @@ async function addSubtasks(discordId, parentId, names) {
     return withTransaction(async (conn) => {
         // Lock order is the user row first, then list and item rows (as addItemIn and setItemCompleted do), or two requests deadlock.
         await lockUser(conn, discordId);
-        const { item: parent } = await access.forItem(conn, discordId, pid, 'editor', { lock: true });
+        const { item: parent, isOwner } = await access.forItem(conn, discordId, pid, 'editor', { lock: true });
         if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
         const items = [];
         for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid }));
-        return { parent: shapeItem(parent), items };
+        return { parent: shapeItem(parent, isOwner), items };
     });
 }
 
@@ -382,7 +401,7 @@ async function addItems(discordId, listId, inputs) {
 
 async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }) {
     const user = await lockUser(conn, discordId);
-    const { list } = await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
+    const { list, isOwner } = await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
     // The quota is the list OWNER's: a member adding to a shared list grows the owner's data. (Repeat copies from
     // spawnNextOccurrence are not counted against it: each one replaces the task just completed.)
     const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [list.discord_id]);
@@ -406,7 +425,7 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
     });
     const achievements = await unlockAchievements(conn, user);
     const [[item]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    return { item: shapeItem(item), xp, achievements };
+    return { item: shapeItem(item, isOwner), xp, achievements };
 }
 
 async function updateItem(discordId, itemId, input) {
@@ -523,7 +542,7 @@ async function deleteItem(discordId, itemId) {
  * grants no creation XP or counters and never counts towards quests (counts_for_quests = 0),
  * so repeating tasks cannot be used to farm.
  */
-async function spawnNextOccurrence(conn, item, user, habitStreak = 0) {
+async function spawnNextOccurrence(conn, item, user, habitStreak = 0, isOwner = true) {
     const today = todayInZone(user.timezone);
     const base = item.due_date ? String(item.due_date).slice(0, 10) : today;
     const anchor = item.recurrence === 'monthly' ? item.repeat_anchor_day || Number(base.slice(8, 10)) : null;
@@ -536,7 +555,7 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0) {
         [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    return shapeItem(created);
+    return shapeItem(created, isOwner);
 }
 
 /**
@@ -646,7 +665,7 @@ async function setItemCompleted(discordId, itemId, completed) {
     const id = unwrap(v.id(itemId));
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
-        const { item } = await access.forItem(conn, user.discord_id, id, 'editor', { lock: true });
+        const { item, isOwner } = await access.forItem(conn, user.discord_id, id, 'editor', { lock: true });
 
         const target = completed === undefined ? !item.completed : Boolean(completed);
         const now = new Date();
@@ -685,10 +704,10 @@ async function setItemCompleted(discordId, itemId, completed) {
                 }
             }
             achievements = await unlockAchievements(conn, user);
-            if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user, habit.streak);
+            if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user, habit.streak, isOwner);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
-        return { item: shapeItem(updated), completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
+        return { item: shapeItem(updated, isOwner), completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }
 

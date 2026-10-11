@@ -2957,6 +2957,62 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.review.getReview(R)).completed, 1);
     });
 
+    await t.test('column whitelist: members get the fields the UI draws, the owner keeps the whole row', async () => {
+        const mk = async (n) => {
+            const id = `2000000000000017${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(id, { username: `cols_${n}`, handle: `cols_${n}`, avatar: null });
+            return id;
+        };
+        const [O, E] = [await mk(1), await mk(2)];
+        const { list } = await db.tasks.createList(O, { name: 'Columns', deadline: '2031-09-01' });
+        await db.sharing.respond(E, (await db.sharing.invite(O, list.id, { discordId: E, role: 'editor' })).id, true);
+        const { item } = await db.tasks.addItem(O, list.id, { name: 'Private state', due_date: '2031-09-01', recurrence: 'weekly', tags: 'a,b', priority: 'HIGH' });
+        await db.tasks.snoozeTask(O, item.id, new Date(Date.now() + 3600e3));
+        await db.tasks.snoozeList(O, list.id, new Date(Date.now() + 3600e3));
+        await db.tasks.setItemCompleted(O, item.id, true); // xp_awarded, first_completed_*, the repeat copy
+
+        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'];
+        const PRIVATE_ITEM = ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'first_completed_by', 'first_completed_high', 'first_completed_early', 'first_completed_overdue', 'due_date_set_at', 'repeat_anchor_day', 'habit_streak', 'rearm_count', 'rearm_day', 'created_by', 'completed_by'];
+        const PRIVATE_LIST = ['remind_at', 'deadline_notified', 'overdue_notified', 'cleared_at', 'cleared_by', 'rearm_count', 'rearm_day', 'discord_id'];
+
+        // The owner's rows are unchanged: everything the owner needs, including their own reminder state.
+        const ownerItems = await db.tasks.getItems(O, list.id);
+        for (const f of ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'habit_streak', 'due_date_set_at']) assert.ok(f in ownerItems[0], `owner row has ${f}`);
+        for (const f of ['created_by', 'completed_by', 'first_completed_by']) assert.equal(f in ownerItems[0], false, 'other people\'s IDs never leave');
+        const ownerList = await db.tasks.getList(O, list.id);
+        for (const f of ['remind_at', 'deadline_notified', 'overdue_notified', 'cleared_at', 'discord_id']) assert.ok(f in ownerList, `owner list has ${f}`);
+
+        // A member gets only the drawn fields, from every read and every write that returns a row.
+        const checkItem = (row, what) => {
+            for (const k of Object.keys(row)) assert.ok(MEMBER_ITEM.includes(k), `${what}: unexpected field ${k}`);
+            for (const k of PRIVATE_ITEM) assert.equal(k in row, false, `${what}: ${k} must not be sent`);
+        };
+        const memberItems = await db.tasks.getItems(E, list.id);
+        assert.equal(memberItems.length, ownerItems.length);
+        memberItems.forEach((row, n) => checkItem(row, `getItems[${n}]`));
+        assert.deepEqual(memberItems.map((i) => [i.id, i.name, i.completed, i.due_date, i.recurrence, i.priority]), ownerItems.map((i) => [i.id, i.name, i.completed, i.due_date, i.recurrence, i.priority]), 'the visible values are the same');
+        checkItem(await db.tasks.getItem(E, item.id), 'getItem');
+        const added = await db.tasks.addItem(E, list.id, { name: 'member task' });
+        checkItem(added.item, 'addItem');
+        checkItem((await db.tasks.setItemCompleted(E, added.item.id, true)).item, 'setItemCompleted');
+        checkItem(await db.tasks.updateItem(E, added.item.id, { name: 'member task 2' }), 'updateItem');
+        const subs = await db.tasks.addSubtasks(E, added.item.id, ['s1']);
+        checkItem(subs.parent, 'addSubtasks parent');
+        const repeating = (await db.tasks.addItem(E, list.id, { name: 'weekly', recurrence: 'weekly', due_date: '2031-09-02' })).item;
+        const done = await db.tasks.setItemCompleted(E, repeating.id, true);
+        assert.ok(done.nextItem, 'a repeat copy was made');
+        checkItem(done.nextItem, 'the repeat copy');
+
+        const checkList = (row, what, drawn = ['id', 'name', 'deadline', 'role', 'is_owner', 'owner_name', 'member_count', 'shared']) => {
+            for (const k of PRIVATE_LIST) assert.equal(k in row, false, `${what}: ${k} must not be sent`);
+            for (const k of drawn) assert.ok(k in row, `${what}: ${k} is drawn`);
+        };
+        checkList(await db.tasks.getList(E, list.id), 'getList');
+        checkList((await db.tasks.getLists(E)).find((l) => l.id === list.id), 'getLists');
+        checkList((await db.tasks.searchLists(E, 'Columns'))[0], 'searchLists', ['id', 'name', 'deadline']);
+        assert.equal((await db.tasks.getLists(E)).find((l) => l.id === list.id).items_total >= 1, true);
+    });
+
 
     // ─── Parties ──────────────────────────────────────────────────────────────────
 

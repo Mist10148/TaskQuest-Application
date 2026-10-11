@@ -120,7 +120,7 @@ The open questions above were settled like this (the product owner was not avail
 | Export / import | The export holds only lists you own; an import creates lists you own. The calendar feed includes lists you own or are a member of. |
 | AI opt-in per list | **Not widened at all.** Shared lists are not embedded or summarised into a member's data, and the AI internal routes run through `db.tasks.asOwner`, which answers `404` for any list the user does not own. |
 | Presence, optimistic concurrency | Out of scope (changes show on refresh / the next query). |
-| Members see names | Display names only; members are addressed by an opaque 12-character key, task rows expose `completed_by_name`, and lists you do not own carry no owner `discord_id`. |
+| Members see names | Display names only; a member's list and task rows are a column whitelist (`MEMBER_LIST_FIELDS`, `MEMBER_ITEM_FIELDS`), so the owner's reminder state and reward bookkeeping stay private; members are addressed by an opaque 12-character key, task rows expose `completed_by_name`, and lists you do not own carry no owner `discord_id`. |
 
 Surfaces: web (Members dialog, invitation banner, read-only view for viewers), bot (`/share`, `/invites`, `/members`, `/leave`, role-aware `/list`), API ([API.md](../API.md#shared-lists-and-invitations)), schema ([DATABASE.md](../DATABASE.md#list_members)).
 

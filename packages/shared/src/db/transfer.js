@@ -161,13 +161,22 @@ async function importAll(discordId, data) {
 
         let itemCount = 0;
         for (const l of lists) {
-            const name = freeName(l.name, taken);
-            taken.add(name.toLowerCase());
-            const [res] = await conn.query(
-                'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
-                [user.discord_id, name, l.description, l.category, l.priority, l.deadline]
-            );
-            const listId = res.insertId;
+            // The database compares names with its own collation (Cafe = Café), which a lower-cased set does not see:
+            // when the insert is refused as a duplicate, mark that name taken and pick the next suffix.
+            let listId;
+            for (let attempt = 0; listId === undefined; attempt++) {
+                const name = freeName(l.name, taken);
+                taken.add(name.toLowerCase());
+                try {
+                    const [res] = await conn.query(
+                        'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
+                        [user.discord_id, name, l.description, l.category, l.priority, l.deadline]
+                    );
+                    listId = res.insertId;
+                } catch (err) {
+                    if (!err || err.code !== 'ER_DUP_ENTRY' || attempt >= 20) throw err;
+                }
+            }
             const idByRef = new Map();
             const subtaskRefs = new Set(); // imported rows that were stored as subtasks
             // Parents first, so a subtask can point at a row that already exists.

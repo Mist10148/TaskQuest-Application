@@ -842,7 +842,8 @@ async function markTaskReminderSent(itemId, now = new Date(), recipientId) {
             return;
         }
     }
-    await run('UPDATE items SET reminded_at = ?, remind_at = NULL WHERE id = ?', [now, itemId]);
+    // Keep updated_at: a reminder going out is not an edit (it would re-trigger the AI reindex and the cleanup timer).
+    await run('UPDATE items SET reminded_at = ?, remind_at = NULL, updated_at = updated_at WHERE id = ?', [now, itemId]);
 }
 
 /** Remind the user (owner or member) about a task again at `until`. */
@@ -851,7 +852,7 @@ async function snoozeTask(discordId, itemId, until) {
     await withTransaction(async (conn) => {
         const { isOwner } = await access.forItem(conn, discordId, id, 'viewer', { lock: true });
         if (isOwner) {
-            await conn.query('UPDATE items SET remind_at = ? WHERE id = ?', [until, id]);
+            await conn.query('UPDATE items SET remind_at = ?, updated_at = updated_at WHERE id = ?', [until, id]);
         } else {
             await conn.query(
                 'INSERT INTO item_reminders (item_id, discord_id, remind_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE remind_at = VALUES(remind_at)',

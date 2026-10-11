@@ -52,10 +52,20 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await db.users.ensureUser(ALICE, { username: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
-    await t.test('migrations 007-013 are idempotent and add the new columns', async () => {
+    await t.test('every migration from 007 on is idempotent and adds the new columns', async () => {
         await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
         const again = await db.runMigrations({ log: () => {} });
-        assert.deepEqual(again.filter((id) => id >= '007' && id <= '014_z'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources', '013_task_reminders', '014_templates']);
+        // Every migration file from 007 on, however many exist: a new one is covered without touching this test.
+        const fs = require('fs');
+        const path = require('path');
+        const expected = fs
+            .readdirSync(path.join(__dirname, '../src/db/migrations'))
+            .filter((f) => /^\d{3}_.+\.js$/.test(f))
+            .map((f) => f.replace(/\.js$/, ''))
+            .filter((id) => id >= '007')
+            .sort();
+        assert.ok(expected.length >= 14, 'found the migration files');
+        assert.deepEqual(again.filter((id) => id >= '007'), expected);
         const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
@@ -73,6 +83,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         for (const c of ['prestige', 'lifetime_xp_total']) assert.ok(users.includes(c), c);
         for (const c of ['first_completed_early', 'first_completed_overdue']) assert.ok(items.includes(c), c);
         assert.equal((await pool.query("SHOW TABLES LIKE 'focus_sessions'"))[0].length, 1);
+        assert.ok(items.includes('due_date_set_at'), 'items.due_date_set_at');
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -2969,6 +2980,35 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(second.xp.bonusInfo.type, 'ARTISAN', 'no second project bonus');
         assert.ok(!bonusKeys(second).includes('list_cleared'));
         assert.ok(Number((await db.users.getUser(R)).artisan_progress) > 0, 'progress keeps building instead of resetting');
+    });
+
+    await t.test('import: list names that differ only by case or accents get an (imported) suffix instead of a 500', async () => {
+        const U = '100000000000000641';
+        await db.users.ensureUser(U);
+        await db.tasks.createList(U, { name: 'Café' });
+        const r = await db.transfer.importAll(U, { lists: [{ name: 'Cafe' }, { name: 'CAFÉ' }, { name: 'cafe' }, { name: 'Naïve' }, { name: 'Naive' }] });
+        assert.equal(r.lists, 5);
+        const names = (await db.query('SELECT name FROM lists WHERE discord_id = ? ORDER BY id', [U])).map((x) => x.name);
+        assert.equal(new Set(names).size, 6, names.join(' | '));
+        assert.ok(names.includes('Cafe (imported)'), names.join(' | '));
+        assert.ok(names.includes('Naive (imported)'), names.join(' | '));
+    });
+
+    await t.test('sending or snoozing a task reminder does not touch items.updated_at', async () => {
+        const U = '100000000000000642';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Quiet reminders' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'Remind me', due_date: dayOffset(1) });
+        const stamp = async () => String((await db.query('SELECT updated_at FROM items WHERE id = ?', [item.id]))[0].updated_at);
+        await db.query("UPDATE items SET updated_at = '2020-01-01 00:00:00' WHERE id = ?", [item.id]);
+        const before = await stamp();
+        await db.tasks.snoozeTask(U, item.id, new Date(Date.now() + 3600e3));
+        assert.equal(await stamp(), before, 'snooze');
+        await db.tasks.markTaskReminderSent(item.id);
+        assert.equal(await stamp(), before, 'reminder sent');
+        const row = (await db.query('SELECT reminded_at, remind_at FROM items WHERE id = ?', [item.id]))[0];
+        assert.ok(row.reminded_at);
+        assert.equal(row.remind_at, null);
     });
 
     await db.closePool();

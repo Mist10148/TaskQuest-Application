@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { localToday } from "@/lib/dates";
-import { CATEGORIES, PRIORITIES } from "./constants";
+import { CATEGORIES, PRIORITIES, TEXT_LIMITS } from "./constants";
 import type { ListFormValues } from "./forms";
 
 interface Props {
@@ -14,16 +14,28 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   initial: ListFormValues;
+  /** Identifies what is being edited (the list id); the form only resets when this or `open` changes. */
+  resetKey?: number | null;
   pending: boolean;
   onSubmit: (values: ListFormValues) => void;
 }
 
 /** One dialog for creating and editing a quest (they share every field). */
-export const ListFormDialog = ({ open, onOpenChange, mode, initial, pending, onSubmit }: Props) => {
+export const ListFormDialog = ({ open, onOpenChange, mode, initial, resetKey = null, pending, onSubmit }: Props) => {
   const [form, setForm] = useState<ListFormValues>(initial);
+  const [nameError, setNameError] = useState("");
+  // Background refetches change `initial`; only reset when the dialog opens or a different list is edited,
+  // so typing is never wiped.
+  const initialRef = useRef(initial);
   useEffect(() => {
-    if (open) setForm(initial);
-  }, [open, initial]);
+    initialRef.current = initial;
+  });
+  useEffect(() => {
+    if (open) {
+      setForm(initialRef.current);
+      setNameError("");
+    }
+  }, [open, resetKey]);
 
   const set = <K extends keyof ListFormValues>(key: K, value: ListFormValues[K]) => setForm((f) => ({ ...f, [key]: value }));
   const creating = mode === "create";
@@ -41,16 +53,19 @@ export const ListFormDialog = ({ open, onOpenChange, mode, initial, pending, onS
           className="space-y-4 py-4"
           onSubmit={(e) => {
             e.preventDefault();
+            if (!form.name.trim()) return setNameError("Give your quest a name.");
+            setNameError("");
             onSubmit(form);
           }}
         >
           <div>
             <label htmlFor="list-name" className="text-sm font-medium block mb-1">Name *</label>
-            <Input id="list-name" placeholder="Quest name..." value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
+            <Input id="list-name" placeholder="Quest name..." value={form.name} onChange={(e) => { set("name", e.target.value); setNameError(""); }} autoFocus required maxLength={TEXT_LIMITS.LIST_NAME} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "list-name-error" : undefined} />
+            {nameError && <p id="list-name-error" role="alert" className="text-xs text-destructive mt-1">{nameError}</p>}
           </div>
           <div>
             <label htmlFor="list-desc" className="text-sm font-medium block mb-1">Description (optional)</label>
-            <Textarea id="list-desc" placeholder="What's this quest about?" value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} />
+            <Textarea id="list-desc" placeholder="What's this quest about?" value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} maxLength={TEXT_LIMITS.DESCRIPTION} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -1,3 +1,6 @@
+/** Mirrors @taskquest/shared TEXT_LIMITS; the server enforces it. */
+export const TEXT_LIMITS = { LIST_NAME: 100, ITEM_NAME: 200, CATEGORY: 50, DESCRIPTION: 1000 } as const;
+
 export const CATEGORIES = [
   { value: "all", label: "All Categories", emoji: "📋" },
   { value: "none", label: "None", emoji: "➖" },

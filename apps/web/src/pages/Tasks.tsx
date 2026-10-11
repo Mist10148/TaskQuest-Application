@@ -12,6 +12,8 @@ import {
 } from "@/hooks/useApi";
 import { ListOverview } from "@/components/tasks/ListOverview";
 import { ListDetail } from "@/components/tasks/ListDetail";
+import { ErrorCard } from "@/components/feedback/ErrorCard";
+import { Button } from "@/components/ui/button";
 import { useListFilters } from "@/components/tasks/useListFilters";
 import { ListFormDialog } from "@/components/tasks/ListFormDialog";
 import { ItemFormDialog } from "@/components/tasks/ItemFormDialog";
@@ -34,7 +36,7 @@ const Tasks = () => {
   // /tasks?list=42 opens a quest directly (used by links from AI answers).
   const [searchParams] = useSearchParams();
   const [selectedListId, setSelectedListId] = useState<number | null>(() => Number(searchParams.get("list")) || null);
-  const { data: selectedList, refetch: refetchList } = useList(selectedListId || 0);
+  const { data: selectedList, refetch: refetchList, isLoading: listLoading, isError: listFailed, error: listError, isFetching: listFetching } = useList(selectedListId || 0);
   const filters = useListFilters(lists);
 
   const [listDialog, setListDialog] = useState<"create" | "edit" | null>(null);
@@ -93,7 +95,8 @@ const Tasks = () => {
   };
 
   const handleSaveList = async (values: ListFormValues) => {
-    if (!values.name.trim() || !selectedListId) return;
+    if (!values.name.trim()) return void toast.error("Enter a name");
+    if (!selectedListId) return;
     try {
       await updateList.mutateAsync({ listId: selectedListId, data: listPayload(values) });
       toast.success("✏️ Quest updated!");
@@ -103,7 +106,8 @@ const Tasks = () => {
   };
 
   const handleSaveItem = async (values: ItemFormValues) => {
-    if (!values.name.trim() || !selectedListId || !itemDialog) return;
+    if (!values.name.trim()) return void toast.error("Enter a name");
+    if (!selectedListId || !itemDialog) return;
     const data = itemPayload(values);
     try {
       if (itemDialog.mode === "create") {
@@ -190,6 +194,19 @@ const Tasks = () => {
             toast.success("Task reordered");
           }}
         />
+      ) : selectedListId ? (
+        listLoading ? (
+          <div className="px-4 sm:px-0 space-y-4" aria-busy="true" aria-live="polite">
+            <div className="h-8 w-64 rounded-lg bg-background-secondary animate-pulse" />
+            <div className="h-20 rounded-xl bg-background-secondary animate-pulse" />
+            {[0, 1, 2].map((n) => <div key={n} className="h-14 rounded-xl bg-background-secondary animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="px-4 sm:px-0 space-y-4">
+            <ErrorCard what="this quest" error={listFailed ? listError : new Error("Quest not found.")} onRetry={() => void refetchList()} retrying={listFetching} />
+            <div className="text-center"><Button variant="outline" size="sm" onClick={() => setSelectedListId(null)}>Back to Quests</Button></div>
+          </div>
+        )
       ) : (
         <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={setSelectedListId} onCreate={() => setListDialog("create")} />
       )}
@@ -199,6 +216,7 @@ const Tasks = () => {
         onOpenChange={(open) => !open && setListDialog(null)}
         mode={listDialog ?? "create"}
         initial={listDialog === "edit" ? editListInitial : EMPTY_LIST_FORM}
+        resetKey={listDialog === "edit" ? selectedListId : null}
         pending={createList.isPending || updateList.isPending}
         onSubmit={listDialog === "edit" ? handleSaveList : handleCreateList}
       />

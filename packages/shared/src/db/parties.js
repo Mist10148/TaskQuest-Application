@@ -127,6 +127,12 @@ async function listInvites(userId) {
 /** Accept or decline one of my invitations. Accepting needs me to be free of any party and the party to have room. */
 async function respond(userId, inviteId, accept) {
     const id = unwrap(v.id(inviteId));
+    const result = await respondIn(userId, id, accept);
+    if (result.voided) throw errors.conflict('This invitation is no longer open.'); // thrown after the transaction, so the revocation sticks
+    return result;
+}
+
+async function respondIn(userId, id, accept) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, userId); // serialises this user's joins: one party at a time
         const [[peek]] = await conn.query('SELECT party_id FROM party_invites WHERE id = ? AND invitee_discord_id = ?', [id, user.discord_id]);
@@ -144,6 +150,12 @@ async function respond(userId, inviteId, accept) {
             return { accepted: false, party: null };
         }
         if (await myParty(conn, user.discord_id)) throw errors.conflict('You are already in a party. Leave it first.');
+        // The invitation was the inviter's to make: if they are no longer in the party, it is void.
+        const [[inviter]] = await conn.query('SELECT 1 AS x FROM party_members WHERE party_id = ? AND discord_id = ?', [inv.party_id, inv.invited_by]);
+        if (!inviter) {
+            await conn.query("UPDATE party_invites SET status = 'revoked' WHERE id = ?", [id]);
+            return { voided: true };
+        }
         const [[party]] = await conn.query('SELECT id, name FROM parties WHERE id = ?', [inv.party_id]);
         const [[m]] = await conn.query('SELECT COUNT(*) AS n FROM party_members WHERE party_id = ?', [party.id]);
         if (Number(m.n) >= LIMITS.MAX_PARTY_MEMBERS) throw errors.validation('This party is full.');
@@ -172,6 +184,7 @@ async function leave(userId) {
         const party = await lockMyParty(conn, userId);
         if (String(party.owner_id) === String(userId)) throw errors.forbidden('You own this party, so you cannot leave it. Disband it instead.');
         await conn.query('DELETE FROM party_members WHERE party_id = ? AND discord_id = ?', [party.id, String(userId)]);
+        await conn.query("UPDATE party_invites SET status = 'revoked' WHERE party_id = ? AND invited_by = ? AND status = 'pending'", [party.id, String(userId)]);
         return true;
     });
 }
@@ -194,6 +207,7 @@ async function kick(ownerId, target = {}) {
         if (!row) throw errors.notFound('Member not found.');
         if (String(row.discord_id) === String(ownerId)) throw errors.validation('You own this party, so you cannot remove yourself. Disband it instead.');
         await conn.query('DELETE FROM party_members WHERE party_id = ? AND discord_id = ?', [party.id, row.discord_id]);
+        await conn.query("UPDATE party_invites SET status = 'revoked' WHERE party_id = ? AND invited_by = ? AND status = 'pending'", [party.id, row.discord_id]);
         return true;
     });
 }

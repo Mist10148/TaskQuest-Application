@@ -2772,6 +2772,72 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.parties.invite(O, { discordId: X })).sent, true);
     });
 
+    await t.test('invitations do not outlive their inviter: removal, demotion, leaving and a void inviter', async () => {
+        const S = db.sharing;
+        const mk = async (n) => {
+            const id = `2000000000000013${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(id, { username: `outl_${n}`, handle: `outl_${n}`, avatar: null });
+            return id;
+        };
+        const [O, M, X, Y, Z] = [await mk(1), await mk(2), await mk(3), await mk(4), await mk(5)];
+        const { list } = await db.tasks.createList(O, { name: 'Outlive' });
+        await S.respond(M, (await S.invite(O, list.id, { discordId: M, role: 'manager' })).id, true);
+        const keyM = async () => (await S.listMembers(O, list.id)).members.find((m) => m.name === 'outl_2').memberKey;
+        const pendingOf = async (id) => (await S.listInvites(id)).length;
+
+        // Demoting the manager below manager voids what they sent; the owner's own invitations stay.
+        await S.invite(M, list.id, { discordId: X });
+        await S.invite(M, list.id, { discordId: Y });
+        await S.invite(O, list.id, { discordId: Z });
+        assert.deepEqual([await pendingOf(X), await pendingOf(Y), await pendingOf(Z)], [1, 1, 1]);
+        await S.setRole(O, list.id, await keyM(), 'editor');
+        assert.deepEqual([await pendingOf(X), await pendingOf(Y), await pendingOf(Z)], [0, 0, 1], 'only the demoted manager\'s invitations are withdrawn');
+        // A change that keeps the manager role withdraws nothing.
+        await S.setRole(O, list.id, await keyM(), 'manager');
+        const kept = await S.invite(M, list.id, { discordId: X });
+        await S.setRole(O, list.id, await keyM(), 'manager');
+        assert.equal(await pendingOf(X), 1);
+
+        // Removing the manager, or the manager leaving, does the same.
+        await S.removeMember(O, list.id, await keyM());
+        assert.equal(await pendingOf(X), 0);
+        await assert.rejects(S.respond(X, kept.id, true), { code: 'CONFLICT' });
+        await S.respond(M, (await S.invite(O, list.id, { discordId: M, role: 'manager' })).id, true);
+        await S.invite(M, list.id, { discordId: Y });
+        await S.leave(M, list.id);
+        assert.equal(await pendingOf(Y), 0);
+
+        // Even a row that is still pending (say, left over from before this fix) cannot be accepted once its inviter is no longer a manager.
+        await S.respond(M, (await S.invite(O, list.id, { discordId: M, role: 'manager' })).id, true);
+        const stale = await S.invite(M, list.id, { discordId: X });
+        await db.query("UPDATE list_members SET role = 'viewer' WHERE list_id = ? AND discord_id = ?", [list.id, M]); // demoted behind the service's back
+        await assert.rejects(S.respond(X, stale.id, true), { code: 'CONFLICT', message: /no longer open/ });
+        assert.equal(await db.tasks.getList(X, list.id), null, 'X did not get in');
+        assert.equal(await pendingOf(X), 0, 'and the invitation is gone from their list');
+        // Declining is always allowed.
+        await db.query("UPDATE list_members SET role = 'manager' WHERE list_id = ? AND discord_id = ?", [list.id, M]);
+        const again = await S.invite(M, list.id, { discordId: Y });
+        await db.query("UPDATE list_members SET role = 'viewer' WHERE list_id = ? AND discord_id = ?", [list.id, M]);
+        assert.equal((await S.respond(Y, again.id, false)).accepted, false);
+
+        // Parties: an invitation needs its inviter still in the party; leaving or being removed withdraws theirs.
+        const PA = db.parties;
+        await PA.create(O, 'Outlive party');
+        const pi = await PA.invite(O, { discordId: X });
+        await db.query('UPDATE party_invites SET invited_by = ? WHERE id = ?', [Z, pi.id]); // the inviter is not in the party
+        await assert.rejects(PA.respond(X, pi.id, true), { code: 'CONFLICT', message: /no longer open/ });
+        assert.equal(await PA.status(X), null);
+        assert.equal((await PA.listInvites(X)).length, 0);
+        // A member who was somehow allowed to invite loses their open invitations when removed.
+        const joined = await PA.respond(Y, (await PA.invite(O, { discordId: Y })).id, true);
+        assert.equal(joined.accepted, true);
+        const pw = await PA.invite(O, { discordId: Z });
+        await db.query('UPDATE party_invites SET invited_by = ? WHERE id = ?', [Y, pw.id]);
+        await PA.leave(Y);
+        assert.equal((await PA.listInvites(Z)).length, 0);
+        await PA.disband(O);
+    });
+
 
     // ─── Parties ──────────────────────────────────────────────────────────────────
 

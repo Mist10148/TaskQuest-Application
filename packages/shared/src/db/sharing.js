@@ -169,6 +169,12 @@ async function listInvites(userId) {
 /** Accept or decline one of my invitations. @returns {Promise<{ accepted: boolean, list: { id: number, name: string }|null, role: string }>} */
 async function respond(userId, inviteId, accept) {
     const id = unwrap(v.id(inviteId));
+    const result = await respondIn(userId, id, accept);
+    if (result.voided) throw errors.conflict('This invitation is no longer open.'); // thrown after the transaction, so the revocation sticks
+    return result;
+}
+
+async function respondIn(userId, id, accept) {
     return withTransaction(async (conn) => {
         // Lock order is the invitee's user row, then the list, then the invitation (the user row first, as everywhere else:
         // inserting the membership takes a share lock on it, which would otherwise wait behind this person's own work on the list).
@@ -189,6 +195,14 @@ async function respond(userId, inviteId, accept) {
         }
         const [[list]] = await conn.query('SELECT id, name, discord_id FROM lists WHERE id = ?', [inv.list_id]);
         if (!list) throw errors.notFound('Invitation not found.');
+        // The invitation was the inviter's to make: if they are no longer the owner or a manager of the list, it is void.
+        if (String(inv.invited_by) !== String(list.discord_id)) {
+            const [[inviter]] = await conn.query("SELECT 1 AS x FROM list_members WHERE list_id = ? AND discord_id = ? AND role = 'manager'", [list.id, inv.invited_by]);
+            if (!inviter) {
+                await conn.query("UPDATE list_invites SET status = 'revoked' WHERE id = ?", [id]);
+                return { voided: true };
+            }
+        }
         const [[m]] = await conn.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [list.id]);
         const [[have]] = await conn.query('SELECT 1 AS x FROM list_members WHERE list_id = ? AND discord_id = ?', [list.id, String(userId)]);
         if (!have && Number(m.n) >= LIMITS.MAX_LIST_MEMBERS) throw errors.validation('This list is full.');
@@ -265,13 +279,21 @@ async function setRole(actorId, listId, memberKey, role) {
         const m = await memberByKey(conn, list.id, memberKey);
         if (!isOwner && (m.role === 'manager' || next === 'manager')) throw errors.forbidden('Only the owner can make or change a manager.');
         await conn.query('UPDATE list_members SET role = ? WHERE list_id = ? AND discord_id = ?', [next, list.id, m.discord_id]);
+        // Someone who can no longer invite leaves no open invitations behind.
+        if (next !== 'manager') await revokeInvitesBy(conn, list.id, m.discord_id);
         return { memberKey: m.public_id, role: next };
     });
 }
 
-/** Delete a member's rows from one list, including their personal reminder state. */
+/** Withdraw the pending invitations a person sent for one list (they lost the right to invite). */
+async function revokeInvitesBy(conn, listId, inviterId) {
+    await conn.query("UPDATE list_invites SET status = 'revoked' WHERE list_id = ? AND invited_by = ? AND status = 'pending'", [listId, String(inviterId)]);
+}
+
+/** Delete a member's rows from one list, including their personal reminder state and the invitations they sent. */
 async function dropMember(conn, listId, discordId) {
     await conn.query('DELETE FROM list_members WHERE list_id = ? AND discord_id = ?', [listId, discordId]);
+    await revokeInvitesBy(conn, listId, discordId);
     await conn.query('DELETE FROM list_reminders WHERE list_id = ? AND discord_id = ?', [listId, discordId]);
     // Read the task ids first (a plain consistent read), so this transaction never takes row locks on items while it holds the list lock.
     const [tasks] = await conn.query('SELECT id FROM items WHERE list_id = ?', [listId]);

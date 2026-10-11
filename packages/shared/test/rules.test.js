@@ -32,7 +32,7 @@ test('every skill exists in exactly one tree and prerequisites resolve', () => {
             assert.ok(skill.description.length > 0);
         }
     }
-    assert.equal(seen.size, 50);
+    assert.equal(seen.size, 54);
     assert.equal(shared.findSkill('__proto__'), null);
 });
 
@@ -568,4 +568,49 @@ test('Artisan tree: four chained skills', () => {
     assert.deepEqual(ids, ['artisan_toolkit', 'artisan_blueprint', 'artisan_assembly', 'artisan_masterwork']);
     assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'artisan_toolkit', 'artisan_blueprint', 'artisan_assembly']);
     assert.equal(shared.CLASSES.ARTISAN.cost, 650);
+});
+
+// ─── Ranger ──────────────────────────────────────────────────────────────────
+
+test('Ranger Deadline Hunter: early, on the day, overdue and non-deadline actions', () => {
+    const ranger = user({ player_class: 'RANGER' });
+    const complete = (dueDate) => ({ action: 'item_complete', today: '2030-01-10', dueDate });
+    // [label, context, skills, base, expected type, expected bonus]
+    const cases = [
+        ['1 day early', complete('2030-01-11'), [], 10, 'RANGER_EARLY', 1 + 2],
+        ['3 days early', complete('2030-01-13'), [], 10, 'RANGER_EARLY', 3 + 6],
+        ['7 days early', complete('2030-01-17'), [], 10, 'RANGER_EARLY', 7 + 14],
+        ['capped at 7 days early', complete('2030-03-01'), [], 10, 'RANGER_EARLY', 7 + 14],
+        ['percentage scales with base', complete('2030-01-12'), [], 100, 'RANGER_EARLY', 20 + 4],
+        ['due today pays 25% of base', complete('2030-01-10'), [], 100, 'RANGER_DUE', 25],
+        ['due today rounds down', complete('2030-01-10'), [], 10, 'RANGER_DUE', 2],
+        ['overdue pays nothing', complete('2030-01-09'), [], 100, 'RANGER_LATE', 0],
+        ['no due date is a flat +3', { action: 'item_complete', today: '2030-01-10', dueDate: null }, [], 10, 'RANGER', 3],
+        ['other actions are a flat +3', { action: 'item_add', dueDate: '2030-01-13' }, [], 10, 'RANGER', 3],
+        ['Scout: +2 per early day per level', complete('2030-01-13'), [sk('ranger_scout', 2)], 10, 'RANGER_EARLY', 3 + 6 + 12],
+        ['Long Sight: cap 10 days', complete('2030-03-01'), [sk('ranger_longsight')], 10, 'RANGER_EARLY', 10 + 20],
+        ['Bullseye: +10 on the day', complete('2030-01-10'), [sk('ranger_bullseye')], 100, 'RANGER_DUE', 35],
+        ['Bullseye does not touch early completions', complete('2030-01-11'), [sk('ranger_bullseye')], 10, 'RANGER_EARLY', 3],
+        ['Second Wind: overdue pays half of due-today', complete('2030-01-09'), [sk('ranger_secondwind')], 100, 'RANGER_LATE', 12],
+        ['Second Wind includes Bullseye in the half', complete('2030-01-09'), [sk('ranger_secondwind'), sk('ranger_bullseye')], 100, 'RANGER_LATE', 17],
+        ['Second Wind does nothing early', complete('2030-01-11'), [sk('ranger_secondwind')], 10, 'RANGER_EARLY', 3]
+    ];
+    for (const [label, context, skills, base, type, bonus] of cases) {
+        const r = shared.calculateClassXP(ranger, base, { context, skills });
+        assert.equal(r.bonusInfo.type, type, `${label}: type`);
+        assert.equal(r.bonusInfo.classBonus, bonus, `${label}: bonus`);
+        assert.equal(r.finalXP, base + bonus, `${label}: final`);
+    }
+    // with no context.today the clock decides
+    const viaNow = shared.calculateClassXP(ranger, 10, { now: NOW, context: { action: 'item_complete', dueDate: '2030-01-12' } });
+    assert.equal(viaNow.bonusInfo.type, 'RANGER_EARLY');
+    assert.equal(viaNow.bonusInfo.classBonus, 2 + 4);
+});
+
+test('Ranger tree: four chained skills and no counter column needed', () => {
+    const ids = Object.keys(shared.SKILL_TREES.RANGER.skills);
+    assert.deepEqual(ids, ['ranger_scout', 'ranger_longsight', 'ranger_bullseye', 'ranger_secondwind']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'ranger_scout', 'ranger_longsight', 'ranger_bullseye']);
+    assert.equal(shared.CLASSES.RANGER.cost, 600);
+    assert.deepEqual(shared.calculateClassXP(user({ player_class: 'RANGER' }), 10).userUpdates, {});
 });

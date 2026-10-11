@@ -825,5 +825,37 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number(u.owns_artisan), 0);
     });
 
+    await t.test('buying the Ranger; completion passes the due date so early, on-time and overdue tasks pay differently', async () => {
+        const G = '100000000000000208';
+        await db.users.ensureUser(G);
+        await setXP(G, 650);
+        await db.progression.buyClass(G, 'RANGER');
+        const u = await db.users.getUser(G);
+        assert.equal(Number(u.owns_ranger), 1);
+        assert.equal(u.player_class, 'RANGER');
+
+        const shared = require('../src');
+        const day = (offset) => {
+            const d = new Date(`${shared.todayInZone()}T00:00:00Z`);
+            d.setUTCDate(d.getUTCDate() + offset);
+            return d.toISOString().slice(0, 10);
+        };
+        const { list } = await db.tasks.createList(G, { name: 'Trail' });
+        const make = async (name, due_date) => (await db.tasks.addItem(G, list.id, { name, due_date })).item.id;
+        const early = await db.tasks.setItemCompleted(G, await make('early', day(3)));
+        assert.equal(early.xp.bonusInfo.type, 'RANGER_EARLY');
+        assert.equal(early.xp.bonusInfo.classBonus, 3 + 6, '3 days early on a 10 XP task');
+        const today = await db.tasks.setItemCompleted(G, await make('today', day(0)));
+        assert.equal(today.xp.bonusInfo.type, 'RANGER_DUE');
+        assert.equal(today.xp.bonusInfo.classBonus, 2);
+        const late = await db.tasks.setItemCompleted(G, await make('late', day(-2)));
+        assert.equal(late.xp.bonusInfo.type, 'RANGER_LATE');
+        assert.equal(late.xp.bonusInfo.classBonus, 0);
+        const none = await db.tasks.setItemCompleted(G, await make('whenever', undefined));
+        assert.equal(none.xp.bonusInfo.type, 'RANGER');
+        await db.users.resetProgress(G);
+        assert.equal(Number((await db.users.getUser(G)).owns_ranger), 0);
+    });
+
     await db.closePool();
 });

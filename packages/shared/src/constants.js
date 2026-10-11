@@ -75,6 +75,13 @@ const CLASSES = {
         cost: 650,
         description: 'Project: every action adds 1 progress (max 10) and pays +2 XP per progress. Finishing the last open task of a list that has at least 3 tasks completes the project: +5 XP per progress, then the progress resets.',
         playstyle: 'Rewards steady work and finishing whole lists.'
+    },
+    RANGER: {
+        name: 'Ranger',
+        emoji: '🧭',
+        cost: 600,
+        description: 'Deadline Hunter: finishing a task with a due date early pays 10% of the base XP plus 2 XP per day early (up to 7 days); due today pays 25% of the base; overdue pays nothing. Every other action gives +3 XP.',
+        playstyle: 'Rewards planning ahead and finishing before the deadline.'
     }
 };
 
@@ -204,6 +211,17 @@ const SKILL_TREES = {
             artisan_assembly: { name: 'Assembly Line', emoji: '🏭', description: 'Each action adds 2 progress instead of 1 (Artisan)', maxLevel: 1, cost: 280, requires: 'artisan_blueprint' },
             artisan_masterwork: { name: 'Masterwork', emoji: '🏆', description: 'Completing a project pays +50% more (Artisan)', maxLevel: 1, cost: 360, requires: 'artisan_assembly' }
         }
+    },
+    RANGER: {
+        name: 'Ranger',
+        emoji: '🧭',
+        description: 'Deadlines and foresight',
+        skills: {
+            ranger_scout: { name: 'Scout', emoji: '🔭', description: '+2 XP per day early on early completions, per level (Ranger)', maxLevel: 3, cost: 130, requires: null },
+            ranger_longsight: { name: 'Long Sight', emoji: '🗺️', description: 'The early bonus counts up to 10 days instead of 7 (Ranger)', maxLevel: 1, cost: 220, requires: 'ranger_scout' },
+            ranger_bullseye: { name: 'Bullseye', emoji: '🎯', description: '+10 XP when you complete a task on its due date (Ranger)', maxLevel: 1, cost: 280, requires: 'ranger_longsight' },
+            ranger_secondwind: { name: 'Second Wind', emoji: '🌅', description: 'Overdue completions pay half the due-today bonus (Ranger)', maxLevel: 1, cost: 330, requires: 'ranger_bullseye' }
+        }
     }
 };
 
@@ -319,6 +337,7 @@ const CLASS_RULES = {
     WIZARD: { OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
     ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97 },
     TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 2, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 3, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
     ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 5, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
     MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 3, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 1, FOCUS_PERCENT: 25, DISCIPLINE_CAP: 4 }
 };

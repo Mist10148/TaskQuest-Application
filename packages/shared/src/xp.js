@@ -276,6 +276,33 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'RANGER': {
+            const r = CLASS_RULES.RANGER;
+            const dueDate = context.action === 'item_complete' && context.dueDate ? String(context.dueDate).slice(0, 10) : null;
+            if (!dueDate) {
+                finalXP = baseXP + r.OTHER_FLAT;
+                bonusInfo = { type: 'RANGER', details: `🧭 Ranger +${r.OTHER_FLAT}`, classBonus: r.OTHER_FLAT };
+                break;
+            }
+            const today = context.today ? String(context.today).slice(0, 10) : new Date(toMs(opts.now) ?? Date.now()).toISOString().slice(0, 10);
+            const daysEarly = daysBetween(today, dueDate);
+            const dueTodayBonus = Math.floor((baseXP * r.DUE_TODAY_PERCENT) / 100) + (lvl('ranger_bullseye') ? r.BULLSEYE_FLAT : 0);
+            let bonus = 0;
+            if (daysEarly > 0) {
+                const days = Math.min(daysEarly, r.MAX_EARLY_DAYS + (lvl('ranger_longsight') ? r.LONGSIGHT_DAYS : 0));
+                bonus = Math.floor((baseXP * r.EARLY_PERCENT_PER_DAY * days) / 100) + days * (r.EARLY_FLAT_PER_DAY + lvl('ranger_scout') * r.SCOUT_FLAT_PER_DAY);
+                bonusInfo = { type: 'RANGER_EARLY', details: `🧭 ${days}d early +${bonus}`, classBonus: bonus };
+            } else if (daysEarly === 0) {
+                bonus = dueTodayBonus;
+                bonusInfo = { type: 'RANGER_DUE', details: `🧭 On the day +${bonus}`, classBonus: bonus };
+            } else {
+                bonus = lvl('ranger_secondwind') ? Math.floor((dueTodayBonus * r.SECOND_WIND_PERCENT) / 100) : 0;
+                bonusInfo = { type: 'RANGER_LATE', details: bonus ? `🧭 Late +${bonus}` : '🧭 Overdue', classBonus: bonus };
+            }
+            finalXP = baseXP + bonus;
+            break;
+        }
+
         default:
             break;
     }

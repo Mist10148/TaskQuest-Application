@@ -26,7 +26,7 @@ const UPDATABLE_COLUMNS = new Set([
     'assassin_streak', 'assassin_stacks', 'assassin_last_at', 'assassin_bleed', 'gambler_streak', 'wizard_counter', 'archer_streak', 'tank_stacks',
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
     'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes',
-    'owns_monk', 'monk_rhythm', 'monk_day', 'owns_artisan', 'artisan_progress'
+    'owns_monk', 'monk_rhythm', 'monk_day', 'owns_artisan', 'artisan_progress', 'owns_ranger'
 ]);
 
 const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, artisan_progress: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };

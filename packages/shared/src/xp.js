@@ -258,6 +258,24 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'ARTISAN': {
+            const a = CLASS_RULES.ARTISAN;
+            const cap = a.MAX_PROGRESS + lvl('artisan_blueprint') * a.BLUEPRINT_CAP;
+            const progress = Math.min(cap, Math.max(0, Number(user.artisan_progress) || 0) + (lvl('artisan_assembly') ? a.ASSEMBLY_STEP : 1));
+            let bonus = progress * (a.XP_PER_PROGRESS + lvl('artisan_toolkit') * a.TOOLKIT_XP_PER_PROGRESS);
+            const cleared = context.action === 'item_complete' && context.listCleared === true;
+            if (cleared) {
+                const clear = progress * a.CLEAR_XP_PER_PROGRESS;
+                bonus += lvl('artisan_masterwork') ? Math.floor((clear * (100 + a.MASTERWORK_PERCENT)) / 100) : clear;
+            }
+            userUpdates.artisan_progress = cleared ? 0 : progress;
+            finalXP = baseXP + bonus;
+            bonusInfo = cleared
+                ? { type: 'ARTISAN_CLEAR', details: `🛠️ Project complete! +${bonus}`, classBonus: bonus }
+                : { type: 'ARTISAN', details: `🛠️ Project ${progress}/${cap} +${bonus}`, classBonus: bonus };
+            break;
+        }
+
         default:
             break;
     }

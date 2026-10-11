@@ -68,6 +68,13 @@ const CLASSES = {
         cost: 550,
         description: 'Rhythm: act on consecutive days to build Rhythm (max 14). Every action adds 3% of the base XP per Rhythm day plus 1 XP per Rhythm day. Skip a day and it restarts at 1.',
         playstyle: 'Rewards doing something small every single day.'
+    },
+    ARTISAN: {
+        name: 'Artisan',
+        emoji: '🛠️',
+        cost: 650,
+        description: 'Project: every action adds 1 progress (max 10) and pays +2 XP per progress. Finishing the last open task of a list that has at least 3 tasks completes the project: +5 XP per progress, then the progress resets.',
+        playstyle: 'Rewards steady work and finishing whole lists.'
     }
 };
 
@@ -186,6 +193,17 @@ const SKILL_TREES = {
             monk_discipline: { name: 'Discipline', emoji: '🪷', description: 'Maximum Rhythm +4 (14 → 18) (Monk)', maxLevel: 1, cost: 260, requires: 'monk_focus' },
             monk_serenity: { name: 'Serenity', emoji: '☯️', description: 'Rhythm survives one missed day (Monk)', maxLevel: 1, cost: 340, requires: 'monk_discipline' }
         }
+    },
+    ARTISAN: {
+        name: 'Artisan',
+        emoji: '🛠️',
+        description: 'Craft projects and finish lists',
+        skills: {
+            artisan_toolkit: { name: 'Toolkit', emoji: '🔧', description: '+1 XP per progress on every action, per level (Artisan)', maxLevel: 3, cost: 130, requires: null },
+            artisan_blueprint: { name: 'Blueprint', emoji: '📐', description: 'Maximum progress +3 per level (10 → 16) (Artisan)', maxLevel: 2, cost: 190, requires: 'artisan_toolkit' },
+            artisan_assembly: { name: 'Assembly Line', emoji: '🏭', description: 'Each action adds 2 progress instead of 1 (Artisan)', maxLevel: 1, cost: 280, requires: 'artisan_blueprint' },
+            artisan_masterwork: { name: 'Masterwork', emoji: '🏆', description: 'Completing a project pays +50% more (Artisan)', maxLevel: 1, cost: 360, requires: 'artisan_assembly' }
+        }
     }
 };
 
@@ -301,6 +319,7 @@ const CLASS_RULES = {
     WIZARD: { OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
     ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97 },
     TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 5, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
     MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 3, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 1, FOCUS_PERCENT: 25, DISCIPLINE_CAP: 4 }
 };
 

@@ -781,5 +781,49 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(shared.ACHIEVEMENTS.ALL_CLASSES.description, 'Own every class');
     });
 
+    await t.test('buying the Artisan; finishing a list of 3+ tasks completes the project (completion context from tasks.js)', async () => {
+        const R = '100000000000000207';
+        await db.users.ensureUser(R);
+        await setXP(R, 700);
+        await db.progression.buyClass(R, 'artisan');
+        let u = await db.users.getUser(R);
+        assert.equal(Number(u.owns_artisan), 1);
+        assert.equal(u.player_class, 'ARTISAN');
+
+        const { list } = await db.tasks.createList(R, { name: 'Shed' });
+        const ids = [];
+        for (const name of ['saw', 'sand', 'paint']) ids.push((await db.tasks.addItem(R, list.id, { name })).item.id);
+        const first = await db.tasks.setItemCompleted(R, ids[0]);
+        assert.equal(first.xp.bonusInfo.type, 'ARTISAN', 'not the last open task');
+        await db.tasks.setItemCompleted(R, ids[1]);
+        const last = await db.tasks.setItemCompleted(R, ids[2]);
+        assert.equal(last.xp.bonusInfo.type, 'ARTISAN_CLEAR');
+        // list create + 3 adds + 3 completions = 7 progress: 7 * 2 + 7 * 5
+        assert.equal(last.xp.bonusInfo.classBonus, 14 + 35);
+        u = await db.users.getUser(R);
+        assert.equal(Number(u.artisan_progress), 0, 'a finished project resets');
+
+        // lists with fewer than 3 tasks, and recurring tasks, never count as a cleared list
+        const { list: small } = await db.tasks.createList(R, { name: 'Tiny' });
+        const a = (await db.tasks.addItem(R, small.id, { name: 'one' })).item.id;
+        const b = (await db.tasks.addItem(R, small.id, { name: 'two' })).item.id;
+        await db.tasks.setItemCompleted(R, a);
+        assert.equal((await db.tasks.setItemCompleted(R, b)).xp.bonusInfo.type, 'ARTISAN');
+
+        const { list: rec } = await db.tasks.createList(R, { name: 'Chores' });
+        const r1 = (await db.tasks.addItem(R, rec.id, { name: 'dishes', recurrence: 'daily' })).item.id;
+        const r2 = (await db.tasks.addItem(R, rec.id, { name: 'trash' })).item.id;
+        const r3 = (await db.tasks.addItem(R, rec.id, { name: 'mail' })).item.id;
+        await db.tasks.setItemCompleted(R, r2);
+        await db.tasks.setItemCompleted(R, r3);
+        assert.equal((await db.tasks.setItemCompleted(R, r1)).xp.bonusInfo.type, 'ARTISAN', 'a repeating task respawns, so the list is not cleared');
+
+        await db.progression.equipClass(R, 'DEFAULT');
+        assert.equal(Number((await db.users.getUser(R)).artisan_progress), 0);
+        await db.users.resetProgress(R);
+        u = await db.users.getUser(R);
+        assert.equal(Number(u.owns_artisan), 0);
+    });
+
     await db.closePool();
 });

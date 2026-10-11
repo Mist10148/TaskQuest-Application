@@ -330,7 +330,7 @@ async function resetProgress(discordId) {
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,
                 total_lists_created = 0, total_items_added = 0, total_items_completed = 0,
                 owns_hero = FALSE, owns_gambler = FALSE, owns_assassin = FALSE, owns_wizard = FALSE,
-                owns_archer = FALSE, owns_tank = FALSE, owns_monk = FALSE, monk_rhythm = 0, monk_day = NULL, xp_spent = 0, streak_freezes = 0,
+                owns_archer = FALSE, owns_tank = FALSE, owns_monk = FALSE, monk_rhythm = 0, monk_day = NULL, owns_artisan = FALSE, artisan_progress = 0, xp_spent = 0, streak_freezes = 0,
                 assassin_streak = 0, assassin_stacks = 0, assassin_last_at = NULL, assassin_bleed = 0, gambler_streak = 0, wizard_counter = 0, archer_streak = 0, tank_stacks = 0
              WHERE discord_id = ?`,
             [id]

@@ -894,5 +894,74 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number(u.owns_necromancer), 0);
     });
 
+    await t.test('buying the Paladin; HIGH priority tasks pay the Vow; the streak board honours the Paladin window', async () => {
+        const P = '100000000000000210';
+        await db.users.ensureUser(P);
+        await setXP(P, 800);
+        await db.progression.buyClass(P, 'Paladin');
+        let u = await db.users.getUser(P);
+        assert.equal(Number(u.owns_paladin), 1);
+        assert.equal(u.player_class, 'PALADIN');
+
+        const { list } = await db.tasks.createList(P, { name: 'Oaths' });
+        const hard = (await db.tasks.addItem(P, list.id, { name: 'hard', priority: 'high' })).item.id;
+        const easy = (await db.tasks.addItem(P, list.id, { name: 'easy', priority: 'low' })).item.id;
+        const vow = await db.tasks.setItemCompleted(P, hard);
+        assert.equal(vow.xp.bonusInfo.type, 'PALADIN_VOW');
+        assert.equal(vow.xp.bonusInfo.classBonus, 20);
+        assert.equal((await db.tasks.setItemCompleted(P, easy)).xp.bonusInfo.classBonus, 5);
+
+        // streak board: a Paladin 60h after the last claim still has a live streak, a Default player does not
+        const P2 = '100000000000000211';
+        await db.users.ensureUser(P2);
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = NOW() - INTERVAL 60 HOUR, player_class = 'PALADIN' WHERE discord_id = ?", [P2]);
+        const D = '100000000000000212';
+        await db.users.ensureUser(D);
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = NOW() - INTERVAL 60 HOUR WHERE discord_id = ?", [D]);
+        const board = await db.users.getLeaderboard(100, { by: 'streak' });
+        assert.ok(board.some((r) => r.discord_id === P2), 'a Paladin streak survives 60h');
+        assert.ok(!board.some((r) => r.discord_id === D), 'the same streak is dead for a Default player');
+        await db.query("UPDATE users SET last_daily_claim = NOW() - INTERVAL 80 HOUR WHERE discord_id = ?", [P2]);
+        assert.ok(!(await db.users.getLeaderboard(100, { by: 'streak' })).some((r) => r.discord_id === P2), 'beyond 72h without Sanctuary');
+        await db.query("INSERT INTO user_skills (discord_id, skill_id, skill_level) VALUES (?, 'paladin_sanctuary', 1)", [P2]);
+        assert.ok((await db.users.getLeaderboard(100, { by: 'streak' })).some((r) => r.discord_id === P2), 'Sanctuary stretches it to 96h');
+
+        await db.users.resetProgress(P);
+        assert.equal(Number((await db.users.getUser(P)).owns_paladin), 0);
+    });
+
+    await t.test('every class can be bought, equipped, filtered on the leaderboard and reset', async () => {
+        const shared = require('../src');
+        const Z = '100000000000000213';
+        await db.users.ensureUser(Z);
+        const total = shared.PURCHASABLE_CLASS_KEYS.reduce((sum, k) => sum + shared.CLASSES[k].cost, 0);
+        await setXP(Z, total);
+        for (const key of shared.PURCHASABLE_CLASS_KEYS) {
+            const bought = await db.progression.buyClass(Z, key.toLowerCase());
+            assert.equal(bought.classKey, key);
+            assert.equal(Number((await db.users.getUser(Z))[shared.classOwnershipColumn(key)]), 1, key);
+        }
+        const user = await db.users.getUser(Z);
+        assert.equal(Number(user.player_xp), 0, 'exactly the class prices were spent');
+        const [[ach]] = await db.getPool().query("SELECT COUNT(*) AS n FROM achievements WHERE discord_id = ? AND achievement_key = 'ALL_CLASSES'", [Z]);
+        assert.equal(Number(ach.n), 1, 'owning every class unlocks Collector');
+        for (const key of ['DEFAULT', ...shared.PURCHASABLE_CLASS_KEYS]) {
+            await db.progression.equipClass(Z, key);
+            assert.equal((await db.users.getUser(Z)).player_class, key);
+            const board = await db.users.getLeaderboard(100, { playerClass: key });
+            assert.ok(board.some((r) => r.discord_id === Z), `${key} leaderboard filter`);
+            assert.equal(await db.users.getRank(Z, 'lifetime', { playerClass: key }) > 0, true);
+        }
+        await db.users.resetProgress(Z);
+        const wiped = await db.users.getUser(Z);
+        for (const key of shared.PURCHASABLE_CLASS_KEYS) assert.equal(Number(wiped[shared.classOwnershipColumn(key)]), 0, `${key} cleared`);
+        for (const col of ['assassin_streak', 'assassin_stacks', 'assassin_bleed', 'gambler_streak', 'wizard_counter', 'archer_streak', 'tank_stacks', 'monk_rhythm', 'artisan_progress', 'necro_souls']) {
+            assert.equal(Number(wiped[col]), 0, `${col} cleared`);
+        }
+        assert.equal(wiped.monk_day, null);
+        assert.equal(wiped.assassin_last_at, null);
+        assert.equal(wiped.player_class, 'DEFAULT');
+    });
+
     await db.closePool();
 });

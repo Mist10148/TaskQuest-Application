@@ -89,6 +89,13 @@ const CLASSES = {
         cost: 600,
         description: 'Revive: completing an overdue task pays +150% of the base XP plus 3 XP per day overdue (max 30) and binds a soul (max 5). Every soul adds +5% of the base XP to every action.',
         playstyle: 'Turns neglected tasks into power.'
+    },
+    PALADIN: {
+        name: 'Paladin',
+        emoji: '⚜️',
+        cost: 750,
+        description: 'Vow: completing a HIGH priority task pays +100% of the base XP plus 10; every other action gives +5 XP. Your daily streak always has the Streak Shield window (72 hours) for free.',
+        playstyle: 'Rewards taking on the hard tasks, and forgives a missed day.'
     }
 };
 
@@ -240,6 +247,17 @@ const SKILL_TREES = {
             necro_ritual: { name: 'Dark Ritual', emoji: '🕯️', description: 'Reviving pays +50% more (Necromancer)', maxLevel: 1, cost: 280, requires: 'necro_jar' },
             necro_lich: { name: 'Lichdom', emoji: '☠️', description: 'Reviving also pays +3 XP per soul you hold (Necromancer)', maxLevel: 1, cost: 350, requires: 'necro_ritual' }
         }
+    },
+    PALADIN: {
+        name: 'Paladin',
+        emoji: '⚜️',
+        description: 'Oaths, high priorities and a forgiving streak',
+        skills: {
+            paladin_aura: { name: 'Holy Aura', emoji: '✨', description: '+2 XP on every action per level (Paladin)', maxLevel: 3, cost: 140, requires: null },
+            paladin_smite: { name: 'Smite', emoji: '⚔️', description: 'The HIGH priority Vow bonus is +25% larger per level (Paladin)', maxLevel: 2, cost: 210, requires: 'paladin_aura' },
+            paladin_crusade: { name: 'Crusade', emoji: '📯', description: '+20% XP when you complete a HIGH priority task (Paladin)', maxLevel: 1, cost: 290, requires: 'paladin_smite' },
+            paladin_sanctuary: { name: 'Sanctuary', emoji: '🏛️', description: 'Your daily streak survives two missed days (96h window) (Paladin)', maxLevel: 1, cost: 350, requires: 'paladin_crusade' }
+        }
     }
 };
 
@@ -355,6 +373,7 @@ const CLASS_RULES = {
     WIZARD: { OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
     ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97 },
     TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    PALADIN: { HIGH_FLAT: 10, OTHER_FLAT: 5, AURA_FLAT: 2, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
     NECROMANCER: { MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 5, SIPHON_PERCENT: 2, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
     RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 2, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 3, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
     ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 5, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
@@ -394,7 +413,9 @@ const LIMITS = {
 const DAILY = {
     COOLDOWN_MS: 24 * 60 * 60 * 1000,
     STREAK_WINDOW_MS: 48 * 60 * 60 * 1000,
-    SHIELDED_STREAK_WINDOW_MS: 72 * 60 * 60 * 1000
+    SHIELDED_STREAK_WINDOW_MS: 72 * 60 * 60 * 1000,
+    /** Paladin with the Sanctuary skill. */
+    SANCTUARY_STREAK_WINDOW_MS: 96 * 60 * 60 * 1000
 };
 
 /** Maximum lengths, matching the database column sizes. */

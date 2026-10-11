@@ -16,7 +16,7 @@
 exports.description = 'class rework: new counters, owns_* flags and player_class values';
 
 /** Every value player_class can take, in order. (Listed here so this migration never changes meaning.) */
-const PLAYER_CLASSES = ['DEFAULT', 'HERO', 'GAMBLER', 'ASSASSIN', 'WIZARD', 'ARCHER', 'TANK', 'MONK', 'ARTISAN', 'RANGER', 'NECROMANCER'];
+const PLAYER_CLASSES = ['DEFAULT', 'HERO', 'GAMBLER', 'ASSASSIN', 'WIZARD', 'ARCHER', 'TANK', 'MONK', 'ARTISAN', 'RANGER', 'NECROMANCER', 'PALADIN'];
 
 exports.up = async (h) => {
     await h.addColumnIfMissing('users', 'assassin_last_at', 'DATETIME NULL DEFAULT NULL');
@@ -35,6 +35,8 @@ exports.up = async (h) => {
 
     await h.addColumnIfMissing('users', 'owns_necromancer', 'BOOLEAN NOT NULL DEFAULT FALSE');
     await h.addColumnIfMissing('users', 'necro_souls', 'INT NOT NULL DEFAULT 0');
+
+    await h.addColumnIfMissing('users', 'owns_paladin', 'BOOLEAN NOT NULL DEFAULT FALSE');
 
     // Extending an ENUM is a MODIFY with the full list; repeating it is harmless.
     const values = PLAYER_CLASSES.map((c) => `'${c}'`).join(',');

@@ -32,7 +32,7 @@ test('every skill exists in exactly one tree and prerequisites resolve', () => {
             assert.ok(skill.description.length > 0);
         }
     }
-    assert.equal(seen.size, 58);
+    assert.equal(seen.size, 62);
     assert.equal(shared.findSkill('__proto__'), null);
 });
 
@@ -653,4 +653,71 @@ test('Necromancer tree: four chained skills', () => {
     assert.deepEqual(ids, ['necro_siphon', 'necro_jar', 'necro_ritual', 'necro_lich']);
     assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'necro_siphon', 'necro_jar', 'necro_ritual']);
     assert.equal(shared.CLASSES.NECROMANCER.cost, 600);
+});
+
+// ─── Paladin ─────────────────────────────────────────────────────────────────
+
+test('Paladin Vow: HIGH priority completions pay base + 10, everything else +5', () => {
+    const paladin = user({ player_class: 'PALADIN' });
+    const high = { action: 'item_complete', priority: 'HIGH' };
+    // [label, context, skills, base, expected type, expected bonus]
+    const cases = [
+        ['HIGH completion', high, [], 10, 'PALADIN_VOW', 10 + 10],
+        ['HIGH completion scales with base', high, [], 50, 'PALADIN_VOW', 60],
+        ['MEDIUM completion', { action: 'item_complete', priority: 'MEDIUM' }, [], 10, 'PALADIN', 5],
+        ['HIGH but not a completion', { action: 'item_add', priority: 'HIGH' }, [], 10, 'PALADIN', 5],
+        ['no context', undefined, [], 10, 'PALADIN', 5],
+        ['Holy Aura: +2 per level on everything', { action: 'item_add' }, [sk('paladin_aura', 3)], 10, 'PALADIN', 5 + 6],
+        ['Holy Aura on a Vow', high, [sk('paladin_aura', 2)], 10, 'PALADIN_VOW', 20 + 4],
+        ['Smite 1: Vow +25%', high, [sk('paladin_smite', 1)], 10, 'PALADIN_VOW', 25],
+        ['Smite 2: Vow +50%', high, [sk('paladin_smite', 2)], 10, 'PALADIN_VOW', 30],
+        ['Smite does not touch the +5', { action: 'item_add' }, [sk('paladin_smite', 2)], 10, 'PALADIN', 5],
+        ['Smite then Aura (aura is flat)', high, [sk('paladin_smite', 2), sk('paladin_aura', 1)], 10, 'PALADIN_VOW', 32]
+    ];
+    for (const [label, context, skills, base, type, bonus] of cases) {
+        const r = shared.calculateClassXP(paladin, base, { context, skills });
+        assert.equal(r.bonusInfo.type, type, `${label}: type`);
+        assert.equal(r.bonusInfo.classBonus, bonus, `${label}: bonus`);
+        assert.equal(r.finalXP, base + bonus, `${label}: final`);
+    }
+});
+
+test('Paladin Crusade: +20% XP on HIGH completions (Paladin only)', () => {
+    const high = { action: 'item_complete', priority: 'HIGH' };
+    const crusade = [sk('paladin_crusade')];
+    const run = (player_class, context) => shared.calculateFinalXP(user({ player_class }), crusade, 100, { rng: seq(0.99), context }).finalXP;
+    assert.equal(run('PALADIN', high), Math.floor(210 * 1.2), 'base 100 + Vow 110, x1.2');
+    assert.equal(run('PALADIN', { action: 'item_complete', priority: 'LOW' }), Math.floor(105 * 1), 'not HIGH: no Crusade');
+    assert.equal(run('DEFAULT', high), 100, 'Crusade needs the Paladin equipped');
+});
+
+test('Paladin passive and Sanctuary: the daily streak window is 72h for free, 96h with Sanctuary', () => {
+    const now = Date.parse('2030-01-10T12:00:00Z');
+    const claim = (hours, player_class, skills = [], extra = {}) =>
+        shared.calculateDailyReward(user({ player_class, last_daily_claim: new Date(now - hours * 3600e3), streak_count: 9, ...extra }), skills, now, { rng: seq(0.99) });
+    // [label, hours since the last claim, class, skills, streak survives]
+    const cases = [
+        ['paladin at 47h', 47, 'PALADIN', [], true],
+        ['paladin at 71h', 71, 'PALADIN', [], true],
+        ['paladin at 73h', 73, 'PALADIN', [], false],
+        ['default at 60h', 60, 'DEFAULT', [], false],
+        ['default with the shield skill at 60h', 60, 'DEFAULT', [sk('default_streak_shield')], true],
+        ['sanctuary at 95h', 95, 'PALADIN', [sk('paladin_sanctuary')], true],
+        ['sanctuary at 97h', 97, 'PALADIN', [sk('paladin_sanctuary')], false],
+        ['sanctuary is a Paladin effect only', 80, 'DEFAULT', [sk('paladin_sanctuary')], false]
+    ];
+    for (const [label, hours, cls, skills, survives] of cases) {
+        const r = claim(hours, cls, skills);
+        assert.equal(r.newStreak, survives ? 10 : 1, label);
+    }
+    // a bought freeze still rescues a streak beyond the Paladin window
+    assert.equal(claim(100, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, true);
+    assert.equal(claim(60, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, 'no freeze is spent while the window holds');
+});
+
+test('Paladin tree: four chained skills', () => {
+    const ids = Object.keys(shared.SKILL_TREES.PALADIN.skills);
+    assert.deepEqual(ids, ['paladin_aura', 'paladin_smite', 'paladin_crusade', 'paladin_sanctuary']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'paladin_aura', 'paladin_smite', 'paladin_crusade']);
+    assert.equal(shared.CLASSES.PALADIN.cost, 750);
 });

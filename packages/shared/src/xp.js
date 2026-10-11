@@ -81,7 +81,8 @@ function getSkillBonuses(userSkills) {
         momentumPerDay: lvl('default_momentum') * (SKILL_RULES.MOMENTUM_PERCENT_PER_DAY / 100),
         rallyXP: lvl('hero_rally') ? CLASS_RULES.HERO.RALLY_XP : 0,
         anchorXP: lvl('tank_anchor') ? CLASS_RULES.TANK.ANCHOR_XP : 0,
-        dailySurprise: lvl('default_daily_surprise') > 0
+        dailySurprise: lvl('default_daily_surprise') > 0,
+        paladinSanctuary: lvl('paladin_sanctuary') > 0
     };
 }
 
@@ -324,6 +325,17 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'PALADIN': {
+            const p = CLASS_RULES.PALADIN;
+            const high = context.action === 'item_complete' && context.priority === 'HIGH';
+            let bonus = high ? baseXP + p.HIGH_FLAT : p.OTHER_FLAT;
+            if (high) bonus = Math.floor((bonus * (100 + lvl('paladin_smite') * p.SMITE_PERCENT)) / 100);
+            bonus += lvl('paladin_aura') * p.AURA_FLAT;
+            finalXP = baseXP + bonus;
+            bonusInfo = { type: high ? 'PALADIN_VOW' : 'PALADIN', details: `⚜️ ${high ? 'Vow' : 'Paladin'} +${bonus}`, classBonus: bonus };
+            break;
+        }
+
         default:
             break;
     }
@@ -364,6 +376,10 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     }
     if (user.player_class === 'TANK' && lvl('tank_revenge') && userUpdates.tank_stacks === tankStackCap(level, skills)) {
         multiplier += lvl('tank_revenge') * 0.10;
+    }
+
+    if (user.player_class === 'PALADIN' && lvl('paladin_crusade') && context.action === 'item_complete' && context.priority === 'HIGH') {
+        multiplier += CLASS_RULES.PALADIN.CRUSADE_PERCENT / 100;
     }
 
     // Momentum: the live daily streak, counted up to a cap.
@@ -454,7 +470,14 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
     }
 
     const bonuses = getSkillBonuses(userSkills);
-    const window = bonuses.streakShield ? DAILY.SHIELDED_STREAK_WINDOW_MS : DAILY.STREAK_WINDOW_MS;
+    // Paladins always get the Shield window; Sanctuary stretches it further.
+    const paladin = user.player_class === 'PALADIN';
+    const window =
+        paladin && getSkillBonuses(userSkills).paladinSanctuary
+            ? DAILY.SANCTUARY_STREAK_WINDOW_MS
+            : bonuses.streakShield || paladin
+              ? DAILY.SHIELDED_STREAK_WINDOW_MS
+              : DAILY.STREAK_WINDOW_MS;
 
     let newStreak = 1;
     let streakBroken = false;

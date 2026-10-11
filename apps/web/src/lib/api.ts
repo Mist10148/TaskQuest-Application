@@ -79,7 +79,8 @@ export const questsApi = {
 export const itemsApi = {
     create: (listId: number, data: ItemInput) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
     update: (id: number, data: Partial<ItemInput> & { position?: number }) => patch<Item>(`/api/items/${id}`, data),
-    toggle: (id: number) => patch<Item & RewardFields & { nextItem?: Item | null }>(`/api/items/${id}/toggle`),
+    toggle: (id: number, completed?: boolean) =>
+        patch<Item & RewardFields & { nextItem?: Item | null }>(`/api/items/${id}/toggle`, completed === undefined ? undefined : { completed }),
     delete: (id: number) => del<{ success: boolean }>(`/api/items/${id}`),
 };
 

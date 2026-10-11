@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Item, ListWithItems } from "@/lib/api";
@@ -151,6 +151,15 @@ const Tasks = () => {
     refetchList();
   };
 
+  // Send the wanted state explicitly and ignore clicks while that task's toggle is in flight.
+  const togglingIds = useRef(new Set<number>());
+  const handleToggleItem = (id: number) => {
+    const item = selectedList?.items.find((i: Item) => i.id === id);
+    if (!item || togglingIds.current.has(id)) return;
+    togglingIds.current.add(id);
+    toggleItem.mutate({ itemId: id, completed: !item.completed }, { onSettled: () => togglingIds.current.delete(id) });
+  };
+
   const openItemEditor = (itemId: number) => {
     const item = selectedList?.items.find((i: Item) => i.id === itemId);
     if (item) setItemDialog({ mode: "edit", item });
@@ -170,7 +179,7 @@ const Tasks = () => {
           onQuickAdd={handleQuickAdd}
           onEditList={() => setListDialog("edit")}
           onDeleteList={() => setListToDelete(detail.id)}
-          onToggleItem={(id) => toggleItem.mutate(id)}
+          onToggleItem={handleToggleItem}
           onEditItem={openItemEditor}
           hiddenIds={itemDeletes.hidden}
           onDeleteItem={(id) => deleteItems([id])}

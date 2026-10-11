@@ -59,6 +59,7 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['classes'] });
     qc.invalidateQueries({ queryKey: ['skills'] });
     qc.invalidateQueries({ queryKey: ['leaderboard'] });
+    qc.invalidateQueries({ queryKey: ['quests'] });
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -168,7 +169,10 @@ export function useDeleteList() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (listId: number) => listsApi.delete(listId),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['lists'] }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['lists'] });
+            qc.invalidateQueries({ queryKey: ['auth'] });
+        },
         onError: showError,
     });
 }
@@ -201,7 +205,10 @@ export function useDeleteItem() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (itemId: number) => itemsApi.delete(itemId),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['lists'] }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['lists'] });
+            qc.invalidateQueries({ queryKey: ['auth'] });
+        },
         onError: showError,
     });
 }
@@ -218,7 +225,9 @@ export function useReorderItems() {
 export function useToggleItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (itemId: number) => itemsApi.toggle(itemId),
+        // `completed` makes the request idempotent (a double click cannot flip the task back).
+        mutationFn: (arg: number | { itemId: number; completed?: boolean }) =>
+            typeof arg === 'number' ? itemsApi.toggle(arg) : itemsApi.toggle(arg.itemId, arg.completed),
         onSuccess: (result) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);

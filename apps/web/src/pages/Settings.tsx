@@ -36,6 +36,7 @@ const Settings = () => {
   const resetProgress = useResetProgress();
   const { reduceMotion, setReduceMotion, sound, setSound } = usePreferences();
   const [confirmText, setConfirmText] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
 
   const dbUser: Partial<User> = user?.user ?? {};
   // The server row is the source of truth; switches follow it after each save.
@@ -57,10 +58,11 @@ const Settings = () => {
     try {
       await resetProgress.mutateAsync();
       toast.success("All progress has been reset!");
+      setResetOpen(false);
       setConfirmText("");
       await refresh();
     } catch {
-      /* error toast shown by the mutation hook */
+      /* error toast shown by the mutation hook; the dialog stays open with RESET still typed */
     }
   };
 
@@ -129,7 +131,14 @@ const Settings = () => {
 
         <SettingsSection icon={<AlertTriangle className="h-5 w-5 text-destructive" />} title="Danger Zone" description="Irreversible actions" danger delay={0.25}>
           <SettingRow label="Reset all progress" description="Delete all data, including AI chats and summaries, and start fresh.">
-            <AlertDialog onOpenChange={(open) => !open && setConfirmText("")}>
+            <AlertDialog
+              open={resetOpen}
+              onOpenChange={(open) => {
+                if (resetProgress.isPending) return; // do not close while the request is running
+                setResetOpen(open);
+                if (!open) setConfirmText("");
+              }}
+            >
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm" className="w-full sm:w-auto">Reset Progress</Button>
               </AlertDialogTrigger>
@@ -159,15 +168,17 @@ const Settings = () => {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-                  <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
-                  <AlertDialogAction
+                  <AlertDialogCancel className="w-full sm:w-auto" disabled={resetProgress.isPending}>Cancel</AlertDialogCancel>
+                  <Button
+                    type="button"
                     onClick={() => void handleReset()}
                     disabled={confirmText !== "RESET" || resetProgress.isPending}
-                    className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    variant="destructive"
+                    className="w-full sm:w-auto"
                   >
                     {resetProgress.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                     Reset Everything
-                  </AlertDialogAction>
+                  </Button>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

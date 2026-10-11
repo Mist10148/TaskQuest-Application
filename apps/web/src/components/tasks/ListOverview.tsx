@@ -9,6 +9,8 @@ import { ListFilters } from "./ListFilters";
 import { TaskSearchResults } from "./TaskSearchResults";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+import { InvitesBanner } from "./InvitesBanner";
+import { sharedSubtitle } from "@/lib/sharing";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import type { useListFilters } from "./useListFilters";
 
@@ -52,6 +54,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
       </div>
     </div>
 
+    <InvitesBanner />
     <PriorityPanel onOpen={onOpen} />
     <ListFilters filters={filters} />
 
@@ -89,6 +92,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
               priority={list.priority}
               deadline={list.deadline ?? undefined}
               onClick={() => onOpen(list.id)}
+              shared={list.shared ? { count: list.memberCount ?? 2, subtitle: sharedSubtitle(list) } : undefined}
             />
           </motion.div>
         ))}

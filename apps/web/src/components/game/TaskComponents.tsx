@@ -19,13 +19,15 @@ interface TaskListCardProps {
   itemsTotal: number;
   onClick?: () => void;
   className?: string;
+  /** Set on a quest other people are on: how many people, and a line such as "Editor · by Ava". */
+  shared?: { count: number; subtitle: string | null };
 }
 
 const categoryEmojis: Record<string, string> = {
   School: "📚", Work: "💼", Home: "🏠", Personal: "👤", Shopping: "🛒", Fitness: "💪", Health: "💪", Finance: "💰", Other: "📌"
 };
 
-export const TaskListCard = ({ name, description, category, priority, deadline, itemsCompleted, itemsTotal, onClick, className }: TaskListCardProps) => {
+export const TaskListCard = ({ name, description, category, priority, deadline, itemsCompleted, itemsTotal, onClick, className, shared }: TaskListCardProps) => {
   const progress = itemsTotal > 0 ? (itemsCompleted / itemsTotal) * 100 : 0;
   const priorityStyles = priority && priorityConfig[priority as keyof typeof priorityConfig] ? priorityConfig[priority as keyof typeof priorityConfig] : null;
   const categoryEmoji = category ? categoryEmojis[category] || "📋" : "📋";
@@ -56,11 +58,17 @@ export const TaskListCard = ({ name, description, category, priority, deadline, 
         <div className="flex items-center gap-2">
           <span className="text-xl">{categoryEmoji}</span>
           <h3 className="font-heading font-semibold text-lg truncate">{name}</h3>
+          {shared && (
+            <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-semibold text-primary-text" title={`Shared with ${shared.count} people`} aria-label={`Shared with ${shared.count} people`}>
+              👥 {shared.count}
+            </span>
+          )}
         </div>
         {priorityStyles && (
           <div className={cn("px-2 py-1 rounded-full text-xs font-medium", priorityStyles.bg, priorityStyles.color)}>{priority}</div>
         )}
       </div>
+      {shared?.subtitle && <p className="-mt-1 mb-2 text-xs text-foreground-muted">{shared.subtitle}</p>}
       {description && <p className="text-sm text-foreground-muted mb-4 line-clamp-2">{description}</p>}
       <div className="mb-3">
         <div className="flex justify-between text-sm mb-1.5">

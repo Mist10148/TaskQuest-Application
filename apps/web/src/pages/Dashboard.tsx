@@ -17,6 +17,8 @@ import { formatCountdown, nextClaimAt } from "@/lib/countdown";
 import { orderQuestsForDashboard } from "@/lib/questOrder";
 import { BriefingCard } from "@/components/ai/BriefingCard";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { InvitesBanner } from "@/components/tasks/InvitesBanner";
+import { sharedSubtitle } from "@/lib/sharing";
 import { QuestsCard } from "@/components/dashboard/QuestsCard";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { dailyDescription } from "@/lib/classInfo";
@@ -147,6 +149,8 @@ const Dashboard = () => {
 
         <BriefingCard />
 
+        <InvitesBanner />
+
         {/* Recent Quests */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
           <div className="flex items-center justify-between mb-4">
@@ -174,7 +178,7 @@ const Dashboard = () => {
               {lists.slice(0, 3).map((list: ListWithCounts, index: number) => (
                 <motion.div key={list.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + index * 0.05 }}>
                   <Link to={`/tasks?list=${list.id}`}>
-                    <TaskListCard name={list.name} description={list.description} itemsCompleted={list.itemsCompleted || 0} itemsTotal={list.itemsTotal || 0} category={list.category} priority={list.priority} />
+                    <TaskListCard name={list.name} description={list.description} itemsCompleted={list.itemsCompleted || 0} itemsTotal={list.itemsTotal || 0} category={list.category} priority={list.priority} shared={list.shared ? { count: list.memberCount ?? 2, subtitle: sharedSubtitle(list) } : undefined} />
                   </Link>
                 </motion.div>
               ))}

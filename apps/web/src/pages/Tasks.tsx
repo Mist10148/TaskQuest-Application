@@ -23,6 +23,9 @@ import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { TemplatesDialog } from "@/components/tasks/TemplatesDialog";
 import { SaveTemplateDialog } from "@/components/tasks/SaveTemplateDialog";
 import { saveTemplateProblem } from "@/lib/templates";
+import { MembersDialog } from "@/components/tasks/MembersDialog";
+import { canEditTasks, isAccessLost, roleOf } from "@/lib/sharing";
+import { useQueryClient } from "@tanstack/react-query";
 
 const Tasks = () => {
   const listsQuery = useLists();
@@ -48,6 +51,19 @@ const Tasks = () => {
   const [listToDelete, setListToDelete] = useState<number | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const qc = useQueryClient();
+
+  // The quest is gone, or I was removed from it while it was open: say so, drop the stale data and go back to the quest log.
+  const accessLost = selectedListId !== null && listFailed && isAccessLost(listError);
+  useEffect(() => {
+    if (!accessLost || selectedListId === null) return;
+    toast.error("That quest was not found, or you no longer have access to it.");
+    qc.removeQueries({ queryKey: ["lists", selectedListId] });
+    void qc.invalidateQueries({ queryKey: ["lists"] });
+    setMembersOpen(false);
+    setSelectedListId(null);
+  }, [accessLost, selectedListId, qc]);
   const itemDeletes = useUndoableDelete(async (id) => {
     await deleteItem.mutateAsync(id);
     refetchList();
@@ -59,11 +75,12 @@ const Tasks = () => {
     if (!wantsNew) return;
     if (wantsNew === "quest") setListDialog("create");
     else if (wantsNew === "task") {
-      if (selectedListId) setItemDialog({ mode: "create" });
+      if (selectedListId && selectedList && !canEditTasks(roleOf(selectedList))) toast("You only have view access to this quest.");
+      else if (selectedListId) setItemDialog({ mode: "create" });
       else toast("Open a quest first, then press N or use Add Task.");
     }
     setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("new"); return next; }, { replace: true });
-  }, [wantsNew, selectedListId, setSearchParams]);
+  }, [wantsNew, selectedListId, selectedList, setSearchParams]);
 
   const editListInitial = useMemo<ListFormValues>(
     () =>
@@ -194,6 +211,7 @@ const Tasks = () => {
         <ListDetail
           list={detail}
           onBack={() => setSelectedListId(null)}
+          onOpenMembers={() => setMembersOpen(true)}
           aiEnabled={Boolean(user?.features?.ai)}
           quickAddPending={createItem.isPending}
           onAddItem={(parentId) => setItemDialog({ mode: "create", parentId })}
@@ -249,6 +267,19 @@ const Tasks = () => {
         onSubmit={handleSaveItem}
       />
       <TemplatesDialog open={templatesOpen} onOpenChange={setTemplatesOpen} onApplied={setSelectedListId} />
+      {detail && (
+        <MembersDialog
+          open={membersOpen}
+          onOpenChange={setMembersOpen}
+          listId={detail.id}
+          listName={detail.name}
+          onAccessLost={() => {
+            setMembersOpen(false);
+            setSelectedListId(null);
+            void qc.invalidateQueries({ queryKey: ["lists"] });
+          }}
+        />
+      )}
       {detail && <SaveTemplateDialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen} listId={detail.id} listName={detail.name} />}
       <ConfirmDeleteDialog
         open={listToDelete !== null}

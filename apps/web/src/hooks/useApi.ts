@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tansta
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
 import { applyItemOrder } from '@/lib/reorder';
-import type { ListRole } from '@/lib/sharing';
+import { isAccessLost, type ListRole } from '@/lib/sharing';
 import { celebrate } from '@/lib/celebrate';
 import { describeChest } from '@/lib/classInfo';
 import { achievementDescription, rewardDescription } from '@/lib/bonuses';
@@ -183,7 +183,8 @@ export function useLists() {
 }
 
 export function useList(listId: number) {
-    return useQuery({ queryKey: ['lists', listId], queryFn: () => listsApi.getById(listId), enabled: listId > 0 });
+    // A 403/404 will not fix itself on retry: it means the quest is gone or I was removed from it.
+    return useQuery({ queryKey: ['lists', listId], queryFn: () => listsApi.getById(listId), enabled: listId > 0, retry: (count, error) => !isAccessLost(error) && count < 1 });
 }
 
 /** Task name/description search (needs a query of at least two characters). */

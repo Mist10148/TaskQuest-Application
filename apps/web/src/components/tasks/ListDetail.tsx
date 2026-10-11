@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, CheckCheck, CheckSquare, FilePlus, Keyboard, Pencil, Plus, Scroll, Trash2, X } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, Plus, Scroll, Trash2, Users, X } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { TaskRow } from "./TaskRow";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+import { canDeleteList, canEditTasks, canManageList, peopleLabel, roleLabel, roleOf } from "@/lib/sharing";
 
 interface Props {
   list: ListWithItems;
@@ -22,6 +23,7 @@ interface Props {
   /** Tasks hidden while their delete can still be undone. */
   hiddenIds: Set<number>;
   onBack: () => void;
+  onOpenMembers: () => void;
   onAddItem: (parentId?: number) => void;
   onQuickAdd: (parsed: QuickAddResult) => Promise<void>;
   onEditList: () => void;
@@ -43,7 +45,11 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onReorder }: Props) => {
+export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onReorder }: Props) => {
+  const role = roleOf(list);
+  const editable = canEditTasks(role);
+  const manageable = canManageList(role);
+  const deletable = canDeleteList(list);
   const items = useMemo(
     () => (list.items || []).filter((i: Item) => !hiddenIds.has(i.id) && !(i.parent_id && hiddenIds.has(i.parent_id))),
     [list.items, hiddenIds]
@@ -97,9 +103,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   const openIds = items.filter((i) => selected.has(i.id) && !i.completed).map((i) => i.id);
 
   useHotkeys({
-    n: (e) => { e.preventDefault(); onAddItem(); },
-    "/": (e) => { e.preventDefault(); quickAddRef.current?.focus(); },
-    s: () => (selectMode ? leaveSelectMode() : setSelectMode(true)),
+    n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
+    "/": (e) => { if (!editable) return; e.preventDefault(); quickAddRef.current?.focus(); },
+    s: () => { if (!editable) return; if (selectMode) leaveSelectMode(); else setSelectMode(true); },
     "?": () => setShowHelp(true),
     Escape: () => (selectMode ? leaveSelectMode() : onBack()),
   });
@@ -131,12 +137,13 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         onToggle={onToggleItem}
         onEdit={onEditItem}
         onDelete={onDeleteItem}
+        readOnly={!editable}
         onAddSubtask={(id) => onAddItem(id)}
         onMove={(id, dir) => move(id, dir, siblings)}
         canMoveUp={index > 0}
         canMoveDown={index < siblings.length - 1}
         drag={
-          isSubtask
+          isSubtask || !editable
             ? undefined
             : { draggable: !selectMode, isDragOver: drag.dragOverItemId === item.id, isDragging: drag.draggedItemId === item.id, ...drag.handlers }
         }
@@ -155,30 +162,48 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl sm:text-3xl font-heading font-bold">{list.name}</h1>
               {list.priority && <span className={cn("text-xs px-2 py-1 rounded-full font-medium", PRIORITY_BADGE[list.priority])}>{list.priority}</span>}
+              {!editable && (
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium border border-border text-foreground-muted">
+                  <Eye className="h-3 w-3" aria-hidden /> View only
+                </span>
+              )}
             </div>
             {list.description && <p className="text-foreground-muted mt-1 text-sm sm:text-base">{list.description}</p>}
             <div className="flex gap-4 mt-2 text-sm text-foreground-muted flex-wrap">
               {list.category && <span className="flex items-center gap-1">{CATEGORIES.find((c) => c.value === list.category)?.emoji} {list.category}</span>}
+              {list.shared && !list.isOwner && <span>{roleLabel(role)} · shared by {list.ownerName ?? "another adventurer"}</span>}
               {list.deadline && <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due: {formatDeadline(list.deadline)}</span>}
             </div>
           </div>
           <div className="flex gap-2">
             <SummarizeButton body={{ mode: "list", listId: list.id }} title={`Summary: ${list.name}`} />
-            <Button variant="outline" size="sm" onClick={() => onAddItem()} className="gap-1">
-              <Plus className="h-4 w-4" /> Add Task
+            <Button variant="outline" size="sm" onClick={onOpenMembers} className="gap-1" title={list.shared ? `Shared with ${peopleLabel(list.memberCount)}` : "Invite people to this quest"}>
+              <Users className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Members</span>
+              {list.shared && <span className="rounded-full bg-primary/15 px-1.5 text-xs font-semibold text-primary-text" aria-label={`${list.memberCount ?? 2} people`}>👥 {list.memberCount}</span>}
             </Button>
-            <Button variant={selectMode ? "default" : "outline"} size="sm" onClick={() => (selectMode ? leaveSelectMode() : setSelectMode(true))} className="gap-1" aria-pressed={selectMode} title="Select tasks (s)">
+            {editable && (
+              <Button variant="outline" size="sm" onClick={() => onAddItem()} className="gap-1">
+                <Plus className="h-4 w-4" /> Add Task
+              </Button>
+            )}
+            {editable && <Button variant={selectMode ? "default" : "outline"} size="sm" onClick={() => (selectMode ? leaveSelectMode() : setSelectMode(true))} className="gap-1" aria-pressed={selectMode} title="Select tasks (s)">
               <CheckSquare className="h-4 w-4" /><span className="hidden sm:inline">Select</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={onSaveTemplate} className="gap-1" title="Save this quest's tasks as a template">
-              <FilePlus className="h-4 w-4" /><span className="hidden sm:inline">Template</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={onEditList} className="gap-1">
-              <Pencil className="h-4 w-4" /><span className="hidden sm:inline">Edit</span>
-            </Button>
-            <Button variant="outline" size="sm" className="text-destructive-text hover:bg-destructive/10" onClick={onDeleteList} aria-label="Delete quest">
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            </Button>}
+            {editable && (
+              <Button variant="outline" size="sm" onClick={onSaveTemplate} className="gap-1" title="Save this quest's tasks as a template">
+                <FilePlus className="h-4 w-4" /><span className="hidden sm:inline">Template</span>
+              </Button>
+            )}
+            {manageable && (
+              <Button variant="outline" size="sm" onClick={onEditList} className="gap-1">
+                <Pencil className="h-4 w-4" /><span className="hidden sm:inline">Edit</span>
+              </Button>
+            )}
+            {deletable && (
+              <Button variant="outline" size="sm" className="text-destructive-text hover:bg-destructive/10" onClick={onDeleteList} aria-label="Delete quest">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -202,18 +227,18 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         </div>
       </div>
 
-      <QuickAddBar ref={quickAddRef} pending={quickAddPending} aiEnabled={aiEnabled} onAdd={onQuickAdd} />
+      {editable && <QuickAddBar ref={quickAddRef} pending={quickAddPending} aiEnabled={aiEnabled} onAdd={onQuickAdd} />}
 
       {items.length === 0 ? (
         <div className="text-center py-12 text-foreground-muted">
           <Scroll className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No tasks yet. Type one above or press Add Task.</p>
+          <p>{editable ? "No tasks yet. Type one above or press Add Task." : "No tasks yet."}</p>
         </div>
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-foreground-muted mb-3 flex items-center gap-2">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
-            Drag the grip (or use the arrows) to reorder. Shift-click selects a range.
+            {editable ? "Drag the grip (or use the arrows) to reorder. Shift-click selects a range." : "View only: you can read this quest but not change it."}
           </p>
           {topLevel.map((item) => (
             <div key={item.id} className="space-y-2">
@@ -224,7 +249,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         </div>
       )}
 
-      {selectMode && (
+      {selectMode && editable && (
         <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
           <span className="text-sm font-medium mr-auto" aria-live="polite">{selectedIds.length} selected</span>
           <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === items.length} onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
@@ -247,9 +272,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       </p>
       <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
 
-      <button onClick={() => onAddItem()} className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 text-foreground-muted text-sm transition-all group">
+      {editable && <button onClick={() => onAddItem()} className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 text-foreground-muted text-sm transition-all group">
         <Plus className="h-5 w-5 group-hover:scale-110 transition-transform" /> Add New Task
-      </button>
+      </button>}
     </motion.div>
   );
 };

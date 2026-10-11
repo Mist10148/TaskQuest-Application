@@ -33,12 +33,14 @@ interface Props {
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   drag?: DragProps;
+  /** A viewer of a shared quest: the checkbox is disabled and the row has no actions. */
+  readOnly?: boolean;
 }
 
 const iconButton = "p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
-export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag }: Props) => {
+export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
   const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
@@ -91,11 +93,13 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       <button
         type="button"
         onClick={() => onToggle(item.id)}
+        disabled={readOnly}
         aria-pressed={completed}
         aria-label={completed ? `Mark "${item.name}" as not done` : `Mark "${item.name}" as done`}
         className={cn(
           "shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
-          completed ? "bg-success border-success" : "border-border hover:border-primary"
+          completed ? "bg-success border-success" : "border-border hover:border-primary",
+          readOnly && "cursor-not-allowed opacity-60 hover:border-border"
         )}
       >
         {completed && <Check className="h-3 w-3 text-white" />}
@@ -112,6 +116,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           {item.name}
         </p>
         {item.description && <p className="text-xs sm:text-sm mt-1 line-clamp-2 text-foreground-muted">{item.description}</p>}
+        {completed && item.completed_by_name && <p className="mt-1 text-xs text-foreground-muted">Done by {item.completed_by_name}</p>}
         {(item.due_date || item.recurrence || tags.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
@@ -132,7 +137,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         )}
       </div>
 
-      <div className="shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      {!readOnly && <div className="shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (
           <>
             <button type="button" aria-label={`Move "${item.name}" up`} disabled={!canMoveUp} onClick={() => onMove(item.id, -1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>
@@ -154,7 +159,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive-text")}>
           <Trash2 className="h-3.5 w-3.5" />
         </button>
-      </div>
+      </div>}
     </div>
   );
 };

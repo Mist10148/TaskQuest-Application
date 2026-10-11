@@ -2574,8 +2574,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
         // Named lookups: exact stored name, a bot may pass an ID, an ambiguous name is refused, an unknown one is a 404.
         const a = await mkUser(10, 'svc_alpha');
-        await assert.rejects(S.invite(O, list.id, { username: 'svc_alph' }), { code: 'NOT_FOUND' }, 'exact names only');
-        await assert.rejects(S.invite(O, list.id, { discordId: '299999999999999999' }), { code: 'NOT_FOUND' });
+        assert.deepEqual(await S.invite(O, list.id, { username: 'svc_alph' }), { sent: false }, 'exact names only: nobody, and no hint');
+        assert.deepEqual(await S.invite(O, list.id, { discordId: '299999999999999999' }), { sent: false });
         await assert.rejects(S.invite(O, list.id, { discordId: O }), { code: 'VALIDATION' });
         await assert.rejects(S.invite(O, list.id, { username: '' }), { code: 'VALIDATION' });
         const first = await S.invite(O, list.id, { discordId: a, role: 'editor' });
@@ -2683,7 +2683,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // Case does not matter on input (Discord usernames are lowercase), accents and look-alikes do not match.
         assert.equal((await S.invite(O, list.id, { username: '@IDENT_BOB_B', dryRun: true })).name, 'ident_bob_a');
         await assert.rejects(S.invite(O, list.id, { username: 'ident_bób_b' }), { code: 'VALIDATION' });
-        await assert.rejects(S.invite(O, list.id, { username: 'ident_bob_' }), { code: 'NOT_FOUND' }, 'no prefix match');
+        assert.deepEqual(await S.invite(O, list.id, { username: 'ident_bob_' }), { sent: false }, 'no prefix match');
         assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_invites WHERE list_id = ?', [list.id]))[0].n, 0, 'a dry run invites nobody');
 
         // The dry run says who it is (display name and an avatar, no ids) and still runs every check.
@@ -2706,7 +2706,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(A, { username: 'Bob Smith', handle: 'ident_bob_b', avatar: 'abc123' });
         assert.equal((await db.users.getUser(A)).discord_handle, 'ident_bob_b');
         assert.equal((await db.users.getUser(B)).discord_handle, null, 'the account that renamed on Discord no longer answers to the old username');
-        await assert.rejects(S.invite(O, list.id, { username: 'ident_bob_a', dryRun: true }), { code: 'NOT_FOUND' });
+        assert.deepEqual(await S.invite(O, list.id, { username: 'ident_bob_a', dryRun: true }), { dryRun: true, name: null, avatarUrl: null });
         assert.equal((await S.invite(O, list.id, { username: 'ident_bob_b', dryRun: true })).name, 'Bob Smith');
 
         // Parties work the same way.
@@ -2790,13 +2790,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(PA.create(u.own, 'Second'), { code: 'CONFLICT', message: /already in a party/ });
         await assert.rejects(PA.invite(u.two, { username: 'pty_three' }), { code: 'NOT_FOUND' }, 'not in a party');
         await assert.rejects(PA.invite(u.own, { username: 'pty_own' }), { code: 'VALIDATION' });
-        await assert.rejects(PA.invite(u.own, { username: 'nobody_x' }), { code: 'NOT_FOUND' });
+        assert.deepEqual(await PA.invite(u.own, { username: 'nobody_x' }), { sent: false });
         const i2 = await PA.invite(u.own, { username: 'pty_two' });
         await assert.rejects(PA.invite(u.own, { discordId: u.two }), { code: 'CONFLICT' });
         assert.deepEqual((await PA.listInvites(u.two)).map((i) => [i.id, i.partyName, i.ownerName]), [[i2.id, 'Night Owls', 'pty_own']]);
         await assert.rejects(PA.respond(u.three, i2.id, true), { code: 'NOT_FOUND' }, 'only the invitee answers');
         assert.deepEqual(await PA.respond(u.two, i2.id, true), { accepted: true, party: { id: party.id, name: 'Night Owls' } });
-        await assert.rejects(PA.invite(u.own, { discordId: u.two }), { code: 'CONFLICT', message: /already in a party/ });
+        assert.deepEqual(await PA.invite(u.own, { discordId: u.two }), { sent: false }, 'someone already in a party: the same neutral answer');
         await assert.rejects(PA.invite(u.two, { discordId: u.three }), { code: 'FORBIDDEN' }, 'only the owner invites');
         assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_members WHERE discord_id = ?', [u.two]))[0].n, 1);
 

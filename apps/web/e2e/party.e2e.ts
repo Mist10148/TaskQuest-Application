@@ -20,10 +20,10 @@ test('an owner creates a party, invites a friend by username, who accepts it fro
     await expect(members).toHaveCount(1);
     await expect(members.first()).toContainText('You');
 
-    // Unknown names are rejected inline; the real one becomes a pending invitation.
+    // Unknown names get the neutral answer inline; the real one becomes a pending invitation.
     await captain.getByLabel('Username').fill('nobody_by_that_name');
     await captain.getByRole('button', { name: 'Invite', exact: true }).click();
-    await expect(captain.getByRole('alert')).toContainText(/no taskquest user/i);
+    await expect(captain.getByRole('status').filter({ hasText: 'If that person can be invited' })).toBeVisible();
     await captain.getByLabel('Username').fill('e2e_ally');
     await captain.getByRole('button', { name: 'Invite', exact: true }).click();
     const confirm = captain.getByRole('alertdialog');

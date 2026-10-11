@@ -497,7 +497,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.match(text(noList.calls.at(-1)), /List not found/);
         const unknown = fake({ userId: P.own, commandName: 'share', options: { list: 'Flat chores', user: target('399999999999999999', 'ghost') } });
         await sharing.share(unknown);
-        assert.match(text(unknown.calls.at(-1)), /not used TaskQuest/);
+        assert.match(text(unknown.calls.at(-1)), /If that person can be invited/);
         const self = fake({ userId: P.own, commandName: 'share', options: { list: 'Flat chores', user: target(P.own, 'bot_own') } });
         await sharing.share(self);
         assert.match(text(self.calls.at(-1)), /yourself/);

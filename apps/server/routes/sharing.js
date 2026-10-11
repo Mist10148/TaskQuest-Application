@@ -8,7 +8,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
-import { inviteLimiter } from '../lib/security.js';
+import { inviteLimiter, inviteIpLimiter } from '../lib/security.js';
 import { idParam, inviteBody, memberRoleBody, memberKeyParam } from '../lib/schemas.js';
 
 export const listSharingRouter = Router();
@@ -24,14 +24,15 @@ listSharingRouter.get(
 
 listSharingRouter.post(
     '/:id/invites',
+    inviteIpLimiter,
     inviteLimiter,
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
         const body = parse(inviteBody, req.body);
         const inv = await db.sharing.invite(uid(req), id, body);
         if (inv.dryRun) return res.json({ name: inv.name, avatarUrl: inv.avatarUrl });
-        if (!inv.sent) return res.json({ message: shared.INVITE_NEUTRAL_MESSAGE });
-        res.status(201).json({ id: inv.id, role: inv.role, expiresAt: inv.expiresAt, inviteeName: inv.inviteeName });
+        // The same answer whether an invitation went out or not: the inviter must not learn who exists, who takes invitations or why.
+        res.json({ message: shared.INVITE_NEUTRAL_MESSAGE });
     })
 );
 

@@ -14,7 +14,7 @@ import { useCountdown } from "@/hooks/useCountdown";
 import { formatLongCountdown } from "@/lib/countdown";
 import { canInvite, canKick, canLeave, ownShareLeft, progressPercent, remainingLabel, seatsLabel, seatsLeft } from "@/lib/party";
 import { shortDate } from "@/lib/stats";
-import type { InvitePreview, MyPartyInvite, PartyMember, PartyStatus } from "@/lib/api";
+import { INVITE_NEUTRAL_MESSAGE, type InvitePreview, type MyPartyInvite, type PartyMember, type PartyStatus } from "@/lib/api";
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
@@ -117,14 +117,18 @@ const InviteForm = ({ seats, partyName }: { seats: number; partyName: string }) 
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<InvitePreview | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
   /** Step 1: ask who the username is and show them for confirmation. Nothing is sent yet. */
   const askWho = async () => {
     const name = username.trim();
     if (!name) return;
     setError(null);
+    setNote(null);
     try {
-      setConfirming(await previewInvite.mutateAsync(name));
+      const who = await previewInvite.mutateAsync(name);
+      if (who.name === null) setNote(INVITE_NEUTRAL_MESSAGE);
+      else setConfirming(who);
     } catch (e) {
       setError(errorText(e, "Could not send the invitation."));
     }
@@ -133,13 +137,12 @@ const InviteForm = ({ seats, partyName }: { seats: number; partyName: string }) 
   /** Step 2: the owner confirmed that is the person they meant. */
   const send = async () => {
     const name = username.trim();
-    const who = confirming;
     setConfirming(null);
     if (!name) return;
     setError(null);
     try {
       const result = await invite.mutateAsync(name);
-      toast.success(`Invited ${result.inviteeName ?? who?.name ?? name}`);
+      toast.success(result.message);
       setUsername("");
     } catch (e) {
       setError(errorText(e, "Could not send the invitation."));
@@ -151,12 +154,13 @@ const InviteForm = ({ seats, partyName }: { seats: number; partyName: string }) 
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-40 flex-1">
           <label htmlFor="party-invite-username" className="mb-1 block text-sm font-medium">Username</label>
-          <Input id="party-invite-username" value={username} maxLength={100} autoComplete="off" onChange={(e) => { setUsername(e.target.value); setError(null); }} aria-describedby={error ? "party-invite-error" : "party-invite-hint"} />
+          <Input id="party-invite-username" value={username} maxLength={100} autoComplete="off" onChange={(e) => { setUsername(e.target.value); setError(null); setNote(null); }} aria-describedby={error ? "party-invite-error" : "party-invite-hint"} />
         </div>
         <Button type="submit" disabled={invite.isPending || previewInvite.isPending || !username.trim()} className="gap-2">
           {invite.isPending || previewInvite.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />} Invite
         </Button>
       </div>
+      {note && <p role="status" className="text-sm text-foreground-muted">{note}</p>}
       {error && <p id="party-invite-error" role="alert" className="text-sm text-destructive-text">{error}</p>}
       <InviteConfirmDialog preview={confirming} target={`the party "${partyName}"`} onCancel={() => setConfirming(null)} onConfirm={() => void send()} />
       <p id="party-invite-hint" className="text-xs text-foreground-muted">

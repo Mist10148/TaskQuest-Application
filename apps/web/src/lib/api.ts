@@ -137,8 +137,17 @@ export interface MyInvite {
     expiresAt: string;
 }
 
+/** Shown when an invitation cannot be confirmed or was not sent: the same words whatever the reason (mirrors the server). */
+export const INVITE_NEUTRAL_MESSAGE = 'If that person can be invited, they have been sent an invitation.';
+
+/** What an invite call answers, whether or not anything was sent: the server never says who exists or who takes invitations. */
+export interface InviteAnswer {
+    message: string;
+}
+
 /** Who a username resolved to, shown for confirmation before an invitation is sent (a display name and avatar, never an ID). */
 export interface InvitePreview {
+    /** null when nothing can be confirmed (nobody by that name, or the person cannot be invited): the server does not say which. */
     name: string | null;
     avatarUrl: string | null;
 }
@@ -152,7 +161,7 @@ export interface InviteResponse {
 export const sharingApi = {
     members: (listId: number) => apiFetch<ListMembers>(`/api/lists/${listId}/members`),
     invite: (listId: number, body: { username: string; role: ListRole }) =>
-        post<{ id: number; role: ListRole; expiresAt: string; inviteeName: string | null }>(`/api/lists/${listId}/invites`, body),
+        post<InviteAnswer>(`/api/lists/${listId}/invites`, body),
     invitePreview: (listId: number, body: { username: string; role: ListRole }) =>
         post<InvitePreview>(`/api/lists/${listId}/invites`, { ...body, dryRun: true }),
     setRole: (listId: number, memberKey: string, role: ListRole) =>
@@ -232,7 +241,7 @@ export interface PartyClaimResult {
 export const partyApi = {
     get: () => apiFetch<PartyOverview>('/api/parties'),
     create: (name: string) => post<PartyStatus>('/api/parties', { name }),
-    invite: (username: string) => post<{ id: number; inviteeName: string | null; expiresAt: string }>('/api/parties/invites', { username }),
+    invite: (username: string) => post<InviteAnswer>('/api/parties/invites', { username }),
     invitePreview: (username: string) => post<InvitePreview>('/api/parties/invites', { username, dryRun: true }),
     revoke: (id: number) => del<{ success: boolean }>(`/api/parties/invites/${id}`),
     accept: (id: number) => post<{ accepted: boolean; party?: { id: number; name: string } }>(`/api/parties/invites/${id}/accept`),

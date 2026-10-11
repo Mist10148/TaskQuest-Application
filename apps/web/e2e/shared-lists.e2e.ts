@@ -24,7 +24,7 @@ test('an owner invites a friend by username, who accepts, finishes a task and th
     await expect(members.getByTestId('member-row')).toHaveCount(1);
     await members.getByLabel('Username').fill('nobody_by_that_name');
     await members.getByRole('button', { name: 'Invite', exact: true }).click();
-    await expect(members.getByRole('alert')).toContainText(/no taskquest user/i);
+    await expect(members.getByRole('status')).toContainText('If that person can be invited');
     await members.getByLabel('Username').fill('e2e_ally');
     await members.getByLabel('Role', { exact: true }).selectOption('editor');
     await members.getByRole('button', { name: 'Invite', exact: true }).click();

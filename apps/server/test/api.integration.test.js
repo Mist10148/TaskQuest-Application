@@ -746,7 +746,12 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
 
         // Inviting: by name only, strict body, real users only, no self, no duplicates.
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', discordId: ids.ed })).status, 400, 'a Discord ID is not accepted from the client');
-        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'nobody_here', role: 'editor' })).status, 404);
+        // Every answer about the other person is the same neutral one: an unknown name looks exactly like a real invitation.
+        const NEUTRAL = { message: 'If that person can be invited, they have been sent an invitation.' };
+        const unknownName = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'nobody_here', role: 'editor' });
+        assert.deepEqual([unknownName.status, unknownName.body], [200, NEUTRAL]);
+        assert.deepEqual((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'nobody_here', dryRun: true })).body, { name: null, avatarUrl: null });
+        const pendingId = async (who) => (await J('GET', '/api/invites', who)).body[0]?.id;
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_own', role: 'editor' })).status, 400, 'not yourself');
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', role: 'boss' })).status, 400);
         // A dry run says who the username is (display name and avatar, no ids) and invites nobody.
@@ -767,12 +772,16 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('PATCH', '/api/user', 'vw', { accept_invites: true })).status, 200);
         assert.equal((await J('PATCH', '/api/user', 'vw', { accept_invites: 'no' })).status, 400);
         const inv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: '@share_ed', role: 'editor' });
-        assert.equal(inv.status, 201, inv.text);
+        assert.deepEqual([inv.status, inv.body], [200, NEUTRAL], 'a real invitation answers exactly like an unknown name');
         noIds(inv, 'invite');
+        const edInviteId = await pendingId('ed');
+        assert.ok(edInviteId);
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed' })).status, 409, 'one pending invitation per person');
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'st', { username: 'share_vw' })).status, 404, 'a stranger cannot invite, and learns nothing');
-        const viewerInv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_vw', role: 'viewer' });
-        const mgrInv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_mg', role: 'manager' });
+        await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_vw', role: 'viewer' });
+        await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_mg', role: 'manager' });
+        const viewerInv = { body: { id: await pendingId('vw') } };
+        const mgrInv = { body: { id: await pendingId('mg') } };
 
         // Until accepted, the list is invisible to the invitee.
         assert.equal((await J('GET', `/api/lists/${listId}`, 'ed')).status, 404);
@@ -781,10 +790,10 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal(mine.body[0].listName, 'Flat share');
         assert.equal(mine.body[0].ownerName, 'share_own');
         noIds(mine, 'my invites');
-        assert.equal((await J('POST', `/api/invites/${inv.body.id}/accept`, 'vw')).status, 404, 'only the invitee may answer');
-        assert.equal((await J('DELETE', `/api/invites/${inv.body.id}`, 'st')).status, 404, 'a stranger cannot revoke');
-        assert.equal((await J('POST', `/api/invites/${inv.body.id}/accept`, 'ed')).status, 200);
-        assert.equal((await J('POST', `/api/invites/${inv.body.id}/accept`, 'ed')).status, 409, 'already answered');
+        assert.equal((await J('POST', `/api/invites/${edInviteId}/accept`, 'vw')).status, 404, 'only the invitee may answer');
+        assert.equal((await J('DELETE', `/api/invites/${edInviteId}`, 'st')).status, 404, 'a stranger cannot revoke');
+        assert.equal((await J('POST', `/api/invites/${edInviteId}/accept`, 'ed')).status, 200);
+        assert.equal((await J('POST', `/api/invites/${edInviteId}/accept`, 'ed')).status, 409, 'already answered');
         assert.equal((await J('POST', `/api/invites/${viewerInv.body.id}/accept`, 'vw')).status, 200);
         assert.equal((await J('POST', `/api/invites/${mgrInv.body.id}/decline`, 'mg')).status, 200);
         assert.equal((await J('GET', '/api/invites', 'mg')).body.length, 0);
@@ -858,7 +867,8 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('GET', `/api/lists/${listId}`, 'vw')).status, 404);
 
         // Revoking a pending invitation.
-        const again2 = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', role: 'viewer' });
+        await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', role: 'viewer' });
+        const again2 = { body: { id: await pendingId('ed') } };
         assert.equal((await J('GET', `/api/lists/${listId}/members`, 'own')).body.invites.length, 1);
         assert.equal((await J('DELETE', `/api/invites/${again2.body.id}`, 'own')).status, 200);
         assert.equal((await J('POST', `/api/invites/${again2.body.id}/accept`, 'ed')).status, 409, 'a revoked invitation cannot be accepted');
@@ -911,6 +921,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
             const text = await res.text();
             return { status: res.status, text, body: text ? JSON.parse(text) : null };
         };
+        const NEUTRAL = { message: 'If that person can be invited, they have been sent an invitation.' };
         assert.equal((await call('GET', '/api/parties')).status, 401);
         assert.deepEqual((await J('GET', '/api/parties', 'own')).body, { party: null, invites: [] });
         assert.equal((await J('POST', '/api/parties', 'own', { name: '' })).status, 400);
@@ -922,14 +933,15 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('POST', '/api/parties', 'own', { name: 'Again' })).status, 409);
 
         assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem', discordId: ids.mem })).status, 400, 'no Discord IDs from the client');
-        assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'nobody_xyz' })).status, 404);
+        assert.deepEqual((await J('POST', '/api/parties/invites', 'own', { username: 'nobody_xyz' })).body, NEUTRAL, 'an unknown name looks like a real invitation');
         assert.equal((await J('POST', '/api/parties/invites', 'out', { username: 'api_party_mem' })).status, 404, 'not in a party');
         const dryParty = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem', dryRun: true });
         assert.deepEqual([dryParty.status, dryParty.body.name, Object.keys(dryParty.body).sort()], [200, 'api_party_mem', ['avatarUrl', 'name']]);
         assert.equal((await J('GET', '/api/parties', 'mem')).body.invites.length, 0, 'a dry run sends nothing');
         const inv = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
-        assert.equal(inv.status, 201);
+        assert.deepEqual([inv.status, inv.body], [200, NEUTRAL]);
         assert.equal(inv.text.includes(ids.mem), false);
+        inv.body.id = (await J('GET', '/api/parties', 'mem')).body.invites[0].id;
         assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' })).status, 409);
         const mine = await J('GET', '/api/parties', 'mem');
         assert.equal(mine.body.party, null);
@@ -975,13 +987,15 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('DELETE', `/api/parties/members/${key('api_party_mem')}`, 'own')).status, 200);
         assert.equal((await J('GET', '/api/parties', 'mem')).body.party, null);
         assert.equal((await J('DELETE', `/api/parties/members/${key('api_party_mem')}`, 'own')).status, 404, 'already gone');
-        const back = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
+        await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
+        const back = { body: { id: (await J('GET', '/api/parties', 'mem')).body.invites[0].id } };
         assert.equal((await J('POST', `/api/parties/invites/${back.body.id}/accept`, 'mem')).status, 200);
 
         // Leaving, then disbanding.
         assert.equal((await J('POST', '/api/parties/leave', 'mem')).status, 200);
         assert.equal((await J('POST', '/api/parties/leave', 'mem')).status, 404);
-        const again = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
+        await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
+        const again = { body: { id: (await J('GET', '/api/parties', 'mem')).body.invites[0].id } };
         assert.equal((await J('GET', '/api/parties', 'own')).body.party.invites.length, 1);
         assert.equal((await J('DELETE', `/api/parties/invites/${again.body.id}`, 'mem')).status, 404);
         assert.equal((await J('DELETE', `/api/parties/invites/${again.body.id}`, 'own')).status, 200);
@@ -1004,6 +1018,21 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         // Every other route keeps the small 16 KB default, signed in or not.
         assert.equal((await call('POST', '/api/lists', { cookie: alice, body: { name: 'x', description: 'y'.repeat(20_000) } })).status, 413);
         assert.equal((await call('POST', '/api/lists', { body: { name: 'x', description: 'y'.repeat(20_000) } })).status, 413);
+    });
+
+    // Last on purpose: it uses up the per-address invite budget.
+    await t.test('invite lookups are limited per address as well as per account', async () => {
+        // Each account makes a single call (far below its own limit of 30), so only the address limit can answer 429.
+        let blockedAt = 0;
+        for (let n = 1; n <= 80 && !blockedAt; n++) {
+            const cookie = await login(db, `2000000000009${String(n).padStart(5, '0')}`);
+            const res = await call('POST', '/api/parties/invites', { cookie, body: { username: 'someone_else', dryRun: true } });
+            if (res.status === 429) {
+                blockedAt = n;
+                assert.equal((await res.json()).code, 'RATE_LIMITED');
+            }
+        }
+        assert.ok(blockedAt > 0 && blockedAt <= 70, `the address limit kicked in (after ${blockedAt} calls)`);
     });
 
     server.close();

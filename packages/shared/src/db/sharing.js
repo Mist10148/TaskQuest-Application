@@ -43,21 +43,19 @@ const newPublicId = () => crypto.randomBytes(6).toString('hex'); // 12 character
 /**
  * Find the invitee: by Discord ID when the bot supplies one (it got it from a real @mention), otherwise by the exact Discord USERNAME
  * (users.discord_handle: unique on Discord, lowercase, binary match). The display name is never searched: it is chosen freely, is
- * not unique and can be stale, so it could reach the wrong person.
+ * not unique and can be stale, so it could reach the wrong person. Resolves to null for nobody: callers must not say so (see notSent).
  */
 async function findInvitee(conn, { discordId, username }) {
     const columns = 'discord_id, discord_username, discord_handle, discord_avatar, accept_invites';
     if (discordId !== undefined && discordId !== null) {
         const [[row]] = await conn.query(`SELECT ${columns} FROM users WHERE discord_id = ?`, [String(discordId)]);
-        if (!row) throw errors.notFound('That person has not used TaskQuest yet.');
-        return row;
+        return row || null;
     }
     const handle = normalizeHandle(username);
     if (!handle) throw errors.validation('Enter the Discord username of the person to invite.');
     if (!HANDLE_RE.test(handle)) throw errors.validation('Enter their Discord username (letters, digits, "_" and "."), not their display name.');
     const [[row]] = await conn.query(`SELECT ${columns} FROM users WHERE discord_handle = ?`, [handle]);
-    if (!row) throw errors.notFound('No TaskQuest user has that username. They need to have used TaskQuest at least once.');
-    return row;
+    return row || null;
 }
 
 /**
@@ -74,8 +72,8 @@ function invitePreview(invitee) {
 }
 
 /**
- * The answer when an invitation is not sent for a reason the inviter must not learn (the person takes no invitations, or declined this
- * inviter recently). A dry run answers with no name. Callers show the same neutral message as for a name that matches nobody.
+ * The answer when an invitation is not sent for a reason the inviter must not learn (nobody has that name, the person takes no
+ * invitations, declined this inviter recently, or - for a party - is already in one). A dry run answers with no name. Callers show the same neutral message as for a name that matches nobody.
  */
 const notSent = (input) => (input.dryRun ? { dryRun: true, name: null, avatarUrl: null } : { sent: false });
 
@@ -95,7 +93,7 @@ async function memberCount(conn, listId) {
  * @param {{ username?: string, discordId?: string, role?: string, dryRun?: boolean }} input `discordId` is for the bot only (the API never passes it).
  *   `dryRun` runs every check and returns { dryRun: true, name, avatarUrl } (who the username resolved to) without inviting anyone.
  * @returns {Promise<{ sent: true, id: number, role: string, expiresAt: Date, inviteeName: string|null, inviteeDiscordId: string, listName: string } | { sent: false } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
- *   `{ sent: false }`: nothing was sent and the inviter must not learn why (the person takes no invitations, or declined them recently)
+ *   `{ sent: false }`: nothing was sent and the inviter must not learn why (nobody has that name, the person takes no invitations, or declined them recently)
  */
 async function invite(actorId, listId, input = {}) {
     const role = parseRole(input.role);
@@ -104,6 +102,7 @@ async function invite(actorId, listId, input = {}) {
         if (role === 'manager' && !isOwner) throw errors.forbidden('Only the owner can invite someone as a manager.');
 
         const invitee = await findInvitee(conn, input);
+        if (!invitee) return notSent(input); // nobody has that name: the same answer as for someone who takes no invitations
         const inviteeId = String(invitee.discord_id);
         if (inviteeId === String(actorId)) throw errors.validation('You cannot invite yourself.');
         if (inviteeId === String(list.discord_id)) throw errors.validation('That person already owns this list.');

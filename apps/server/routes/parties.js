@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
-import { inviteLimiter } from '../lib/security.js';
+import { inviteLimiter, inviteIpLimiter } from '../lib/security.js';
 import { idParam, createPartyBody, partyInviteBody, partyMemberKeyParam } from '../lib/schemas.js';
 
 const router = Router();
@@ -31,12 +31,13 @@ router.post(
 
 router.post(
     '/invites',
+    inviteIpLimiter,
     inviteLimiter,
     asyncRoute(async (req, res) => {
         const inv = await db.parties.invite(uid(req), parse(partyInviteBody, req.body));
         if (inv.dryRun) return res.json({ name: inv.name, avatarUrl: inv.avatarUrl });
-        if (!inv.sent) return res.json({ message: shared.INVITE_NEUTRAL_MESSAGE });
-        res.status(201).json({ id: inv.id, inviteeName: inv.inviteeName, expiresAt: inv.expiresAt });
+        // The same answer whether an invitation went out or not (see the list invite route).
+        res.json({ message: shared.INVITE_NEUTRAL_MESSAGE });
     })
 );
 

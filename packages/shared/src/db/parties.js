@@ -78,15 +78,16 @@ async function counts(conn, partyId) {
  * Invite someone to the party (owner only). `input`: { username } (the exact Discord username) from the API, or { discordId } from the bot's @mention;
  * `dryRun` returns { dryRun: true, name, avatarUrl } for the confirmation step and invites nobody.
  * @returns {Promise<{ sent: true, id: number, inviteeName: string|null, inviteeDiscordId: string, expiresAt: Date, partyName: string } | { sent: false } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
- *   `{ sent: false }`: the person takes no invitations or declined this inviter recently; the inviter must not learn which
+ *   `{ sent: false }`: nobody has that name, the person takes no invitations, declined this inviter recently or is already in a party; the inviter must not learn which
  */
 async function invite(actorId, input = {}) {
     return withTransaction(async (conn) => {
         const party = await lockMyParty(conn, actorId, { ownerOnly: true });
         const invitee = await findInvitee(conn, input);
+        if (!invitee) return notSent(input);
         const inviteeId = String(invitee.discord_id);
         if (inviteeId === String(actorId)) throw errors.validation('You cannot invite yourself.');
-        if (await myParty(conn, inviteeId)) throw errors.conflict('That person is already in a party.');
+        if (await myParty(conn, inviteeId)) return notSent(input); // not revealed: whether someone is in a party is theirs to know
 
         if (!Number(invitee.accept_invites)) return notSent(input);
         const [[declined]] = await conn.query(

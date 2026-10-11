@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Loader2, LogOut, Send, UserMinus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import type { InvitePreview, ListInvite, ListMember } from "@/lib/api";
-import { ApiError } from "@/lib/api";
+import { ApiError, INVITE_NEUTRAL_MESSAGE } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -54,6 +54,7 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   const [inviteRole, setInviteRole] = useState<ListRole>("editor");
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<InvitePreview | null>(null);
+  const [inviteNote, setInviteNote] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [toRemove, setToRemove] = useState<ListMember | null>(null);
 
@@ -64,7 +65,8 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   const slots = data ? remainingSlots(data.limit, data.members.length, data.invites.length) : 0;
 
   const reportInviteError = (error: unknown) => {
-    if (error instanceof ApiError && error.status === 404 && /^list not found/i.test(error.message)) {
+    // An unknown name is never an error (the answer is neutral), so a 404 here always means the quest is gone or I lost access.
+    if (error instanceof ApiError && error.status === 404) {
       onAccessLost();
       return;
     }
@@ -76,8 +78,11 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
     const name = username.trim();
     if (!name) return;
     setInviteError(null);
+    setInviteNote(null);
     try {
-      setConfirming(await previewInvite.mutateAsync({ username: name, role: effectiveInviteRole }));
+      const who = await previewInvite.mutateAsync({ username: name, role: effectiveInviteRole });
+      if (who.name === null) setInviteNote(INVITE_NEUTRAL_MESSAGE);
+      else setConfirming(who);
     } catch (error) {
       reportInviteError(error);
     }
@@ -86,13 +91,12 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   /** Step 2: the inviter confirmed that is the person they meant. */
   const sendInvite = async () => {
     const name = username.trim();
-    const who = confirming;
     setConfirming(null);
     if (!name) return;
     setInviteError(null);
     try {
       const result = await invite.mutateAsync({ username: name, role: effectiveInviteRole });
-      toast.success(`Invited ${result.inviteeName ?? who?.name ?? name} as ${roleLabel(effectiveInviteRole).toLowerCase()}`);
+      toast.success(result.message);
       setUsername("");
     } catch (error) {
       reportInviteError(error);
@@ -182,7 +186,7 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="min-w-40 flex-1">
                         <label htmlFor="invite-username" className="mb-1 block text-sm font-medium">Username</label>
-                        <Input id="invite-username" value={username} maxLength={100} autoComplete="off" onChange={(e) => { setUsername(e.target.value); setInviteError(null); }} aria-describedby={inviteError ? "invite-error" : "invite-hint"} />
+                        <Input id="invite-username" value={username} maxLength={100} autoComplete="off" onChange={(e) => { setUsername(e.target.value); setInviteError(null); setInviteNote(null); }} aria-describedby={inviteError ? "invite-error" : "invite-hint"} />
                       </div>
                       <div>
                         <label htmlFor="invite-role" className="mb-1 block text-sm font-medium">Role</label>
@@ -194,6 +198,7 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
                         {invite.isPending || previewInvite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" aria-hidden />} Invite
                       </Button>
                     </div>
+                    {inviteNote && <p role="status" className="text-sm text-foreground-muted">{inviteNote}</p>}
                     {inviteError && <p id="invite-error" role="alert" className="text-sm text-destructive-text">{inviteError}</p>}
                     <p id="invite-hint" className="text-xs text-foreground-muted">
                       Type their exact Discord username (not their display name); you will be asked to confirm who it is. {roleHint(effectiveInviteRole)}. {slots} {slots === 1 ? "spot" : "spots"} left.

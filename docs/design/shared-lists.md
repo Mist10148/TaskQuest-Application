@@ -54,6 +54,7 @@ In code: `access.forList(conn, discordId, listId, minRole)` returns the list or 
 ### Rewards
 
 - `rewardAction` keeps taking the **actor's** locked user row. Creating a shared list or task rewards the creator; completing rewards the person who completed.
+- **Lock order** is user row, then the list row, then item rows, everywhere. `access.forItem(..., { lock: true })` finds the item's list without a lock, locks the list first and then the item; `swapItemPositions` locks its two items in ascending id order. A concurrency test (several editors swapping, moving, reordering and editing one shared list at once) fails if any path takes the locks the other way round.
 - `items.completed_by` records who completed a task, so the weekly digest and quests count the right person.
 - Quests and `total_items_completed` count the actor's completions only.
 

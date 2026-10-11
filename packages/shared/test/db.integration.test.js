@@ -3251,6 +3251,45 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         if (before !== null) assert.equal(after, before, 'no deadlock was even raised');
     });
 
+    await t.test('lock order: swaps, moves, reorders and edits by different people on one shared list never deadlock', async () => {
+        const mk = async (n) => {
+            const id = `2000000000000015${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(id, { username: `lock_${n}`, handle: `lock_${n}`, avatar: null });
+            return id;
+        };
+        const [O, E1, E2] = [await mk(1), await mk(2), await mk(3)];
+        const { list } = await db.tasks.createList(O, { name: 'Shared lock order' });
+        for (const e of [E1, E2]) await db.sharing.respond(e, (await db.sharing.invite(O, list.id, { discordId: e, role: 'editor' })).id, true);
+        const ids = [];
+        for (let n = 0; n < 8; n++) ids.push((await db.tasks.addItem(O, list.id, { name: `t${n}` })).item.id);
+        const deadlocks = async () => {
+            const [rows] = await pool.query("SHOW GLOBAL STATUS LIKE 'Innodb_deadlocks'");
+            return rows[0] ? Number(rows[0].Value) : null;
+        };
+        const before = await deadlocks();
+        for (let round = 0; round < 8; round++) {
+            const shuffled = [...ids].sort(() => Math.random() - 0.5);
+            const results = await Promise.allSettled([
+                // Opposite orders of the same pair: the classic way to deadlock when locks are taken in argument order.
+                db.tasks.swapItemPositions(E1, ids[0], ids[1]),
+                db.tasks.swapItemPositions(E2, ids[1], ids[0]),
+                db.tasks.swapItemPositions(O, ids[2], ids[3]),
+                db.tasks.swapItemPositions(E1, ids[3], ids[2]),
+                db.tasks.moveItem(E1, ids[4], 0),
+                db.tasks.moveItem(E2, ids[0], 5),
+                db.tasks.reorderItems(O, list.id, shuffled),
+                db.tasks.setItemCompleted(E1, ids[5], round % 2 === 0),
+                db.tasks.setItemCompleted(E2, ids[6], round % 2 === 0),
+                db.tasks.updateItem(E2, ids[7], { name: `renamed ${round}`, position: 2 })
+            ]);
+            for (const r of results) assert.equal(r.status, 'fulfilled', r.reason && r.reason.message);
+        }
+        const after = await deadlocks();
+        if (before !== null) assert.equal(after, before, 'no deadlock was even raised');
+        const positions = (await db.tasks.getItems(O, list.id)).map((i) => i.position).sort((a, b) => a - b);
+        assert.deepEqual(positions, ids.map((_, n) => n), 'positions stay unique and contiguous');
+    });
+
     await t.test('per-user quotas hold on every way of creating lists and tasks', async () => {
         const { LIMITS: L } = require('../src/constants');
         const Q = '100000000000000621';

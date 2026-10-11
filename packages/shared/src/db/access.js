@@ -10,6 +10,10 @@
  *   - the owner is an implicit manager.
  *
  * Pass a transaction connection together with `lock: true` to hold a row lock while the caller writes.
+ *
+ * Lock order (the same everywhere, or two requests deadlock): user row, then the LIST row, then the item rows. forItem therefore
+ * finds the item's list without a lock, locks that list first and only then the item, the same order the list-wide writers
+ * (reorder, move, clean-up) use.
  */
 
 'use strict';
@@ -71,6 +75,11 @@ async function forItem(conn, discordId, itemId, min = 'viewer', { lock = false }
     const id = v.id(itemId);
     if (!id.ok) throw errors.notFound('Task not found.');
     const me = String(discordId);
+    if (lock) {
+        // An item never changes list, so reading its list id without a lock is safe; a vanished item falls through to NOT_FOUND below.
+        const [[peek]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [id.value]);
+        if (peek) await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [peek.list_id]);
+    }
     const [[row]] = await conn.query(
         `SELECT i.*, l.name AS list_name, l.priority AS list_priority, l.discord_id AS owner_id, m.role AS member_role
          FROM items i JOIN lists l ON l.id = i.list_id

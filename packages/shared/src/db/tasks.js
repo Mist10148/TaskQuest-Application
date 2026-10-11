@@ -683,8 +683,10 @@ async function swapItemPositions(discordId, itemIdA, itemIdB) {
     const a = unwrap(v.id(itemIdA));
     const b = unwrap(v.id(itemIdB));
     return withTransaction(async (conn) => {
-        const first = await access.forItem(conn, discordId, a, 'editor', { lock: true });
-        const second = await access.forItem(conn, discordId, b, 'editor', { lock: true });
+        // Lock in ascending id order whichever way the caller named them: swap(a, b) racing swap(b, a) must not wait on each other.
+        const [lo, hi] = a <= b ? [a, b] : [b, a];
+        const first = await access.forItem(conn, discordId, lo, 'editor', { lock: true });
+        const second = lo === hi ? first : await access.forItem(conn, discordId, hi, 'editor', { lock: true });
         const rows = [first.item, second.item];
         if (rows[0].list_id !== rows[1].list_id) throw errors.notFound('Tasks not found.');
         const [all] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [rows[0].list_id]);

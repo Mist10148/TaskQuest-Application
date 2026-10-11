@@ -27,6 +27,7 @@ import {
     type ListWithItems,
     type RewardFields,
     type User,
+    type UserData,
 } from '@/lib/api';
 
 // ─── Notifications ───────────────────────────────────────────────────────────
@@ -88,8 +89,21 @@ export function useUpdateSettings() {
     return useMutation({
         mutationFn: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'weekly_digest' | 'timezone' | 'reminder_hour'>>) =>
             userApi.updateSettings(settings),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['user'] }),
-        onError: showError,
+        // Optimistic: the switch moves at once (the session query holds the settings) and snaps back on error.
+        onMutate: async (settings) => {
+            await qc.cancelQueries({ queryKey: ['auth', 'me'] });
+            const previous = qc.getQueryData<UserData | null>(['auth', 'me']);
+            if (previous) qc.setQueryData<UserData | null>(['auth', 'me'], { ...previous, user: { ...previous.user, ...settings } });
+            return { previous };
+        },
+        onError: (error, _settings, context) => {
+            if (context?.previous) qc.setQueryData(['auth', 'me'], context.previous);
+            showError(error);
+        },
+        onSettled: () => {
+            qc.invalidateQueries({ queryKey: ['user'] });
+            qc.invalidateQueries({ queryKey: ['auth', 'me'] });
+        },
     });
 }
 

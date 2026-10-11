@@ -46,13 +46,19 @@ const Settings = () => {
   // The server row is the source of truth; switches follow it after each save.
   const on = (value: boolean | number | undefined, fallback: boolean) => Boolean(value ?? fallback);
 
+  // Fields with a save in flight: their control is disabled so a second click cannot race the first.
+  const [saving, setSaving] = useState<ReadonlySet<string>>(new Set());
   const save = async (patch: Parameters<typeof updateSettings.mutateAsync>[0]) => {
+    const fields = Object.keys(patch);
+    setSaving((prev) => new Set([...prev, ...fields]));
     try {
+      // The switch already moved (optimistic update); one toast confirms the save, and the hook shows the error.
       await updateSettings.mutateAsync(patch);
-      toast.success("Settings updated!");
-      await refresh();
+      toast.success("Settings saved");
     } catch {
-      /* error toast shown by the mutation hook; the switches fall back to the saved value */
+      /* error toast shown by the mutation hook; the control snapped back to the saved value */
+    } finally {
+      setSaving((prev) => new Set([...prev].filter((f) => !fields.includes(f))));
     }
   };
   const toggle = (key: SwitchKey, value: boolean) => save({ [SWITCH_FIELDS[key]]: value });
@@ -89,7 +95,7 @@ const Settings = () => {
         </SettingsSection>
 
         <SettingsSection icon={<Sparkles className="h-5 w-5 text-xp" />} title="Gamification" description="XP rewards and leveling" tint="bg-xp/20" delay={0.1}>
-          <SwitchRow label="Enable gamification" description="Earn XP for tasks" checked={on(dbUser.gamification_enabled, true)} onChange={(v) => void toggle("gamification", v)} />
+          <SwitchRow label="Enable gamification" description="Earn XP for tasks" checked={on(dbUser.gamification_enabled, true)} disabled={saving.has("gamification_enabled")} onChange={(v) => void toggle("gamification", v)} />
         </SettingsSection>
 
         <SettingsSection icon={<Zap className="h-5 w-5 text-primary" />} title="Reminders & automation" description="When and how TaskQuest nudges you on Discord" delay={0.15}>
@@ -100,6 +106,7 @@ const Settings = () => {
             autoDelete={on(dbUser.auto_delete_old_lists, true)}
             onToggle={(key, value) => void toggle(key, value)}
             onSave={(patch) => void save(patch)}
+            saving={saving}
           />
         </SettingsSection>
 
@@ -117,6 +124,7 @@ const Settings = () => {
               label="Enable AI features"
               description="Your quests are sent to Google Gemini only when you use an AI feature."
               checked={on(dbUser.ai_enabled, true)}
+              disabled={saving.has("ai_enabled")}
               onChange={(v) => void toggle("ai", v)}
             />
           </SettingsSection>

@@ -52,8 +52,8 @@ export const SettingRow = ({ label, description, children }: RowProps) => (
 );
 
 /** A switch row with an accessible name. */
-export const SwitchRow = ({ label, description, checked, onChange }: { label: string; description?: string; checked: boolean; onChange: (value: boolean) => void }) => (
+export const SwitchRow = ({ label, description, checked, disabled, onChange }: { label: string; description?: string; checked: boolean; /** True while this setting is being saved. */ disabled?: boolean; onChange: (value: boolean) => void }) => (
   <SettingRow label={label} description={description}>
-    <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+    <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} aria-busy={disabled || undefined} aria-label={label} />
   </SettingRow>
 );

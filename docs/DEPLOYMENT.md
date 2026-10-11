@@ -151,6 +151,7 @@ Browser notifications for reminders, **off unless all three VAPID values are set
 | `WEB_PUSH_PUBLIC_KEY` | web | VAPID public key (base64url, about 87 characters). Sent to browsers, so it is safe to expose. |
 | `WEB_PUSH_PRIVATE_KEY` | web | VAPID private key (about 43 characters). Server-side only, never a `VITE_*` variable. |
 | `WEB_PUSH_SUBJECT` | web | Contact for the push services: `mailto:you@example.com` or an `https://` URL |
+| `WEB_PUSH_ALLOWED_HOSTS` | web | Optional. Extra host suffixes (comma separated, e.g. `push.example.com`) a push endpoint may use. By default only the browsers' own push services are accepted (`fcm.googleapis.com`, `push.services.mozilla.com` and subdomains, `notify.windows.com`, `push.apple.com` and `web.push.apple.com`), on port 443, because the server sends to the endpoint a browser hands it. |
 | `WEB_PUSH_INTERNAL_URL` | bot | Base URL of the web service (`http://localhost:3001`; the private host on Render). Without it the bot never pushes. |
 | `WEB_PUSH_INTERNAL_TOKEN` | web, bot | Shared secret, **at least 32 characters**, identical on both. Optional: it falls back to `AI_INTERNAL_TOKEN`, so with the AI token already shared you only need `WEB_PUSH_INTERNAL_URL`. Sent as the `X-AI-Token` header of `POST /internal/push` and checked in constant time. |
 | `WEB_PUSH_TIMEOUT_MS` | bot | How long the bot waits for the web server per push (default `5000`) |

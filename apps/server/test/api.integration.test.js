@@ -658,7 +658,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const pushId = '200000000000000031';
         const pat = await login(db, pushId);
         const keys = { p256dh: Buffer.alloc(65, 3).toString('base64url'), auth: Buffer.alloc(16, 4).toString('base64url') };
-        const subscription = (n) => ({ endpoint: `https://push.example.com/send/${n}`, expirationTime: null, keys });
+        const subscription = (n) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${n}`, expirationTime: null, keys });
         const TOKEN = 'p'.repeat(40);
         const saved = { ...config.push };
         try {
@@ -676,7 +676,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
             assert.equal(ok.status, 201);
             assert.equal((await ok.json()).subscriptions, 1);
             assert.equal((await (await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: subscription(1) } })).json()).subscriptions, 1, 'the same browser twice is one row');
-            for (const bad of [{ ...subscription(2), endpoint: 'http://push.example.com/x' }, { ...subscription(2), endpoint: 'https://127.0.0.1/x' }, { ...subscription(2), keys: { p256dh: 'x', auth: 'y' } }, { ...subscription(2), endpoint: `https://push.example.com/${'a'.repeat(2100)}` }]) {
+            for (const bad of [{ ...subscription(2), endpoint: 'http://push.example.com/x' }, { ...subscription(2), endpoint: 'https://127.0.0.1/x' }, { ...subscription(2), keys: { p256dh: 'x', auth: 'y' } }, { ...subscription(2), endpoint: `https://fcm.googleapis.com/${'a'.repeat(2100)}` }, { ...subscription(2), endpoint: 'https://push.example.com/x' }, { ...subscription(2), endpoint: 'https://fcm.googleapis.com:8443/x' }]) {
                 assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: bad } })).status, 400);
             }
             assert.equal((await call('POST', '/api/push/subscribe', { cookie: pat, body: { subscription: { ...subscription(2), extra: 1 } } })).status, 400);

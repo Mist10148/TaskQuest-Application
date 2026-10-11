@@ -10,7 +10,7 @@ import shared from '@taskquest/shared';
 import config from '../config.js';
 export { pushConfigProblems } from './pushConfig.js';
 
-const { buildPayload } = shared.push;
+const { buildPayload, isAllowedEndpoint } = shared.push;
 
 /** The push service says the subscription is gone for good. */
 const isGone = (err) => err?.statusCode === 404 || err?.statusCode === 410;
@@ -36,6 +36,11 @@ export function createPushService({ sender, store, wantsPush = async () => true 
             const payload = JSON.stringify(buildPayload(message));
             await Promise.all(
                 subscriptions.map(async (sub) => {
+                    // A row stored before the host allow-list existed must not become a request to an arbitrary host.
+                    if (!isAllowedEndpoint(sub.endpoint)) {
+                        result.failed++;
+                        return;
+                    }
                     try {
                         await sender({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, { TTL: 24 * 60 * 60, urgency: 'normal' });
                         result.sent++;

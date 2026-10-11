@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createPushService } from '../lib/push.js';
 import { pushConfigProblems } from '../lib/pushConfig.js';
 
-const sub = (id) => ({ id, endpoint: `https://push.example.com/send/${id}`, p256dh: 'p', auth: 'a' });
+const sub = (id) => ({ id, endpoint: `https://fcm.googleapis.com/fcm/send/${id}`, p256dh: 'p', auth: 'a' });
 
 function setup({ subs = [sub(1), sub(2), sub(3)], fail = {}, wantsPush } = {}) {
     const calls = [];
@@ -29,7 +29,7 @@ test('sends one payload to every subscribed browser and marks them used', async 
     assert.deepEqual(r, { sent: 3, pruned: 0, failed: 0 });
     assert.equal(calls.length, 3);
     assert.deepEqual(calls[0].payload, { title: 'Deadline today', body: 'Taxes is due', url: '/tasks' });
-    assert.deepEqual(calls[0].subscription, { endpoint: 'https://push.example.com/send/1', keys: { p256dh: 'p', auth: 'a' } });
+    assert.deepEqual(calls[0].subscription, { endpoint: 'https://fcm.googleapis.com/fcm/send/1', keys: { p256dh: 'p', auth: 'a' } });
     assert.ok(calls[0].options.TTL > 0);
     assert.deepEqual(touched.sort(), [1, 2, 3]);
 });
@@ -76,4 +76,10 @@ test('push settings: all three VAPID values or none', () => {
     assert.match(pushConfigProblems({ ...KEYS, publicKey: 'short', internalToken: '' }).join(' '), /public key/);
     assert.match(pushConfigProblems({ ...KEYS, subject: 'ops@example.com', internalToken: '' }).join(' '), /mailto:/);
     assert.match(pushConfigProblems({ ...KEYS, internalToken: 'tooshort' }).join(' '), /at least 32/);
+});
+
+test('a stored endpoint outside the push-service allow-list is never sent to', async () => {
+    const { service, calls } = setup({ subs: [sub(1), { ...sub(2), endpoint: 'https://internal.example.com/x' }] });
+    assert.deepEqual(await service.send('42', { title: 'T' }), { sent: 1, pruned: 0, failed: 1 });
+    assert.deepEqual(calls.map((c) => c.subscription.endpoint), ['https://fcm.googleapis.com/fcm/send/1']);
 });

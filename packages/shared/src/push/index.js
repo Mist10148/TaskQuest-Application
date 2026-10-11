@@ -18,6 +18,31 @@ const PUSH = {
     MAX_URL: 200
 };
 
+/**
+ * The push services browsers use. An endpoint's host must equal one of these or be a subdomain of it, because the server
+ * POSTs to the endpoint and a DNS name can resolve to an internal address (so no host-name check alone can make it safe).
+ * WEB_PUSH_ALLOWED_HOSTS adds more suffixes (comma separated), for a push service that is not listed.
+ */
+const DEFAULT_PUSH_HOSTS = [
+    'fcm.googleapis.com',
+    'updates.push.services.mozilla.com',
+    'push.services.mozilla.com',
+    'notify.windows.com',
+    'web.push.apple.com',
+    'push.apple.com'
+];
+
+/** The allowed host suffixes: the defaults plus any listed in WEB_PUSH_ALLOWED_HOSTS (lower-cased, no wildcards or dots at the ends). */
+function allowedPushHosts(env = process.env) {
+    const extra = String(env.WEB_PUSH_ALLOWED_HOSTS || '')
+        .split(',')
+        .map((h) => h.trim().toLowerCase().replace(/^\*?\./, '').replace(/\.$/, ''))
+        .filter(Boolean);
+    return [...new Set([...DEFAULT_PUSH_HOSTS, ...extra])];
+}
+
+const hostAllowed = (host, suffixes) => suffixes.some((s) => host === s || host.endsWith(`.${s}`));
+
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 /** Byte length of a base64url string, or -1 when it is not base64url. */
@@ -28,11 +53,14 @@ function base64urlBytes(value) {
 
 /**
  * Check a PushSubscription as the browser serialised it ({ endpoint, keys: { p256dh, auth } }) and return
- * only the fields we store. The endpoint must be an https URL without credentials, at most 2048 chars;
+ * only the fields we store. The endpoint must be an https URL without credentials, at most 2048 chars, on port 443,
+ * with a host of a known push service (see allowedPushHosts);
  * p256dh must be a 65-byte P-256 point and auth a 16-byte secret, both base64url.
+ * @param {object} sub
+ * @param {{ allowedHosts?: string[] }} [options]  host suffixes to allow instead of allowedPushHosts()
  * @throws TaskQuestError (VALIDATION)
  */
-function validateSubscription(sub) {
+function validateSubscription(sub, { allowedHosts } = {}) {
     const endpoint = sub && typeof sub === 'object' ? sub.endpoint : undefined;
     if (typeof endpoint !== 'string' || !endpoint || endpoint.length > PUSH.MAX_ENDPOINT_LENGTH) throw errors.validation('Invalid push subscription endpoint.');
     let url;
@@ -45,6 +73,8 @@ function validateSubscription(sub) {
     // The server POSTs to this URL, so it must be a public DNS name (real push services are): never an IP literal, localhost or an internal name.
     const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
     if (net.isIP(host) || !host.includes('.') || /(^|\.)(localhost|local|internal|localdomain)$/.test(host)) throw errors.validation('The push endpoint must be a public https URL.');
+    if (url.port && url.port !== '443') throw errors.validation('The push endpoint must use the standard https port.');
+    if (!hostAllowed(host, allowedHosts || allowedPushHosts())) throw errors.validation('The push endpoint is not a known push service.');
     const keys = sub.keys && typeof sub.keys === 'object' ? sub.keys : {};
     if (base64urlBytes(keys.p256dh) !== 65 || base64urlBytes(keys.auth) !== 16) throw errors.validation('Invalid push subscription keys.');
     return { endpoint, p256dh: keys.p256dh, auth: keys.auth };
@@ -60,4 +90,14 @@ function buildPayload({ title, body, url } = {}) {
     return { title: clip(title, PUSH.MAX_TITLE) || 'TaskQuest', body: clip(body, PUSH.MAX_BODY), url: path };
 }
 
-module.exports = { PUSH, validateSubscription, endpointHash, buildPayload, base64urlBytes };
+/** Whether an already stored endpoint may still be sent to (the same rules as when it was subscribed). */
+function isAllowedEndpoint(endpoint, options) {
+    try {
+        validateSubscription({ endpoint, keys: { p256dh: Buffer.alloc(65).toString('base64url'), auth: Buffer.alloc(16).toString('base64url') } }, options);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+module.exports = { PUSH, DEFAULT_PUSH_HOSTS, allowedPushHosts, isAllowedEndpoint, validateSubscription, endpointHash, buildPayload, base64urlBytes };

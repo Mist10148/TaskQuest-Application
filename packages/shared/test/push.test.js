@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSubscription, buildPayload, endpointHash, PUSH } = require('../src/push');
+const { validateSubscription, buildPayload, endpointHash, PUSH, allowedPushHosts, isAllowedEndpoint, DEFAULT_PUSH_HOSTS } = require('../src/push');
 const { createPushClient, configFromEnv } = require('../src/push/client');
 
 const keys = { p256dh: Buffer.alloc(65, 7).toString('base64url'), auth: Buffer.alloc(16, 9).toString('base64url') };
@@ -18,11 +18,40 @@ test('endpoints must be https, public, bounded and credential-free', () => {
     const bad = (endpoint) => assert.throws(() => validateSubscription({ ...good, endpoint }), { code: 'VALIDATION' }, String(endpoint).slice(0, 40));
     for (const e of ['http://push.example.com/x', 'ftp://push.example.com/x', 'javascript:alert(1)', 'not a url', '', 'https://', 'https://user:pw@push.example.com/x',
         'https://127.0.0.1/x', 'https://10.0.0.5/x', 'https://[::1]/x', 'https://localhost/x', 'https://intranet/x', 'https://svc.internal/x', 'https://printer.local/x']) bad(e);
-    bad(`https://push.example.com/${'a'.repeat(PUSH.MAX_ENDPOINT_LENGTH)}`);
+    bad(`https://fcm.googleapis.com/${'a'.repeat(PUSH.MAX_ENDPOINT_LENGTH)}`);
     bad(undefined);
     bad(42);
-    assert.doesNotThrow(() => validateSubscription({ ...good, endpoint: `https://push.example.com/${'a'.repeat(PUSH.MAX_ENDPOINT_LENGTH - 25)}` }), 'right at the limit is fine');
+    assert.doesNotThrow(() => validateSubscription({ ...good, endpoint: `https://fcm.googleapis.com/${'a'.repeat(PUSH.MAX_ENDPOINT_LENGTH - 30)}` }), 'right at the limit is fine');
     assert.throws(() => validateSubscription(null), { code: 'VALIDATION' });
+});
+
+test('only known push services are allowed: a DNS name that resolves to a private address is refused', () => {
+    const bad = (endpoint, options) => assert.throws(() => validateSubscription({ ...good, endpoint }, options), { code: 'VALIDATION' }, endpoint);
+    const ok = (endpoint, options) => assert.doesNotThrow(() => validateSubscription({ ...good, endpoint }, options), endpoint);
+    for (const e of ['https://evil.example.com/x', 'https://169.254.169.254.nip.io/x', 'https://metadata.google.internal/x', 'https://fcm.googleapis.com.evil.com/x',
+        'https://notfcm.googleapis.com/x', 'https://evil.com/fcm.googleapis.com', 'https://push.apple.com.attacker.net/x']) bad(e);
+    for (const e of ['https://fcm.googleapis.com/fcm/send/a', 'https://updates.push.services.mozilla.com/wpush/v2/a', 'https://eu.push.services.mozilla.com/x',
+        'https://wns2-par02p.notify.windows.com/w/?token=a', 'https://web.push.apple.com/a', 'https://api.push.apple.com/a', 'https://FCM.GoogleAPIs.com/x']) ok(e);
+    // Only the standard port (explicit or implied).
+    ok('https://fcm.googleapis.com:443/x');
+    bad('https://fcm.googleapis.com:8443/x');
+    bad('https://fcm.googleapis.com:22/x');
+    // Extra suffixes come from the environment (or the options).
+    const env = { WEB_PUSH_ALLOWED_HOSTS: ' Push.Example.com, *.relay.example.org ,,' };
+    assert.deepEqual(allowedPushHosts(env).slice(-2), ['push.example.com', 'relay.example.org']);
+    assert.equal(allowedPushHosts({}).length, DEFAULT_PUSH_HOSTS.length);
+    ok('https://push.example.com/x', { allowedHosts: allowedPushHosts(env) });
+    ok('https://a.relay.example.org/x', { allowedHosts: allowedPushHosts(env) });
+    bad('https://example.com/x', { allowedHosts: allowedPushHosts(env) });
+    process.env.WEB_PUSH_ALLOWED_HOSTS = 'push.example.com';
+    try {
+        ok('https://push.example.com/x');
+    } finally {
+        delete process.env.WEB_PUSH_ALLOWED_HOSTS;
+    }
+    bad('https://push.example.com/x');
+    assert.equal(isAllowedEndpoint('https://fcm.googleapis.com/x'), true);
+    assert.equal(isAllowedEndpoint('https://evil.example.com/x'), false);
 });
 
 test('keys must be base64url of the right size', () => {

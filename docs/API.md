@@ -59,7 +59,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET 🔒 | `/api/user` | — | Same as `/me` without `discord`/`userAchievements` |
-| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?, weekly_digest?}` (booleans), `{timezone?: IANA name\|null, reminder_hour?: 0–23}`; ≥1 field. An unknown zone is `400`. The zone sets when your day, week and month start (daily caps, quests, weekly review, stats), so a second change within 24 hours of the last one is `400` ("once every 24 hours"); saving the zone you already have is fine. | Updated `users` row |
+| PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?, weekly_digest?, web_push?}` (booleans), `{timezone?: IANA name\|null, reminder_hour?: 0–23}`; ≥1 field. An unknown zone is `400`. The zone sets when your day, week and month start (daily caps, quests, weekly review, stats), so a second change within 24 hours of the last one is `400` ("once every 24 hours"); saving the zone you already have is fine. | Updated `users` row |
 | POST 🔒 | `/api/user/daily` | — | See below |
 | GET 🔒 | `/api/user/xp-history` (alias `/api/xp/history`) | — | Last 50 `xp_transactions` |
 | POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, task templates, achievements, skills, games and XP history, and resets stats (including `xp_spent` and streak freezes). Also asks the AI service to forget the user's vectors, chat threads and cached summaries. `{success, message}` |
@@ -135,6 +135,30 @@ All routes are 🔒 and owner-scoped (another user's template ID is `404`). A te
 | GET | `/api/achievements` | 🔒 | `{achievements:[{key,name,emoji,description,category,unlocked,unlockedAt}], unlockedCount, totalCount}` |
 | GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, prestige, prestigeTitle, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]` (`lifetimeXp` is the never-reset total). `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only; one global week for everyone, not per viewer), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs. |
 | GET | `/api/leaderboard/me?by=&class=` | 🔒 | `{rank}` on that board, within the class when `class` is given (null when XP is off, no score on `weekly`/`streak`, or you are not that class) |
+
+## Cosmetics (shop)
+
+All routes are 🔒. Prices, requirements and ownership are decided on the server. `GET /api/user` also returns `user.cosmetics` (below), and each leaderboard row carries the same `cosmetics` object (never a Discord ID).
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/cosmetics` | — | `{balance, gamificationEnabled, equipped, items:[{id, kind: title\|frame\|accent, name, cost, color?, colorDark?, owned, equipped, locked, lockedReason, affordable}]}`. `color` is a CSS background for frames and a hex for accents (`colorDark` is the accent on dark surfaces). `locked` means a level, prestige or achievement requirement is unmet (`lockedReason` says which). |
+| POST | `/api/cosmetics/:id/buy` | — | `{success, id, kind, name, cost, balance, newAchievements}`. `404` unknown id, `403` requirement not met or XP off (`GAMIFICATION_DISABLED`), `400 INSUFFICIENT_XP`, `409` already owned (a double click is a `409`, never a second charge). |
+| POST | `/api/cosmetics/equip` | `{kind: title\|frame\|accent, id: string\|null}` | `{success, kind, id, equipped}`. `id: null` unequips that kind. `403` if not owned, `404` for an id that is not of that kind. |
+
+`equipped` and `user.cosmetics` are `{title: string\|null, frame: {id, name, color}\|null, accent: {id, name, color, colorDark}\|null}`.
+
+## Web push (optional)
+
+Off unless the server has `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY` and `WEB_PUSH_SUBJECT` (see [DEPLOYMENT.md](DEPLOYMENT.md#web-push-optional)); then the Settings page offers "Push notifications" and the bot's reminders are also pushed to the browsers a user subscribed.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/push/config` | — | Public. `{enabled: false}` or `{enabled: true, publicKey}` (the VAPID public key the browser subscribes with) |
+| POST 🔒 | `/api/push/subscribe` | `{subscription: {endpoint, expirationTime?, keys: {p256dh, auth}}}` (a browser `PushSubscription.toJSON()`) | `201 {success, subscriptions}`. The endpoint must be an `https` URL on a public host (no IP literals, `localhost` or internal names), at most 2048 characters; `p256dh` is a 65-byte and `auth` a 16-byte base64url value. Subscribing the same endpoint again refreshes its keys. At most 10 browsers per user (`400`). `404` when push is off. |
+| DELETE 🔒 | `/api/push/subscribe` | `{endpoint}` | `{success, removed}`. Only removes the caller's own subscription. |
+
+`PATCH /api/user {web_push: false}` keeps the subscriptions but stops pushes to the user (default on). The bot reaches the server through `POST /internal/push` (see [Internal API](#internal-api-service-to-service)).
 
 ## Quests
 
@@ -265,6 +289,8 @@ A `confirm` event pauses the turn. Nothing has been changed yet. Answer with `PO
 | POST | `/internal/items/:id/subtasks` | `{discordId, names: string[] (2-8)}` | Break a top-level task down: creates the subtasks under it in one transaction (all or none) and returns `{parent, items, newAchievements, xpResult}`. 400 when the task is itself a subtask, 404 when it is not the user's |
 | PATCH | `/internal/items/:id/toggle` | `{discordId, completed?}` | Complete or reopen a task |
 | PATCH | `/internal/lists/:id` | `{discordId, priority?, deadline?}` | Change a list's priority or deadline |
+
+**`POST /internal/push`** `{discordId, title (≤100), body? (≤300), url? (a path like /tasks)}` asks the server to send a web push to all of that user's subscribed browsers. Unlike the routes above it is mounted whenever web push is configured (not only with AI on) and is checked with the same `X-AI-Token` header against `WEB_PUSH_INTERNAL_TOKEN` (falling back to `AI_INTERNAL_TOKEN`); it is `404` when push is off or no token is set. Response: `{sent, pruned, failed, skipped?}`, where `skipped` is `opted-out` or `no-subscriptions`. A subscription the push service reports gone (`404` or `410`) is deleted (`pruned`). The text is clipped and an off-site `url` is replaced by `/`.
 
 The reverse direction (Express and the bot to the AI service: `POST /internal/index`, `POST /internal/forget`) is documented in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). `POST /internal/forget` with only a `discordId` removes everything stored about the user: vectors, chat threads with their checkpoints, and cached summaries (the daily usage counter is kept, so a reset cannot refill the AI quota).
 

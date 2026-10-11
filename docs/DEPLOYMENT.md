@@ -142,6 +142,21 @@ python -m app.rag.backfill                    # once: embed existing quests
 
 Set `AI_ENABLED=true`, `AI_INTERNAL_TOKEN`, `GEMINI_API_KEY` in `.env`, then open `/api/ai/ping` while logged in.
 
+### Web push (optional)
+
+Browser notifications for reminders, **off unless all three VAPID values are set** (set one or two and the server refuses to start). Generate a key pair once with `npx web-push generate-vapid-keys` and keep the private key secret. The bot owns the reminder job, so it asks the web server to send the push (the server holds the keys); the push is best effort and never delays or replaces the Discord DM.
+
+| Variable | Where | Description |
+|---|---|---|
+| `WEB_PUSH_PUBLIC_KEY` | web | VAPID public key (base64url, about 87 characters). Sent to browsers, so it is safe to expose. |
+| `WEB_PUSH_PRIVATE_KEY` | web | VAPID private key (about 43 characters). Server-side only, never a `VITE_*` variable. |
+| `WEB_PUSH_SUBJECT` | web | Contact for the push services: `mailto:you@example.com` or an `https://` URL |
+| `WEB_PUSH_INTERNAL_URL` | bot | Base URL of the web service (`http://localhost:3001`; the private host on Render). Without it the bot never pushes. |
+| `WEB_PUSH_INTERNAL_TOKEN` | web, bot | Shared secret, **at least 32 characters**, identical on both. Optional: it falls back to `AI_INTERNAL_TOKEN`, so with the AI token already shared you only need `WEB_PUSH_INTERNAL_URL`. Sent as the `X-AI-Token` header of `POST /internal/push` and checked in constant time. |
+| `WEB_PUSH_TIMEOUT_MS` | bot | How long the bot waits for the web server per push (default `5000`) |
+
+Users then turn it on per browser under **Settings → Push notifications**. The service worker (`/sw.js`) is only registered at that point, shows the notification, opens the right page on click and caches nothing. Push needs HTTPS (or `localhost`). Subscriptions are stored in `push_subscriptions` (migration `017_web_push`); dead ones are removed when the push service answers 404 or 410.
+
 ## 4. Deploying on Render
 
 The repository includes [`render.yaml`](../render.yaml).

@@ -13,6 +13,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/quests` | — | Ephemeral | 📜 Daily and weekly quests with progress bars and Claim buttons |
 | `/review` | — | Ephemeral | 📝 This week's review: tasks finished, XP earned, streak, and a Claim button for the once-a-week bonus (needs at least one finished task; same rules as the web review page). |
 | `/prestige` | — | Ephemeral | ✦ Shows your prestige title, bonus and whether you can start over (level 30+). **Prestige...** opens a warning listing what is lost and kept; only **Yes, reset** on that second screen resets, **Cancel** backs out. |
+| `/shop` | `section` (titles, frames or accents; default titles) | Ephemeral | 🛍️ Spend XP on cosmetics. Tabs for Titles, Frames and Accents list every item with its price and owned or locked state. Pick one from the menu to see the price and your balance after, then **Buy**, **Equip** or **Unequip**. A title you equip shows in `/profile`. |
 | `/profile` | `user` (optional) | Ephemeral | Level (with your prestige title), balance and lifetime XP (all-time, across prestiges), focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet". |
 | `/achievements` | — | Ephemeral | Paginated achievement list |
 | `/class` | — | Ephemeral | Class browser: buy, equip, view and unlock skills |
@@ -124,6 +125,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 | `quest_claim_<KEY>` | `commands/quests.js` buttons |
 | `review_claim` | `commands/review.js` button |
 | `prestige_ask`, `prestige_confirm`, `prestige_cancel` | `commands/prestige.js` buttons |
+| `shop_tab_<kind>`, `shop_buy_<id>`, `shop_equip_<id>`, `shop_unequip_<kind>`, `shop_pick_<kind>` (menu) | `commands/shop.js` buttons and menu |
 | `remind_snooze_<listId>`, `task_remind_snooze_<itemId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
 | `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_` (incl. `item_details_`), `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
 | `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_details_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |

@@ -14,6 +14,7 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
    - [Focus sessions](#5d-focus-sessions)
    - [Weekly review](#5e-weekly-review)
    - [Prestige](#5f-prestige)
+   - [Cosmetics](#5g-cosmetics-the-shop)
 6. [Achievements](#6-achievements)
 7. [Games](#7-games)
 8. [Limits and anti-farming](#8-limits-and-anti-farming)
@@ -296,6 +297,51 @@ At **level 30** you can prestige (`POST /api/user/prestige` with `{"confirm":"PR
 | Title | Veteran | Seasoned | Champion | Elite | Master | Grandmaster | Legend | Mythic | Ascendant | Eternal |
 
 Level comes from `lifetime_xp`, so prestige resets it; the never-reset `lifetime_xp_total` feeds the XP achievements and the lifetime leaderboard, so neither moves. The multiplier is added to your other multipliers, so on small amounts the extra XP rounds down (10 base XP stays 10 until about +5%).
+
+## 5g. Cosmetics (the shop)
+
+Titles, avatar frames and profile accents are an XP sink with **no gameplay effect**: they never change how much XP you earn. Buy them in the web app's **Shop** page or with `/shop` in Discord. Each is bought once with XP (source `cosmetic_purchase`, which counts as spending for `xp_spent` and the spending achievements) and is yours until a progress reset. A few also need something earned first: a level, a prestige or an achievement. The server checks the requirement, your balance and ownership in one locked transaction, so a double click or two devices cannot charge twice.
+
+- A **title** shows next to your name in the sidebar, on your profile, on the leaderboard and in `/profile`.
+- A **frame** is a coloured ring around your avatar on the web app.
+- An **accent** colours your name and a bar on your own web profile. Every accent is held to a 4.5:1 text contrast on the card surfaces in both themes.
+
+You can equip one of each kind (or none). **Prestige keeps** everything you own and have equipped; a **progress reset** (`/api/user/reset`) removes owned cosmetics and clears what is equipped. With XP turned off nothing can be bought, but equipped items still show.
+
+**Titles**
+
+| Name | Cost | Needs |
+|---|---|---|
+| the Diligent | 300 XP | - |
+| Taskbreaker | 600 XP | Unlock the First Victory achievement |
+| Night Owl | 400 XP | - |
+| Early Bird | 400 XP | - |
+| the Organiser | 500 XP | Unlock the Organization Pro achievement |
+| the Relentless | 1200 XP | Reach level 20 |
+| Completionist | 1500 XP | Unlock the Completionist achievement |
+| the Reborn | 2000 XP | Prestige once |
+
+**Frames**
+
+| Name | Cost | Needs |
+|---|---|---|
+| Bronze ring | 250 XP | - |
+| Silver ring | 400 XP | - |
+| Gold ring | 600 XP | Reach level 10 |
+| Aurora ring | 750 XP | Reach level 15 |
+| Ember ring | 800 XP | Unlock the Achiever achievement |
+| Ascendant ring | 1000 XP | Prestige once |
+
+**Accents**
+
+| Name | Cost | Needs |
+|---|---|---|
+| Ocean | 200 XP | - |
+| Forest | 200 XP | - |
+| Plum | 300 XP | - |
+| Ember | 300 XP | - |
+| Rose | 400 XP | Reach level 5 |
+| Slate | 500 XP | Reach level 10 |
 
 ## 6. Achievements
 

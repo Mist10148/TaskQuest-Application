@@ -44,6 +44,8 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `013_task_reminders` | `items.reminded_at` (the task's due-day DM went out) and `items.remind_at` (snooze); a new due date clears both |
 | `014_templates` | The `task_templates` table |
 | `015_timezone_days` | `users.timezone_changed_at` (throttles zone changes now that the zone sets the user's day) |
+| `016_cosmetics` | The `user_cosmetics` table and `users.equipped_title`, `equipped_frame`, `equipped_accent` |
+| `017_web_push` | The `push_subscriptions` table and `users.web_push` |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -103,7 +105,9 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 | `weekly_digest`, `last_digest_at` | BOOLEAN / TIMESTAMP | Opt-in Monday summary DM and when it last went out |
 | `calendar_token` | CHAR(32) NULL, unique | Secret of the calendar feed URL; NULL = feed off |
 | `streak_freezes` | INT | Bought freezes held (max 3) |
-| `xp_spent` | BIGINT | XP ever spent on classes, skills and freezes (spending achievements) |
+| `equipped_title`, `equipped_frame`, `equipped_accent` | VARCHAR(40) NULL | The cosmetic (a key of `COSMETICS`) shown for each kind; cleared by a progress reset |
+| `web_push` | TINYINT(1), default 1 | Send reminders to this user's subscribed browsers too (needs web push configured) |
+| `xp_spent` | BIGINT | XP ever spent on classes, skills, freezes and cosmetics (spending achievements) |
 | `ai_enabled`, `ai_chat_format` | TINYINT / VARCHAR(8) | AI opt-out and Discord reply format (migrations 003, 006) |
 | `created_at` | TIMESTAMP | |
 
@@ -163,6 +167,14 @@ The weekly review claim is stored here too, under `quest_key = 'WEEKLY_REVIEW'` 
 
 `id` · `discord_id` FK (cascade) · `name` VARCHAR(100) · `description` TEXT · `items` JSON (array of `{name, description?, priority?, tags?, recurrence?}`, at most 30; MariaDB stores it as text) · `created_at`. Unique key `(discord_id, name)`. At most 20 per user (`LIMITS.MAX_TEMPLATES_PER_USER`), enforced by the service under the user row lock. A progress reset deletes them with the quests. Applying a template uses the normal quest and task creation, so nothing about XP is stored here.
 
+### `user_cosmetics`
+
+`id` · `discord_id` FK (cascade) · `cosmetic_id` VARCHAR(40) (a key of `COSMETICS` in `constants.js`) · `acquired_at`. Unique key `(discord_id, cosmetic_id)`, so a cosmetic is owned once. Rows are inserted in the same transaction as the XP debit (`cosmetic_purchase`), under the user row lock. Prestige keeps them; a progress reset deletes them.
+
+### `push_subscriptions`
+
+`id` · `discord_id` FK (cascade) · `endpoint` TEXT (the push service URL, at most 2048 characters) · `endpoint_hash` CHAR(64) (SHA-256 of the endpoint; the unique key, since a TEXT column cannot be indexed whole) · `p256dh`, `auth` VARCHAR(255) (the browser's keys) · `created_at` · `last_used_at`. Index `(discord_id)`. At most 10 per user, enforced by the service under the user row lock. A subscription that answers 404 or 410 when a push is sent is deleted.
+
 ### `web_sessions`
 
 `session_id` VARCHAR(128) PK · `expires` INT UNSIGNED (unix seconds) · `data` MEDIUMTEXT (JSON). This holds web login sessions. Expired rows are purged every 15 minutes.
@@ -198,7 +210,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | `blackjack_bet` | − | Bet escrow (and double down) |
 | `blackjack_win`, `blackjack_blackjack` | + | Bet returned plus boosted winnings |
 | `blackjack_push`, `blackjack_refund` | + | Bet returned (push or expired hand). Not lifetime XP. |
-| `class_purchase`, `skill_purchase` | − | Spending |
+| `class_purchase`, `skill_purchase`, `streak_freeze`, `cosmetic_purchase` | − | Spending (counted in `xp_spent`) |
 | *legacy* `blackjack_loss`, `task_complete`, `item_create`, `manual` | ± | Written by pre-4.0 versions |
 
 ## Game session states

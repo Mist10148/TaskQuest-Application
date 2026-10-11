@@ -61,6 +61,13 @@ const CLASSES = {
         cost: 500,
         description: 'Every action adds a shield stack (cap = min(15, 3 + level ÷ 3), plus Absorb). Each stack adds +4% XP plus +1 XP per two stacks.',
         playstyle: 'Strong early, steady momentum.'
+    },
+    MONK: {
+        name: 'Monk',
+        emoji: '🧘',
+        cost: 550,
+        description: 'Rhythm: act on consecutive days to build Rhythm (max 14). Every action adds 3% of the base XP per Rhythm day plus 1 XP per Rhythm day. Skip a day and it restarts at 1.',
+        playstyle: 'Rewards doing something small every single day.'
     }
 };
 
@@ -168,6 +175,17 @@ const SKILL_TREES = {
             tank_bulwark: { name: 'Bulwark', emoji: '🏰', description: 'Each action adds 2 Tank shield stacks instead of 1 (Tank)', maxLevel: 1, cost: 240, requires: 'tank_unstoppable' },
             tank_anchor: { name: 'Anchor', emoji: '⚓', description: '+8 flat XP when you complete a recurring task', maxLevel: 1, cost: 260, requires: 'tank_bulwark' }
         }
+    },
+    MONK: {
+        name: 'Monk',
+        emoji: '🧘',
+        description: 'Daily rhythm and calm focus',
+        skills: {
+            monk_breath: { name: 'Steady Breath', emoji: '🌬️', description: '+1 XP per Rhythm day on every action, per level (Monk)', maxLevel: 3, cost: 120, requires: null },
+            monk_focus: { name: 'Inner Focus', emoji: '🧠', description: 'Monk bonus +25% per level (Monk)', maxLevel: 2, cost: 180, requires: 'monk_breath' },
+            monk_discipline: { name: 'Discipline', emoji: '🪷', description: 'Maximum Rhythm +4 (14 → 18) (Monk)', maxLevel: 1, cost: 260, requires: 'monk_focus' },
+            monk_serenity: { name: 'Serenity', emoji: '☯️', description: 'Rhythm survives one missed day (Monk)', maxLevel: 1, cost: 340, requires: 'monk_discipline' }
+        }
     }
 };
 
@@ -219,7 +237,7 @@ const ACHIEVEMENTS = {
     STREAK_30: { name: 'Monthly Master', emoji: '🗓️', description: '30-day daily streak', category: 'streaks' },
     // Classes
     FIRST_CLASS: { name: 'Class Act', emoji: '🎭', description: 'Buy your first class', category: 'classes' },
-    ALL_CLASSES: { name: 'Collector', emoji: '🎪', description: 'Own all classes', category: 'classes' },
+    ALL_CLASSES: { name: 'Collector', emoji: '🎪', description: 'Own every class', category: 'classes' },
     // Games
     FIRST_GAME: { name: 'Player One', emoji: '🎮', description: 'Finish your first game', category: 'games' },
     GAME_WIN_10: { name: 'Winner', emoji: '🥇', description: 'Win 10 games', category: 'games' },
@@ -282,7 +300,8 @@ const CLASS_RULES = {
     ASSASSIN: { DECAY_HOURS: 36, NIGHT_OWL_DECAY_HOURS: 48, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
     WIZARD: { OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
     ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97 },
-    TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 }
+    TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 3, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 1, FOCUS_PERCENT: 25, DISCIPLINE_CAP: 4 }
 };
 
 /** Numbers behind the default-tree skills. */

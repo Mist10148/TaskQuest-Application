@@ -25,10 +25,11 @@ const { evaluateAchievements } = require('../achievements');
 const UPDATABLE_COLUMNS = new Set([
     'assassin_streak', 'assassin_stacks', 'assassin_last_at', 'assassin_bleed', 'gambler_streak', 'wizard_counter', 'archer_streak', 'tank_stacks',
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
-    'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes'
+    'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes',
+    'owns_monk', 'monk_rhythm', 'monk_day'
 ]);
 
-const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
+const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
 
 /** Persist column updates on a locked user and mirror them on the object. */
 async function updateUserColumns(conn, user, updates) {

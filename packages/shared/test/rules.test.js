@@ -32,7 +32,7 @@ test('every skill exists in exactly one tree and prerequisites resolve', () => {
             assert.ok(skill.description.length > 0);
         }
     }
-    assert.equal(seen.size, 42);
+    assert.equal(seen.size, 46);
     assert.equal(shared.findSkill('__proto__'), null);
 });
 
@@ -495,4 +495,40 @@ test('Tank Bulwark (+2 stacks per action) and Anchor (+8 XP on recurring tasks)'
         const r = shared.calculateFinalXP(user(), [sk('tank_anchor')], 10, { rng: seq(0.99), context });
         assert.equal(r.finalXP, expected, JSON.stringify(context));
     }
+});
+
+// ─── Monk ────────────────────────────────────────────────────────────────────
+
+test('Monk Rhythm: consecutive UTC days build it, a missed day resets it, bonus = 3% x rhythm + rhythm', () => {
+    const monk = (rhythm, day) => user({ player_class: 'MONK', monk_rhythm: rhythm, monk_day: day });
+    // [label, rhythm, last day, skills, base, expected rhythm, expected bonus]
+    const cases = [
+        ['first action ever', 0, null, [], 100, 1, 4],
+        ['same day keeps rhythm', 5, '2030-01-10', [], 100, 5, 20],
+        ['yesterday adds one', 5, '2030-01-09', [], 100, 6, 24],
+        ['two days ago resets', 5, '2030-01-08', [], 100, 1, 4],
+        ['two days ago, Serenity forgives', 5, '2030-01-08', [sk('monk_serenity')], 100, 6, 24],
+        ['three days ago, Serenity does not', 5, '2030-01-07', [sk('monk_serenity')], 100, 1, 4],
+        ['rhythm is capped at 14', 14, '2030-01-09', [], 100, 14, 42 + 14],
+        ['Discipline lifts the cap to 18', 14, '2030-01-09', [sk('monk_discipline')], 100, 15, 45 + 15],
+        ['Discipline cap holds at 18', 18, '2030-01-09', [sk('monk_discipline')], 100, 18, 54 + 18],
+        ['Steady Breath adds 1 XP per rhythm day per level', 5, '2030-01-10', [sk('monk_breath', 2)], 100, 5, 15 + 5 * 3],
+        ['Inner Focus adds 25% per level', 5, '2030-01-10', [sk('monk_focus', 2)], 100, 5, 30],
+        ['small actions still get the flat part', 3, '2030-01-10', [], 10, 3, 3],
+        ['a DATE returned as a Date object works', 5, new Date('2030-01-09T00:00:00Z'), [], 100, 6, 24]
+    ];
+    for (const [label, rhythm, day, skills, base, expectedRhythm, expectedBonus] of cases) {
+        const r = shared.calculateClassXP(monk(rhythm, day), base, { now: NOW, skills });
+        assert.equal(r.userUpdates.monk_rhythm, expectedRhythm, `${label}: rhythm`);
+        assert.equal(r.userUpdates.monk_day, '2030-01-10', `${label}: day stamp`);
+        assert.equal(r.bonusInfo.classBonus, expectedBonus, `${label}: bonus`);
+        assert.equal(r.finalXP, base + expectedBonus, `${label}: final`);
+    }
+});
+
+test('Monk tree: four skills in a chain, each with an implemented effect', () => {
+    const ids = Object.keys(shared.SKILL_TREES.MONK.skills);
+    assert.deepEqual(ids, ['monk_breath', 'monk_focus', 'monk_discipline', 'monk_serenity']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'monk_breath', 'monk_focus', 'monk_discipline']);
+    assert.equal(shared.CLASSES.MONK.cost, 550);
 });

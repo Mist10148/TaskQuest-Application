@@ -12,6 +12,13 @@
 
 const { XP_PER_LEVEL, REWARDS, DAILY, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES } = require('./constants');
 const { secureRandom } = require('./random');
+const { daysBetween } = require('./dates');
+
+/** YYYY-MM-DD for a DATE column value (string or Date); null when empty. */
+function dayString(value) {
+    if (!value) return null;
+    return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
 
 /** Milliseconds for a Date, ISO string or number; null for empty/invalid. */
 function toMs(value) {
@@ -224,6 +231,30 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const total = Math.floor((baseXP * stacks * 4) / 100) + Math.floor(stacks / 2);
             finalXP = baseXP + total;
             bonusInfo = { type: 'TANK', details: `🛡️ Shield x${stacks} +${total}`, classBonus: total };
+            break;
+        }
+
+        case 'MONK': {
+            const m = CLASS_RULES.MONK;
+            const today = new Date(toMs(opts.now) ?? Date.now()).toISOString().slice(0, 10);
+            const last = dayString(user.monk_day);
+            const cap = m.MAX_RHYTHM + (lvl('monk_discipline') ? m.DISCIPLINE_CAP : 0);
+            const gap = last ? daysBetween(last, today) : null;
+            let rhythm = Math.max(0, Number(user.monk_rhythm) || 0);
+            if (gap !== null && gap <= 0 && rhythm > 0) {
+                // Same day: the rhythm holds.
+            } else if (gap !== null && (gap === 1 || (gap === 2 && lvl('monk_serenity')))) {
+                rhythm += 1;
+            } else {
+                rhythm = 1;
+            }
+            rhythm = Math.min(rhythm, cap);
+            userUpdates.monk_rhythm = rhythm;
+            userUpdates.monk_day = today;
+            const raw = Math.floor((baseXP * rhythm * m.PERCENT_PER_DAY) / 100) + rhythm * (m.FLAT_PER_DAY + lvl('monk_breath') * m.BREATH_FLAT_PER_DAY);
+            const bonus = Math.floor((raw * (100 + lvl('monk_focus') * m.FOCUS_PERCENT)) / 100);
+            finalXP = baseXP + bonus;
+            bonusInfo = { type: 'MONK', details: `🧘 Rhythm ${rhythm}/${cap} +${bonus}`, classBonus: bonus };
             break;
         }
 

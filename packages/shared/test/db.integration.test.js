@@ -698,5 +698,73 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(wiped.assassin_last_at, null);
     });
 
+    await t.test('buying the Monk: atomic, sets owns_monk, counters reset on a class switch, resetProgress clears them', async () => {
+        const M = '100000000000000204';
+        await db.users.ensureUser(M);
+        await setXP(M, 549);
+        await assert.rejects(db.progression.buyClass(M, 'monk'), { code: 'INSUFFICIENT_XP' });
+        let u = await db.users.getUser(M);
+        assert.equal(Number(u.owns_monk), 0, 'nothing is granted when the purchase fails');
+        assert.equal(Number(u.player_xp), 549);
+        await setXP(M, 600);
+        const bought = await db.progression.buyClass(M, 'MONK');
+        assert.equal(bought.classKey, 'MONK');
+        u = await db.users.getUser(M);
+        assert.equal(u.player_class, 'MONK');
+        assert.equal(Number(u.owns_monk), 1);
+        assert.equal(Number(u.player_xp), 50);
+        await assert.rejects(db.progression.buyClass(M, 'MONK'), { code: 'CONFLICT' });
+
+        // a rewarded action builds rhythm and stamps the UTC day
+        await db.tasks.createList(M, { name: 'Rhythm' });
+        u = await db.users.getUser(M);
+        assert.equal(Number(u.monk_rhythm), 1);
+        assert.equal(u.monk_day, new Date().toISOString().slice(0, 10));
+
+        // a class switch resets the counters; switching back does not restore them
+        await db.progression.equipClass(M, 'DEFAULT');
+        u = await db.users.getUser(M);
+        assert.equal(Number(u.monk_rhythm), 0);
+        assert.equal(u.monk_day, null);
+        await db.progression.equipClass(M, 'MONK');
+        await db.query('UPDATE users SET monk_rhythm = 9, monk_day = ? WHERE discord_id = ?', ['2000-01-01', M]);
+        await db.users.resetProgress(M);
+        u = await db.users.getUser(M);
+        assert.equal(Number(u.owns_monk), 0);
+        assert.equal(Number(u.monk_rhythm), 0);
+        assert.equal(u.monk_day, null);
+        assert.equal(u.player_class, 'DEFAULT');
+    });
+
+    await t.test('the Monk tree can be learned only by Monk owners, in chain order', async () => {
+        const M = '100000000000000205';
+        await db.users.ensureUser(M);
+        await setXP(M, 5000);
+        await assert.rejects(db.progression.unlockSkill(M, 'monk_breath'), { code: 'FORBIDDEN' });
+        await db.progression.buyClass(M, 'MONK');
+        await assert.rejects(db.progression.unlockSkill(M, 'monk_focus'), { code: 'FORBIDDEN' });
+        await db.progression.unlockSkill(M, 'monk_breath');
+        const focus = await db.progression.unlockSkill(M, 'monk_focus');
+        assert.equal(focus.treeKey, 'MONK');
+    });
+
+    await t.test('ALL_CLASSES needs every class, however many exist, and is never revoked', async () => {
+        const shared = require('../src');
+        const all = {};
+        for (const k of shared.PURCHASABLE_CLASS_KEYS) all[shared.classOwnershipColumn(k)] = 1;
+        const has = (stats) => shared.evaluateAchievements(stats, []).some((a) => a.key === 'ALL_CLASSES');
+        assert.equal(has(all), true);
+        for (const k of shared.PURCHASABLE_CLASS_KEYS) {
+            assert.equal(has({ ...all, [shared.classOwnershipColumn(k)]: 0 }), false, `missing ${k}`);
+        }
+        const M = '100000000000000206';
+        await db.users.ensureUser(M);
+        await db.query("INSERT INTO achievements (discord_id, achievement_key) VALUES (?, 'ALL_CLASSES')", [M]);
+        await db.progression.checkAchievements(M);
+        const [[row]] = await db.getPool().query("SELECT COUNT(*) AS n FROM achievements WHERE discord_id = ? AND achievement_key = 'ALL_CLASSES'", [M]);
+        assert.equal(Number(row.n), 1, 'still unlocked after re-evaluation without all classes');
+        assert.equal(shared.ACHIEVEMENTS.ALL_CLASSES.description, 'Own every class');
+    });
+
     await db.closePool();
 });

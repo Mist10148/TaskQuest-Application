@@ -335,12 +335,48 @@ async function routeSelect(interaction) {
     }
 }
 
+/**
+ * The sort/filter an overview message is showing, read back from its footer ("Sorted: name • Filter: Current") and
+ * from whether it carries the category filter row. Unknown or missing pieces mean the default view.
+ */
+function overviewViewOf(message) {
+    const footer = message?.embeds?.[0]?.footer?.text || '';
+    let sort = '';
+    let filter = '';
+    for (const part of footer.split(' • ')) {
+        if (part.startsWith('Sorted: ')) sort = part.slice('Sorted: '.length);
+        else if (part.startsWith('Filter: ')) filter = part.slice('Filter: '.length);
+    }
+    const hasCategoryRow = (message?.components || []).some((row) => (row.components || []).some((c) => (c.customId ?? c.custom_id) === 'filter_category'));
+    return { sort, filter, withCategoryFilter: hasCategoryRow };
+}
+
+/** The lists an overview view (see overviewViewOf) shows, sorted and filtered the way its buttons would. */
+async function listsForView(userId, { sort, filter }) {
+    const sorts = { name: { sortBy: 'name', order: 'ASC' }, created_at: { sortBy: 'created_at', order: 'DESC' }, priority: { sortBy: 'priority', order: 'DESC' } };
+    let lists = await tasks.getLists(userId, sorts[sort]);
+    if (sort.startsWith('category: ')) {
+        const label = sort.slice('category: '.length);
+        if (label === 'Uncategorized') lists = lists.filter((l) => !l.category);
+        else if (label !== 'All Categories') lists = lists.filter((l) => l.category === label);
+    }
+    if (filter === 'Current') lists = lists.filter((l) => !isExpired(l));
+    else if (filter === 'Expired') lists = lists.filter(isExpired);
+    else if (filter === 'Completed') lists = lists.filter((l) => l.items_total > 0 && l.items_completed === l.items_total);
+    return lists;
+}
+
 /** Re-render a paged list/item select menu on another page. */
 async function pageSelect(interaction, id, page) {
     const userId = interaction.user.id;
     if (id === 'sel_list') {
-        const lists = await tasks.getLists(userId);
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists)], components: overviewComponents(lists, { page }) });
+        // Paging must not reset the view: recover the sort/filter from the message's footer and its category row.
+        const view = overviewViewOf(interaction.message);
+        const lists = await listsForView(userId, view);
+        return interaction.update({
+            embeds: [ui.listsOverviewEmbed(lists, view.sort, view.filter)],
+            components: overviewComponents(lists, { page, withCategoryFilter: view.withCategoryFilter })
+        });
     }
     const m = /^(sel_(?:edit|del|done|desc|details|swap1|swap2))_(\d+)$/.exec(id);
     if (!m) return interaction.deferUpdate();
@@ -374,7 +410,7 @@ function parseDetails(get) {
     const repeat = text('repeat').toLowerCase();
     return {
         due_date: text('due') || null,
-        priority: pri in PRIORITY_WORDS ? PRIORITY_WORDS[pri] : pri,
+        priority: Object.hasOwn(PRIORITY_WORDS, pri) ? PRIORITY_WORDS[pri] : pri,
         tags: text('tags') || null,
         recurrence: repeat === 'none' || repeat === '-' ? null : repeat || null
     };
@@ -453,4 +489,4 @@ async function routeModal(interaction) {
     }
 }
 
-module.exports = { data, execute, autocomplete, handleButton, handleSelectMenu, handleModal, parseDetails };
+module.exports = { data, execute, autocomplete, handleButton, handleSelectMenu, handleModal, parseDetails, overviewViewOf };

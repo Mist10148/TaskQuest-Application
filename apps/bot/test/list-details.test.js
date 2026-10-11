@@ -82,3 +82,43 @@ test('completion bonuses, achievement rewards and prestige titles render', () =>
     assert.equal(ui.prestigeTitle({ prestige: 1 }), 'Veteran');
     assert.equal(ui.prestigeTitle({ prestige: 99 }), 'Eternal');
 });
+
+test('a priority word that is an inherited property name is passed through, not mapped', () => {
+    const get = (fields) => (k) => fields[k];
+    for (const word of ['constructor', 'toString', '__proto__']) {
+        assert.equal(parseDetails(get({ priority: word })).priority, word.toLowerCase());
+    }
+});
+
+test('paging the list select keeps the sort, filter and category row of the message', async () => {
+    const db = require('@taskquest/shared/db');
+    const { overviewViewOf, handleSelectMenu } = require('../commands/list');
+    const message = {
+        embeds: [{ footer: { text: 'Sorted: name • Filter: Current' } }],
+        components: [{ components: [{ customId: 'filter_category' }] }]
+    };
+    assert.deepEqual(overviewViewOf(message), { sort: 'name', filter: 'Current', withCategoryFilter: true });
+    assert.deepEqual(overviewViewOf({ embeds: [{ footer: { text: 'Select a list to view' } }], components: [] }), { sort: '', filter: '', withCategoryFilter: false });
+
+    const asked = [];
+    const realGetLists = db.tasks.getLists;
+    db.tasks.getLists = async (userId, opts) => {
+        asked.push(opts);
+        return Array.from({ length: 30 }, (_, n) => ({ id: n + 1, name: `L${n}`, category: null, items_total: 0, items_completed: 0 }));
+    };
+    try {
+        const sent = [];
+        await handleSelectMenu({
+            customId: 'sel_list',
+            values: ['__page_1'],
+            user: { id: '1' },
+            message: { ...message, interaction: { user: { id: '1' } } },
+            update: async (p) => void sent.push(p)
+        });
+        assert.deepEqual(asked[0], { sortBy: 'name', order: 'ASC' });
+        assert.match(sent[0].embeds[0].toJSON().footer.text, /Sorted: name • Filter: Current/);
+        assert.equal(sent[0].components[0].toJSON().components[0].custom_id, 'filter_category');
+    } finally {
+        db.tasks.getLists = realGetLists;
+    }
+});

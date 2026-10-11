@@ -213,7 +213,9 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.ok(done.nextItem && done.nextItem.name === 'c', 'repeating task spawns its next copy');
 
         const quests = await (await call('GET', '/api/quests', { cookie: alice })).json();
-        assert.equal(quests.quests.length, 5);
+        assert.equal(quests.quests.length, 7, '5 fixed (incl. the monthly boss) + 1 live rotating quest');
+        assert.equal(quests.quests.filter((q) => q.rotating).length, 1);
+        assert.ok(quests.quests.some((q) => q.period === 'monthly'));
         assert.equal((await call('POST', '/api/quests/NOPE/claim', { cookie: alice })).status, 404);
         assert.equal((await call('POST', '/api/quests/WEEKLY_COMPLETE_15/claim', { cookie: alice })).status, 400, 'not finished');
 

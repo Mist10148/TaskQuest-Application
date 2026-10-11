@@ -11,8 +11,16 @@ const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const { applyXP, requireGamification, unlockAchievements } = require('./progression');
 const { errors } = require('../errors');
-const { QUESTS } = require('../constants');
-const { questPeriod } = require('../quests');
+const { QUESTS, ROTATING_QUESTS } = require('../constants');
+const { questPeriod, activeRotatingQuest } = require('../quests');
+
+const PERIOD_NOUN = { daily: 'day', weekly: 'week', monthly: 'month' };
+
+/** Quests that can be listed and claimed at `now`: every fixed quest, and only the live rotating one. */
+function liveQuests(now) {
+    const live = activeRotatingQuest(ROTATING_QUESTS, now);
+    return Object.entries(QUESTS).filter(([key, q]) => !q.rotating || key === live);
+}
 
 /** How far along a user is on one metric within [from, to). */
 async function metricProgress(conn, discordId, metric, from, to) {
@@ -37,6 +45,25 @@ async function metricProgress(conn, discordId, metric, from, to) {
                 `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
                  WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.created_at >= ? AND i.created_at < ?`
             );
+        case 'early_completions':
+            return count(
+                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
+                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                   AND i.first_completed_early = 1`
+            );
+        case 'overdue_completions':
+            return count(
+                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
+                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?
+                   AND i.first_completed_overdue = 1`
+            );
+        case 'lists_cleared':
+            return count('SELECT COUNT(*) AS n FROM lists WHERE discord_id = ? AND cleared_at >= ? AND cleared_at < ?');
+        case 'dated_adds':
+            return count(
+                `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
+                 WHERE l.discord_id = ? AND i.counts_for_quests = 1 AND i.due_date IS NOT NULL AND i.created_at >= ? AND i.created_at < ?`
+            );
         case 'daily_claims':
             return count(
                 `SELECT COUNT(*) AS n FROM xp_transactions
@@ -50,12 +77,12 @@ async function metricProgress(conn, discordId, metric, from, to) {
 async function questState(conn, discordId, now = new Date()) {
     const [claims] = await conn.query('SELECT quest_key, period_start FROM quest_claims WHERE discord_id = ? AND period_start >= ?', [
         discordId,
-        questPeriod('weekly', now).start
+        [questPeriod('weekly', now).start, questPeriod('monthly', now).start].sort()[0]
     ]);
     const claimed = new Set(claims.map((c) => `${c.quest_key}@${String(c.period_start).slice(0, 10)}`));
 
     const out = [];
-    for (const [key, q] of Object.entries(QUESTS)) {
+    for (const [key, q] of liveQuests(now)) {
         const period = questPeriod(q.period, now);
         const progress = Math.min(q.target, await metricProgress(conn, discordId, q.metric, period.startsAt, period.endsAt));
         const isClaimed = claimed.has(`${key}@${period.start}`);
@@ -65,6 +92,7 @@ async function questState(conn, discordId, now = new Date()) {
             emoji: q.emoji,
             description: q.description,
             period: q.period,
+            rotating: Boolean(q.rotating),
             target: q.target,
             reward: q.reward,
             progress,
@@ -91,7 +119,7 @@ async function getQuests(discordId, now = new Date()) {
 async function claimQuest(discordId, rawKey, now = new Date()) {
     const key = String(rawKey || '').toUpperCase();
     const quest = Object.prototype.hasOwnProperty.call(QUESTS, key) ? QUESTS[key] : null;
-    if (!quest) throw errors.notFound('Quest not found.');
+    if (!quest || !liveQuests(now).some(([k]) => k === key)) throw errors.notFound('Quest not found.');
 
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
@@ -106,7 +134,7 @@ async function claimQuest(discordId, rawKey, now = new Date()) {
             period.start,
             quest.reward
         ]);
-        if (res.affectedRows !== 1) throw errors.conflict(`You already claimed ${quest.name} this ${quest.period === 'daily' ? 'day' : 'week'}.`);
+        if (res.affectedRows !== 1) throw errors.conflict(`You already claimed ${quest.name} this ${PERIOD_NOUN[quest.period]}.`);
 
         const tx = await applyXP(conn, user, quest.reward, 'quest_reward', { referenceId: res.insertId });
         const achievements = await unlockAchievements(conn, user);

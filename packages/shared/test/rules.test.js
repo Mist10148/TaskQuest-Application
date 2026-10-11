@@ -773,3 +773,26 @@ test('weekly review: constants', () => {
     assert.equal(WEEKLY_REVIEW_KEY, 'WEEKLY_REVIEW');
     assert.ok(WEEKLY_XP_SOURCES.includes('weekly_review'));
 });
+
+test('quest periods: monthly runs from the first of the UTC month to the next first', () => {
+    const jan = shared.questPeriod('monthly', new Date('2030-01-31T23:59:59Z'));
+    assert.equal(jan.start, '2030-01-01');
+    assert.equal(jan.endsAt.toISOString(), '2030-02-01T00:00:00.000Z');
+    const dec = shared.questPeriod('monthly', new Date('2030-12-15T12:00:00Z'));
+    assert.equal(dec.endsAt.toISOString(), '2031-01-01T00:00:00.000Z', 'rolls over the year');
+    assert.equal(shared.questPeriod('monthly', new Date('2030-03-01T00:00:00Z')).start, '2030-03-01');
+});
+
+test('quest rotation: ISO week numbers pick one of four weekly quests', () => {
+    assert.equal(shared.isoWeek(new Date('2030-01-07T10:00:00Z')), 2);
+    assert.equal(shared.isoWeek(new Date('2030-01-01T10:00:00Z')), 1, 'Dec 31 to Jan 6 is week 1');
+    assert.equal(shared.isoWeek(new Date('2021-01-03T10:00:00Z')), 53, 'a Sunday in early January can still be week 53');
+    assert.equal(shared.isoWeek(new Date('2026-12-28T00:00:00Z')), 53);
+    const week = (day) => shared.activeRotatingQuest(shared.ROTATING_QUESTS, new Date(`${day}T12:00:00Z`));
+    assert.equal(week('2030-01-07'), shared.ROTATING_QUESTS[2], 'week 2 -> index 2');
+    assert.equal(week('2030-01-10'), week('2030-01-07'), 'the whole week shares one quest');
+    assert.equal(new Set([week('2030-01-07'), week('2030-01-14'), week('2030-01-21'), week('2030-01-28')]).size, 4);
+    assert.equal(week('2030-02-04'), week('2030-01-07'), 'it repeats every four weeks');
+    for (const key of shared.ROTATING_QUESTS) assert.ok(shared.QUESTS[key].rotating && shared.QUESTS[key].period === 'weekly');
+    assert.deepEqual(shared.QUESTS.BOSS_COMPLETE_50, { name: 'Monthly Boss', emoji: '🐉', description: 'Complete 50 tasks this month', period: 'monthly', metric: 'completions', target: 50, reward: 400 });
+});

@@ -11,7 +11,7 @@ const achievements = require('./achievements');
 const validation = require('./validation');
 const random = require('./random');
 const dates = require('./dates');
-const { questPeriod } = require('./quests');
+const { questPeriod, isoWeek, activeRotatingQuest } = require('./quests');
 const { buildIcs } = require('./ics');
 const { parseQuickAdd } = require('./quickAdd');
 const blackjack = require('./games/blackjack');
@@ -30,6 +30,8 @@ module.exports = {
     random,
     ...dates,
     questPeriod,
+    isoWeek,
+    activeRotatingQuest,
     buildIcs,
     parseQuickAdd,
     games: { blackjack, rps, hangman, arcade }

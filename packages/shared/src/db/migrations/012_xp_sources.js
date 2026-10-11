@@ -6,14 +6,17 @@
  *   users.last_chest_streak  the streak length of the last streak chest paid; a chest pays only above it, and a reset streak clears it
  *   items.habit_streak  consecutive on-time completions of a repeating task, carried onto each spawned copy
  *   focus_sessions     server-timed focus sessions; minutes_credited and xp are what the server measured and paid
+ *   items.first_completed_early / first_completed_overdue  whether the first completion was before / after the due date (NULL: no due date or not recorded)
  */
 
-exports.description = 'xp sources: list cleared marker, streak chests, habit streaks, focus sessions';
+exports.description = 'xp sources: list cleared marker, streak chests, habit streaks, focus sessions, quest facts';
 
 exports.up = async (h) => {
     await h.addColumnIfMissing('lists', 'cleared_at', 'DATETIME NULL DEFAULT NULL');
     await h.addColumnIfMissing('users', 'last_chest_streak', 'INT NOT NULL DEFAULT 0');
     await h.addColumnIfMissing('items', 'habit_streak', 'INT NOT NULL DEFAULT 0');
+    await h.addColumnIfMissing('items', 'first_completed_early', 'TINYINT(1) NULL DEFAULT NULL');
+    await h.addColumnIfMissing('items', 'first_completed_overdue', 'TINYINT(1) NULL DEFAULT NULL');
 
     await h.exec(`CREATE TABLE IF NOT EXISTS focus_sessions (
         id INT AUTO_INCREMENT PRIMARY KEY,

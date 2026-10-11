@@ -483,11 +483,13 @@ async function setItemCompleted(discordId, itemId, completed) {
         let bonuses = [];
         if (target && !item.xp_awarded) {
             // first_completed_* is what quests count: set once, never rewritten by a re-check or a later priority edit.
-            await conn.query('UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_high = ? WHERE id = ?', [
-                now,
-                (item.priority || item.list_priority) === 'HIGH' ? 1 : 0,
-                id
-            ]);
+            const dueOn = item.due_date ? String(item.due_date).slice(0, 10) : null;
+            const todayLocal = todayInZone(user.timezone);
+            await conn.query(
+                `UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_high = ?,
+                        first_completed_early = ?, first_completed_overdue = ? WHERE id = ?`,
+                [now, (item.priority || item.list_priority) === 'HIGH' ? 1 : 0, dueOn ? (dueOn > todayLocal ? 1 : 0) : null, dueOn ? (dueOn < todayLocal ? 1 : 0) : null, id]
+            );
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
             const ctx = await completionContext(conn, item, user);

@@ -384,8 +384,17 @@ const QUESTS = {
     DAILY_HIGH_1: { name: 'Heavy Lifter', emoji: '🏋️', description: 'Complete a high-priority task today', period: 'daily', metric: 'high_completions', target: 1, reward: 25 },
     DAILY_ADD_3: { name: 'Planner', emoji: '🗒️', description: 'Add 3 tasks today', period: 'daily', metric: 'adds', target: 3, reward: 15 },
     WEEKLY_COMPLETE_15: { name: 'Weekly Warrior', emoji: '🛡️', description: 'Complete 15 tasks this week', period: 'weekly', metric: 'completions', target: 15, reward: 120 },
-    WEEKLY_DAILY_5: { name: 'Regular', emoji: '📆', description: 'Claim your daily reward on 5 days this week', period: 'weekly', metric: 'daily_claims', target: 5, reward: 80 }
+    WEEKLY_DAILY_5: { name: 'Regular', emoji: '📆', description: 'Claim your daily reward on 5 days this week', period: 'weekly', metric: 'daily_claims', target: 5, reward: 80 },
+    // The rotating weekly pool: exactly one of these is live each ISO week (see ROTATING_QUESTS).
+    WEEKLY_ROT_A: { name: 'Early Riser', emoji: '🌅', description: 'Finish 5 tasks before their due date', period: 'weekly', rotating: true, metric: 'early_completions', target: 5, reward: 60 },
+    WEEKLY_ROT_B: { name: 'Tidy Up', emoji: '🧹', description: 'Clear 2 lists', period: 'weekly', rotating: true, metric: 'lists_cleared', target: 2, reward: 60 },
+    WEEKLY_ROT_C: { name: 'Spring Cleaning', emoji: '🪣', description: 'Complete 10 overdue tasks', period: 'weekly', rotating: true, metric: 'overdue_completions', target: 10, reward: 80 },
+    WEEKLY_ROT_D: { name: 'Planner Pro', emoji: '🗓️', description: 'Add 10 tasks with due dates', period: 'weekly', rotating: true, metric: 'dated_adds', target: 10, reward: 50 },
+    BOSS_COMPLETE_50: { name: 'Monthly Boss', emoji: '🐉', description: 'Complete 50 tasks this month', period: 'monthly', metric: 'completions', target: 50, reward: 400 }
 };
+
+/** The rotating weekly quests in rotation order: ISO week number mod 4 picks the live one. */
+const ROTATING_QUESTS = ['WEEKLY_ROT_A', 'WEEKLY_ROT_B', 'WEEKLY_ROT_C', 'WEEKLY_ROT_D'];
 
 /** Leaderboard tabs. `weekly` counts XP earned since Monday from these sources (not bets or refunds). */
 const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
@@ -546,6 +555,7 @@ module.exports = {
     SKILL_RULES,
     SPEND_SOURCES,
     QUESTS,
+    ROTATING_QUESTS,
     LEADERBOARDS,
     WEEKLY_XP_SOURCES,
     LIMITS,

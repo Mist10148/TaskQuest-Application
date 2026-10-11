@@ -64,6 +64,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await cols('lists')).includes('cleared_at'));
         assert.ok(users.includes('last_chest_streak'));
         assert.ok(items.includes('habit_streak'));
+        for (const c of ['first_completed_early', 'first_completed_overdue']) assert.ok(items.includes(c), c);
         assert.equal((await pool.query("SHOW TABLES LIKE 'focus_sessions'"))[0].length, 1);
     });
 
@@ -1357,6 +1358,115 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const off = await db.review.getReview(U);
         assert.equal(off.claimable, false);
         await assert.rejects(db.review.claimReview(U), { code: 'GAMIFICATION_DISABLED' });
+    });
+
+
+    await t.test('quests: the monthly boss and exactly one rotating weekly quest', async () => {
+        const U = '100000000000000161';
+        await db.users.ensureUser(U);
+        const shared = require('../src');
+        const now = new Date();
+        const quests = await db.quests.getQuests(U, now);
+        const rotating = quests.filter((q) => q.rotating);
+        assert.equal(rotating.length, 1, 'one rotating quest is live');
+        assert.equal(rotating[0].key, shared.activeRotatingQuest(shared.ROTATING_QUESTS, now));
+        const boss = quests.find((q) => q.key === 'BOSS_COMPLETE_50');
+        assert.deepEqual([boss.period, boss.target, boss.reward, boss.claimable], ['monthly', 50, 400, false]);
+        assert.equal(boss.periodStart, shared.questPeriod('monthly', now).start);
+        assert.equal(new Date(boss.resetsAt).getTime(), shared.questPeriod('monthly', now).endsAt.getTime());
+
+        // The other three rotating quests cannot be listed or claimed this week.
+        for (const key of shared.ROTATING_QUESTS.filter((k) => k !== rotating[0].key)) {
+            assert.ok(!quests.some((q) => q.key === key));
+            await assert.rejects(db.quests.claimQuest(U, key, now), { code: 'NOT_FOUND' });
+        }
+        // ...but each is live in its own week.
+        const seen = new Set();
+        for (let w = 0; w < 4; w++) {
+            const at = new Date(now.getTime() + w * 7 * 86400e3);
+            const live = (await db.quests.getQuests(U, at)).filter((q) => q.rotating);
+            assert.equal(live.length, 1);
+            seen.add(live[0].key);
+        }
+        assert.equal(seen.size, 4);
+    });
+
+    await t.test('quests: early, overdue and dated-add facts count only real first completions', async () => {
+        const U = '100000000000000162';
+        await db.users.ensureUser(U);
+        const shared = require('../src');
+        const { list } = await db.tasks.createList(U, { name: 'Facts' });
+        let n = 0;
+        const add = async (due) => (await db.tasks.addItem(U, list.id, { name: `f${n++}`, due_date: due })).item.id;
+        const early = await add(dayOffset(5));
+        const late = await add(dayOffset(-2));
+        const today = await add(dayOffset(0));
+        for (const id of [early, late, today]) await db.tasks.setItemCompleted(U, id);
+        // Un-check, change the due date and re-check: the recorded facts do not move.
+        await db.tasks.setItemCompleted(U, early, false);
+        await db.tasks.updateItem(U, early, { due_date: dayOffset(-9) });
+        await db.tasks.setItemCompleted(U, early, true);
+
+        // Each rotating quest is only listed in its own week: move the data into that week and look.
+        let shifted = 0;
+        const progressIn = async (key) => {
+            let k = 0;
+            while (shared.activeRotatingQuest(shared.ROTATING_QUESTS, new Date(Date.now() + k * 7 * 86400e3)) !== key) k++;
+            const delta = k * 7 - shifted;
+            await db.query(
+                'UPDATE items i JOIN lists l ON l.id = i.list_id SET i.first_completed_at = i.first_completed_at + INTERVAL ? DAY, i.created_at = i.created_at + INTERVAL ? DAY WHERE l.discord_id = ?',
+                [delta, delta, U]
+            );
+            shifted = k * 7;
+            return (await db.quests.getQuests(U, new Date(Date.now() + k * 7 * 86400e3))).find((q) => q.key === key).progress;
+        };
+        assert.equal(await progressIn('WEEKLY_ROT_A'), 1, 'one task was finished early; the later due-date edit changed nothing');
+        assert.equal(await progressIn('WEEKLY_ROT_C'), 1, 'one task was finished overdue');
+        assert.equal(await progressIn('WEEKLY_ROT_D'), 3, 'three tasks were added with due dates');
+    });
+
+    await t.test('quests: clearing a list counts once and the monthly boss counts first completions', async () => {
+        const U = '100000000000000163';
+        await db.users.ensureUser(U);
+        const shared = require('../src');
+        const { list } = await db.tasks.createList(U, { name: 'Clear me' });
+        const ids = [];
+        for (const n of ['1', '2', '3']) ids.push((await db.tasks.addItem(U, list.id, { name: n })).item.id);
+        for (const id of ids) await db.tasks.setItemCompleted(U, id);
+        const [[cleared]] = await db.getPool().query('SELECT cleared_at FROM lists WHERE id = ?', [list.id]);
+        assert.ok(cleared.cleared_at, 'the list was marked cleared once');
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'again' });
+        const marked = (await db.getPool().query('SELECT cleared_at FROM lists WHERE id = ?', [list.id]))[0][0].cleared_at;
+        await db.tasks.setItemCompleted(U, item.id);
+        assert.equal((await db.getPool().query('SELECT cleared_at FROM lists WHERE id = ?', [list.id]))[0][0].cleared_at.getTime(), marked.getTime(), 're-clearing does not re-mark it');
+        let at = new Date();
+        while (shared.activeRotatingQuest(shared.ROTATING_QUESTS, at) !== 'WEEKLY_ROT_B') at = new Date(at.getTime() + 7 * 86400e3);
+        const days = Math.round((at.getTime() - Date.now()) / 86400e3);
+        await db.query('UPDATE lists SET cleared_at = cleared_at + INTERVAL ? DAY WHERE id = ?', [days, list.id]);
+        assert.equal((await db.quests.getQuests(U, at)).find((q) => q.key === 'WEEKLY_ROT_B').progress, 1);
+
+        // Monthly boss: 4 first completions so far this month; re-checking adds none.
+        const boss = async () => (await db.quests.getQuests(U)).find((q) => q.key === 'BOSS_COMPLETE_50').progress;
+        assert.equal(await boss(), 4);
+        await db.tasks.setItemCompleted(U, item.id, false);
+        await db.tasks.setItemCompleted(U, item.id, true);
+        assert.equal(await boss(), 4);
+        await assert.rejects(db.quests.claimQuest(U, 'BOSS_COMPLETE_50'), { code: 'VALIDATION' });
+        // Fill the boss quest with real completions (imported rows would not count), then claim it once.
+        const { list: big } = await db.tasks.createList(U, { name: 'Boss fight' });
+        await db.query(
+            `INSERT INTO items (list_id, name, position, completed, xp_awarded, first_completed_at, counts_for_quests)
+             SELECT ?, 'x', 0, 1, 1, UTC_TIMESTAMP(), 1 FROM information_schema.COLUMNS LIMIT 46`,
+            [big.id]
+        );
+        assert.equal(await boss(), 50);
+        const before = Number((await db.users.getUser(U)).player_xp);
+        const rewards0 = await rewardSum(U);
+        const claimed = await db.quests.claimQuest(U, 'BOSS_COMPLETE_50');
+        assert.equal(claimed.reward, 400);
+        assert.equal(Number((await db.users.getUser(U)).player_xp) - before - ((await rewardSum(U)) - rewards0), 400);
+        await assert.rejects(db.quests.claimQuest(U, 'BOSS_COMPLETE_50'), { code: 'CONFLICT', message: /this month/ });
+        assert.equal((await db.quests.getQuests(U)).find((q) => q.key === 'BOSS_COMPLETE_50').claimed, true);
     });
 
     await db.closePool();

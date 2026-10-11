@@ -857,5 +857,42 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number((await db.users.getUser(G)).owns_ranger), 0);
     });
 
+    await t.test('buying the Necromancer; reviving an overdue task binds a soul; the counter resets on a class switch', async () => {
+        const N = '100000000000000209';
+        await db.users.ensureUser(N);
+        await setXP(N, 650);
+        await db.progression.buyClass(N, 'necromancer');
+        let u = await db.users.getUser(N);
+        assert.equal(Number(u.owns_necromancer), 1);
+        assert.equal(u.player_class, 'NECROMANCER');
+
+        const shared = require('../src');
+        const day = (offset) => {
+            const d = new Date(`${shared.todayInZone()}T00:00:00Z`);
+            d.setUTCDate(d.getUTCDate() + offset);
+            return d.toISOString().slice(0, 10);
+        };
+        const { list } = await db.tasks.createList(N, { name: 'Crypt' });
+        const add = async (name, due_date) => (await db.tasks.addItem(N, list.id, { name, due_date })).item.id;
+        const first = await db.tasks.setItemCompleted(N, await add('stale', day(-3)));
+        assert.equal(first.xp.bonusInfo.type, 'NECROMANCER_REVIVE');
+        assert.equal(first.xp.bonusInfo.classBonus, 15 + 9 + 0, '3 days overdue on a 10 XP task, first soul');
+        assert.equal(Number((await db.users.getUser(N)).necro_souls), 1);
+        const fresh = await db.tasks.setItemCompleted(N, await add('fresh', day(1)));
+        assert.equal(fresh.xp.bonusInfo.type, 'NECROMANCER', 'a task that is not overdue is not a revive');
+        assert.equal(Number((await db.users.getUser(N)).necro_souls), 1);
+        const dueToday = await db.tasks.setItemCompleted(N, await add('today', day(0)));
+        assert.equal(dueToday.xp.bonusInfo.type, 'NECROMANCER', 'due today is not overdue');
+
+        await db.progression.equipClass(N, 'DEFAULT');
+        u = await db.users.getUser(N);
+        assert.equal(Number(u.necro_souls), 0);
+        await db.query('UPDATE users SET necro_souls = 4 WHERE discord_id = ?', [N]);
+        await db.users.resetProgress(N);
+        u = await db.users.getUser(N);
+        assert.equal(Number(u.necro_souls), 0);
+        assert.equal(Number(u.owns_necromancer), 0);
+    });
+
     await db.closePool();
 });

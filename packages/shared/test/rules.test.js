@@ -32,7 +32,7 @@ test('every skill exists in exactly one tree and prerequisites resolve', () => {
             assert.ok(skill.description.length > 0);
         }
     }
-    assert.equal(seen.size, 54);
+    assert.equal(seen.size, 58);
     assert.equal(shared.findSkill('__proto__'), null);
 });
 
@@ -613,4 +613,44 @@ test('Ranger tree: four chained skills and no counter column needed', () => {
     assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'ranger_scout', 'ranger_longsight', 'ranger_bullseye']);
     assert.equal(shared.CLASSES.RANGER.cost, 600);
     assert.deepEqual(shared.calculateClassXP(user({ player_class: 'RANGER' }), 10).userUpdates, {});
+});
+
+// ─── Necromancer ─────────────────────────────────────────────────────────────
+
+test('Necromancer Revive: overdue completions pay and bind souls; souls boost every action', () => {
+    const necro = (souls) => user({ player_class: 'NECROMANCER', necro_souls: souls });
+    const revive = (days) => ({ action: 'item_complete', overdueDays: days });
+    const plain = { action: 'item_complete', overdueDays: 0 };
+    // [label, souls held, context, skills, base, expected souls, expected bonus]
+    const cases = [
+        ['not overdue, no souls', 0, plain, [], 10, 0, 0],
+        ['revive 1 day overdue', 0, revive(1), [], 10, 1, 15 + 3],
+        ['revive 3 days overdue, 2nd soul adds 5% of base', 1, revive(3), [], 100, 2, 150 + 9 + 10],
+        ['overdue days are capped at 30 XP', 0, revive(40), [], 10, 1, 15 + 30],
+        ['souls are capped at 5', 5, revive(2), [], 100, 5, 150 + 6 + 25],
+        ['souls boost a normal action too', 3, plain, [], 100, 3, 15],
+        ['souls boost non-completions', 4, { action: 'item_add' }, [], 100, 4, 20],
+        ['small base rounds the soul bonus down', 2, plain, [], 10, 2, 1],
+        ['Siphon: +2% per soul per level', 3, plain, [sk('necro_siphon', 2)], 100, 3, 27],
+        ['Soul Jar: cap 8', 5, revive(2), [sk('necro_jar')], 100, 6, 150 + 6 + 30],
+        ['Soul Jar: still capped at 8', 8, revive(2), [sk('necro_jar')], 100, 8, 150 + 6 + 40],
+        ['Dark Ritual: revive +50%', 0, revive(2), [sk('necro_ritual')], 100, 1, Math.floor(156 * 1.5) + 5],
+        ['Lichdom: +3 per soul on a revive', 2, revive(2), [sk('necro_lich')], 100, 3, 156 + 15 + 9],
+        ['Lichdom does nothing without a revive', 2, plain, [sk('necro_lich')], 100, 2, 10]
+    ];
+    for (const [label, souls, context, skills, base, expectedSouls, expectedBonus] of cases) {
+        const r = shared.calculateClassXP(necro(souls), base, { context, skills });
+        assert.equal(r.userUpdates.necro_souls, expectedSouls, `${label}: souls`);
+        assert.equal(r.bonusInfo.classBonus, expectedBonus, `${label}: bonus`);
+        assert.equal(r.finalXP, base + expectedBonus, `${label}: final`);
+    }
+    assert.equal(shared.calculateClassXP(necro(0), 10, { context: revive(1) }).bonusInfo.type, 'NECROMANCER_REVIVE');
+    assert.equal(shared.calculateClassXP(necro(0), 10, { context: plain }).bonusInfo.type, 'NECROMANCER');
+});
+
+test('Necromancer tree: four chained skills', () => {
+    const ids = Object.keys(shared.SKILL_TREES.NECROMANCER.skills);
+    assert.deepEqual(ids, ['necro_siphon', 'necro_jar', 'necro_ritual', 'necro_lich']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'necro_siphon', 'necro_jar', 'necro_ritual']);
+    assert.equal(shared.CLASSES.NECROMANCER.cost, 600);
 });

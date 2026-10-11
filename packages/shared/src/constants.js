@@ -82,6 +82,13 @@ const CLASSES = {
         cost: 600,
         description: 'Deadline Hunter: finishing a task with a due date early pays 10% of the base XP plus 2 XP per day early (up to 7 days); due today pays 25% of the base; overdue pays nothing. Every other action gives +3 XP.',
         playstyle: 'Rewards planning ahead and finishing before the deadline.'
+    },
+    NECROMANCER: {
+        name: 'Necromancer',
+        emoji: '💀',
+        cost: 600,
+        description: 'Revive: completing an overdue task pays +150% of the base XP plus 3 XP per day overdue (max 30) and binds a soul (max 5). Every soul adds +5% of the base XP to every action.',
+        playstyle: 'Turns neglected tasks into power.'
     }
 };
 
@@ -222,6 +229,17 @@ const SKILL_TREES = {
             ranger_bullseye: { name: 'Bullseye', emoji: '🎯', description: '+10 XP when you complete a task on its due date (Ranger)', maxLevel: 1, cost: 280, requires: 'ranger_longsight' },
             ranger_secondwind: { name: 'Second Wind', emoji: '🌅', description: 'Overdue completions pay half the due-today bonus (Ranger)', maxLevel: 1, cost: 330, requires: 'ranger_bullseye' }
         }
+    },
+    NECROMANCER: {
+        name: 'Necromancer',
+        emoji: '💀',
+        description: 'Revive overdue work, collect souls',
+        skills: {
+            necro_siphon: { name: 'Siphon', emoji: '🫧', description: 'Each soul adds +2% more XP per level (Necromancer)', maxLevel: 3, cost: 130, requires: null },
+            necro_jar: { name: 'Soul Jar', emoji: '🏺', description: 'Hold up to 8 souls instead of 5 (Necromancer)', maxLevel: 1, cost: 210, requires: 'necro_siphon' },
+            necro_ritual: { name: 'Dark Ritual', emoji: '🕯️', description: 'Reviving pays +50% more (Necromancer)', maxLevel: 1, cost: 280, requires: 'necro_jar' },
+            necro_lich: { name: 'Lichdom', emoji: '☠️', description: 'Reviving also pays +3 XP per soul you hold (Necromancer)', maxLevel: 1, cost: 350, requires: 'necro_ritual' }
+        }
     }
 };
 
@@ -337,6 +355,7 @@ const CLASS_RULES = {
     WIZARD: { OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
     ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97 },
     TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    NECROMANCER: { MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 5, SIPHON_PERCENT: 2, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
     RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 2, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 3, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
     ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 5, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
     MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 3, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 1, FOCUS_PERCENT: 25, DISCIPLINE_CAP: 4 }

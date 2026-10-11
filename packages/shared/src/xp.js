@@ -303,6 +303,27 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'NECROMANCER': {
+            const n = CLASS_RULES.NECROMANCER;
+            const revive = context.action === 'item_complete' && Number(context.overdueDays) > 0;
+            const cap = n.MAX_SOULS + (lvl('necro_jar') ? n.JAR_SOULS : 0);
+            const souls = Math.min(cap, Math.max(0, Number(user.necro_souls) || 0) + (revive ? 1 : 0));
+            userUpdates.necro_souls = souls;
+            const soulBonus = Math.floor((baseXP * souls * (n.SOUL_PERCENT + lvl('necro_siphon') * n.SIPHON_PERCENT)) / 100);
+            let reviveBonus = 0;
+            if (revive) {
+                reviveBonus = Math.floor((baseXP * n.REVIVE_PERCENT) / 100) + Math.min(n.REVIVE_OVERDUE_CAP, n.REVIVE_XP_PER_OVERDUE_DAY * Number(context.overdueDays));
+                if (lvl('necro_ritual')) reviveBonus = Math.floor((reviveBonus * (100 + n.RITUAL_PERCENT)) / 100);
+                if (lvl('necro_lich')) reviveBonus += souls * n.LICH_XP_PER_SOUL;
+            }
+            const bonus = soulBonus + reviveBonus;
+            finalXP = baseXP + bonus;
+            bonusInfo = revive
+                ? { type: 'NECROMANCER_REVIVE', details: `💀 Revived! Souls ${souls}/${cap} +${bonus}`, classBonus: bonus }
+                : { type: 'NECROMANCER', details: souls ? `💀 Souls ${souls}/${cap} +${bonus}` : '', classBonus: bonus };
+            break;
+        }
+
         default:
             break;
     }

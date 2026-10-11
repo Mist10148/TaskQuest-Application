@@ -85,7 +85,10 @@ const SKILL_TREES = {
         skills: {
             default_xp_boost: { name: 'Quick Learner', emoji: '📚', description: '+5% XP from all actions per level', maxLevel: 3, cost: 50, requires: null },
             default_daily_boost: { name: 'Early Bird', emoji: '🌅', description: '+10 daily reward XP per level', maxLevel: 2, cost: 75, requires: 'default_xp_boost' },
-            default_streak_shield: { name: 'Streak Shield', emoji: '🛡️', description: 'Your daily streak survives one missed day (72h window instead of 48h)', maxLevel: 1, cost: 100, requires: 'default_daily_boost' }
+            default_streak_shield: { name: 'Streak Shield', emoji: '🛡️', description: 'Your daily streak survives one missed day (72h window instead of 48h)', maxLevel: 1, cost: 100, requires: 'default_daily_boost' },
+            default_momentum: { name: 'Momentum', emoji: '🔥', description: '+0.5% XP per level for each day of your current daily streak (counted up to 10 days, so +15% at level 3)', maxLevel: 3, cost: 70, requires: 'default_xp_boost' },
+            default_freeze_cache: { name: 'Freeze Cache', emoji: '🧊', description: 'Hold 5 streak freezes instead of 3, and each costs 120 XP instead of 150', maxLevel: 1, cost: 120, requires: 'default_streak_shield' },
+            default_daily_surprise: { name: 'Daily Surprise', emoji: '🎁', description: 'Your daily reward has a 15% chance to add +50 XP', maxLevel: 1, cost: 140, requires: 'default_freeze_cache' }
         }
     },
     HERO: {
@@ -96,7 +99,9 @@ const SKILL_TREES = {
             hero_valor: { name: 'Valor', emoji: '⚔️', description: '+10 flat XP per action per level', maxLevel: 3, cost: 100, requires: null },
             hero_inspire: { name: 'Inspire', emoji: '✨', description: '+8% XP per level', maxLevel: 2, cost: 150, requires: 'hero_valor' },
             hero_champion: { name: 'Champion', emoji: '👑', description: 'Double XP while your level is a multiple of 5', maxLevel: 1, cost: 200, requires: 'hero_inspire' },
-            hero_legend: { name: 'Legendary', emoji: '🏆', description: '+25% XP on every action', maxLevel: 1, cost: 300, requires: 'hero_champion' }
+            hero_legend: { name: 'Legendary', emoji: '🏆', description: '+25% XP on every action', maxLevel: 1, cost: 300, requires: 'hero_champion' },
+            hero_oath: { name: 'Oath', emoji: '🛡️', description: 'Hero bonus becomes min(25 + level, 50), still capped at 3× the base reward (Hero)', maxLevel: 1, cost: 250, requires: 'hero_legend' },
+            hero_rally: { name: 'Rally', emoji: '📣', description: '+15 flat XP when you complete a HIGH priority task', maxLevel: 1, cost: 220, requires: 'hero_oath' }
         }
     },
     GAMBLER: {
@@ -107,7 +112,9 @@ const SKILL_TREES = {
             gambler_lucky: { name: 'Lucky Streak', emoji: '🍀', description: 'Gambler bad-luck chance −5% per level (20% → 5%)', maxLevel: 3, cost: 80, requires: null },
             gambler_double: { name: 'Double Down', emoji: '🎰', description: '10% chance per level to double the XP of an action', maxLevel: 2, cost: 120, requires: 'gambler_lucky' },
             gambler_safety: { name: 'Safety Net', emoji: '🪢', description: 'Gambler bad-luck losses are 25% smaller per level', maxLevel: 2, cost: 150, requires: 'gambler_double' },
-            gambler_jackpot: { name: 'Jackpot', emoji: '💎', description: '1% chance for 10× XP on an action', maxLevel: 1, cost: 250, requires: 'gambler_safety' }
+            gambler_jackpot: { name: 'Jackpot', emoji: '💎', description: '1% chance for 10× XP on an action', maxLevel: 1, cost: 250, requires: 'gambler_safety' },
+            gambler_insurance: { name: 'Insurance', emoji: '🎟️', description: 'Bad luck can never cut a reward below 60% of the base XP (Gambler)', maxLevel: 1, cost: 200, requires: 'gambler_jackpot' },
+            gambler_hothand: { name: 'Hot Hand', emoji: '🔁', description: 'After 3 lucky rolls in a row the next roll cannot be bad luck (Gambler)', maxLevel: 1, cost: 230, requires: 'gambler_insurance' }
         }
     },
     ASSASSIN: {
@@ -118,7 +125,9 @@ const SKILL_TREES = {
             assassin_swift: { name: 'Swift Strike', emoji: '💨', description: 'Assassin streak builds +1 faster per level', maxLevel: 3, cost: 90, requires: null },
             assassin_critical: { name: 'Critical Hit', emoji: '🎯', description: '+10% chance per level to crit for +50% XP', maxLevel: 2, cost: 130, requires: 'assassin_swift' },
             assassin_shadow: { name: 'Shadow Step', emoji: '🌑', description: 'Critical hits grant +100% XP instead of +50%', maxLevel: 1, cost: 180, requires: 'assassin_critical' },
-            assassin_execute: { name: 'Execute', emoji: '☠️', description: '+100% XP while at 10/10 Assassin stacks', maxLevel: 1, cost: 280, requires: 'assassin_shadow' }
+            assassin_execute: { name: 'Execute', emoji: '☠️', description: '+100% XP while at 10/10 Assassin stacks', maxLevel: 1, cost: 280, requires: 'assassin_shadow' },
+            assassin_nightowl: { name: 'Night Owl', emoji: '🌙', description: 'Your Assassin streak survives 48 hours of inactivity instead of 36 (Assassin)', maxLevel: 1, cost: 200, requires: 'assassin_execute' },
+            assassin_bleed: { name: 'Bleed', emoji: '🩸', description: 'After a critical hit your next 3 actions get +20% XP', maxLevel: 1, cost: 240, requires: 'assassin_nightowl' }
         }
     },
     WIZARD: {
@@ -129,7 +138,9 @@ const SKILL_TREES = {
             wizard_study: { name: 'Arcane Study', emoji: '📖', description: '+3 flat XP per action per level', maxLevel: 3, cost: 100, requires: null },
             wizard_combo: { name: 'Spell Combo', emoji: '🔥', description: 'Wizard Combo bonus +50% per level', maxLevel: 2, cost: 150, requires: 'wizard_study' },
             wizard_focus: { name: 'Focus', emoji: '🧘', description: '+10% XP per level', maxLevel: 2, cost: 200, requires: 'wizard_combo' },
-            wizard_mastery: { name: 'Arcane Mastery', emoji: '🌟', description: 'Wizard Burst grants 3× Wisdom instead of 2×', maxLevel: 1, cost: 350, requires: 'wizard_focus' }
+            wizard_mastery: { name: 'Arcane Mastery', emoji: '🌟', description: 'Wizard Burst grants 3× Wisdom instead of 2×', maxLevel: 1, cost: 350, requires: 'wizard_focus' },
+            wizard_overcharge: { name: 'Overcharge', emoji: '🕯️', description: 'After a Burst the Wizard cycle restarts at 2 charges instead of 0 (Wizard)', maxLevel: 1, cost: 300, requires: 'wizard_mastery' },
+            wizard_tome: { name: 'Tome', emoji: '📚', description: 'Wisdom grows by 1 for every 20 tasks you have ever completed (Wizard)', maxLevel: 1, cost: 260, requires: 'wizard_overcharge' }
         }
     },
     ARCHER: {
@@ -140,7 +151,9 @@ const SKILL_TREES = {
             archer_aim: { name: 'Steady Aim', emoji: '🎯', description: '+3% XP per level', maxLevel: 3, cost: 85, requires: null },
             archer_multishot: { name: 'Multishot', emoji: '🏹', description: '+5 XP per level when completing a task', maxLevel: 2, cost: 140, requires: 'archer_aim' },
             archer_piercing: { name: 'Piercing Shot', emoji: '💫', description: 'Archer misses no longer reduce your streak', maxLevel: 1, cost: 190, requires: 'archer_multishot' },
-            archer_sniper: { name: 'Sniper', emoji: '🦅', description: 'Completing a task in a HIGH priority list is always a headshot (Archer)', maxLevel: 1, cost: 300, requires: 'archer_piercing' }
+            archer_sniper: { name: 'Sniper', emoji: '🦅', description: 'Completing a task in a HIGH priority list is always a headshot (Archer)', maxLevel: 1, cost: 300, requires: 'archer_piercing' },
+            archer_quiver: { name: 'Quiver', emoji: '🪶', description: '+3% Archer hit chance per level (still capped at 97%)', maxLevel: 2, cost: 150, requires: 'archer_sniper' },
+            archer_eagle: { name: 'Eagle Eye', emoji: '🦉', description: 'Archer headshot chance ×1.5', maxLevel: 1, cost: 260, requires: 'archer_quiver' }
         }
     },
     TANK: {
@@ -151,7 +164,9 @@ const SKILL_TREES = {
             tank_fortify: { name: 'Fortify', emoji: '🧱', description: '+5 flat XP per action per level', maxLevel: 3, cost: 95, requires: null },
             tank_absorb: { name: 'Absorb', emoji: '💪', description: '+2 Tank max shield stacks per level', maxLevel: 2, cost: 145, requires: 'tank_fortify' },
             tank_revenge: { name: 'Revenge', emoji: '⚡', description: '+10% XP per level while at max shield stacks', maxLevel: 2, cost: 200, requires: 'tank_absorb' },
-            tank_unstoppable: { name: 'Unstoppable', emoji: '🚀', description: 'Your daily streak never resets; a missed day only pauses it', maxLevel: 1, cost: 320, requires: 'tank_revenge' }
+            tank_unstoppable: { name: 'Unstoppable', emoji: '🚀', description: 'Your daily streak never resets; a missed day only pauses it', maxLevel: 1, cost: 320, requires: 'tank_revenge' },
+            tank_bulwark: { name: 'Bulwark', emoji: '🏰', description: 'Each action adds 2 Tank shield stacks instead of 1 (Tank)', maxLevel: 1, cost: 240, requires: 'tank_unstoppable' },
+            tank_anchor: { name: 'Anchor', emoji: '⚓', description: '+8 flat XP when you complete a recurring task', maxLevel: 1, cost: 260, requires: 'tank_bulwark' }
         }
     }
 };
@@ -254,6 +269,30 @@ const WEEKLY_XP_SOURCES = ['list_create', 'item_add', 'item_complete', 'daily', 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
 const STREAK_FREEZE = { COST: 150, MAX: 3 };
 
+/** Streak freezes with the Freeze Cache skill (default_freeze_cache). */
+const STREAK_FREEZE_CACHE = { COST: 120, MAX: 5 };
+
+/**
+ * Tunable numbers behind classes and the conditional skills. xp.js reads them; docs/GAMEPLAY.md
+ * tables them. Percentages are plain numbers (20 = 20%).
+ */
+const CLASS_RULES = {
+    HERO: { FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15 },
+    GAMBLER: { LOSS_CHANCE: 0.2, MIN_LOSS_CHANCE: 0.05, INSURANCE_FLOOR: 0.6, HOT_HAND_STREAK: 3 },
+    ASSASSIN: { DECAY_HOURS: 36, NIGHT_OWL_DECAY_HOURS: 48, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
+    WIZARD: { OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
+    ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97 },
+    TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 }
+};
+
+/** Numbers behind the default-tree skills. */
+const SKILL_RULES = {
+    MOMENTUM_PERCENT_PER_DAY: 0.5,
+    MOMENTUM_MAX_DAYS: 10,
+    DAILY_SURPRISE_CHANCE: 0.15,
+    DAILY_SURPRISE_XP: 50
+};
+
 /** xp_transactions sources that count as "spending" for xp_spent and the spending achievements. */
 const SPEND_SOURCES = ['class_purchase', 'skill_purchase', 'streak_freeze'];
 
@@ -342,6 +381,9 @@ module.exports = {
     XP_PER_LEVEL,
     REWARDS,
     STREAK_FREEZE,
+    STREAK_FREEZE_CACHE,
+    CLASS_RULES,
+    SKILL_RULES,
     SPEND_SOURCES,
     QUESTS,
     LEADERBOARDS,

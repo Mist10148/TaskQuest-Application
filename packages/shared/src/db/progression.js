@@ -16,20 +16,19 @@ const {
     classOwnershipColumn,
     findSkill,
     LIMITS,
-    STREAK_FREEZE,
     SPEND_SOURCES
 } = require('../constants');
-const { levelFromXP, calculateFinalXP, calculateDailyReward } = require('../xp');
+const { levelFromXP, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
 
 /** Columns applyXP() may update alongside the balance. */
 const UPDATABLE_COLUMNS = new Set([
-    'assassin_streak', 'assassin_stacks', 'assassin_last_at', 'wizard_counter', 'archer_streak', 'tank_stacks',
+    'assassin_streak', 'assassin_stacks', 'assassin_last_at', 'assassin_bleed', 'gambler_streak', 'wizard_counter', 'archer_streak', 'tank_stacks',
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
     'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes'
 ]);
 
-const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
+const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
 
 /** Persist column updates on a locked user and mirror them on the object. */
 async function updateUserColumns(conn, user, updates) {
@@ -245,12 +244,13 @@ async function buyStreakFreeze(discordId) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         requireGamification(user);
+        const limits = getFreezeLimits(await getUserSkills(user.discord_id, conn));
         const owned = Number(user.streak_freezes) || 0;
-        if (owned >= STREAK_FREEZE.MAX) throw errors.conflict(`You can hold at most ${STREAK_FREEZE.MAX} streak freezes.`);
-        if (Number(user.player_xp) < STREAK_FREEZE.COST) throw errors.insufficientXP(STREAK_FREEZE.COST, Number(user.player_xp));
-        const tx = await applyXP(conn, user, -STREAK_FREEZE.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
+        if (owned >= limits.MAX) throw errors.conflict(`You can hold at most ${limits.MAX} streak freezes.`);
+        if (Number(user.player_xp) < limits.COST) throw errors.insufficientXP(limits.COST, Number(user.player_xp));
+        const tx = await applyXP(conn, user, -limits.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
         const achievements = await unlockAchievements(conn, user);
-        return { freezes: owned + 1, cost: STREAK_FREEZE.COST, balance: tx.balanceAfter, achievements };
+        return { freezes: owned + 1, max: limits.MAX, cost: limits.COST, balance: tx.balanceAfter, achievements };
     });
 }
 

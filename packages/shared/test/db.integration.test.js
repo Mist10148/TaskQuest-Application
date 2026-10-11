@@ -667,5 +667,36 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await row()).assassin_streak, 2, 'inside the window it keeps building');
     });
 
+    await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
+        const F = '100000000000000203';
+        await db.users.ensureUser(F);
+        await setXP(F, 5000);
+        // the chain default_xp_boost -> daily_boost -> streak_shield -> freeze_cache must be bought in order
+        await assert.rejects(db.progression.unlockSkill(F, 'default_freeze_cache'), { code: 'FORBIDDEN' });
+        for (const id of ['default_xp_boost', 'default_daily_boost', 'default_daily_boost', 'default_streak_shield']) await db.progression.unlockSkill(F, id);
+        for (let i = 0; i < 3; i += 1) await db.progression.buyStreakFreeze(F);
+        await assert.rejects(db.progression.buyStreakFreeze(F), { code: 'CONFLICT' }, 'the default cap is 3');
+        await db.progression.unlockSkill(F, 'default_freeze_cache');
+        const before = (await db.users.getUser(F)).player_xp;
+        const bought = await db.progression.buyStreakFreeze(F);
+        assert.equal(bought.freezes, 4);
+        assert.equal(bought.max, 5);
+        assert.equal(bought.cost, 120);
+        assert.equal(Number(before) - bought.balance, 120);
+        await db.progression.buyStreakFreeze(F);
+        await assert.rejects(db.progression.buyStreakFreeze(F), { code: 'CONFLICT' }, 'the cache cap is 5');
+
+        // gambler_streak resets when switching class; assassin_bleed survives (it belongs to the skill, not the class)
+        await db.query("UPDATE users SET owns_gambler = 1, owns_hero = 1, player_class = 'GAMBLER', gambler_streak = 4, assassin_bleed = 2 WHERE discord_id = ?", [F]);
+        await db.progression.equipClass(F, 'HERO');
+        const after = await db.users.getUser(F);
+        assert.equal(after.gambler_streak, 0);
+        assert.equal(after.assassin_bleed, 2);
+        await db.users.resetProgress(F);
+        const wiped = await db.users.getUser(F);
+        assert.equal(wiped.assassin_bleed, 0);
+        assert.equal(wiped.assassin_last_at, null);
+    });
+
     await db.closePool();
 });

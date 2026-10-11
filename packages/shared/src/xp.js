@@ -10,11 +10,8 @@
 
 'use strict';
 
-const { XP_PER_LEVEL, REWARDS, DAILY } = require('./constants');
+const { XP_PER_LEVEL, REWARDS, DAILY, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES } = require('./constants');
 const { secureRandom } = require('./random');
-
-/** How long an Assassin may stay idle before the streak and stacks reset. */
-const ASSASSIN_DECAY_MS = 36 * 60 * 60 * 1000;
 
 /** Milliseconds for a Date, ISO string or number; null for empty/invalid. */
 function toMs(value) {
@@ -73,8 +70,18 @@ function getSkillBonuses(userSkills) {
         doubleChance: lvl('gambler_double') * 10,
         jackpotChance: lvl('gambler_jackpot') ? 1 : 0,
         streakShield: lvl('default_streak_shield') > 0,
-        streakUnstoppable: lvl('tank_unstoppable') > 0
+        streakUnstoppable: lvl('tank_unstoppable') > 0,
+        momentumPerDay: lvl('default_momentum') * (SKILL_RULES.MOMENTUM_PERCENT_PER_DAY / 100),
+        rallyXP: lvl('hero_rally') ? CLASS_RULES.HERO.RALLY_XP : 0,
+        anchorXP: lvl('tank_anchor') ? CLASS_RULES.TANK.ANCHOR_XP : 0,
+        dailySurprise: lvl('default_daily_surprise') > 0
     };
+}
+
+/** Streak freeze limits: { max, cost }. Freeze Cache raises the cap and lowers the price. */
+function getFreezeLimits(userSkills) {
+    const cache = (toSkillMap(userSkills).get('default_freeze_cache') || 0) > 0;
+    return cache ? { ...STREAK_FREEZE_CACHE } : { ...STREAK_FREEZE };
 }
 
 // ─── Class XP ─────────────────────────────────────────────────────────────────
@@ -104,7 +111,8 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
     switch (user.player_class) {
         case 'HERO': {
-            const bonus = Math.min(25, baseXP * 3);
+            const flat = lvl('hero_oath') ? Math.min(CLASS_RULES.HERO.FLAT + level, CLASS_RULES.HERO.OATH_CAP) : CLASS_RULES.HERO.FLAT;
+            const bonus = Math.min(flat, baseXP * CLASS_RULES.HERO.MAX_BASE_MULTIPLE);
             finalXP += bonus;
             bonusInfo = { type: 'HERO', details: `⚔️ Hero +${bonus}`, classBonus: bonus };
             break;
@@ -112,15 +120,23 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
         case 'GAMBLER': {
             const bonus = Math.floor(rng() * (baseXP + 100));
-            const lossChance = Math.max(0.05, 0.2 - lvl('gambler_lucky') * 0.05);
-            if (rng() < lossChance) {
+            const lossChance = Math.max(CLASS_RULES.GAMBLER.MIN_LOSS_CHANCE, CLASS_RULES.GAMBLER.LOSS_CHANCE - lvl('gambler_lucky') * 0.05);
+            const streak = Number(user.gambler_streak) || 0;
+            // Hot Hand: a run of lucky rolls guarantees the next one is not bad luck (the roll is still drawn).
+            const hotHand = lvl('gambler_hothand') > 0 && streak >= CLASS_RULES.GAMBLER.HOT_HAND_STREAK;
+            const bad = rng() < lossChance && !hotHand;
+            if (bad) {
                 const rawLoss = Math.min(bonus, baseXP - 1);
-                const lost = Math.max(0, Math.floor(rawLoss * (1 - lvl('gambler_safety') * 0.25)));
+                let lost = Math.max(0, Math.floor(rawLoss * (1 - lvl('gambler_safety') * 0.25)));
+                if (lvl('gambler_insurance')) lost = Math.min(lost, baseXP - Math.ceil(baseXP * CLASS_RULES.GAMBLER.INSURANCE_FLOOR));
+                lost = Math.max(0, lost);
                 finalXP = Math.max(1, baseXP - lost);
+                userUpdates.gambler_streak = 0;
                 bonusInfo = { type: 'GAMBLER_LOSS', details: `🎲 Bad luck -${lost}`, classBonus: -lost };
             } else {
                 finalXP = baseXP + bonus;
-                bonusInfo = { type: 'GAMBLER_WIN', details: `🎲 Lucky +${bonus}`, classBonus: bonus };
+                userUpdates.gambler_streak = hotHand ? 0 : streak + 1;
+                bonusInfo = { type: 'GAMBLER_WIN', details: `🎲 ${hotHand ? 'Hot hand' : 'Lucky'} +${bonus}`, classBonus: bonus };
             }
             break;
         }
@@ -129,7 +145,8 @@ function calculateClassXP(user, baseXP, opts = {}) {
             // A streak only lives while you keep acting: after the decay window it starts over.
             const nowMs = toMs(opts.now) ?? Date.now();
             const lastAt = toMs(user.assassin_last_at);
-            const decayed = lastAt !== null && nowMs - lastAt > ASSASSIN_DECAY_MS;
+            const decayHours = lvl('assassin_nightowl') ? CLASS_RULES.ASSASSIN.NIGHT_OWL_DECAY_HOURS : CLASS_RULES.ASSASSIN.DECAY_HOURS;
+            const decayed = lastAt !== null && nowMs - lastAt > decayHours * 3600e3;
             userUpdates.assassin_last_at = new Date(nowMs);
             const prevStreak = decayed ? 0 : Number(user.assassin_streak) || 0;
             const prevStacks = decayed ? 0 : Number(user.assassin_stacks) || 0;
@@ -137,7 +154,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const streak = prevStreak + 1 + lvl('assassin_swift');
             userUpdates.assassin_streak = streak;
             if (streak >= 3) {
-                const stacks = Math.min(10, prevStacks + 1);
+                const stacks = Math.min(CLASS_RULES.ASSASSIN.MAX_STACKS, prevStacks + 1);
                 userUpdates.assassin_stacks = stacks;
                 const bonusXP = Math.floor((baseXP * 5 * stacks) / 100);
                 finalXP = baseXP + bonusXP;
@@ -150,8 +167,9 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
         case 'WIZARD': {
             const counter = (Number(user.wizard_counter) || 0) + 1;
-            userUpdates.wizard_counter = counter >= 5 ? 0 : counter;
-            const wisdom = level * 5;
+            userUpdates.wizard_counter = counter >= 5 ? (lvl('wizard_overcharge') ? CLASS_RULES.WIZARD.OVERCHARGE_START : 0) : counter;
+            const tome = lvl('wizard_tome') ? Math.floor((Number(user.total_items_completed) || 0) / CLASS_RULES.WIZARD.TOME_TASKS_PER_WISDOM) : 0;
+            const wisdom = level * 5 + tome;
             if (counter % 5 === 0) {
                 const burst = wisdom * (lvl('wizard_mastery') ? 3 : 2);
                 finalXP = baseXP + burst;
@@ -167,7 +185,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
         }
 
         case 'ARCHER': {
-            const hitChance = Math.min(97, 80 + level * 0.5);
+            const hitChance = Math.min(CLASS_RULES.ARCHER.MAX_HIT_CHANCE, 80 + level * 0.5 + lvl('archer_quiver') * CLASS_RULES.ARCHER.QUIVER_HIT_PERCENT);
             const sniper = lvl('archer_sniper') && context.action === 'item_complete' && context.priority === 'HIGH';
             const roll = rng() * 100;
             if (sniper || roll < hitChance) {
@@ -177,7 +195,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
                 let total = streakBonus;
                 let details = `🎯 Hit x${streak} +${streakBonus}`;
 
-                const headshotChance = Math.min(30, hitChance * 0.2);
+                const headshotChance = Math.min(30, hitChance * 0.2) * (lvl('archer_eagle') ? CLASS_RULES.ARCHER.EAGLE_HEADSHOT_MULTIPLIER : 1);
                 if (sniper || roll < headshotChance) {
                     const crit = baseXP * 2 + streak * 3;
                     total += crit;
@@ -201,7 +219,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
         case 'TANK': {
             const cap = tankStackCap(level, skills);
-            const stacks = Math.min(cap, (Number(user.tank_stacks) || 0) + 1);
+            const stacks = Math.min(cap, (Number(user.tank_stacks) || 0) + (lvl('tank_bulwark') ? CLASS_RULES.TANK.BULWARK_STACKS : 1));
             userUpdates.tank_stacks = stacks;
             const total = Math.floor((baseXP * stacks * 4) / 100) + Math.floor(stacks / 2);
             finalXP = baseXP + total;
@@ -218,7 +236,8 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
 function tankStackCap(level, skills) {
     const absorb = toSkillMap(skills).get('tank_absorb') || 0;
-    return Math.min(15, 3 + Math.floor(level / 3)) + absorb * 2;
+    const t = CLASS_RULES.TANK;
+    return Math.min(t.CAP_MAX, t.CAP_BASE + Math.floor(level / t.CAP_LEVELS_PER_STACK)) + absorb * 2;
 }
 
 // ─── Final XP ─────────────────────────────────────────────────────────────────
@@ -243,19 +262,35 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
 
     // Conditional multipliers that depend on class state after this action.
     let multiplier = bonuses.xpMultiplier;
-    if (user.player_class === 'ASSASSIN' && lvl('assassin_execute') && userUpdates.assassin_stacks === 10) {
+    if (user.player_class === 'ASSASSIN' && lvl('assassin_execute') && userUpdates.assassin_stacks === CLASS_RULES.ASSASSIN.MAX_STACKS) {
         multiplier += 1.0;
     }
     if (user.player_class === 'TANK' && lvl('tank_revenge') && userUpdates.tank_stacks === tankStackCap(level, skills)) {
         multiplier += lvl('tank_revenge') * 0.10;
     }
 
-    let flat = bonuses.flatXPBonus;
-    if (context.action === 'item_complete') flat += lvl('archer_multishot') * 5;
+    // Momentum: the live daily streak, counted up to a cap.
+    multiplier += bonuses.momentumPerDay * Math.min(SKILL_RULES.MOMENTUM_MAX_DAYS, Number(user.streak_count) || 0);
 
-    let finalXP = Math.floor(classXP * multiplier) + flat;
-    const skillBonus = finalXP - classXP;
+    // Bleed: a crit makes the next few actions worth more, whatever class you play.
     const procs = [];
+    let bleedLeft = Number(user.assassin_bleed) || 0;
+    if (lvl('assassin_bleed') && bleedLeft > 0) {
+        multiplier += CLASS_RULES.ASSASSIN.BLEED_BONUS_PERCENT / 100;
+        bleedLeft -= 1;
+        procs.push('🩸 Bleed');
+    }
+
+    let flat = bonuses.flatXPBonus;
+    if (context.action === 'item_complete') {
+        flat += lvl('archer_multishot') * 5;
+        if (context.priority === 'HIGH') flat += bonuses.rallyXP;
+        if (context.recurring) flat += bonuses.anchorXP;
+    }
+
+    // The epsilon keeps 100 * 1.15 (114.99999999999999 in floats) from losing a whole XP.
+    let finalXP = Math.floor(classXP * multiplier + 1e-9) + flat;
+    const skillBonus = finalXP - classXP;
 
     if (lvl('hero_champion') && level % 5 === 0) {
         finalXP *= 2;
@@ -266,7 +301,9 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     if (bonuses.critChance > 0 && rng() * 100 < bonuses.critChance) {
         critBonus = Math.floor(finalXP * (bonuses.critMultiplier - 1));
         finalXP += critBonus;
+        if (lvl('assassin_bleed')) bleedLeft = CLASS_RULES.ASSASSIN.BLEED_ACTIONS;
     }
+    if (lvl('assassin_bleed')) userUpdates.assassin_bleed = bleedLeft;
 
     if (bonuses.doubleChance > 0 && rng() * 100 < bonuses.doubleChance) {
         finalXP *= 2;
@@ -342,7 +379,9 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 
     const streakBonus = Math.min((newStreak - 1) * REWARDS.DAILY_STREAK_STEP, REWARDS.DAILY_STREAK_MAX_BONUS);
     const xp = calculateFinalXP(user, userSkills, REWARDS.DAILY_BASE, { ...opts, context: { action: 'daily' } });
-    const totalXP = xp.finalXP + streakBonus + bonuses.dailyBonus;
+    // Daily Surprise: a chance at a flat bonus (the rng is injectable for tests).
+    const surpriseBonus = bonuses.dailySurprise && (opts.rng || secureRandom)() < SKILL_RULES.DAILY_SURPRISE_CHANCE ? SKILL_RULES.DAILY_SURPRISE_XP : 0;
+    const totalXP = xp.finalXP + streakBonus + bonuses.dailyBonus + surpriseBonus;
 
     return {
         eligible: true,
@@ -352,6 +391,7 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
         freezeUsed,
         streakBonus,
         skillDailyBonus: bonuses.dailyBonus,
+        surpriseBonus,
         xp,
         totalXP
     };
@@ -362,6 +402,7 @@ module.exports = {
     levelProgress,
     toSkillMap,
     getSkillBonuses,
+    getFreezeLimits,
     calculateClassXP,
     calculateFinalXP,
     calculateDailyReward,

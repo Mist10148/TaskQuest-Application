@@ -32,7 +32,7 @@ test('every skill exists in exactly one tree and prerequisites resolve', () => {
             assert.ok(skill.description.length > 0);
         }
     }
-    assert.equal(seen.size, 27);
+    assert.equal(seen.size, 42);
     assert.equal(shared.findSkill('__proto__'), null);
 });
 
@@ -301,4 +301,198 @@ test('Assassin streak and stacks decay after 36 hours idle and every action stam
     });
     assert.equal(swift.userUpdates.assassin_streak, 3);
     assert.equal(swift.userUpdates.assassin_stacks, 1);
+});
+
+// ─── New skills on the existing classes ──────────────────────────────────────
+
+const sk = (id, level = 1) => ({ skill_id: id, skill_level: level });
+
+test('every new skill has a chain, a real cost and sits in the right tree', () => {
+    const expected = {
+        default_momentum: ['DEFAULT', 3, 70, 'default_xp_boost'],
+        default_freeze_cache: ['DEFAULT', 1, 120, 'default_streak_shield'],
+        default_daily_surprise: ['DEFAULT', 1, 140, 'default_freeze_cache'],
+        hero_oath: ['HERO', 1, 250, 'hero_legend'],
+        hero_rally: ['HERO', 1, 220, 'hero_oath'],
+        gambler_insurance: ['GAMBLER', 1, 200, 'gambler_jackpot'],
+        gambler_hothand: ['GAMBLER', 1, 230, 'gambler_insurance'],
+        assassin_nightowl: ['ASSASSIN', 1, 200, 'assassin_execute'],
+        assassin_bleed: ['ASSASSIN', 1, 240, 'assassin_nightowl'],
+        wizard_overcharge: ['WIZARD', 1, 300, 'wizard_mastery'],
+        wizard_tome: ['WIZARD', 1, 260, 'wizard_overcharge'],
+        archer_quiver: ['ARCHER', 2, 150, 'archer_sniper'],
+        archer_eagle: ['ARCHER', 1, 260, 'archer_quiver'],
+        tank_bulwark: ['TANK', 1, 240, 'tank_unstoppable'],
+        tank_anchor: ['TANK', 1, 260, 'tank_bulwark']
+    };
+    for (const [id, [tree, max, cost, requires]] of Object.entries(expected)) {
+        const found = shared.findSkill(id);
+        assert.equal(found.treeKey, tree, id);
+        assert.equal(found.skill.maxLevel, max, id);
+        assert.equal(found.skill.cost, cost, id);
+        assert.equal(found.skill.requires, requires, id);
+    }
+});
+
+test('Momentum: +0.5% XP per level per streak day, streak counted to 10', () => {
+    // [skill level, streak days, base, expected final]
+    const cases = [[1, 0, 100, 100], [1, 4, 100, 102], [2, 5, 100, 105], [3, 10, 100, 115], [3, 40, 100, 115], [3, 10, 200, 230]];
+    for (const [level, streak, base, expected] of cases) {
+        const r = shared.calculateFinalXP(user({ streak_count: streak }), [sk('default_momentum', level)], base, { rng: seq(0.99) });
+        assert.equal(r.finalXP, expected, `lvl ${level} streak ${streak}`);
+    }
+});
+
+test('Freeze Cache raises the freeze cap to 5 and lowers the price to 120', () => {
+    assert.deepEqual(shared.getFreezeLimits([]), { COST: 150, MAX: 3 });
+    assert.deepEqual(shared.getFreezeLimits([sk('default_freeze_cache')]), { COST: 120, MAX: 5 });
+    assert.deepEqual(shared.getFreezeLimits(new Map([['default_freeze_cache', 0]])), { COST: 150, MAX: 3 });
+});
+
+test('Daily Surprise: 15% chance of +50 XP on the daily reward', () => {
+    const now = Date.parse('2030-01-10T12:00:00Z');
+    const u = user({ last_daily_claim: new Date(now - 30 * 3600e3), streak_count: 2 });
+    // The default class draws no rng; the surprise draws exactly one value.
+    const cases = [[0.0, 50], [0.149, 50], [0.15, 0], [0.99, 0]];
+    for (const [roll, bonus] of cases) {
+        const r = shared.calculateDailyReward(u, [sk('default_daily_surprise')], now, { rng: seq(roll) });
+        assert.equal(r.surpriseBonus, bonus, `roll ${roll}`);
+        assert.equal(r.totalXP, 100 + 10 + bonus);
+    }
+    const without = shared.calculateDailyReward(u, [], now, { rng: seq(0) });
+    assert.equal(without.surpriseBonus, 0, 'no skill, no surprise');
+});
+
+test('Hero Oath: bonus min(25 + level, 50), still capped at 3x base', () => {
+    // [level, base, with oath, without oath]
+    const cases = [[1, 100, 26, 25], [10, 100, 35, 25], [25, 100, 50, 25], [60, 100, 50, 25], [30, 5, 15, 15]];
+    for (const [level, base, oath, plain] of cases) {
+        const hero = user({ player_class: 'HERO', player_level: level });
+        assert.equal(shared.calculateClassXP(hero, base, { skills: [sk('hero_oath')] }).bonusInfo.classBonus, oath, `lvl ${level} base ${base}`);
+        assert.equal(shared.calculateClassXP(hero, base).bonusInfo.classBonus, plain);
+    }
+    const notHero = shared.calculateClassXP(user({ player_level: 30 }), 100, { skills: [sk('hero_oath')] });
+    assert.equal(notHero.finalXP, 100, 'Oath only matters while Hero is equipped');
+});
+
+test('Hero Rally: +15 XP when completing a HIGH priority task, any class', () => {
+    const cases = [
+        ['item_complete', 'HIGH', 25],
+        ['item_complete', 'MEDIUM', 10],
+        ['item_complete', undefined, 10],
+        ['item_add', 'HIGH', 10]
+    ];
+    for (const [action, priority, expected] of cases) {
+        const r = shared.calculateFinalXP(user(), [sk('hero_rally')], 10, { rng: seq(0.99), context: { action, priority } });
+        assert.equal(r.finalXP, expected, `${action} ${priority}`);
+    }
+});
+
+test('Gambler Insurance: bad luck never cuts below 60% of base', () => {
+    // rng: bonus roll 0.99 (biggest possible loss), loss roll 0 (bad luck). [base, plain result, insured result]
+    for (const [base, plain, insured] of [[100, 1, 60], [10, 1, 6], [1, 1, 1], [5, 1, 3]]) {
+        const g = user({ player_class: 'GAMBLER' });
+        assert.equal(shared.calculateClassXP(g, base, { rng: seq(0.99, 0.0) }).finalXP, plain, `base ${base} plain`);
+        assert.equal(shared.calculateClassXP(g, base, { rng: seq(0.99, 0.0), skills: [sk('gambler_insurance')] }).finalXP, insured, `base ${base} insured`);
+    }
+});
+
+test('Gambler Hot Hand: three lucky rolls in a row guard the next one', () => {
+    // bonus roll 0.5, loss roll 0.0 (would be bad luck); only Hot Hand at a streak of 3+ stops it
+    const roll = (streak, skills = []) =>
+        shared.calculateClassXP(user({ player_class: 'GAMBLER', gambler_streak: streak }), 10, { rng: seq(0.5, 0.0), skills });
+    assert.equal(roll(2, [sk('gambler_hothand')]).bonusInfo.type, 'GAMBLER_LOSS');
+    assert.equal(roll(3).bonusInfo.type, 'GAMBLER_LOSS', 'no skill, no protection');
+    const guarded = roll(3, [sk('gambler_hothand')]);
+    assert.equal(guarded.bonusInfo.type, 'GAMBLER_WIN');
+    assert.equal(guarded.userUpdates.gambler_streak, 0, 'the protection is spent');
+    assert.equal(roll(5, [sk('gambler_hothand')]).bonusInfo.type, 'GAMBLER_WIN');
+    // the streak counts lucky rolls and breaks on bad luck, with or without the skill
+    const win = shared.calculateClassXP(user({ player_class: 'GAMBLER', gambler_streak: 1 }), 10, { rng: seq(0.5, 0.99) });
+    assert.equal(win.userUpdates.gambler_streak, 2);
+    assert.equal(roll(2).userUpdates.gambler_streak, 0);
+});
+
+test('Assassin Night Owl: decay window is 48h', () => {
+    const base = { player_class: 'ASSASSIN', assassin_streak: 5, assassin_stacks: 5 };
+    // [hours idle, skills, expected streak after the action]
+    const cases = [[40, [], 1], [40, [sk('assassin_nightowl')], 6], [48, [sk('assassin_nightowl')], 6], [49, [sk('assassin_nightowl')], 1]];
+    for (const [hours, skills, streak] of cases) {
+        const r = shared.calculateClassXP(user({ ...base, assassin_last_at: hoursAgo(hours) }), 100, { now: NOW, skills });
+        assert.equal(r.userUpdates.assassin_streak, streak, `${hours}h`);
+    }
+});
+
+test('Assassin Bleed: a crit gives the next 3 actions +20% XP, whatever the class', () => {
+    const skills = [sk('assassin_critical', 2), sk('assassin_bleed')];
+    // a crit roll of 0 always crits (20% chance, +50%)
+    const crit = shared.calculateFinalXP(user(), skills, 100, { rng: seq(0.0, 0.99) });
+    assert.equal(crit.finalXP, 150);
+    assert.equal(crit.userUpdates.assassin_bleed, 3);
+    // while bleeding (and not critting) each action gets +20% and uses one charge: [charges, XP, charges after]
+    for (const [left, expectedXP, after] of [[3, 120, 2], [1, 120, 0], [0, 100, 0]]) {
+        const r = shared.calculateFinalXP(user({ assassin_bleed: left }), skills, 100, { rng: seq(0.99) });
+        assert.equal(r.finalXP, expectedXP, `${left} charges`);
+        assert.equal(r.userUpdates.assassin_bleed, after);
+    }
+    // a crit while bleeding refreshes to 3 and still pays the +20% for that action
+    const refreshed = shared.calculateFinalXP(user({ assassin_bleed: 1 }), skills, 100, { rng: seq(0.0, 0.99) });
+    assert.equal(refreshed.userUpdates.assassin_bleed, 3);
+    assert.equal(refreshed.finalXP, 120 + Math.floor(120 * 0.5));
+    // no skill, no counter
+    assert.equal(shared.calculateFinalXP(user({ assassin_bleed: 2 }), [], 100, { rng: seq(0.99) }).userUpdates.assassin_bleed, undefined);
+});
+
+test('Wizard Overcharge restarts the cycle at 2 charges; Tome adds Wisdom per 20 tasks', () => {
+    const w = (overrides = {}, skills = []) => shared.calculateClassXP(user({ player_class: 'WIZARD', player_level: 4, ...overrides }), 10, { skills });
+    assert.equal(w({ wizard_counter: 4 }).userUpdates.wizard_counter, 0);
+    assert.equal(w({ wizard_counter: 4 }, [sk('wizard_overcharge')]).userUpdates.wizard_counter, 2);
+    assert.equal(w({ wizard_counter: 1 }, [sk('wizard_overcharge')]).userUpdates.wizard_counter, 2, 'a normal charge still counts up');
+    // after an Overcharge burst the 3rd charge is a combo again
+    assert.equal(w({ wizard_counter: 2 }, [sk('wizard_overcharge')]).bonusInfo.type, 'WIZARD_COMBO');
+
+    // Tome: wisdom = level * 5 + floor(tasks / 20); [tasks done, expected combo XP (= wisdom)]
+    for (const [done, wisdom] of [[0, 20], [19, 20], [20, 21], [95, 24], [400, 40]]) {
+        const combo = w({ wizard_counter: 2, total_items_completed: done }, [sk('wizard_tome')]);
+        assert.equal(combo.bonusInfo.classBonus, wisdom, `${done} tasks`);
+    }
+    assert.equal(w({ wizard_counter: 2, total_items_completed: 400 }).bonusInfo.classBonus, 20, 'no Tome, no growth');
+});
+
+test('Archer Quiver (+3% hit per level, cap 97) and Eagle Eye (headshots x1.5)', () => {
+    // level 1: hit chance 80.5. A roll of 83 misses plainly and hits with Quiver 1 (83.5).
+    const archer = user({ player_class: 'ARCHER', player_level: 1 });
+    const type = (u, roll, skills = []) => shared.calculateClassXP(u, 10, { rng: seq(roll, 0.99), skills }).bonusInfo.type;
+    assert.equal(type(archer, 0.83), 'ARCHER_MISS');
+    assert.equal(type(archer, 0.83, [sk('archer_quiver')]), 'ARCHER_HIT');
+    assert.equal(type(archer, 0.9, [sk('archer_quiver', 2)]), 'ARCHER_MISS', 'cap is 86.5% at level 2');
+    assert.equal(type(archer, 0.86, [sk('archer_quiver', 2)]), 'ARCHER_HIT');
+    // still capped at 97
+    const high = user({ player_class: 'ARCHER', player_level: 80 });
+    assert.equal(type(high, 0.971, [sk('archer_quiver', 2)]), 'ARCHER_MISS');
+    assert.equal(type(high, 0.969, [sk('archer_quiver', 2)]), 'ARCHER_HIT');
+
+    // Headshot threshold: min(30, hit * 0.2) = 16.1 at level 1; Eagle Eye makes it 24.15.
+    const headshot = (roll, skills = []) => shared.calculateClassXP(archer, 10, { rng: seq(roll, 0.99), skills }).bonusInfo.details.includes('💥');
+    assert.equal(headshot(0.2), false);
+    assert.equal(headshot(0.2, [sk('archer_eagle')]), true);
+    assert.equal(headshot(0.25, [sk('archer_eagle')]), false);
+    assert.equal(headshot(0.15), true);
+});
+
+test('Tank Bulwark (+2 stacks per action) and Anchor (+8 XP on recurring tasks)', () => {
+    const tank = (stacks, skills = []) => shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: stacks }), 100, { skills });
+    assert.equal(tank(0).userUpdates.tank_stacks, 1);
+    assert.equal(tank(0, [sk('tank_bulwark')]).userUpdates.tank_stacks, 2);
+    assert.equal(tank(12, [sk('tank_bulwark')]).userUpdates.tank_stacks, 13, 'still clamped to the cap (13 at level 30)');
+
+    const cases = [
+        [{ action: 'item_complete', recurring: true }, 18],
+        [{ action: 'item_complete', recurring: false }, 10],
+        [{ action: 'item_add', recurring: true }, 10]
+    ];
+    for (const [context, expected] of cases) {
+        const r = shared.calculateFinalXP(user(), [sk('tank_anchor')], 10, { rng: seq(0.99), context });
+        assert.equal(r.finalXP, expected, JSON.stringify(context));
+    }
 });

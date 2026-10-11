@@ -222,6 +222,25 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('GET', '/api/leaderboard?class=hero')).status, 200);
         assert.equal((await call('GET', '/api/leaderboard?class=wizzard')).status, 400);
         assert.equal((await call('GET', '/api/leaderboard/me?by=weekly', { cookie: alice })).status, 200);
+        // /me takes the class filter too, and a player outside that class has no rank on it
+        const myClass = (await (await call('GET', '/api/user', { cookie: alice })).json()).user.player_class;
+        const other = myClass === 'HERO' ? 'wizard' : 'hero';
+        assert.equal((await (await call('GET', `/api/leaderboard/me?class=${myClass}`, { cookie: alice })).json()).rank, 1);
+        assert.equal((await (await call('GET', `/api/leaderboard/me?class=${other}`, { cookie: alice })).json()).rank, null);
+        assert.equal((await call('GET', '/api/leaderboard/me?class=wizzard', { cookie: alice })).status, 400);
+
+        // the profile never carries the calendar token; it has its own owner-only endpoint
+        const feed = await (await call('POST', '/api/user/calendar-token', { cookie: alice })).json();
+        const profile = await (await call('GET', '/api/user', { cookie: alice })).json();
+        const me = await (await call('GET', '/api/auth/me', { cookie: alice })).json();
+        for (const body of [profile, me]) {
+            assert.equal(body.user.calendar_token, undefined);
+            assert.equal(body.user.has_calendar_token, true);
+            assert.ok(!JSON.stringify(body).includes(feed.token));
+        }
+        assert.equal((await (await call('GET', '/api/user/calendar-token', { cookie: alice })).json()).token, feed.token);
+        assert.equal((await call('GET', '/api/user/calendar-token')).status, 401);
+        await call('DELETE', '/api/user/calendar-token', { cookie: alice });
 
         await db.query('UPDATE users SET player_xp = 1000 WHERE discord_id = ?', ['200000000000000001']);
         const frozen = await (await call('POST', '/api/user/streak-freeze', { cookie: alice })).json();

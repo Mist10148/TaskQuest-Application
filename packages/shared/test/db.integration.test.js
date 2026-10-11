@@ -592,5 +592,62 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual(removed.filter((r) => r.discord_id === CID).map((r) => r.id), [plain.id]);
     });
 
+    await t.test('import enforces the per-user quota and one level of subtasks', async () => {
+        const IMP = '100000000000000013';
+        await db.users.ensureUser(IMP);
+        const { LIMITS } = require('../src/constants');
+        const many = (n) => Array.from({ length: n }, (_, i) => ({ name: `L${i}` }));
+        await assert.rejects(db.transfer.importAll(IMP, { lists: many(LIMITS.MAX_LISTS_PER_USER + 1) }), { code: 'VALIDATION' });
+        assert.equal((await db.tasks.getLists(IMP)).length, 0);
+        await db.transfer.importAll(IMP, { lists: many(3) });
+        await assert.rejects(db.transfer.importAll(IMP, { lists: many(LIMITS.MAX_LISTS_PER_USER - 2) }), { code: 'VALIDATION' }, 'existing lists count');
+        await assert.rejects(
+            db.transfer.importAll(IMP, { lists: [{ name: 'deep', items: [{ id: 1, name: 'a' }, { id: 2, name: 'b', parent_id: 1 }, { id: 3, name: 'c', parent_id: 2 }] }] }),
+            { code: 'VALIDATION' }
+        );
+        assert.equal((await db.tasks.getLists(IMP)).length, 3, 'rejected import writes nothing');
+        await db.transfer.importAll(IMP, { lists: [{ name: 'flat', items: [{ id: 1, name: 'a' }, { id: 2, name: 'b', parent_id: 1 }] }] });
+    });
+
+    await t.test('profile and stats never carry the calendar token; reset clears quest claims', async () => {
+        const CT = '100000000000000014';
+        await db.users.ensureUser(CT);
+        const token = await db.transfer.regenerateCalendarToken(CT);
+        const stats = await db.users.getUserStats(CT);
+        assert.equal(stats.user.calendar_token, undefined);
+        assert.equal(stats.user.has_calendar_token, true);
+        assert.ok(!JSON.stringify(stats).includes(token));
+        assert.equal(await db.transfer.findUserByCalendarToken(token), CT, 'the feed still works');
+
+        await db.query("INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, 'DAILY_ADD_3', CURDATE(), 15)", [CT]);
+        await db.users.resetProgress(CT);
+        const [claims] = await db.getPool().query('SELECT COUNT(*) AS n FROM quest_claims WHERE discord_id = ?', [CT]);
+        assert.equal(Number(claims[0].n), 0, 'a reset lets the same quest be claimed again');
+    });
+
+    await t.test('streak board ignores dead streaks; rank respects the class filter', async () => {
+        const S1 = '100000000000000015';
+        const S2 = '100000000000000016';
+        const S3 = '100000000000000017';
+        for (const id of [S1, S2, S3]) await db.users.ensureUser(id);
+        await db.query("UPDATE users SET streak_count = 30, last_daily_claim = NOW() - INTERVAL 10 DAY, player_class = 'HERO', lifetime_xp = 900 WHERE discord_id = ?", [S1]);
+        await db.query("UPDATE users SET streak_count = 4, last_daily_claim = NOW() - INTERVAL 1 HOUR, player_class = 'HERO', lifetime_xp = 800 WHERE discord_id = ?", [S2]);
+        await db.query("UPDATE users SET streak_count = 2, last_daily_claim = NOW() - INTERVAL 1 HOUR, player_class = 'WIZARD', lifetime_xp = 700 WHERE discord_id = ?", [S3]);
+        const board = await db.users.getLeaderboard(100, { by: 'streak' });
+        assert.ok(!board.some((r) => r.discord_id === S1), 'a 10-day-old streak is not shown');
+        assert.ok(board.some((r) => r.discord_id === S2));
+        assert.equal(await db.users.getRank(S1, 'streak'), null);
+
+        // rank is within the class when a class is given
+        const heroBoard = await db.users.getLeaderboard(100, { by: 'lifetime', playerClass: 'hero' });
+        const wizBoard = await db.users.getLeaderboard(100, { by: 'lifetime', playerClass: 'wizard' });
+        const heroRank = heroBoard.findIndex((r) => r.discord_id === S2) + 1;
+        const wizRank = wizBoard.findIndex((r) => r.discord_id === S3) + 1;
+        assert.equal(await db.users.getRank(S2, 'lifetime', { playerClass: 'hero' }), heroRank);
+        assert.equal(await db.users.getRank(S3, 'lifetime', { playerClass: 'WIZARD' }), wizRank);
+        assert.equal(await db.users.getRank(S3, 'lifetime', { playerClass: 'hero' }), null, 'not on that class board');
+        assert.ok((await db.users.getRank(S3, 'lifetime')) >= wizRank, 'the all-class rank is never better than the class rank');
+    });
+
     await db.closePool();
 });

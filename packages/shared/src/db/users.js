@@ -3,7 +3,7 @@
 'use strict';
 
 const { getPool, withTransaction } = require('./pool');
-const { LEADERBOARDS, WEEKLY_XP_SOURCES } = require('../constants');
+const { LEADERBOARDS, WEEKLY_XP_SOURCES, DAILY } = require('../constants');
 const { errors } = require('../errors');
 const { isValidTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
@@ -126,8 +126,11 @@ async function getUserStats(discordId) {
         run(null, 'SELECT COUNT(*) AS count FROM achievements WHERE discord_id = ?', [id]),
         getGameCounts(id)
     ]);
+    // The calendar feed token is a secret: it never travels with the profile. Settings reads it
+    // from GET /api/user/calendar-token, which only returns it when asked.
+    const { calendar_token: calendarToken, ...safeUser } = user;
     return {
-        user,
+        user: { ...safeUser, has_calendar_token: Boolean(calendarToken) },
         lists: { total: Number(lists.total) },
         items: { total: Number(items.total), completed: Number(items.completed) },
         achievements: Number(achs.count),
@@ -146,8 +149,23 @@ function scoreSql(by, now = new Date()) {
     switch (by) {
         case 'xp':
             return { sql: 'u.player_xp', params: [] };
-        case 'streak':
-            return { sql: 'u.streak_count', params: [] };
+        case 'streak': {
+            // A streak only counts while it is still alive: a stale one that nobody has
+            // broken yet (the reset happens on the next claim) scores 0. Streak shield
+            // gets the longer window; a bought freeze or the Unstoppable skill saves it outright.
+            const at = now.getTime();
+            return {
+                sql: `(CASE
+                    WHEN u.last_daily_claim IS NULL THEN 0
+                    WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'tank_unstoppable') THEN u.streak_count
+                    WHEN u.streak_freezes > 0 AND u.streak_count > 1 THEN u.streak_count
+                    WHEN u.last_daily_claim >= (CASE
+                        WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'default_streak_shield') THEN ? ELSE ? END)
+                        THEN u.streak_count
+                    ELSE 0 END)`,
+                params: [new Date(at - DAILY.SHIELDED_STREAK_WINDOW_MS), new Date(at - DAILY.STREAK_WINDOW_MS)]
+            };
+        }
         case 'weekly': {
             const monday = questPeriod('weekly', now).startsAt;
             const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
@@ -193,13 +211,26 @@ async function getLeaderboard(limit = 10, { by = 'lifetime', playerClass, now } 
          LIMIT ${n}`,
         params
     );
-    return rows.map((r, i) => ({ rank: i + 1, ...r, score: Number(r.score), games_played: Number(r.games_played) }));
+    return rows.map((r, i) => ({
+        rank: i + 1,
+        ...r,
+        // On the streak tab the live streak is the score (a stale one is already filtered out).
+        ...(board === 'streak' ? { streak_count: Number(r.score) } : {}),
+        score: Number(r.score),
+        games_played: Number(r.games_played)
+    }));
 }
 
-/** 1-based leaderboard rank for a user on one tab, or null (XP off, or no score on weekly/streak). */
-async function getRank(discordId, by = 'lifetime', now) {
+/**
+ * 1-based leaderboard rank for a user on one tab, or null (XP off, or no score on weekly/streak).
+ * With `playerClass` the rank is within that class's board, matching getLeaderboard; a user who is
+ * not that class is not on it (null).
+ */
+async function getRank(discordId, by = 'lifetime', { now, playerClass } = {}) {
     const user = await getUser(discordId);
     if (!user || !user.gamification_enabled) return null;
+    const cls = playerClass ? String(playerClass).toUpperCase() : null;
+    if (cls && user.player_class !== cls) return null;
     const mine = scoreSql(by, now);
     const [own] = await run(null, `SELECT ${mine.sql} AS score FROM users u WHERE u.discord_id = ?`, [...mine.params, String(discordId)]);
     const score = Number(own.score);
@@ -207,8 +238,9 @@ async function getRank(discordId, by = 'lifetime', now) {
     const other = scoreSql(by, now);
     const [row] = await run(
         null,
-        `SELECT COUNT(*) + 1 AS user_rank FROM users u WHERE u.gamification_enabled = TRUE AND ${other.sql} > ?`,
-        [...other.params, score]
+        `SELECT COUNT(*) + 1 AS user_rank FROM users u
+         WHERE u.gamification_enabled = TRUE ${cls ? 'AND u.player_class = ?' : ''} AND ${other.sql} > ?`,
+        [...(cls ? [cls] : []), ...other.params, score]
     );
     return Number(row.user_rank);
 }
@@ -227,6 +259,23 @@ async function getDigestCandidates(now = new Date()) {
 
 async function markDigestSent(discordId, now = new Date()) {
     await run(null, 'UPDATE users SET last_digest_at = ? WHERE discord_id = ?', [now, String(discordId)]);
+}
+
+/**
+ * Atomically claim this week's digest: true for exactly one caller, so two overlapping
+ * runs cannot both send it. Pair with releaseDigest() if the send fails and should be retried.
+ */
+async function claimDigest(discordId, now = new Date()) {
+    const [res] = await getPool().query(
+        'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND (last_digest_at IS NULL OR last_digest_at < ?)',
+        [now, String(discordId), new Date(now.getTime() - 6 * 86400e3)]
+    );
+    return res.affectedRows > 0;
+}
+
+/** Undo a claimDigest() after a temporary send failure (only if nobody claimed again since). */
+async function releaseDigest(discordId, claimedAt, previous = null) {
+    await run(null, 'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND last_digest_at = ?', [previous, String(discordId), claimedAt]);
 }
 
 /** Numbers for the digest: the 7 days up to `now`, plus what is open right now. */
@@ -261,23 +310,6 @@ async function getWeeklyStats(discordId, now = new Date()) {
     return {
         completed: Number(done.n),
         xpEarned: Number(xp.n),
-/**
- * Atomically claim this week's digest: true for exactly one caller, so two overlapping
- * runs cannot both send it. Pair with releaseDigest() if the send fails and should be retried.
- */
-async function claimDigest(discordId, now = new Date()) {
-    const [res] = await getPool().query(
-        'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND (last_digest_at IS NULL OR last_digest_at < ?)',
-        [now, String(discordId), new Date(now.getTime() - 6 * 86400e3)]
-    );
-    return res.affectedRows > 0;
-}
-
-/** Undo a claimDigest() after a temporary send failure (only if nobody claimed again since). */
-async function releaseDigest(discordId, claimedAt, previous = null) {
-    await run(null, 'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND last_digest_at = ?', [previous, String(discordId), claimedAt]);
-}
-
         listsOpen: Number(open.lists_open),
         listsOverdue: Number(open.lists_overdue),
         streak: user ? Number(user.streak_count) : 0,
@@ -290,7 +322,7 @@ async function resetProgress(discordId) {
     const id = String(discordId);
     return withTransaction(async (conn) => {
         await lockUser(conn, id);
-        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions']) {
+        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims']) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }
         await conn.query(
@@ -336,7 +368,7 @@ module.exports = {
     getXPHistory,
     getDigestCandidates,
     markDigestSent,
-    getWeeklyStats
-};
     claimDigest,
     releaseDigest,
+    getWeeklyStats
+};

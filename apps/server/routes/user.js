@@ -94,6 +94,15 @@ router.post(
     })
 );
 
+// The feed token is a secret, so the profile never includes it; Settings asks for it here.
+router.get(
+    '/calendar-token',
+    asyncRoute(async (req, res) => {
+        const stats = await db.transfer.getCalendarToken(uid(req));
+        res.json({ token: stats });
+    })
+);
+
 router.post(
     '/calendar-token',
     asyncRoute(async (req, res) => {

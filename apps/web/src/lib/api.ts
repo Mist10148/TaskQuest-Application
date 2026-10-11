@@ -54,6 +54,7 @@ export const userApi = {
         patch<User>('/api/user', settings),
     claimDaily: () => post<DailyClaimResult>('/api/user/daily'),
     resetProgress: () => post<{ success: boolean; message: string }>('/api/user/reset', { confirm: 'RESET' }),
+    getCalendarToken: () => apiFetch<{ token: string | null }>('/api/user/calendar-token'),
     createCalendarToken: () => post<{ token: string }>('/api/user/calendar-token'),
     revokeCalendarToken: () => del<{ success: boolean }>('/api/user/calendar-token'),
     importData: (data: unknown) => post<{ success: boolean; lists: number; items: number }>('/api/user/import', data),
@@ -166,7 +167,11 @@ export const achievementsApi = {
 export type LeaderboardBoard = 'lifetime' | 'weekly' | 'streak' | 'xp';
 
 export const leaderboardApi = {
-    me: (by: LeaderboardBoard = 'lifetime') => apiFetch<{ rank: number | null }>(`/api/leaderboard/me?by=${by}`),
+    me: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
+        const params = new URLSearchParams({ by });
+        if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
+        return apiFetch<{ rank: number | null }>(`/api/leaderboard/me?${params}`);
+    },
     get: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
         const params = new URLSearchParams({ by });
         if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
@@ -228,7 +233,7 @@ export interface User {
     timezone?: string | null;
     reminder_hour?: number;
     weekly_digest?: boolean | number;
-    calendar_token?: string | null;
+    has_calendar_token?: boolean;
 }
 
 export interface DiscordUser {

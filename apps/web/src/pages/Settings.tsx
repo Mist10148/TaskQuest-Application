@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, Bot, CalendarDays, ExternalLink, Loader2, LogOut, Palette, Settings as SettingsIcon, Sparkles, Zap, Database } from "lucide-react";
-import type { User } from "@/lib/api";
+import { userApi, type User } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { SettingRow, SettingsSection, SwitchRow } from "@/components/settings/SettingsSection";
@@ -39,6 +40,9 @@ const Settings = () => {
   const [resetOpen, setResetOpen] = useState(false);
 
   const dbUser: Partial<User> = user?.user ?? {};
+  // The feed token is a secret, so /api/auth/me no longer carries it; it is fetched only while the feed is on.
+  // The key sits under "auth" so creating or revoking the feed (which invalidates "auth") refreshes it.
+  const calendar = useQuery({ queryKey: ["auth", "calendar-token", Boolean(dbUser.has_calendar_token)], queryFn: userApi.getCalendarToken, enabled: Boolean(dbUser.has_calendar_token) });
   // The server row is the source of truth; switches follow it after each save.
   const on = (value: boolean | number | undefined, fallback: boolean) => Boolean(value ?? fallback);
 
@@ -100,7 +104,7 @@ const Settings = () => {
         </SettingsSection>
 
         <SettingsSection icon={<CalendarDays className="h-5 w-5 text-primary" />} title="Calendar feed" description="Deadlines in Google, Apple or Outlook Calendar" delay={0.17}>
-          <CalendarFeed token={dbUser.calendar_token} />
+          <CalendarFeed token={dbUser.has_calendar_token ? calendar.data?.token : null} />
         </SettingsSection>
 
         <SettingsSection icon={<Database className="h-5 w-5 text-primary" />} title="Your data" description="Export and import" delay={0.18}>

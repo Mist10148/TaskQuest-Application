@@ -12,6 +12,7 @@ const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const { errors } = require('../errors');
 const v = require('../validation');
+const { LIMITS: USER_LIMITS } = require('../constants');
 
 const LIMITS = { LISTS: 100, ITEMS_PER_LIST: 500, ITEMS_TOTAL: 1000 };
 const FORMAT_VERSION = 1;
@@ -144,6 +145,19 @@ async function importAll(discordId, data) {
         const [existing] = await conn.query('SELECT name FROM lists WHERE discord_id = ?', [user.discord_id]);
         const taken = new Set(existing.map((l) => l.name.toLowerCase()));
 
+        // Per-user quota: what the user already owns plus what this import adds.
+        const [[have]] = await conn.query(
+            'SELECT COUNT(DISTINCT l.id) AS lists, COUNT(i.id) AS items FROM lists l LEFT JOIN items i ON i.list_id = l.id WHERE l.discord_id = ?',
+            [user.discord_id]
+        );
+        const importedItems = lists.reduce((n, l) => n + l.items.length, 0);
+        if (Number(have.lists) + lists.length > USER_LIMITS.MAX_LISTS_PER_USER) {
+            throw errors.validation(`You can have at most ${USER_LIMITS.MAX_LISTS_PER_USER} lists; this import would exceed that.`);
+        }
+        if (Number(have.items) + importedItems > USER_LIMITS.MAX_ITEMS_PER_USER) {
+            throw errors.validation(`You can have at most ${USER_LIMITS.MAX_ITEMS_PER_USER} tasks; this import would exceed that.`);
+        }
+
         let itemCount = 0;
         for (const l of lists) {
             const name = freeName(l.name, taken);
@@ -154,17 +168,23 @@ async function importAll(discordId, data) {
             );
             const listId = res.insertId;
             const idByRef = new Map();
+            const subtaskRefs = new Set(); // imported rows that were stored as subtasks
             // Parents first, so a subtask can point at a row that already exists.
             const ordered = [...l.items.filter((i) => i.parentRef === null), ...l.items.filter((i) => i.parentRef !== null)];
             let position = 0;
             for (const it of ordered) {
                 const parentId = it.parentRef !== null && idByRef.has(it.parentRef) ? idByRef.get(it.parentRef) : null;
+                // Subtasks are one level deep (the same rule assertValidParent enforces elsewhere).
+                if (parentId !== null && subtaskRefs.has(it.parentRef)) throw errors.validation('Subtasks can only be one level deep.');
                 const [ir] = await conn.query(
                     `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, position, due_date, priority, tags, recurrence, parent_id, counts_for_quests)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
                     [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, position++, it.due_date, it.priority, it.tags, it.recurrence, parentId]
                 );
-                if (it.ref !== undefined && it.ref !== null) idByRef.set(it.ref, ir.insertId);
+                if (it.ref !== undefined && it.ref !== null) {
+                    idByRef.set(it.ref, ir.insertId);
+                    if (parentId !== null) subtaskRefs.add(it.ref);
+                }
                 itemCount++;
             }
         }
@@ -180,6 +200,12 @@ async function regenerateCalendarToken(discordId) {
     await getPool().query('INSERT IGNORE INTO users (discord_id) VALUES (?)', [String(discordId)]);
     await getPool().query('UPDATE users SET calendar_token = ? WHERE discord_id = ?', [token, String(discordId)]);
     return token;
+}
+
+/** The user's feed token, or null when the feed is off. Only the owner's settings endpoint calls this. */
+async function getCalendarToken(discordId) {
+    const [rows] = await getPool().query('SELECT calendar_token FROM users WHERE discord_id = ?', [String(discordId)]);
+    return rows[0] ? rows[0].calendar_token || null : null;
 }
 
 async function clearCalendarToken(discordId) {
@@ -220,6 +246,7 @@ module.exports = {
     importAll,
     parseImport,
     regenerateCalendarToken,
+    getCalendarToken,
     clearCalendarToken,
     findUserByCalendarToken,
     getCalendarData

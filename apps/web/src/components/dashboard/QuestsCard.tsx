@@ -67,9 +67,9 @@ export const QuestsCard = () => {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {[
-            ["Today", daily, "Resets at 00:00 UTC"] as const,
-            ["This week", weekly, "Resets Monday 00:00 UTC"] as const,
-            ["This month", monthly, "Resets on the 1st, 00:00 UTC"] as const,
+            ["Today", daily, "Resets at your midnight"] as const,
+            ["This week", weekly, "Resets Monday at your midnight"] as const,
+            ["This month", monthly, "Resets on the 1st at your midnight"] as const,
           ].filter(([, list]) => list.length > 0).map(([title, list, resets]) => (
             <div key={title} className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-baseline justify-between">

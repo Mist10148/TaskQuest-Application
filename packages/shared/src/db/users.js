@@ -51,10 +51,19 @@ async function lockUser(conn, discordId) {
     return rows[0];
 }
 
-/** Update boolean settings. Unknown keys are ignored. Returns the user. */
-async function updateSettings(discordId, settings) {
+/** How long a time zone change locks the next one (a zone decides when daily caps and quests reset). */
+const TIMEZONE_CHANGE_COOLDOWN_MS = 24 * 3600e3;
+
+/**
+ * Update settings. Unknown keys are ignored. Returns the user.
+ * Changing the time zone also moves the user's day, week and month (daily caps, quests, weekly review, stats)
+ * from then on, so it can only change once every 24 hours; the first time, and setting the value it already has,
+ * are always allowed.
+ */
+async function updateSettings(discordId, settings, now = new Date()) {
     const sets = [];
     const values = [];
+    let timezoneChange; // undefined: not requested
     for (const key of SETTINGS) {
         if (settings[key] !== undefined) {
             sets.push(`${key} = ?`);
@@ -63,8 +72,7 @@ async function updateSettings(discordId, settings) {
     }
     if (settings.timezone !== undefined) {
         if (settings.timezone !== null && !isValidTimeZone(settings.timezone)) throw errors.validation('Unknown time zone. Use a name like Europe/Paris or Asia/Manila.');
-        sets.push('timezone = ?');
-        values.push(settings.timezone);
+        timezoneChange = settings.timezone;
     }
     if (settings.reminder_hour !== undefined) {
         const hour = settings.reminder_hour;
@@ -73,7 +81,24 @@ async function updateSettings(discordId, settings) {
         values.push(hour);
     }
     await ensureUser(discordId);
-    if (sets.length) await run(null, `UPDATE users SET ${sets.join(', ')} WHERE discord_id = ?`, [...values, String(discordId)]);
+    if (timezoneChange !== undefined) {
+        await withTransaction(async (conn) => {
+            const user = await lockUser(conn, discordId);
+            if (timezoneChange !== (user.timezone || null)) {
+                const last = user.timezone_changed_at ? new Date(user.timezone_changed_at).getTime() : null;
+                const wait = last === null ? 0 : last + TIMEZONE_CHANGE_COOLDOWN_MS - now.getTime();
+                if (wait > 0) {
+                    const minutes = Math.ceil(wait / 60e3);
+                    throw errors.validation(
+                        `You changed your time zone recently. It sets when your day starts for daily limits and quests, so it can only change once every 24 hours. Try again in ${Math.floor(minutes / 60)}h ${minutes % 60}m.`
+                    );
+                }
+                sets.push('timezone = ?', 'timezone_changed_at = ?');
+                values.push(timezoneChange, now);
+            }
+            if (sets.length) await run(conn, `UPDATE users SET ${sets.join(', ')} WHERE discord_id = ?`, [...values, String(discordId)]);
+        });
+    } else if (sets.length) await run(null, `UPDATE users SET ${sets.join(', ')} WHERE discord_id = ?`, [...values, String(discordId)]);
     return getUser(discordId);
 }
 

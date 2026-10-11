@@ -24,6 +24,15 @@ export function freezeLimits(limits?: FreezeLimits | null): { cost: number; max:
   return { cost: limits.COST, max: limits.MAX };
 }
 
+/** YYYY-MM-DD of `now` in the user's IANA zone (UTC when unset or unknown), like the server's per-user day. */
+function dayInZone(now: number, zone?: string | null): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: zone || "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  } catch {
+    return new Date(now).toISOString().slice(0, 10);
+  }
+}
+
 function dayNumber(iso: string): number {
   return Math.floor(Date.parse(`${iso.slice(0, 10)}T00:00:00Z`) / 86_400_000);
 }
@@ -35,7 +44,7 @@ export function classCounter(user: Partial<User>, skills: UserSkill[] = [], now:
     case "MONK": {
       const max = 14 + (level("monk_discipline") > 0 ? 4 : 0);
       const value = Math.min(max, Number(user.monk_rhythm) || 0);
-      const today = new Date(now).toISOString().slice(0, 10);
+      const today = dayInZone(now, user.timezone);
       const gap = user.monk_day ? dayNumber(today) - dayNumber(String(user.monk_day)) : null;
       const lapsed = value > 0 && gap !== null && gap > (level("monk_serenity") > 0 ? 2 : 1);
       return { label: "Rhythm", emoji: "🧘", value, max, note: lapsed ? "Lapsed: restarts at 1 on your next action" : undefined };

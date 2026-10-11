@@ -38,7 +38,7 @@ export const ReminderSettings = ({ user, automation, weeklyDigest, autoDelete, o
   return (
     <div>
       <SwitchRow label="Deadline reminders" description="A Discord DM when a list is due, and one more if it goes overdue." checked={automation} disabled={busy("automation_enabled")} onChange={(v) => onToggle("automation", v)} />
-      <SettingRow label="Time zone" description={zone ? "Deadlines are dates; this decides when your day starts." : "Not set: reminders use UTC dates."}>
+      <SettingRow label="Time zone" description={zone ? "Your day starts at midnight in this zone: reminders, daily limits and quests follow it. It can change once every 24 hours." : "Not set: days, quests and reminders use UTC. A zone can be changed once every 24 hours."}>
         <div className="flex flex-col gap-2 sm:items-end">
           <select
             aria-label="Time zone"

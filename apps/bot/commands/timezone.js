@@ -1,7 +1,8 @@
 /**
  * /timezone - set the time zone and hour for your deadline reminders.
- * Deadlines are plain dates; this decides when "today" starts for you and
- * when in the day the reminder DM arrives.
+ * Deadlines are plain dates; this decides when "today" starts for you, when your
+ * daily limits, quests and weekly review reset, and when in the day the reminder DM arrives.
+ * The zone can change once every 24 hours (the shared users service rejects a faster change).
  */
 
 'use strict';
@@ -14,7 +15,7 @@ const { EPHEMERAL, handleError } = require('../utils/respond');
 
 const data = new SlashCommandBuilder()
     .setName('timezone')
-    .setDescription('🕒 Set your time zone and the hour your deadline reminders arrive')
+    .setDescription('🕒 Set your time zone (your day, quests and reminders) and the hour reminders arrive')
     .addStringOption((o) => o.setName('zone').setDescription('Time zone, e.g. Europe/Paris or Asia/Manila').setAutocomplete(true))
     .addIntegerOption((o) => o.setName('hour').setDescription('Hour of day for reminders (0-23, default 9)').setMinValue(0).setMaxValue(23));
 
@@ -40,7 +41,8 @@ async function execute(interaction) {
         const lines = [
             `**Time zone:** ${user.timezone || 'UTC (not set)'}`,
             `**Local time now:** ${todayInZone(tz)} ${clock(hourInZone(tz))}`,
-            `**Reminders arrive:** around ${clock(user.reminder_hour ?? 9)}`
+            `**Reminders arrive:** around ${clock(user.reminder_hour ?? 9)}`,
+            'Your day starts at midnight in this zone: daily limits, quests and the weekly review reset then. A zone can change once every 24 hours.'
         ];
         const title = Object.keys(changes).length ? 'Reminder settings saved' : 'Your reminder settings';
         await interaction.editReply({ embeds: [ui.success(title, lines.join('\n'))] });

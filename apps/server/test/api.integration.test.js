@@ -631,6 +631,22 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await (await call('GET', '/api/user', { cookie: carol })).json()).user.cosmetics.title, null);
     });
 
+    await t.test('time zone: PATCH /api/user throttles a second change within 24 hours', async () => {
+        const id = '200000000000000031';
+        const cookie = await login(db, id);
+        const set = (body) => call('PATCH', '/api/user', { cookie, body });
+        assert.equal((await set({ timezone: 'Mars/Base' })).status, 400);
+        const first = await set({ timezone: 'Pacific/Kiritimati' });
+        assert.equal(first.status, 200);
+        assert.equal((await first.json()).timezone, 'Pacific/Kiritimati');
+        const second = await set({ timezone: 'Pacific/Pago_Pago' });
+        assert.equal(second.status, 400);
+        assert.match((await second.json()).error, /once every 24 hours/);
+        assert.equal((await set({ timezone: 'Pacific/Kiritimati', reminder_hour: 8 })).status, 200, 'the same zone is not a change');
+        await db.query('UPDATE users SET timezone_changed_at = NOW() - INTERVAL 25 HOUR WHERE discord_id = ?', [id]);
+        assert.equal((await set({ timezone: 'Pacific/Pago_Pago' })).status, 200);
+    });
+
     server.close();
     await db.closePool();
 });

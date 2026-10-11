@@ -8,7 +8,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
-const { TEXT_LIMITS, CLASSES, CLASS_RULES, PRESTIGE_TITLES, validation, levelProgress, isPastDeadline, formatDeadline } = require('@taskquest/shared');
+const { TEXT_LIMITS, CLASSES, CLASS_RULES, PRESTIGE_TITLES, validation, levelProgress, isPastDeadline, formatDeadline, todayInZone } = require('@taskquest/shared');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🎨 COLOR SYSTEM
@@ -53,7 +53,7 @@ function classCounterLine(user, userSkills = [], now = Date.now()) {
             const cap = m.MAX_RHYTHM + (lvl('monk_discipline') ? m.DISCIPLINE_CAP : 0);
             const rhythm = Math.min(cap, Number(user.monk_rhythm) || 0);
             const last = user.monk_day ? new Date(user.monk_day).toISOString().slice(0, 10) : null;
-            const today = new Date(now).toISOString().slice(0, 10);
+            const today = todayInZone(user.timezone, new Date(now)); // the user's own day, like the rule
             const gap = last ? Math.round((Date.parse(today) - Date.parse(last)) / 86400000) : null;
             const lapsed = rhythm > 0 && gap !== null && gap > (lvl('monk_serenity') ? 2 : 1);
             return `🧘 Rhythm **${rhythm}/${cap}**${lapsed ? ' (lapsed, restarts at 1)' : ''}`;

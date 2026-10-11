@@ -170,6 +170,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(u.reminder_hour, 7);
         await assert.rejects(db.users.updateSettings(FRANK, { timezone: 'Mars/Base' }), { code: 'VALIDATION' });
         await assert.rejects(db.users.updateSettings(FRANK, { reminder_hour: 24 }), { code: 'VALIDATION' });
+        await assert.rejects(db.users.updateSettings(FRANK, { timezone: null }), { code: 'VALIDATION', message: /24 hours/ }, 'a zone change is throttled');
+        await db.query('UPDATE users SET timezone_changed_at = NULL WHERE discord_id = ?', [FRANK]);
         assert.equal((await db.users.updateSettings(FRANK, { timezone: null })).timezone, null);
 
         const now = new Date('2030-06-10T12:00:00Z');
@@ -298,6 +300,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.addItem(IVY, list.id, { name: 'open' });
         const late = new Date('2030-06-10T23:30:00Z');
         assert.equal((await db.users.getWeeklyStats(IVY, late)).listsOverdue, 1);
+        await db.query('UPDATE users SET timezone_changed_at = NULL WHERE discord_id = ?', [IVY]);
         await db.users.updateSettings(IVY, { timezone: 'America/New_York' });
         assert.equal((await db.users.getWeeklyStats(IVY, late)).listsOverdue, 0);
     });
@@ -2056,6 +2059,36 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await when(BOARD, 'item_add', 9, '2030-06-03T01:00:00Z'); // Monday in UTC
         const board = await db.users.getLeaderboard(100, { by: 'weekly', now: new Date('2030-06-03T12:00:00Z') });
         assert.equal(Number(board.find((r) => r.discord_id === BOARD).score), 9);
+    });
+
+    await t.test('time zones: a zone change is throttled to once per 24 hours', async () => {
+        const T = '100000000000000521';
+        await db.users.ensureUser(T);
+        assert.equal((await db.users.getUser(T)).timezone_changed_at, null, 'never set');
+        await assert.rejects(db.users.updateSettings(T, { timezone: 'Mars/Base' }), { code: 'VALIDATION', message: /Unknown time zone/ });
+        assert.equal((await db.users.updateSettings(T, { timezone: 'Asia/Manila' })).timezone, 'Asia/Manila', 'the first change is free');
+        assert.ok((await db.users.getUser(T)).timezone_changed_at);
+
+        // A second change within 24 hours is refused, and nothing else in the same save is applied.
+        await assert.rejects(db.users.updateSettings(T, { timezone: 'Europe/Paris', weekly_digest: true }), { code: 'VALIDATION', message: /once every 24 hours.*Try again in 24h/ });
+        await assert.rejects(db.users.updateSettings(T, { timezone: null }), { code: 'VALIDATION' }, 'going back to UTC is a change too');
+        const kept = await db.users.getUser(T);
+        assert.deepEqual([kept.timezone, Boolean(kept.weekly_digest)], ['Asia/Manila', false]);
+        // The same value, and other settings, are never throttled.
+        assert.equal((await db.users.updateSettings(T, { timezone: 'Asia/Manila', reminder_hour: 6 })).reminder_hour, 6);
+        assert.equal((await db.users.updateSettings(T, { weekly_digest: true })).weekly_digest, 1);
+
+        // After 24 hours it can change again (the clock is injectable).
+        await assert.rejects(db.users.updateSettings(T, { timezone: 'Europe/Paris' }, new Date(Date.now() + 23 * 3600e3)), { code: 'VALIDATION' });
+        const later = new Date(Date.now() + 25 * 3600e3);
+        assert.equal((await db.users.updateSettings(T, { timezone: 'Europe/Paris' }, later)).timezone, 'Europe/Paris');
+        await assert.rejects(db.users.updateSettings(T, { timezone: 'Asia/Manila' }, later), { code: 'VALIDATION' }, 'and the clock restarts');
+
+        // Zone-hopping cannot reset a daily cap: the cap window follows the zone, but only once a day.
+        const H = '100000000000000522';
+        await db.users.ensureUser(H);
+        await db.users.updateSettings(H, { timezone: 'Pacific/Kiritimati' });
+        await assert.rejects(db.users.updateSettings(H, { timezone: 'Pacific/Pago_Pago' }), { code: 'VALIDATION' });
     });
 
     await db.closePool();

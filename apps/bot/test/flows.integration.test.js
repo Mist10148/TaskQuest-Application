@@ -423,6 +423,10 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         await timezone.execute(badTz);
         assert.match(text(badTz.calls.at(-1)), /Unknown time zone/);
         assert.equal((await db.users.getUser(USER)).timezone, 'Asia/Manila', 'a bad zone changes nothing');
+        const quick2 = fake({ commandName: 'timezone', options: { zone: 'Europe/Paris' } });
+        await timezone.execute(quick2);
+        assert.match(text(quick2.calls.at(-1)), /once every 24 hours/);
+        assert.equal((await db.users.getUser(USER)).timezone, 'Asia/Manila', 'a second change within a day is refused');
 
         const on = fake({ commandName: 'weekly' });
         await weekly.execute(on);

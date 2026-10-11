@@ -33,7 +33,7 @@ function render(r) {
             { name: 'XP earned', value: `${Number(r.xpEarned).toLocaleString()} XP`, inline: true },
             { name: 'Streak', value: `🔥 ${r.streak}`, inline: true }
         )
-        .setFooter({ text: 'The week resets on Monday at 00:00 UTC.' });
+        .setFooter({ text: 'The week resets on Monday at your midnight (see /timezone).' });
     const components = r.claimable
         ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('review_claim').setLabel('Claim review').setEmoji('🎁').setStyle(ButtonStyle.Success))]
         : [];

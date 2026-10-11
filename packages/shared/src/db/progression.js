@@ -16,6 +16,7 @@ const {
     classOwnershipColumn,
     findSkill,
     LIMITS,
+    REWARDS,
     SPEND_SOURCES,
     STREAK_CHESTS
 } = require('../constants');
@@ -180,24 +181,31 @@ async function remainingFreeGameXP(conn, discordId) {
 }
 
 /**
- * Evaluate and persist newly earned achievements for a (locked) user.
- * @returns {Promise<Array<object>>} achievements unlocked by this call
+ * Evaluate and persist newly earned achievements for a (locked) user. Each one pays REWARDS.ACHIEVEMENT
+ * flat XP (source achievement_reward) in the same transaction. That XP can itself earn an XP or level
+ * achievement, so the check repeats until nothing new unlocks; it always ends, because every achievement
+ * unlocks once and the list is finite.
+ * @returns {Promise<Array<object>>} achievements unlocked by this call, each with the `xp` it paid (0 when XP is off)
  */
 async function unlockAchievements(conn, user, events = {}) {
-    const [rows] = await conn.query('SELECT achievement_key FROM achievements WHERE discord_id = ?', [user.discord_id]);
-    const games = await getGameCounts(user.discord_id, conn);
-    const candidates = evaluateAchievements(
-        { ...user, games_played: games.played, games_won: games.won },
-        rows.map((r) => r.achievement_key),
-        events
-    );
     const unlocked = [];
-    for (const ach of candidates) {
-        const [res] = await conn.query('INSERT IGNORE INTO achievements (discord_id, achievement_key) VALUES (?, ?)', [
-            user.discord_id,
-            ach.key
-        ]);
-        if (res.affectedRows === 1) unlocked.push(ach);
+    const known = new Set((await conn.query('SELECT achievement_key FROM achievements WHERE discord_id = ?', [user.discord_id]))[0].map((r) => r.achievement_key));
+    for (let round = 0; round < 100; round++) {
+        const games = await getGameCounts(user.discord_id, conn);
+        const candidates = evaluateAchievements({ ...user, games_played: games.played, games_won: games.won }, known, events);
+        let found = 0;
+        for (const ach of candidates) {
+            const [res] = await conn.query('INSERT IGNORE INTO achievements (discord_id, achievement_key) VALUES (?, ?)', [
+                user.discord_id,
+                ach.key
+            ]);
+            known.add(ach.key);
+            if (res.affectedRows !== 1) continue;
+            found++;
+            const paid = await awardFlat(conn, user, 'achievement_reward', REWARDS.ACHIEVEMENT, { referenceId: res.insertId || null });
+            unlocked.push({ ...ach, xp: paid ? paid.xp : 0 });
+        }
+        if (!found) break;
     }
     return unlocked;
 }
@@ -283,7 +291,7 @@ async function buyStreakFreeze(discordId) {
         if (Number(user.player_xp) < limits.COST) throw errors.insufficientXP(limits.COST, Number(user.player_xp));
         const tx = await applyXP(conn, user, -limits.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
         const achievements = await unlockAchievements(conn, user);
-        return { freezes: owned + 1, max: limits.MAX, cost: limits.COST, balance: tx.balanceAfter, achievements };
+        return { freezes: owned + 1, max: limits.MAX, cost: limits.COST, balance: Number(user.player_xp), achievements };
     });
 }
 
@@ -314,7 +322,7 @@ async function buyClass(discordId, rawKey) {
             userUpdates: { [classOwnershipColumn(classKey)]: 1, player_class: classKey, ...CLASS_COUNTER_RESET }
         });
         const achievements = await unlockAchievements(conn, user);
-        return { classKey, cost, balance: tx.balanceAfter, user, achievements };
+        return { classKey, cost, balance: Number(user.player_xp), user, achievements };
     });
 }
 

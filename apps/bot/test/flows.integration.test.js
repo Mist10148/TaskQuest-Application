@@ -191,6 +191,8 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
 
     await t.test('/class buy, equip and skill unlock', async () => {
         await pool.query('UPDATE users SET player_xp = 2000 WHERE discord_id = ?', [USER]);
+        const [[before]] = await pool.query("SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'achievement_reward'", [USER]);
+        const rewards0 = Number(before.n);
         await gam.classShop(fake());
         for (const id of ['class_next', 'cbuy_HERO', 'class_skills', 'skill_unlock_hero_valor', 'skill_unlock_tank_fortify', 'ceq_DEFAULT', 'class_return_default']) {
             const i = fake({ customId: id });
@@ -199,7 +201,8 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         }
         const user = await db.users.getUser(USER);
         assert.equal(user.owns_hero, 1);
-        assert.equal(Number(user.player_xp), 2000 - 500 - 100);
+        const [[paid]] = await pool.query("SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'achievement_reward'", [USER]);
+        assert.equal(Number(user.player_xp), 2000 - 500 - 100 + Number(paid.n) - rewards0, 'prices spent, plus achievement rewards');
         const sel = fake({ customId: 'skill_select', values: ['hero_inspire'] });
         await gam.handleSkillSelect(sel);
         assert.deepEqual(errors(sel), []);

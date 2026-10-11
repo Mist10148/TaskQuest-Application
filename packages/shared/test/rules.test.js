@@ -738,3 +738,10 @@ test('streak chests: 7, 14 and 30 days pay 100, 250 and 600 XP and count for the
     assert.deepEqual(STREAK_CHESTS, { 7: 100, 14: 250, 30: 600 });
     assert.ok(WEEKLY_XP_SOURCES.includes('streak_chest'));
 });
+
+test('achievement rewards: a flat 25 XP, counted on the weekly board', () => {
+    const { REWARDS, WEEKLY_XP_SOURCES, BONUS_LABELS } = require('../src/constants');
+    assert.equal(REWARDS.ACHIEVEMENT, 25);
+    assert.ok(WEEKLY_XP_SOURCES.includes('achievement_reward'));
+    assert.ok(BONUS_LABELS.achievement_reward);
+});

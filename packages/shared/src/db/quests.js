@@ -110,7 +110,7 @@ async function claimQuest(discordId, rawKey, now = new Date()) {
 
         const tx = await applyXP(conn, user, quest.reward, 'quest_reward', { referenceId: res.insertId });
         const achievements = await unlockAchievements(conn, user);
-        return { key, name: quest.name, reward: quest.reward, balance: tx.balanceAfter, level: tx.level, leveledUp: tx.leveledUp, achievements };
+        return { key, name: quest.name, reward: quest.reward, balance: Number(user.player_xp), level: Number(user.player_level), leveledUp: Number(user.player_level) > tx.previousLevel, achievements };
     });
 }
 

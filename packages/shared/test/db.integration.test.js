@@ -24,6 +24,9 @@ if (enabled) {
 
 const db = enabled ? require('../src/db') : null;
 
+/** XP paid for achievements so far (+25 each), so balance assertions can separate it from the thing under test. */
+const rewardSum = async (id) => Number((await db.query("SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'achievement_reward'", [id]))[0].n);
+
 const ALICE = '100000000000000001';
 const BOB = '100000000000000002';
 const CAROL = '100000000000000003';
@@ -339,10 +342,11 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
     await t.test('class purchase is atomic under concurrency', async () => {
         await setXP(ALICE, 600);
+        const rewards0 = await rewardSum(ALICE);
         const results = await Promise.allSettled([db.progression.buyClass(ALICE, 'hero'), db.progression.buyClass(ALICE, 'HERO')]);
         assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
         const user = await db.users.getUser(ALICE);
-        assert.equal(Number(user.player_xp), 100);
+        assert.equal(Number(user.player_xp), 100 + ((await rewardSum(ALICE)) - rewards0), 'the class price, plus any achievement it unlocked');
         assert.equal(user.player_class, 'HERO');
         const levelBefore = Number(user.player_level);
         assert.ok(levelBefore >= 6, 'spending XP does not lower level');
@@ -418,11 +422,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         let s = await db.games.startBlackjack(BOB, 100);
         while (s.settlement) s = await db.games.startBlackjack(BOB, 100);
         const before = Number((await db.users.getUser(BOB)).player_xp);
+        const rewards0 = await rewardSum(BOB);
         await rigHand(BOB, s.sessionId, ['10', 'K'], ['10', '7']);
         const done = await db.games.blackjackAction(BOB, 'stand');
         assert.equal(done.settlement.credited, 200, 'bet back plus exactly the bet, no Hero +25');
         assert.equal(done.settlement.bonusInfo, null);
-        assert.equal(Number((await db.users.getUser(BOB)).player_xp) - before, 200);
+        assert.equal(Number((await db.users.getUser(BOB)).player_xp) - before - ((await rewardSum(BOB)) - rewards0), 200);
         await pool.query("UPDATE users SET player_class = 'DEFAULT' WHERE discord_id = ?", [BOB]);
     });
 
@@ -724,12 +729,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number(u.owns_monk), 0, 'nothing is granted when the purchase fails');
         assert.equal(Number(u.player_xp), 549);
         await setXP(M, 600);
+        const rewards0 = await rewardSum(M);
         const bought = await db.progression.buyClass(M, 'MONK');
         assert.equal(bought.classKey, 'MONK');
         u = await db.users.getUser(M);
         assert.equal(u.player_class, 'MONK');
         assert.equal(Number(u.owns_monk), 1);
-        assert.equal(Number(u.player_xp), 50);
+        assert.equal(Number(u.player_xp), 50 + ((await rewardSum(M)) - rewards0));
         await assert.rejects(db.progression.buyClass(M, 'MONK'), { code: 'CONFLICT' });
 
         // a rewarded action builds rhythm and stamps the UTC day
@@ -938,13 +944,14 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(Z);
         const total = shared.PURCHASABLE_CLASS_KEYS.reduce((sum, k) => sum + shared.CLASSES[k].cost, 0);
         await setXP(Z, total);
+        const rewards0 = await rewardSum(Z);
         for (const key of shared.PURCHASABLE_CLASS_KEYS) {
             const bought = await db.progression.buyClass(Z, key.toLowerCase());
             assert.equal(bought.classKey, key);
             assert.equal(Number((await db.users.getUser(Z))[shared.classOwnershipColumn(key)]), 1, key);
         }
         const user = await db.users.getUser(Z);
-        assert.equal(Number(user.player_xp), 0, 'exactly the class prices were spent');
+        assert.equal(Number(user.player_xp), (await rewardSum(Z)) - rewards0, 'exactly the class prices were spent, plus achievement rewards');
         const [[ach]] = await db.getPool().query("SELECT COUNT(*) AS n FROM achievements WHERE discord_id = ? AND achievement_key = 'ALL_CLASSES'", [Z]);
         assert.equal(Number(ach.n), 1, 'owning every class unlocks Collector');
         for (const key of ['DEFAULT', ...shared.PURCHASABLE_CLASS_KEYS]) {
@@ -1133,6 +1140,43 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await sumSource(U, 'streak_chest'), 1050);
     });
 
+
+
+    await t.test('achievement rewards: +25 XP each, cascading into XP achievements exactly once', async () => {
+        const U = '100000000000000121';
+        await db.users.ensureUser(U);
+        await db.query('UPDATE users SET player_xp = 70, lifetime_xp = 70 WHERE discord_id = ?', [U]);
+        // 70 + 10 (list) = 80, FIRST_LIST pays 25 = 105, which crosses 100 lifetime XP: XP_100 pays 25 more.
+        const { achievements, list } = await db.tasks.createList(U, { name: 'Cascade' });
+        assert.ok(list);
+        assert.deepEqual(achievements.map((a) => a.key).sort(), ['FIRST_LIST', 'XP_100']);
+        assert.ok(achievements.every((a) => a.xp === 25));
+        assert.equal(await sumSource(U, 'achievement_reward'), 50);
+        assert.equal(Number((await db.users.getUser(U)).player_xp), 70 + 10 + 50);
+        // Nothing unlocks twice, whatever re-checks run.
+        assert.deepEqual(await db.progression.checkAchievements(U), []);
+        assert.deepEqual(await db.progression.checkAchievements(U), []);
+        assert.equal(await sumSource(U, 'achievement_reward'), 50);
+
+        // XP off: the achievement still unlocks but pays nothing.
+        const OFF = '100000000000000122';
+        await db.users.ensureUser(OFF);
+        await db.users.updateSettings(OFF, { gamification_enabled: false });
+        const off = await db.tasks.createList(OFF, { name: 'Quiet' });
+        assert.deepEqual(off.achievements.map((a) => [a.key, a.xp]), [['FIRST_LIST', 0]]);
+        assert.equal(await sumSource(OFF, 'achievement_reward'), 0);
+    });
+
+    await t.test('achievement rewards: the total any user can ever earn is bounded by the achievement list', async () => {
+        const shared = require('../src');
+        const U = '100000000000000123';
+        await db.users.ensureUser(U);
+        await db.query('UPDATE users SET total_lists_created = 500, total_items_added = 500, total_items_completed = 500, streak_count = 100, lifetime_xp = 100000, player_xp = 100000, player_level = 60 WHERE discord_id = ?', [U]);
+        const first = await db.progression.checkAchievements(U);
+        assert.ok(first.length > 15);
+        assert.equal(await db.progression.checkAchievements(U).then((r) => r.length), 0);
+        assert.ok((await sumSource(U, 'achievement_reward')) <= Object.keys(shared.ACHIEVEMENTS).length * shared.REWARDS.ACHIEVEMENT);
+    });
 
     await db.closePool();
 });

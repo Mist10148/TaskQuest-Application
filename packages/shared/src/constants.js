@@ -343,7 +343,8 @@ const REWARDS = {
     LIST_CLEARED: 25,
     EARLY_FINISH_PER_DAY: 5,
     OVERDUE_CLEAR: 10,
-    SUBTASKS_DONE: 10
+    SUBTASKS_DONE: 10,
+    ACHIEVEMENT: 25
 };
 
 /** Streak milestones: the daily claim that reaches the day pays the chest once per streak run. */
@@ -359,7 +360,8 @@ const BONUS_LABELS = {
     early_finish: 'Finished early',
     overdue_clear: 'Overdue cleared',
     subtasks_done: 'All subtasks done',
-    streak_chest: 'Streak chest'
+    streak_chest: 'Streak chest',
+    achievement_reward: 'Achievement reward'
 };
 
 /**
@@ -378,7 +380,8 @@ const QUESTS = {
 const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
     'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
-    'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest'
+    'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest',
+    'achievement_reward'
 ];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */

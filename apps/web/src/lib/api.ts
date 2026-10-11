@@ -342,14 +342,25 @@ export interface XPResult {
 
 export interface AchievementUnlock {
     key: string;
+    /** XP the achievement paid when it unlocked (flat, no modifiers). */
+    xp?: number;
     name: string;
     description: string;
     emoji: string;
     category: string;
 }
 
+/** A flat extra paid with a first task completion (first of the day, cleared list, early finish ...). */
+export interface BonusEntry {
+    key: string;
+    label: string;
+    xp: number;
+}
+
 export interface RewardFields {
     xpResult: XPResult | null;
+    /** Task completions only: the flat extras paid on top of xpResult. */
+    bonuses?: BonusEntry[];
     newAchievements: AchievementUnlock[];
 }
 
@@ -671,7 +682,9 @@ export interface Quest {
     name: string;
     emoji: string;
     description: string;
-    period: 'daily' | 'weekly';
+    period: 'daily' | 'weekly' | 'monthly';
+    /** True for this week's pick from the rotating weekly pool. */
+    rotating?: boolean;
     target: number;
     reward: number;
     progress: number;

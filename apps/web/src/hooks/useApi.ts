@@ -10,6 +10,7 @@ import { formatDeadline } from '@/lib/dates';
 import { applyItemOrder } from '@/lib/reorder';
 import { celebrate } from '@/lib/celebrate';
 import { describeChest } from '@/lib/classInfo';
+import { achievementDescription, rewardDescription } from '@/lib/bonuses';
 import {
     userApi,
     importApi,
@@ -43,7 +44,7 @@ export function showXPNotification(result: Partial<RewardFields> | null | undefi
     if (!xp || xp.finalXP <= 0) return;
     if (xp.leveledUp) celebrate('level');
     toast.success(`${emoji} ${action} +${xp.finalXP} XP!`, {
-        description: xp.leveledUp ? `🎉 Level up! You are now level ${xp.newLevel}.` : xp.bonusInfo?.details || undefined,
+        description: rewardDescription({ leveledUp: xp.leveledUp, newLevel: xp.newLevel, details: xp.bonusInfo?.details, bonuses: result?.bonuses }),
         duration: 3500,
     });
 }
@@ -52,7 +53,7 @@ export function showAchievementNotifications(achievements: AchievementUnlock[] |
     if (!achievements?.length) return;
     celebrate('achievement');
     for (const ach of achievements) {
-        toast.success(`🏆 Achievement Unlocked: ${ach.name}!`, { description: ach.description, duration: 5000 });
+        toast.success(`🏆 Achievement Unlocked: ${ach.name}!`, { description: achievementDescription(ach), duration: 5000 });
     }
     qc.invalidateQueries({ queryKey: ['achievements'] });
 }

@@ -147,7 +147,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 
 ### Leaderboard boards
 
-The leaderboard defaults to **lifetime XP**, so buying a class or skill never lowers your rank. Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins and quests since Monday 00:00 UTC; bets and refunds don't count), **daily streak**, and **current balance**. Any board can be filtered by class.
+The leaderboard defaults to **lifetime XP**, so buying a class or skill never lowers your rank. Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins and quests since Monday 00:00 UTC; bets and refunds don't count), **daily streak** (a streak whose claim window has passed shows as 0 instead of lingering until your next claim), and **current balance**. Any board can be filtered by class, and your own rank respects that filter.
 
 ### Streak freeze
 
@@ -164,6 +164,8 @@ Five quests, with periods in UTC (daily: the UTC day; weekly: Monday 00:00 to Mo
 | 🗒️ Planner | Daily | Add 3 tasks | 15 XP |
 | 🛡️ Weekly Warrior | Weekly | Complete 15 tasks | 120 XP |
 | 📆 Regular | Weekly | Claim the daily reward on 5 days | 80 XP |
+
+What counts: a task counts toward the completion quests once, at the moment it is first completed (the same moment its completion XP is paid), so un-checking and re-checking never moves it into a new period. *Heavy Lifter* uses the task's priority at that moment, so raising it afterwards does not qualify. Imported tasks and the next copy a repeating task creates never count towards any quest (adds or completions). A progress reset clears your claims.
 
 ## 6. Achievements
 

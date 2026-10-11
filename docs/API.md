@@ -66,7 +66,8 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | POST 🔒 | `/api/user/streak-freeze` | — | Buys one streak freeze for 150 XP (max 3 held). `{success, freezes, cost, newBalance, newAchievements}`. `409` at the cap, `400 INSUFFICIENT_XP`. |
 | GET 🔒 | `/api/user/export` | — | Download of everything you own as JSON (`{app, version, exportedAt, lists:[{name, description, category, priority, deadline, items:[{id, parent_id, name, description, completed, due_date, priority, tags, recurrence}]}]}`). |
 | GET 🔒 | `/api/user/export.csv` | — | One row per task (`list, task, subtask_of, done, due_date, priority, tags, repeat, list_deadline, list_category`). Cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets don't run them as formulas. |
-| POST 🔒 | `/api/user/import` | An export document (body limit **1 MB** on this route only; max 100 lists, 500 tasks per list, 1000 in total) | `201 {success, lists, items}`. All or nothing. Name clashes get an `(imported)` suffix, existing lists are never touched, and **no XP, counters or achievements are granted**; completed tasks arrive already paid, so they cannot be re-earned. |
+| POST 🔒 | `/api/user/import` | An export document (body limit **1 MB** on this route only; max 100 lists, 500 tasks per list, 1000 in total, and no more than 200 lists / 5000 tasks in your account counting what you already have; a subtask under another subtask is rejected) | `201 {success, lists, items}`. All or nothing. Name clashes get an `(imported)` suffix, existing lists are never touched, and **no XP, counters or achievements are granted**; completed tasks arrive already paid, so they cannot be re-earned. |
+| GET 🔒 | `/api/user/calendar-token` | — | `{token}` (null when the feed is off). The token is a secret, so `/api/auth/me` and `/api/user` only report `user.has_calendar_token`. |
 | POST 🔒 | `/api/user/calendar-token` | — | Creates or rotates the secret calendar feed token. `{token}` |
 | DELETE 🔒 | `/api/user/calendar-token` | — | Turns the feed off. `{success:true}` |
 
@@ -115,7 +116,7 @@ Completing tasks pays XP for the first **50 completions per UTC day** (like list
 | POST | `/api/skills/:skillId/unlock` | 🔒 | Unlocks or levels up one skill (cost per level). The tree is derived on the server; any `classKey` in the body is ignored. `{success, skill:{skill_id, skill_level}, balance}` |
 | GET | `/api/achievements` | 🔒 | `{achievements:[{key,name,emoji,description,category,unlocked,unlockedAt}], unlockedCount, totalCount}` |
 | GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]`. `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs. |
-| GET | `/api/leaderboard/me?by=` | 🔒 | `{rank}` on that board (null when XP is off, or no score on `weekly`/`streak`) |
+| GET | `/api/leaderboard/me?by=&class=` | 🔒 | `{rank}` on that board, within the class when `class` is given (null when XP is off, no score on `weekly`/`streak`, or you are not that class) |
 
 ## Quests
 

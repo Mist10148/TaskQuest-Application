@@ -38,6 +38,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `007_item_fields` | Per-task `due_date`, `priority`, `tags`, `parent_id` (subtasks, self-referencing FK, cascade) and `recurrence` |
 | `008_user_prefs` | `users.timezone`, `reminder_hour`, `weekly_digest`, `last_digest_at`, `calendar_token` (unique), `streak_freezes`, `xp_spent` (backfilled from `xp_transactions`); `lists.remind_at` and `overdue_notified` |
 | `009_quest_claims` | `quest_claims`, the claim log that keeps a quest to one payout per period |
+| `010_quest_integrity` | `items.first_completed_at`, `first_completed_high`, `counts_for_quests` (what quests count) and `repeat_anchor_day` (monthly repeats keep their day) |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -104,7 +105,7 @@ Unique key `(discord_id, name)`, index on `deadline`.
 
 ### `items`
 
-`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `created_at` · `updated_at` (auto-updated).
+`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `created_at` · `updated_at` (auto-updated).
 
 Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`. Positions are kept unique and contiguous (0..n-1) by `moveItem` / `reorderItems`.
 
@@ -138,7 +139,7 @@ Indexes `(discord_id, created_at)` and `(discord_id, source, created_at)`. The s
 
 ### `quest_claims`
 
-`id` · `discord_id` FK · `quest_key` VARCHAR(50) · `period_start` DATE · `reward_xp` INT · `claimed_at`. The unique key `(discord_id, quest_key, period_start)` is what makes a claim atomic: two clicks cannot both insert, so a quest pays once per period. Quest *progress* is not stored; it is computed from `items` and `xp_transactions`.
+`id` · `discord_id` FK · `quest_key` VARCHAR(50) · `period_start` DATE · `reward_xp` INT · `claimed_at`. The unique key `(discord_id, quest_key, period_start)` is what makes a claim atomic: two clicks cannot both insert, so a quest pays once per period. Quest *progress* is not stored; it is computed from `items` (`first_completed_at`, `first_completed_high`, `counts_for_quests`, `created_at`) and `xp_transactions`.
 
 ### `web_sessions`
 
@@ -183,7 +184,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 
 **Deadline reminders** (`tasks.getReminderCandidates`): a deliberately wide net of lists that might need a message (snoozes that have ended, and lists due within the next day or the last 14 that still owe a due or overdue notice, for owners with `automation_enabled`). The bot then decides per user in their own time zone and at their `reminder_hour` (`decideReminder`): a *due* reminder on the deadline day (or up to 3 days late), one *overdue* notice the day after if tasks are still open, and a *snooze* reminder when `remind_at` passes. `deadline_notified` / `overdue_notified` are set only after the DM was sent or can never be sent (DMs closed, unknown user); other errors retry on the next hourly run. Changing a list's deadline resets `deadline_notified`, `overdue_notified` and `remind_at`.
 
-**Old-list clean-up** (`tasks.cleanupOldLists`, 5 days by default). It deletes lists of users with `auto_delete_old_lists = TRUE` when the list has items, all completed, and the latest item change is more than 5 days old. Unfinished lists are never deleted, whatever their deadline. The function returns the deleted `{id, discord_id}` rows so the bot can drop their AI vectors.
+**Old-list clean-up** (`tasks.cleanupOldLists`, 5 days by default). It deletes lists of users with `auto_delete_old_lists = TRUE` when the list has items, all completed, and the latest item change is more than 5 days old. Each list is locked and re-checked inside a transaction right before it is deleted, so a task added after the scan saves the list. Unfinished lists are never deleted, whatever their deadline. The function returns the deleted `{id, discord_id}` rows so the bot can drop their AI vectors.
 
 ## Connection settings
 

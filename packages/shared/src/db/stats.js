@@ -1,14 +1,15 @@
 /**
- * Read-only statistics for the web "Stats" page: XP and completed tasks per UTC day, and a 30 day summary.
+ * Read-only statistics for the web "Stats" page: XP and completed tasks per day (in the user's own time zone), and a 30 day summary.
  * Every query is scoped by discord_id and bounded by a capped date range. Nothing here writes.
  */
 
 'use strict';
 
 const { getPool } = require('./pool');
+const { userZone } = require('./progression');
+const tz = require('../tz');
 const { WEEKLY_XP_SOURCES } = require('../constants');
 
-const DAY = 86400e3;
 /** Ranges the API accepts (also the cap: nothing larger is ever queried). */
 const HISTORY_RANGES = [7, 30, 90];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -39,9 +40,22 @@ function sourceLabel(source) {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-const startOfUtcDay = (date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-const isoDay = (date) => date.toISOString().slice(0, 10);
 const marks = () => WEEKLY_XP_SOURCES.map(() => '?').join(', ');
+
+/** Start instants of the user's last `n` local days (today included), oldest first, plus the end of today. */
+function dayStarts(zone, now, n) {
+    const starts = [tz.dayStart(zone, now)];
+    while (starts.length < n) starts.unshift(tz.dayStart(zone, new Date(starts[0].getTime() - 1))); // 1 ms earlier is the previous local day
+    return { starts, end: tz.nextDayStart(zone, now) };
+}
+
+/**
+ * Per-15-minute totals, so a day in any zone (offsets are whole quarter hours) can be summed in JS without
+ * the database knowing the zone. `expr` is a timestamp column, `select` an aggregate over the rows.
+ */
+const QUARTER = 900;
+const bucketSql = (column) => `UNIX_TIMESTAMP(${column}) DIV ${QUARTER}`;
+const bucketTime = (b) => new Date(Number(b) * QUARTER * 1000);
 
 /** A positive whole number of days from the allowed ranges; anything else throws a RangeError. */
 function checkDays(days) {
@@ -51,54 +65,60 @@ function checkDays(days) {
 }
 
 /**
- * XP earned and tasks first completed on each of the last `days` UTC days (today included), oldest first.
- * Days without activity are present with zeros. Only earning sources count (spending never lowers a day).
+ * XP earned and tasks first completed on each of the last `days` days of the user's own time zone (today included),
+ * oldest first. Days without activity are present with zeros. Only earning sources count (spending never lowers a day).
  * @returns {Promise<Array<{ date: string, xp: number, tasksCompleted: number }>>}
  */
 async function getXPHistory(discordId, days = 30, now = new Date()) {
     const n = checkDays(days);
     const id = String(discordId);
-    const today = startOfUtcDay(now);
-    const from = new Date(today.getTime() - (n - 1) * DAY);
-    const to = new Date(today.getTime() + DAY);
     const pool = getPool();
+    const zone = await userZone(pool, id);
+    const { starts, end } = dayStarts(zone, now, n);
+    const from = starts[0];
     const [[xpRows], [taskRows]] = await Promise.all([
         pool.query(
-            `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS d, COALESCE(SUM(amount), 0) AS xp
+            `SELECT ${bucketSql('created_at')} AS b, COALESCE(SUM(amount), 0) AS xp
              FROM xp_transactions
              WHERE discord_id = ? AND amount > 0 AND created_at >= ? AND created_at < ? AND source IN (${marks()})
-             GROUP BY d`,
-            [id, from, to, ...WEEKLY_XP_SOURCES]
+             GROUP BY b`,
+            [id, from, end, ...WEEKLY_XP_SOURCES]
         ),
         pool.query(
-            `SELECT DATE_FORMAT(i.first_completed_at, '%Y-%m-%d') AS d, COUNT(*) AS n
+            `SELECT ${bucketSql('i.first_completed_at')} AS b, COUNT(*) AS n
              FROM items i JOIN lists l ON l.id = i.list_id
              WHERE l.discord_id = ? AND i.first_completed_at >= ? AND i.first_completed_at < ?
-             GROUP BY d`,
-            [id, from, to]
+             GROUP BY b`,
+            [id, from, end]
         )
     ]);
-    const xpByDay = new Map(xpRows.map((r) => [r.d, Number(r.xp)]));
-    const tasksByDay = new Map(taskRows.map((r) => [r.d, Number(r.n)]));
-    const out = [];
-    for (let i = 0; i < n; i++) {
-        const date = isoDay(new Date(from.getTime() + i * DAY));
-        out.push({ date, xp: xpByDay.get(date) || 0, tasksCompleted: tasksByDay.get(date) || 0 });
-    }
-    return out;
+    const sumByDay = (rows, field) => {
+        const out = new Map();
+        for (const r of rows) {
+            const key = tz.dayKey(zone, bucketTime(r.b));
+            out.set(key, (out.get(key) || 0) + Number(r[field]));
+        }
+        return out;
+    };
+    const xpByDay = sumByDay(xpRows, 'xp');
+    const tasksByDay = sumByDay(taskRows, 'n');
+    return starts.map((start) => {
+        const date = tz.dayKey(zone, start);
+        return { date, xp: xpByDay.get(date) || 0, tasksCompleted: tasksByDay.get(date) || 0 };
+    });
 }
 
 /**
- * Headline numbers: the current streak, tasks completed in the last 7 days, XP earned per source in the last 30
- * (largest first) and the weekday with the most completions over the last 90 days (null with no history).
+ * Headline numbers (all in the user's own time zone): the current streak, tasks completed in the last 7 days, XP earned
+ * per source in the last 30 (largest first) and the weekday with the most completions over the last 90 days (null with no history).
  */
 async function getStatsSummary(discordId, now = new Date()) {
     const id = String(discordId);
-    const today = startOfUtcDay(now);
-    const end = new Date(today.getTime() + DAY);
-    const since = (n) => new Date(today.getTime() - (n - 1) * DAY);
     const pool = getPool();
-    const [[[user]], [[done]], [sources], [weekdays]] = await Promise.all([
+    const zone = await userZone(pool, id);
+    const { starts, end } = dayStarts(zone, now, 90);
+    const since = (n) => starts[starts.length - n];
+    const [[[user]], [[done]], [sources], [weekdayRows]] = await Promise.all([
         pool.query('SELECT streak_count FROM users WHERE discord_id = ?', [id]),
         pool.query(
             `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
@@ -112,19 +132,25 @@ async function getStatsSummary(discordId, now = new Date()) {
             [id, since(30), end, ...WEEKLY_XP_SOURCES]
         ),
         pool.query(
-            `SELECT DAYOFWEEK(i.first_completed_at) AS dow, COUNT(*) AS n
+            `SELECT ${bucketSql('i.first_completed_at')} AS b, COUNT(*) AS n
              FROM items i JOIN lists l ON l.id = i.list_id
              WHERE l.discord_id = ? AND i.first_completed_at >= ? AND i.first_completed_at < ?
-             GROUP BY dow ORDER BY n DESC, dow ASC LIMIT 1`,
+             GROUP BY b`,
             [id, since(90), end]
         )
     ]);
-    const top = weekdays[0];
+    const perWeekday = new Array(7).fill(0); // 0 = Sunday
+    for (const r of weekdayRows) {
+        const [y, m, d] = tz.dayKey(zone, bucketTime(r.b)).split('-').map(Number);
+        perWeekday[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] += Number(r.n);
+    }
+    const best = Math.max(...perWeekday);
+    const index = perWeekday.indexOf(best); // ties go to the earliest weekday, Sunday first
     return {
         streak: user ? Number(user.streak_count) : 0,
         tasksCompleted7d: Number(done.n),
         xpBySource30d: sources.map((r) => ({ source: r.source, label: sourceLabel(r.source), xp: Number(r.xp) })),
-        busiestWeekday: top ? { index: Number(top.dow) - 1, name: WEEKDAYS[Number(top.dow) - 1], count: Number(top.n) } : null
+        busiestWeekday: best > 0 ? { index, name: WEEKDAYS[index], count: best } : null
     };
 }
 

@@ -107,18 +107,20 @@ async function applyXP(conn, user, amount, source, opts = {}) {
     };
 }
 
+/** The IANA zone of a user (row or discord id); null means UTC. */
+async function userZone(conn, who) {
+    if (who && typeof who === 'object') return who.timezone || null;
+    const [rows] = await conn.query('SELECT timezone FROM users WHERE discord_id = ?', [String(who)]);
+    return rows[0] ? rows[0].timezone || null : null;
+}
+
 /**
  * The user's day window [from, to) containing `now`: 00:00 to 00:00 in their own time zone (users.timezone,
  * UTC when unset). `who` is a user row (its zone is used, no query) or a discord id (its zone is looked up).
  * Every daily reward cap reads this window, so "today" is the user's own day.
  */
 async function dayWindow(conn, who, now = new Date()) {
-    let zone = null;
-    if (who && typeof who === 'object') zone = who.timezone;
-    else {
-        const [rows] = await conn.query('SELECT timezone FROM users WHERE discord_id = ?', [String(who)]);
-        zone = rows[0] ? rows[0].timezone : null;
-    }
+    const zone = await userZone(conn, who);
     return { from: tz.dayStart(zone, now), to: tz.nextDayStart(zone, now) };
 }
 
@@ -476,6 +478,7 @@ module.exports = {
     countToday,
     sumToday,
     dayWindow,
+    userZone,
     claimDaily,
     buyStreakFreeze,
     buyClass,

@@ -149,7 +149,7 @@ async function getUserStats(discordId) {
  *   lifetime  total XP ever earned (never drops when XP is spent)
  *   xp        current spendable balance
  *   streak    daily streak
- *   weekly    XP earned since Monday 00:00 UTC (earning sources only)
+ *   weekly    XP earned since Monday 00:00 UTC (earning sources only; one global week for everyone, not per viewer)
  */
 function scoreSql(by, now = new Date()) {
     switch (by) {
@@ -181,7 +181,7 @@ function scoreSql(by, now = new Date()) {
             };
         }
         case 'weekly': {
-            const monday = questPeriod('weekly', now).startsAt;
+            const monday = questPeriod('weekly', now, 'UTC').startsAt; // the board is global, so its week is the UTC week
             const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
             return {
                 sql: `(SELECT COALESCE(SUM(t.amount), 0) FROM xp_transactions t

@@ -9,7 +9,7 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
-const { applyXP, requireGamification, unlockAchievements } = require('./progression');
+const { applyXP, requireGamification, unlockAchievements, userZone } = require('./progression');
 const { errors } = require('../errors');
 const { QUESTS, ROTATING_QUESTS } = require('../constants');
 const { questPeriod, activeRotatingQuest } = require('../quests');
@@ -17,8 +17,8 @@ const { questPeriod, activeRotatingQuest } = require('../quests');
 const PERIOD_NOUN = { daily: 'day', weekly: 'week', monthly: 'month' };
 
 /** Quests that can be listed and claimed at `now`: every fixed quest, and only the live rotating one. */
-function liveQuests(now) {
-    const live = activeRotatingQuest(ROTATING_QUESTS, now);
+function liveQuests(now, zone) {
+    const live = activeRotatingQuest(ROTATING_QUESTS, now, zone);
     return Object.entries(QUESTS).filter(([key, q]) => !q.rotating || key === live);
 }
 
@@ -74,16 +74,16 @@ async function metricProgress(conn, discordId, metric, from, to) {
     }
 }
 
-async function questState(conn, discordId, now = new Date()) {
+async function questState(conn, discordId, now = new Date(), zone = null) {
     const [claims] = await conn.query('SELECT quest_key, period_start FROM quest_claims WHERE discord_id = ? AND period_start >= ?', [
         discordId,
-        [questPeriod('weekly', now).start, questPeriod('monthly', now).start].sort()[0]
+        [questPeriod('weekly', now, zone).start, questPeriod('monthly', now, zone).start].sort()[0]
     ]);
     const claimed = new Set(claims.map((c) => `${c.quest_key}@${String(c.period_start).slice(0, 10)}`));
 
     const out = [];
-    for (const [key, q] of liveQuests(now)) {
-        const period = questPeriod(q.period, now);
+    for (const [key, q] of liveQuests(now, zone)) {
+        const period = questPeriod(q.period, now, zone);
         const progress = Math.min(q.target, await metricProgress(conn, discordId, q.metric, period.startsAt, period.endsAt));
         const isClaimed = claimed.has(`${key}@${period.start}`);
         out.push({
@@ -109,7 +109,7 @@ async function questState(conn, discordId, now = new Date()) {
 async function getQuests(discordId, now = new Date()) {
     const conn = await getPool().getConnection();
     try {
-        return await questState(conn, String(discordId), now);
+        return await questState(conn, String(discordId), now, await userZone(conn, discordId));
     } finally {
         conn.release();
     }
@@ -119,12 +119,14 @@ async function getQuests(discordId, now = new Date()) {
 async function claimQuest(discordId, rawKey, now = new Date()) {
     const key = String(rawKey || '').toUpperCase();
     const quest = Object.prototype.hasOwnProperty.call(QUESTS, key) ? QUESTS[key] : null;
-    if (!quest || !liveQuests(now).some(([k]) => k === key)) throw errors.notFound('Quest not found.');
+    if (!quest) throw errors.notFound('Quest not found.');
 
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         requireGamification(user);
-        const period = questPeriod(quest.period, now);
+        // Periods are the user's own day, week and month; a rotating quest is live by their local ISO week.
+        if (!liveQuests(now, user.timezone).some(([k]) => k === key)) throw errors.notFound('Quest not found.');
+        const period = questPeriod(quest.period, now, user.timezone);
         const progress = await metricProgress(conn, user.discord_id, quest.metric, period.startsAt, period.endsAt);
         if (progress < quest.target) throw errors.validation(`${quest.name} isn't finished yet (${progress}/${quest.target}).`);
 

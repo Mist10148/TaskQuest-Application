@@ -1912,5 +1912,96 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.tasks.createList(today, { name: 'capped' })).xp.capped, true, 'today\'s creations do');
     });
 
+    await t.test('time zones: quests, weekly review, stats and the leaderboard follow each user\'s zone', async () => {
+        const KIRI = '100000000000000511'; // UTC+14
+        const PAGO = '100000000000000512'; // UTC-11
+        const BOARD = '100000000000000513';
+        const tzmod = require('../src/tz');
+        const zones = { [KIRI]: 'Pacific/Kiritimati', [PAGO]: 'Pacific/Pago_Pago' };
+        const itemTimes = ['2030-06-02T09:59:00Z', '2030-06-02T10:00:00Z']; // Kiritimati: Sun 23:59 / Mon 00:00; Pago Pago: Sat 22:59 / 23:00
+        const when = (id, source, amount, at) => db.query('INSERT INTO xp_transactions (discord_id, amount, source, created_at) VALUES (?, ?, ?, ?)', [id, amount, source, new Date(at)]);
+        for (const id of [KIRI, PAGO, BOARD]) await db.users.ensureUser(id);
+        for (const [id, zone] of Object.entries(zones)) {
+            await db.query('UPDATE users SET timezone = ? WHERE discord_id = ?', [zone, id]);
+            const { list } = await db.tasks.createList(id, { name: 'Zones' });
+            for (const [n, at] of itemTimes.entries()) {
+                const { item } = await db.tasks.addItem(id, list.id, { name: `done ${n}` });
+                await db.tasks.setItemCompleted(id, item.id);
+                await db.query('UPDATE items SET first_completed_at = ? WHERE id = ?', [new Date(at), item.id]);
+            }
+            await when(id, 'item_add', 5, '2030-06-02T09:59:00Z');
+            await when(id, 'item_add', 7, '2030-06-02T10:00:00Z');
+        }
+        const X = new Date('2030-06-02T13:00:00Z'); // Sunday 02:00 in Pago Pago, already Monday 03:00 in Kiritimati
+
+        // Quests: different periods, progress and rotating quest at the same instant.
+        const find = (qs, key) => qs.find((q) => q.key === key);
+        const kq = await db.quests.getQuests(KIRI, X);
+        const pq = await db.quests.getQuests(PAGO, X);
+        assert.equal(find(kq, 'WEEKLY_COMPLETE_15').periodStart, '2030-06-03');
+        assert.equal(find(pq, 'WEEKLY_COMPLETE_15').periodStart, '2030-05-27');
+        assert.equal(find(kq, 'WEEKLY_COMPLETE_15').resetsAt, '2030-06-09T10:00:00.000Z');
+        assert.equal(find(pq, 'WEEKLY_COMPLETE_15').resetsAt, '2030-06-03T11:00:00.000Z');
+        assert.equal(find(kq, 'WEEKLY_COMPLETE_15').progress, 1, 'Kiritimati: only the Monday task is in the new week');
+        assert.equal(find(pq, 'WEEKLY_COMPLETE_15').progress, 2, 'Pago Pago: still last week, both count');
+        assert.equal(find(kq, 'DAILY_COMPLETE_3').progress, 1);
+        assert.equal(find(pq, 'DAILY_COMPLETE_3').progress, 0, 'both tasks were done on Pago Pago\'s Saturday');
+        assert.equal(find(kq, 'DAILY_COMPLETE_3').periodStart, '2030-06-03');
+        assert.equal(find(pq, 'DAILY_COMPLETE_3').periodStart, '2030-06-02');
+        assert.equal(find(kq, 'BOSS_COMPLETE_50').periodStart, '2030-06-01');
+        assert.ok(find(kq, 'WEEKLY_ROT_D') && !find(kq, 'WEEKLY_ROT_C'), 'ISO week 23 locally in Kiritimati');
+        assert.ok(find(pq, 'WEEKLY_ROT_C') && !find(pq, 'WEEKLY_ROT_D'), 'still ISO week 22 in Pago Pago');
+        // Rolling over at local Monday: Pago Pago's week ends 06-03 11:00Z exactly.
+        assert.equal(find(await db.quests.getQuests(PAGO, new Date('2030-06-03T10:59:59Z')), 'WEEKLY_COMPLETE_15').periodStart, '2030-05-27');
+        const rolled = find(await db.quests.getQuests(PAGO, new Date('2030-06-03T11:00:00Z')), 'WEEKLY_COMPLETE_15');
+        assert.deepEqual([rolled.periodStart, rolled.progress], ['2030-06-03', 0]);
+
+        // A claim is keyed by the user's local date, and reopens at their local midnight.
+        const { list: hl } = await db.tasks.createList(KIRI, { name: 'High' });
+        const { item: hi } = await db.tasks.addItem(KIRI, hl.id, { name: 'big', priority: 'HIGH' });
+        await db.tasks.setItemCompleted(KIRI, hi.id);
+        const now = new Date();
+        const claim = await db.quests.claimQuest(KIRI, 'DAILY_HIGH_1', now);
+        assert.equal(claim.reward, 25);
+        const [[row]] = await db.getPool().query("SELECT DATE_FORMAT(period_start, '%Y-%m-%d') AS d FROM quest_claims WHERE discord_id = ? AND quest_key = 'DAILY_HIGH_1'", [KIRI]);
+        assert.equal(row.d, tzmod.dayKey('Pacific/Kiritimati', now));
+        await assert.rejects(db.quests.claimQuest(KIRI, 'DAILY_HIGH_1', now), { code: 'CONFLICT' });
+        const tomorrow = tzmod.nextDayStart('Pacific/Kiritimati', now);
+        assert.equal(find(await db.quests.getQuests(KIRI, new Date(tomorrow.getTime() - 1)), 'DAILY_HIGH_1').claimed, true);
+        const reopened = find(await db.quests.getQuests(KIRI, tomorrow), 'DAILY_HIGH_1');
+        assert.deepEqual([reopened.claimed, reopened.progress], [false, 0]);
+
+        // Weekly review: same week keys and rollover.
+        const rk = await db.review.getReview(KIRI, X);
+        const rp = await db.review.getReview(PAGO, X);
+        assert.deepEqual([rk.weekStart, rk.completed], ['2030-06-03', 1]);
+        assert.deepEqual([rp.weekStart, rp.completed], ['2030-05-27', 2]);
+        assert.equal((await db.review.claimReview(PAGO, X)).weekStart, '2030-05-27');
+        await assert.rejects(db.review.claimReview(PAGO, new Date('2030-06-03T10:59:59Z')), { code: 'CONFLICT' });
+        const nextWeek = await db.review.getReview(PAGO, new Date('2030-06-03T11:00:00Z'));
+        assert.deepEqual([nextWeek.weekStart, nextWeek.claimed, nextWeek.completed], ['2030-06-03', false, 0]);
+
+        // Stats: per-day buckets are the user's own days.
+        const sNow = new Date('2030-06-03T05:00:00Z'); // Kiritimati Mon 19:00, Pago Pago Sun 18:00
+        const hk = await db.stats.getXPHistory(KIRI, 7, sNow);
+        const hp = await db.stats.getXPHistory(PAGO, 7, sNow);
+        assert.deepEqual(hk.slice(-2).map((d) => [d.date, d.tasksCompleted]), [['2030-06-02', 1], ['2030-06-03', 1]]);
+        assert.deepEqual(hp.slice(-3).map((d) => [d.date, d.tasksCompleted]), [['2030-05-31', 0], ['2030-06-01', 2], ['2030-06-02', 0]]);
+        assert.equal(hk.at(-2).xp, 5);
+        assert.equal(hk.at(-1).xp, 7);
+        assert.equal(hp.at(-2).xp, 12, 'both rows fall on Pago Pago\'s Saturday');
+        const sk = await db.stats.getStatsSummary(KIRI, sNow);
+        const sp = await db.stats.getStatsSummary(PAGO, sNow);
+        assert.deepEqual([sk.busiestWeekday.name, sk.busiestWeekday.count], ['Sunday', 1]);
+        assert.deepEqual([sp.busiestWeekday.name, sp.busiestWeekday.count], ['Saturday', 2]);
+
+        // The leaderboard's week is global (Monday 00:00 UTC), whatever the viewer's zone.
+        await db.query('UPDATE users SET timezone = ? WHERE discord_id = ?', ['Pacific/Kiritimati', BOARD]);
+        await when(BOARD, 'item_add', 4, '2030-06-02T23:00:00Z'); // Sunday in UTC
+        await when(BOARD, 'item_add', 9, '2030-06-03T01:00:00Z'); // Monday in UTC
+        const board = await db.users.getLeaderboard(100, { by: 'weekly', now: new Date('2030-06-03T12:00:00Z') });
+        assert.equal(Number(board.find((r) => r.discord_id === BOARD).score), 9);
+    });
+
     await db.closePool();
 });

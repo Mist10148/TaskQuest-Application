@@ -1,5 +1,5 @@
 /**
- * Weekly review: once per UTC week (Monday to Monday, like quests) a user who finished at least one task
+ * Weekly review: once per week in the user's own time zone (Monday 00:00 to Monday, like quests) a user who finished at least one task
  * can claim a flat bonus. The claim lives in quest_claims under a fixed key, so the unique
  * (user, key, week) row is what makes it pay once.
  */
@@ -24,7 +24,7 @@ async function completedThisWeek(conn, discordId, period) {
 }
 
 async function reviewState(conn, user, now) {
-    const period = questPeriod('weekly', now);
+    const period = questPeriod('weekly', now, user.timezone);
     const completed = await completedThisWeek(conn, user.discord_id, period);
     const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
     const [[xp]] = await conn.query(
@@ -51,7 +51,7 @@ async function reviewState(conn, user, now) {
 async function getReview(discordId, now = new Date()) {
     const conn = await getPool().getConnection();
     try {
-        const [[user]] = await conn.query('SELECT discord_id, gamification_enabled, streak_count FROM users WHERE discord_id = ?', [String(discordId)]);
+        const [[user]] = await conn.query('SELECT discord_id, gamification_enabled, streak_count, timezone FROM users WHERE discord_id = ?', [String(discordId)]);
         const s = await reviewState(conn, user || { discord_id: String(discordId), gamification_enabled: 1, streak_count: 0 }, now);
         return {
             weekStart: s.period.start,

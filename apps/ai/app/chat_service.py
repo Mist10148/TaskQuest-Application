@@ -11,10 +11,11 @@ Events (see docs/AI_INTEGRATION.md):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.types import Command
@@ -24,6 +25,7 @@ from app.db import pool
 from app.graphs.chat import ChatDeps, build_chat_graph, text_of
 from app.graphs.checkpointer import MySQLCheckpointSaver
 from app.llm import BLOCKED_REPLY, AIUnavailable
+from app.locks import thread_locks
 
 log = logging.getLogger("taskquest.ai.chat")
 
@@ -46,48 +48,91 @@ async def pending_actions(graph, config) -> list[dict[str, Any]]:
     return out
 
 
+async def _book_turn(deps: ChatDeps, discord_id: str, thread_id: str, feature: str = "chat") -> None:
+    """Record the turn's tokens (its request was reserved up front) and bump the thread."""
+    async with pool.connection() as conn:
+        await usage.record(
+            conn, discord_id, feature, input_tokens=deps.tokens[0], output_tokens=deps.tokens[1], requests=0
+        )
+        await threads.touch_thread(conn, discord_id, thread_id)
+
+
 async def stream_turn(
-    deps: ChatDeps, discord_id: str, thread_id: str, graph_input: dict[str, Any] | Command
+    deps: ChatDeps,
+    discord_id: str,
+    thread_id: str,
+    graph_input: dict[str, Any] | Command,
+    *,
+    expect: Literal["any", "pending", "idle"] = "any",
 ) -> AsyncIterator[dict[str, str]]:
+    """Run one turn on a thread and stream it.
+
+    Turns on the same thread are serialised by a lock, so a double click on Approve cannot run a
+    confirmed write twice. ``expect`` is re-checked under that lock: "pending" (a resume) needs a
+    confirmation waiting, "idle" (a new message) needs none; otherwise the turn is rejected without
+    touching the model and its reserved request is handed back.
+
+    Usage is booked in a ``finally`` so a client that disconnects mid-stream still pays for what
+    the model already spent.
+    """
     graph = make_graph(deps)
     config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 40}
+    rejected = False
     try:
-        async for mode, payload in graph.astream(graph_input, config, stream_mode=["messages", "updates"]):
-            if mode == "messages":
-                chunk, meta = payload
-                if meta.get("langgraph_node") == "agent" and isinstance(chunk, AIMessageChunk):
-                    text = text_of(chunk.content)
-                    if text:
-                        yield sse("token", {"text": text})
-                continue
-            for node, update in payload.items():
-                if node == "__interrupt__":
-                    for intr in update:
-                        for action in intr.value.get("actions", []):
-                            yield sse("confirm", action)
-                elif node == "agent" and update:
-                    # A blocked/empty reply is swapped for a fixed message that never streamed as tokens.
-                    for m in update.get("messages", []):
-                        if isinstance(m, AIMessage) and m.response_metadata.get("taskquest_fallback"):
-                            yield sse("token", {"text": text_of(m.content)})
-                elif node == "retrieve" and update:
-                    sources = [
-                        {"id": r["id"], "title": r["title"]} for r in update.get("retrieved", []) if r["kind"] == "list"
-                    ]
-                    if sources:
-                        yield sse("sources", sources)
-                elif node == "tools" and update:
-                    for event in update.get("tool_events", []):
-                        sources = event.pop("sources", None)
-                        yield sse("tool", event)
-                        if sources:
-                            yield sse("sources", sources)
-    except Exception:
-        log.exception("chat turn failed")
-        yield sse("error", {"message": "Something went wrong talking to the AI. Please try again."})
-    async with pool.connection() as conn:
-        await usage.record(conn, discord_id, "chat", input_tokens=deps.tokens[0], output_tokens=deps.tokens[1])
-        await threads.touch_thread(conn, discord_id, thread_id)
+        async with thread_locks.hold(thread_id):
+            if expect != "any":
+                waiting = bool(await pending_actions(graph, config))
+                if waiting != (expect == "pending"):
+                    rejected = True
+                    async with pool.connection() as conn:
+                        await usage.release(conn, discord_id, "chat")
+                    message = (
+                        "Nothing is waiting for confirmation."
+                        if expect == "pending"
+                        else "Confirm or cancel the pending action first."
+                    )
+                    yield sse("error", {"message": message})
+                    return
+            try:
+                async for mode, payload in graph.astream(graph_input, config, stream_mode=["messages", "updates"]):
+                    if mode == "messages":
+                        chunk, meta = payload
+                        if meta.get("langgraph_node") == "agent" and isinstance(chunk, AIMessageChunk):
+                            text = text_of(chunk.content)
+                            if text:
+                                yield sse("token", {"text": text})
+                        continue
+                    for node, update in payload.items():
+                        if node == "__interrupt__":
+                            for intr in update:
+                                for action in intr.value.get("actions", []):
+                                    yield sse("confirm", action)
+                        elif node == "agent" and update:
+                            # A blocked/empty reply is swapped for a fixed message that never streamed as tokens.
+                            for m in update.get("messages", []):
+                                if isinstance(m, AIMessage) and m.response_metadata.get("taskquest_fallback"):
+                                    yield sse("token", {"text": text_of(m.content)})
+                        elif node == "retrieve" and update:
+                            sources = [
+                                {"id": r["id"], "title": r["title"]}
+                                for r in update.get("retrieved", [])
+                                if r["kind"] == "list"
+                            ]
+                            if sources:
+                                yield sse("sources", sources)
+                        elif node == "tools" and update:
+                            for event in update.get("tool_events", []):
+                                sources = event.pop("sources", None)
+                                yield sse("tool", event)
+                                if sources:
+                                    yield sse("sources", sources)
+            except Exception:
+                log.exception("chat turn failed")
+                yield sse("error", {"message": "Something went wrong talking to the AI. Please try again."})
+    finally:
+        if not rejected:
+            # Shielded: a cancelled request (client gone) must still be booked.
+            await asyncio.shield(_book_turn(deps, discord_id, thread_id))
     yield sse("done", {"threadId": thread_id, "usage": {"input": deps.tokens[0], "output": deps.tokens[1]}})
 
 
@@ -117,27 +162,27 @@ async def converse_turn(
 
     thread_id = thread_id_for(discord_id, channel_id)
     async with pool.connection() as conn:
-        if await threads.get_thread(conn, discord_id, thread_id, source=threads.DISCORD) is None:
-            await threads.create_thread(
-                conn, discord_id, f"Discord {channel_id}", thread_id=thread_id, source=threads.DISCORD
-            )
+        # Idempotent: two messages arriving together both "create" the thread without a duplicate-key error.
+        await threads.create_thread(
+            conn, discord_id, f"Discord {channel_id}", thread_id=thread_id, source=threads.DISCORD
+        )
     graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()), public=public)
     config = {"configurable": {"thread_id": thread_id, "image": image}, "recursion_limit": 40}
     text = f"{message}\n[attached an image]" if image else message
     tools: list[dict[str, Any]] = []  # every tool round of this turn (state keeps only the last one)
     try:
-        async for update in graph.astream(user_input(discord_id, text), config, stream_mode="updates"):
-            for node, data in update.items():
-                if node == "tools" and data:
-                    tools += [{"name": e["name"], "status": e["status"]} for e in data.get("tool_events", [])]
-        state = (await graph.aget_state(config)).values
-    except Exception as err:
-        log.exception("converse turn failed")
-        raise AIUnavailable("conversation failed") from err
+        async with thread_locks.hold(thread_id):  # one turn at a time per user and channel
+            try:
+                async for update in graph.astream(user_input(discord_id, text), config, stream_mode="updates"):
+                    for node, data in update.items():
+                        if node == "tools" and data:
+                            tools += [{"name": e["name"], "status": e["status"]} for e in data.get("tool_events", [])]
+                state = (await graph.aget_state(config)).values
+            except Exception as err:
+                log.exception("converse turn failed")
+                raise AIUnavailable("conversation failed") from err
     finally:
-        async with pool.connection() as conn:
-            await usage.record(conn, discord_id, "chat", input_tokens=deps.tokens[0], output_tokens=deps.tokens[1])
-            await threads.touch_thread(conn, discord_id, thread_id)
+        await asyncio.shield(_book_turn(deps, discord_id, thread_id))
 
     reply = ""
     for m in reversed(state["messages"]):

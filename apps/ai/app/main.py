@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.db import pool
+from app.deps import AIOptedOut
 from app.llm import AIUnavailable
 from app.observability import add_request_logging, configure_logging, configure_tracing
 from app.routers import chat, converse, internal, v1
@@ -62,6 +63,13 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=429,
             content={"error": "Daily AI energy used up. It resets at midnight UTC.", "code": "AI_QUOTA"},
+        )
+
+    @app.exception_handler(AIOptedOut)
+    async def _opted_out(request: Request, exc: AIOptedOut):
+        return JSONResponse(
+            status_code=403,
+            content={"error": "AI features are turned off for your account.", "code": "AI_OPTED_OUT"},
         )
 
     @app.exception_handler(AIUnavailable)

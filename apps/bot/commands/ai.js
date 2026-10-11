@@ -150,7 +150,8 @@ async function ask(interaction) {
 async function handleButton(interaction) {
     const parsed = fmt.parseConfirmId(interaction.customId);
     if (!parsed) return interaction.reply({ content: '❌ This button has expired.', ...EPHEMERAL });
-    await interaction.deferUpdate();
+    // Remove Approve/Cancel before the (slow) AI call, so a second click cannot resume the same action twice.
+    await interaction.update({ components: [] });
     try {
         const discordId = interaction.user.id;
         await assertAllowed(discordId);

@@ -5,9 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app import chat_service, images, usage
-from app.db import pool
-from app.deps import Caller, get_caller
+from app import chat_service, images
+from app.deps import AIAccess, Caller, get_caller, require_ai
 from app.graphs.chat import ChatDeps
 from app.routers.chat import get_chat_deps
 
@@ -31,21 +30,23 @@ def get_image_transport():
 @router.post("/converse")
 async def converse(
     body: ConverseBody,
-    caller: Caller = Depends(get_caller),
+    access: AIAccess = Depends(require_ai("chat")),
     deps: ChatDeps = Depends(get_chat_deps),
     transport=Depends(get_image_transport),
 ):
-    async with pool.connection() as conn:
-        await usage.check(conn, caller.discord_id)
     image = None
     if body.imageUrl:
         try:
             image = await images.fetch_data_url(body.imageUrl, transport)
         except images.ImageRejected as err:
+            await access.refund()
             raise HTTPException(status_code=400, detail=str(err)) from None
         except Exception:  # noqa: BLE001 - a CDN hiccup should not fail the whole message
+            await access.refund()
             raise HTTPException(status_code=400, detail="Could not download the image.") from None
-    return await chat_service.converse_turn(deps, caller.discord_id, body.channelId, body.message, image, public=body.public)
+    return await chat_service.converse_turn(
+        deps, access.discord_id, body.channelId, body.message, image, public=body.public
+    )
 
 
 @router.delete("/converse/{channel_id}")

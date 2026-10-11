@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
+from app.db.dialect import is_mysql
 
 FEATURES = ("summary", "prioritize", "chat", "embed")
 
@@ -47,29 +48,52 @@ async def record(
     """Add to today's usage. ``requests=0`` books tokens for a side call (e.g. a thread title) without
     spending the user's quota."""
     assert feature in FEATURES
-    params = {
-        "uid": discord_id,
-        "day": today_utc(),
-        "f": feature,
-        "n": int(requests),
-        "i": int(input_tokens),
-        "o": int(output_tokens),
-    }
-    updated = await conn.execute(
+    await _add(conn, discord_id, feature, int(requests), int(input_tokens), int(output_tokens))
+
+
+async def _add(conn: AsyncConnection, discord_id: str, feature: str, requests: int, i: int, o: int) -> None:
+    """Atomic upsert (no read-then-write race between concurrent requests)."""
+    params = {"uid": discord_id, "day": today_utc(), "f": feature, "n": requests, "i": i, "o": o}
+    if is_mysql(conn):
+        clause = (
+            "ON DUPLICATE KEY UPDATE requests = requests + VALUES(requests), "
+            "input_tokens = input_tokens + VALUES(input_tokens), output_tokens = output_tokens + VALUES(output_tokens)"
+        )
+    else:
+        clause = (
+            "ON CONFLICT (discord_id, day, feature) DO UPDATE SET requests = requests + excluded.requests, "
+            "input_tokens = input_tokens + excluded.input_tokens, output_tokens = output_tokens + excluded.output_tokens"
+        )
+    await conn.execute(
         text(
-            "UPDATE ai_usage SET requests = requests + :n, input_tokens = input_tokens + :i, "
-            "output_tokens = output_tokens + :o WHERE discord_id = :uid AND day = :day AND feature = :f"
+            "INSERT INTO ai_usage (discord_id, day, feature, requests, input_tokens, output_tokens) "
+            f"VALUES (:uid, :day, :f, :n, :i, :o) {clause}"
         ),
         params,
     )
-    if updated.rowcount == 0:
-        await conn.execute(
-            text(
-                "INSERT INTO ai_usage (discord_id, day, feature, requests, input_tokens, output_tokens) "
-                "VALUES (:uid, :day, :f, :n, :i, :o)"
-            ),
-            params,
-        )
+
+
+async def reserve(conn: AsyncConnection, discord_id: str, feature: str) -> None:
+    """Spend one request up front, atomically, or raise QuotaExceeded (and leave nothing booked).
+
+    The increment happens before the limit is read, so concurrent requests cannot all slip under
+    the limit. Run it inside a transaction that rolls back when this raises.
+    """
+    assert feature in FEATURES
+    await _add(conn, discord_id, feature, 1, 0, 0)
+    if await requests_today(conn, discord_id) > get_settings().ai_daily_request_limit:
+        raise QuotaExceeded
+
+
+async def release(conn: AsyncConnection, discord_id: str, feature: str) -> None:
+    """Hand back a reserved request when the call never reached the model (404, cache hit, LLM down)."""
+    await conn.execute(
+        text(
+            "UPDATE ai_usage SET requests = CASE WHEN requests > 0 THEN requests - 1 ELSE 0 END "
+            "WHERE discord_id = :uid AND day = :day AND feature = :f"
+        ),
+        {"uid": discord_id, "day": today_utc(), "f": feature},
+    )
 
 
 def tokens_from(message: Any) -> tuple[int, int]:

@@ -86,12 +86,15 @@ function answerEmbed(turn, question) {
     if (turn.text) parts.push(turn.text.trim());
     parts.push(...toolLines(turn.tools));
     if (turn.error) parts.push(`⚠️ ${turn.error}`);
-    if (turn.confirms && turn.confirms.length) {
-        parts.push(`**Confirm to continue:**\n${turn.confirms.map((c) => `• ${c.preview}`).join('\n')}`);
-    }
+    // The confirmation is what the user is approving: never cut it, shorten the answer text instead.
+    const confirm = turn.confirms && turn.confirms.length ? `**Confirm to continue:**\n${turn.confirms.map((c) => `• ${c.preview}`).join('\n')}` : '';
+    const body = parts.join('\n\n');
+    const description = confirm
+        ? `${body ? `${truncate(body, Math.max(0, DESCRIPTION_LIMIT - confirm.length - 2))}\n\n` : ''}${truncate(confirm, DESCRIPTION_LIMIT)}`
+        : truncate(body || 'I have no answer for that.', DESCRIPTION_LIMIT);
     const embed = new EmbedBuilder()
         .setColor(turn.error ? COLORS.error : AI_COLOR)
-        .setDescription(truncate(parts.join('\n\n') || 'I have no answer for that.', DESCRIPTION_LIMIT))
+        .setDescription(description)
         .setFooter(FOOTER);
     if (question) embed.setAuthor({ name: truncate(`💬 ${question}`, 256) });
     if (turn.sources && turn.sources.length) {

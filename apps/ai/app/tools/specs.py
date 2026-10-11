@@ -14,10 +14,10 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app import usage
 from app.chains import summarize as summarize_chain
@@ -205,10 +205,9 @@ class SummarizeArgs(Args):
 async def summarize_tool(ctx: ToolContext, a: SummarizeArgs) -> dict[str, Any]:
     list_id = _parse_id(a.list_id, "L") if a.list_id else None
     try:
-        async with pool.connection() as conn:
-            return await summarize_chain.summarize(
-                conn, ctx.discord_id, ctx.llm_factory, a.mode, list_id=list_id, range_=a.range, today=ctx.today
-            )
+        return await summarize_chain.summarize(
+            ctx.discord_id, ctx.llm_factory, a.mode, list_id=list_id, range_=a.range, today=ctx.today
+        )
     except summarize_chain.NotFound:
         raise ToolError("That quest was not found.") from None
     except usage.QuotaExceeded:
@@ -220,8 +219,7 @@ class PrioritizeArgs(Args):
 
 
 async def prioritize_tool(ctx: ToolContext, a: PrioritizeArgs) -> dict[str, Any]:
-    async with pool.connection() as conn:
-        return await prioritize_graph.prioritize(conn, ctx.discord_id, ctx.llm_factory, limit=a.limit, today=ctx.today)
+    return await prioritize_graph.prioritize(ctx.discord_id, ctx.llm_factory, limit=a.limit, today=ctx.today)
 
 
 # ── write tools (confirmation required) ──────────────────────────────────────
@@ -233,7 +231,9 @@ class CreateListArgs(Args):
     priority: Priority | None = None
     deadline: str | None = Field(default=None, pattern=_DATE, description="YYYY-MM-DD")
     description: str | None = Field(default=None, max_length=500)
-    items: list[str] | None = Field(default=None, max_length=20, description="Initial subtask names")
+    items: list[Annotated[str, StringConstraints(min_length=1, max_length=150)]] | None = Field(
+        default=None, max_length=20, description="Initial subtask names"
+    )
 
 
 async def create_list(ctx: ToolContext, a: CreateListArgs) -> dict[str, Any]:
@@ -241,9 +241,20 @@ async def create_list(ctx: ToolContext, a: CreateListArgs) -> dict[str, Any]:
 
 
 async def _preview_create_list(ctx: ToolContext, a: CreateListArgs) -> str:
-    extra = f" with {len(a.items)} subtasks" if a.items else ""
-    due = f", due {a.deadline}" if a.deadline else ""
-    return f'Create quest "{a.name}"{extra}{due}?'
+    """Everything that will be written, so the user approves exactly this."""
+    lines = [f'Create quest "{a.name}"']
+    for label, value in (
+        ("Category", a.category),
+        ("Priority", a.priority),
+        ("Deadline", a.deadline),
+        ("Description", a.description),
+    ):
+        if value:
+            lines.append(f"- {label}: {value}")
+    if a.items:
+        lines.append(f"- Subtasks ({len(a.items)}):")
+        lines.extend(f"  {n}. {name}" for n, name in enumerate(a.items, 1))
+    return "\n".join(lines) + "\nApprove?"
 
 
 class AddItemArgs(Args):
@@ -266,7 +277,10 @@ async def _list_name(ctx: ToolContext, list_id: int) -> str:
 
 
 async def _preview_add_item(ctx: ToolContext, a: AddItemArgs) -> str:
-    return f'Add subtask "{a.name}" to "{await _list_name(ctx, _parse_id(a.list_id, "L"))}"?'
+    quest = await _list_name(ctx, _parse_id(a.list_id, "L"))
+    if not a.description:
+        return f'Add subtask "{a.name}" to "{quest}"?'
+    return f'Add subtask "{a.name}" to "{quest}"\n- Description: {a.description}\nApprove?'
 
 
 class CompleteItemArgs(Args):

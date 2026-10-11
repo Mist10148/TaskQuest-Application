@@ -106,8 +106,8 @@ def test_template_reasons():
 
 
 async def run(seeded, llm, **kw):
-    async with seeded.begin() as conn:
-        return await P.prioritize(conn, UID, factory_for(llm), today=TODAY, **kw)
+    async with seeded.begin():
+        return await P.prioritize(UID, factory_for(llm), today=TODAY, **kw)
 
 
 async def test_ok_path_merges_llm_and_baseline(seeded):
@@ -153,8 +153,8 @@ async def test_gemini_not_configured_falls_back(seeded):
     def boom(**kw):
         raise AIUnavailable("no key")
 
-    async with seeded.begin() as conn:
-        out = await P.prioritize(conn, UID, boom, today=TODAY)
+    async with seeded.begin():
+        out = await P.prioritize(UID, boom, today=TODAY)
     assert out["usedFallback"] is True
 
 
@@ -190,7 +190,7 @@ async def test_limit_and_cache(seeded):
 async def test_no_open_quests_makes_no_llm_call(engine):
     async with engine.begin() as conn:
         await conn.execute(text("INSERT INTO users (discord_id) VALUES ('333')"))
-        out = await P.prioritize(conn, "333", lambda **kw: (_ for _ in ()).throw(AssertionError("no LLM")), today=TODAY)
+        out = await P.prioritize("333", lambda **kw: (_ for _ in ()).throw(AssertionError("no LLM")), today=TODAY)
     assert out["ranked"] == [] and out["usedFallback"] is False
 
 

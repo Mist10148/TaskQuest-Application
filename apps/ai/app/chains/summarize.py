@@ -24,7 +24,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
-from app.db import repo
+from app.db import pool, repo
 from app.llm_call import structured_call
 from app.prompts import load_prompt
 from app.rag.chunking import item_label, list_label, sha256
@@ -241,7 +241,6 @@ async def put_cache(conn: AsyncConnection, discord_id: str, scope_key: str, inpu
 
 
 async def summarize(
-    conn: AsyncConnection,
     discord_id: str,
     llm_factory,
     mode: Mode,
@@ -249,34 +248,59 @@ async def summarize(
     list_id: int | None = None,
     range_: str = "week",
     today: date | None = None,
+    reserved: bool = False,
 ) -> dict[str, Any]:
-    """Full flow. ``llm_factory`` is only called on a cache miss, so cache hits cost no quota or LLM setup."""
+    """Full flow. ``llm_factory`` is only called on a cache miss, so cache hits cost no quota or LLM setup.
+
+    Database work uses short connections (one to read, one to write), never one held across the
+    model call. ``reserved``: the caller already reserved this request (see deps.require_ai), so only
+    tokens are booked, and the request is handed back when the model is not used.
+    """
     from app import usage
 
+    async def give_back() -> None:
+        if reserved:
+            async with pool.connection() as conn:
+                await usage.release(conn, discord_id, "summary")
+
     today = today or datetime.now(UTC).date()
-    rendered = await render_input(conn, discord_id, mode, list_id=list_id, range_=range_, today=today)
-    input_hash = sha256(f"{mode}\n{rendered.text}")
+    try:
+        async with pool.connection() as conn:
+            rendered = await render_input(conn, discord_id, mode, list_id=list_id, range_=range_, today=today)
+            input_hash = sha256(f"{mode}\n{rendered.text}")
+            cached = await get_cached(conn, discord_id, rendered.scope_key, input_hash)
+        if cached:
+            await give_back()
+            return {**cached.model_dump(), "mode": mode, "cached": True}
+        if not rendered.valid_ids:  # nothing to summarize: no LLM call
+            await give_back()
+            empty = Summary(
+                headline="Nothing to summarize yet",
+                highlights=[],
+                blockers=[],
+                next_steps=["Create a quest to get started"],
+            )
+            return {**empty.model_dump(), "mode": mode, "cached": False}
 
-    cached = await get_cached(conn, discord_id, rendered.scope_key, input_hash)
-    if cached:
-        return {**cached.model_dump(), "mode": mode, "cached": True}
-    if not rendered.valid_ids:  # nothing to summarize: no LLM call
-        empty = Summary(
-            headline="Nothing to summarize yet",
-            highlights=[],
-            blockers=[],
-            next_steps=["Create a quest to get started"],
+        if not reserved:
+            async with pool.connection() as conn:
+                await usage.check(conn, discord_id)
+        summarizer = Summarizer(llm_factory())
+        started = time.monotonic()
+        summary, dropped = await summarizer.summarize_text(mode, today, rendered)
+    except Exception:
+        await give_back()  # the model never produced an answer
+        raise
+    async with pool.connection() as conn:
+        await usage.record(
+            conn,
+            discord_id,
+            "summary",
+            input_tokens=summarizer.tokens[0],
+            output_tokens=summarizer.tokens[1],
+            requests=0 if reserved else 1,
         )
-        return {**empty.model_dump(), "mode": mode, "cached": False}
-
-    await usage.check(conn, discord_id)
-    summarizer = Summarizer(llm_factory())
-    started = time.monotonic()
-    summary, dropped = await summarizer.summarize_text(mode, today, rendered)
-    await usage.record(
-        conn, discord_id, "summary", input_tokens=summarizer.tokens[0], output_tokens=summarizer.tokens[1]
-    )
-    await put_cache(conn, discord_id, rendered.scope_key, input_hash, summary)
+        await put_cache(conn, discord_id, rendered.scope_key, input_hash, summary)
     log.info(
         "summary mode=%s prompt=%s calls=%d dropped_ids=%d tokens=%s ms=%d",
         mode,

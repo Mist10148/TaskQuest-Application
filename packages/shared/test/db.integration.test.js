@@ -2118,7 +2118,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(P);
         await db.users.ensureUser(Q);
         const keys = { p256dh: Buffer.alloc(65, 5).toString('base64url'), auth: Buffer.alloc(16, 6).toString('base64url') };
-        const sub = (n) => ({ endpoint: `https://push.example.com/send/${n}`, keys });
+        const sub = (n) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${n}`, keys });
         assert.equal((await db.users.getUser(P)).web_push, 1, 'on by default');
         await assert.rejects(db.push.addSubscription(P, { endpoint: 'http://push.example.com/x', keys }), { code: 'VALIDATION' });
         assert.equal((await db.push.addSubscription(P, sub(1))).count, 1);
@@ -2126,7 +2126,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const refreshed = { endpoint: sub(1).endpoint, keys: { p256dh: Buffer.alloc(65, 8).toString('base64url'), auth: keys.auth } };
         await db.push.addSubscription(P, refreshed);
         assert.equal((await db.push.listSubscriptions(P))[0].p256dh, refreshed.keys.p256dh, 'a re-subscribe refreshes the keys');
-        const long = { endpoint: `https://push.example.com/${'a'.repeat(2000)}`, keys };
+        const long = { endpoint: `https://fcm.googleapis.com/${'a'.repeat(2000)}`, keys };
         await db.push.addSubscription(P, long); // a long endpoint fits (TEXT) and is indexed by hash
         for (let n = 2; n <= 9; n++) await db.push.addSubscription(P, sub(n));
         assert.equal(await db.push.countSubscriptions(P), 10);

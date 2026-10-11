@@ -118,12 +118,12 @@ Completing tasks pays XP for the first **50 completions per day (in your time zo
 
 ## Shared lists and invitations
 
-All routes are 🔒. People are invited by their **stored display name** (the Discord username they last logged in with), never by Discord ID: the API rejects unknown fields, so a `discordId` in a body is a `400`. A stranger gets `404` from every route below (the list's existence never leaks); a member whose role is too weak gets `403`. Members are addressed by an opaque 12-character `memberKey`; the owner's key is the string `owner`.
+All routes are 🔒. People are invited by their exact **Discord username** (the unique `users.discord_handle`, lowercase, a leading `@` ignored; never the display name, which is not unique), never by Discord ID: the API rejects unknown fields, so a `discordId` in a body is a `400`. A stranger gets `404` from every route below (the list's existence never leaks); a member whose role is too weak gets `403`. Members are addressed by an opaque 12-character `memberKey`; the owner's key is the string `owner`.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/lists/:id/members` | — | `{list:{id,name}, role, isOwner, members:[{memberKey, name, role, isOwner, isYou, since?}], invites:[{id, inviteeName, role, createdAt, expiresAt}], limit}`. Any member may read it; `invites` (pending, not expired) is filled for managers only. |
-| POST | `/api/lists/:id/invites` | `{username (1–100, a leading @ is ignored), role?: "viewer"\|"editor"\|"manager"}` (default `viewer`) | `201 {id, role, expiresAt, inviteeName}`. Managers only, and only the owner invites managers (`403`). `404` for an unknown name (the person must have used TaskQuest), `409` when the name is ambiguous, they are already on the list or already invited, `400` for yourself, a bad role or a full list (`LIMITS.MAX_LIST_MEMBERS` = 10 people besides the owner, members and pending invitations together), `429` after 30 invitations a day (and the endpoint is rate limited, because it looks names up). An invitation is valid for 7 days. |
+| POST | `/api/lists/:id/invites` | `{username (1–100, a leading @ is ignored), role?: "viewer"\|"editor"\|"manager", dryRun?: boolean}` (default `viewer`) | `201 {id, role, expiresAt, inviteeName}`. With `dryRun: true` every check runs, nobody is invited and the answer is `200 {name, avatarUrl}`: the display name and avatar of the resolved person (no ids; `avatarUrl` is Discord's default avatar, or `null` for a custom one because its address contains the Discord ID) for the web app's "Invite Bob Smith?" confirmation. Managers only, and only the owner invites managers (`403`). `400` for something that is not a Discord username, `404` for an unknown name (the person must have used TaskQuest), they are already on the list or already invited, `400` for yourself, a bad role or a full list (`LIMITS.MAX_LIST_MEMBERS` = 10 people besides the owner, members and pending invitations together), `429` after 30 invitations a day (and the endpoint is rate limited, because it looks names up). An invitation is valid for 7 days. |
 | DELETE | `/api/invites/:id` | — | Withdraw a pending invitation of a list you manage. `{success:true}`; `409` if it was already answered. |
 | PATCH | `/api/lists/:id/members/:memberKey` | `{role}` | `{memberKey, role}`. Managers only; only the owner makes or changes a manager. |
 | DELETE | `/api/lists/:id/members/:memberKey` | — | Remove a member (their personal reminder state goes with them). Managers only; only the owner removes a manager. Their next request on the list is `404`. |
@@ -136,13 +136,13 @@ Not shared: the **export** holds only lists you own, an **import** always create
 
 ## Parties
 
-All routes are 🔒. A user is in at most one party (up to 6 people, the owner included). People are invited by display name, like list invitations (7 days, 30 a day, `inviteLimiter`); only the owner invites. Members see each other's **display names and this week's task counts** only.
+All routes are 🔒. A user is in at most one party (up to 6 people, the owner included). People are invited by Discord username, like list invitations (7 days, 30 a day, `inviteLimiter`); only the owner invites. Members see each other's **display names and this week's task counts** only.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, target, progress, reward, members:[{name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. |
 | POST | `/api/parties` | `{name (1–40)}` | `201` the new party in the shape above. `409` if you are already in one. |
-| POST | `/api/parties/invites` | `{username}` | `201 {id, inviteeName, expiresAt}`. Owner only (`403`); `409` for someone already in a party or already invited, `400` when the party is full (6, pending invitations included). |
+| POST | `/api/parties/invites` | `{username, dryRun?}` | `201 {id, inviteeName, expiresAt}`, or with `dryRun: true` `200 {name, avatarUrl}` and nobody is invited. Owner only (`403`); `409` for someone already in a party or already invited, `400` when the party is full (6, pending invitations included). |
 | DELETE | `/api/parties/invites/:id` | — | Withdraw a pending invitation (owner). |
 | POST | `/api/parties/invites/:id/accept` | — | `{accepted:true, party:{id,name}}`. `409` if you are already in a party or the invitation is no longer open. |
 | POST | `/api/parties/invites/:id/decline` | — | `{accepted:false}` |

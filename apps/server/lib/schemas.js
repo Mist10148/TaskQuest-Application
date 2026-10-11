@@ -137,15 +137,16 @@ export const createTemplateBody = z
 export const applyTemplateBody = z
     .object({ listName: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional(), listId: z.number().int().positive().optional() })
     .strict();
-// Sharing: people are found by their stored display name, never by Discord ID, and a member is addressed by an opaque key.
+// Sharing: people are found by their exact Discord username, never by display name or Discord ID, and a member is addressed by an opaque key.
+// dryRun asks who the username resolves to (for the confirmation step) without inviting anyone.
 export const inviteBody = z
-    .object({ username: z.string().trim().min(1).max(100), role: z.enum(shared.LIST_ROLES).default('viewer') })
+    .object({ username: z.string().trim().min(1).max(100), role: z.enum(shared.LIST_ROLES).default('viewer'), dryRun: z.boolean().optional() })
     .strict();
 export const memberRoleBody = z.object({ role: z.enum(shared.LIST_ROLES) }).strict();
 export const memberKeyParam = z.object({ id: z.coerce.number().int().positive(), memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
 
 export const createPartyBody = z.object({ name: z.string().trim().min(1).max(TEXT_LIMITS.PARTY_NAME) }).strict();
-export const partyInviteBody = z.object({ username: z.string().trim().min(1).max(100) }).strict();
+export const partyInviteBody = z.object({ username: z.string().trim().min(1).max(100), dryRun: z.boolean().optional() }).strict();
 
 export const saveTemplateBody = z.object({ name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional() }).strict();
 

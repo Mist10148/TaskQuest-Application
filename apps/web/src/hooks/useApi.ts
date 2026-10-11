@@ -303,6 +303,11 @@ export function useInviteMember(listId: number) {
     });
 }
 
+/** Ask who a username is before inviting them (no toast: the dialog shows the server's message). */
+export function useInvitePreview(listId: number) {
+    return useMutation({ mutationFn: (body: { username: string; role: ListRole }) => sharingApi.invitePreview(listId, body) });
+}
+
 export function useSetMemberRole(listId: number) {
     const qc = useQueryClient();
     return useMutation({
@@ -571,6 +576,10 @@ export function useInviteToParty() {
         mutationFn: (username: string) => partyApi.invite(username),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
     });
+}
+
+export function useInvitePartyPreview() {
+    return useMutation({ mutationFn: (username: string) => partyApi.invitePreview(username) });
 }
 
 export function useRevokePartyInvite() {

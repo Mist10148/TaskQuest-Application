@@ -77,7 +77,7 @@ router.get(
         const me = await meRes.json();
         if (!/^\d{5,25}$/.test(String(me.id))) return loginError(res, 'profile_failed');
 
-        await db.users.ensureUser(me.id, { username: me.global_name || me.username, avatar: me.avatar });
+        await db.users.ensureUser(me.id, { username: me.global_name || me.username, handle: me.username, avatar: me.avatar });
 
         // New session ID on login prevents session fixation.
         req.session.regenerate((err) => {

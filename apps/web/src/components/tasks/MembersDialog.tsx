@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Loader2, LogOut, Send, UserMinus, Users, X } from "lucide-react";
 import { toast } from "sonner";
-import type { ListInvite, ListMember } from "@/lib/api";
+import type { InvitePreview, ListInvite, ListMember } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
-import { useInviteMember, useLeaveList, useListMembers, useRemoveMember, useRevokeInvite, useSetMemberRole } from "@/hooks/useApi";
+import { InviteConfirmDialog } from "@/components/feedback/InviteConfirmDialog";
+import { useInviteMember, useInvitePreview, useLeaveList, useListMembers, useRemoveMember, useRevokeInvite, useSetMemberRole } from "@/hooks/useApi";
 import {
   assignableRoles, canChangeRole, canLeaveList, canManageList, isAccessLost, remainingSlots, roleHint, roleLabel, rolesFor,
   type ListRole, type SharingFields,
@@ -43,6 +44,7 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   const membersQuery = useListMembers(listId, open);
   const data = membersQuery.data;
   const invite = useInviteMember(listId);
+  const previewInvite = useInvitePreview(listId);
   const setRole = useSetMemberRole(listId);
   const removeMember = useRemoveMember(listId);
   const revoke = useRevokeInvite(listId);
@@ -51,6 +53,7 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   const [username, setUsername] = useState("");
   const [inviteRole, setInviteRole] = useState<ListRole>("editor");
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<InvitePreview | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [toRemove, setToRemove] = useState<ListMember | null>(null);
 
@@ -60,20 +63,39 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   const effectiveInviteRole = roles.includes(inviteRole) ? inviteRole : roles[roles.length - 1] ?? "viewer";
   const slots = data ? remainingSlots(data.limit, data.members.length, data.invites.length) : 0;
 
-  const submitInvite = async () => {
+  const reportInviteError = (error: unknown) => {
+    if (error instanceof ApiError && error.status === 404 && /^list not found/i.test(error.message)) {
+      onAccessLost();
+      return;
+    }
+    setInviteError(error instanceof Error ? error.message : "Could not send the invitation.");
+  };
+
+  /** Step 1: ask who the username is and show them for confirmation. Nothing is sent yet. */
+  const askWho = async () => {
     const name = username.trim();
     if (!name) return;
     setInviteError(null);
     try {
+      setConfirming(await previewInvite.mutateAsync({ username: name, role: effectiveInviteRole }));
+    } catch (error) {
+      reportInviteError(error);
+    }
+  };
+
+  /** Step 2: the inviter confirmed that is the person they meant. */
+  const sendInvite = async () => {
+    const name = username.trim();
+    const who = confirming;
+    setConfirming(null);
+    if (!name) return;
+    setInviteError(null);
+    try {
       const result = await invite.mutateAsync({ username: name, role: effectiveInviteRole });
-      toast.success(`Invited ${result.inviteeName ?? name} as ${roleLabel(effectiveInviteRole).toLowerCase()}`);
+      toast.success(`Invited ${result.inviteeName ?? who?.name ?? name} as ${roleLabel(effectiveInviteRole).toLowerCase()}`);
       setUsername("");
     } catch (error) {
-      if (error instanceof ApiError && error.status === 404 && /^list not found/i.test(error.message)) {
-        onAccessLost();
-        return;
-      }
-      setInviteError(error instanceof Error ? error.message : "Could not send the invitation.");
+      reportInviteError(error);
     }
   };
 
@@ -156,7 +178,7 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
                 {slots === 0 ? (
                   <p className="text-sm text-foreground-muted">This quest is full ({data.limit} people besides the owner, counting pending invitations).</p>
                 ) : (
-                  <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void submitInvite(); }}>
+                  <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void askWho(); }}>
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="min-w-40 flex-1">
                         <label htmlFor="invite-username" className="mb-1 block text-sm font-medium">Username</label>
@@ -168,13 +190,13 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
                           {roles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                         </select>
                       </div>
-                      <Button type="submit" disabled={invite.isPending || !username.trim()} className="gap-2">
-                        {invite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" aria-hidden />} Invite
+                      <Button type="submit" disabled={invite.isPending || previewInvite.isPending || !username.trim()} className="gap-2">
+                        {invite.isPending || previewInvite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" aria-hidden />} Invite
                       </Button>
                     </div>
                     {inviteError && <p id="invite-error" role="alert" className="text-sm text-destructive-text">{inviteError}</p>}
                     <p id="invite-hint" className="text-xs text-foreground-muted">
-                      Type their TaskQuest display name exactly. {roleHint(effectiveInviteRole)}. {slots} {slots === 1 ? "spot" : "spots"} left.
+                      Type their exact Discord username (not their display name); you will be asked to confirm who it is. {roleHint(effectiveInviteRole)}. {slots} {slots === 1 ? "spot" : "spots"} left.
                     </p>
                   </form>
                 )}
@@ -212,6 +234,7 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
         )}
       </DialogContent>
 
+      <InviteConfirmDialog preview={confirming} target={`the quest "${listName}"`} onCancel={() => setConfirming(null)} onConfirm={() => void sendInvite()} />
       <ConfirmDialog
         open={confirmLeave}
         onOpenChange={setConfirmLeave}

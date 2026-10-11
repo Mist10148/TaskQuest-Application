@@ -49,7 +49,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await pool.query('SET FOREIGN_KEY_CHECKS = 1');
     await db.runMigrations({ log: () => {} });
     await db.assertSchemaCurrent();
-    await db.users.ensureUser(ALICE, { username: 'alice', avatar: null });
+    await db.users.ensureUser(ALICE, { username: 'alice', handle: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
     await t.test('every migration from 007 on is idempotent and adds the new columns', async () => {
@@ -2168,7 +2168,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     let slFixture;
     async function sharedFixture() {
         if (slFixture) return slFixture;
-        for (const [name, id] of Object.entries(SL)) await db.users.ensureUser(id, { username: `sl_${name}`, avatar: null });
+        for (const [name, id] of Object.entries(SL)) await db.users.ensureUser(id, { username: `sl_${name}`, handle: `sl_${name}`, avatar: null });
         const { list } = await db.tasks.createList(SL.owner, { name: 'Household', priority: 'HIGH' });
         const a = (await db.tasks.addItem(SL.owner, list.id, { name: 'Bins' })).item;
         const b = (await db.tasks.addItem(SL.owner, list.id, { name: 'Dishes', due_date: '2031-01-05' })).item;
@@ -2396,7 +2396,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
     await t.test('shared lists: completions, XP, caps, quests, review and stats belong to the person who acted', async () => {
         const AC = { owner: '200000000000000311', editor: '200000000000000312' };
-        for (const [k, id] of Object.entries(AC)) await db.users.ensureUser(id, { username: `ac_${k}`, avatar: null });
+        for (const [k, id] of Object.entries(AC)) await db.users.ensureUser(id, { username: `ac_${k}`, handle: `ac_${k}`, avatar: null });
         const { list } = await db.tasks.createList(AC.owner, { name: 'Team board' });
         await addMember(list.id, AC.editor, 'editor');
         const ids = [];
@@ -2450,7 +2450,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
     await t.test('shared lists: daily completion caps count the actor, not the list owner', async () => {
         const CAP = { owner: '200000000000000321', editor: '200000000000000322' };
-        for (const [k, id] of Object.entries(CAP)) await db.users.ensureUser(id, { username: `cap_${k}`, avatar: null });
+        for (const [k, id] of Object.entries(CAP)) await db.users.ensureUser(id, { username: `cap_${k}`, handle: `cap_${k}`, avatar: null });
         const { list } = await db.tasks.createList(CAP.owner, { name: 'Cap board' });
         await addMember(list.id, CAP.editor, 'editor');
         const { LIMITS } = require('../src');
@@ -2490,7 +2490,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
     await t.test('shared lists: auto-delete never removes a list that has members', async () => {
         const CL = { owner: '200000000000000331', member: '200000000000000332' };
-        for (const [k, id] of Object.entries(CL)) await db.users.ensureUser(id, { username: `cl_${k}`, avatar: null });
+        for (const [k, id] of Object.entries(CL)) await db.users.ensureUser(id, { username: `cl_${k}`, handle: `cl_${k}`, avatar: null });
         const mk = async (name, shared) => {
             const { list } = await db.tasks.createList(CL.owner, { name });
             const { item } = await db.tasks.addItem(CL.owner, list.id, { name: 'only' });
@@ -2509,7 +2509,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
     await t.test('shared lists: reminders go to every member with automation on, once each, with their own snooze', async () => {
         const RM = { owner: '200000000000000341', viewer: '200000000000000342', editor: '200000000000000343', quiet: '200000000000000344' };
-        for (const [k, id] of Object.entries(RM)) await db.users.ensureUser(id, { username: `rm_${k}`, avatar: null });
+        for (const [k, id] of Object.entries(RM)) await db.users.ensureUser(id, { username: `rm_${k}`, handle: `rm_${k}`, avatar: null });
         await db.users.updateSettings(RM.quiet, { automation_enabled: false });
         const today = new Date().toISOString().slice(0, 10);
         const { list } = await db.tasks.createList(RM.owner, { name: 'Due today', deadline: today });
@@ -2563,7 +2563,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('sharing service: caps, expiry, ambiguity, per-day limit and removal clean-up', async () => {
         const S = db.sharing;
         const O = '200000000000000701';
-        await db.users.ensureUser(O, { username: 'svc_owner', avatar: null });
+        await db.users.ensureUser(O, { username: 'svc_owner', handle: 'svc_owner', avatar: null });
         const mkUser = async (n, name) => {
             const id = `2000000000000007${String(n).padStart(2, '0')}`;
             await db.users.ensureUser(id, { username: name, avatar: null });
@@ -2574,9 +2574,6 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
         // Named lookups: exact stored name, a bot may pass an ID, an ambiguous name is refused, an unknown one is a 404.
         const a = await mkUser(10, 'svc_alpha');
-        await mkUser(11, 'svc_twin');
-        await mkUser(12, 'svc_twin');
-        await assert.rejects(S.invite(O, list.id, { username: 'svc_twin' }), { code: 'CONFLICT', message: /More than one/ });
         await assert.rejects(S.invite(O, list.id, { username: 'svc_alph' }), { code: 'NOT_FOUND' }, 'exact names only');
         await assert.rejects(S.invite(O, list.id, { discordId: '299999999999999999' }), { code: 'NOT_FOUND' });
         await assert.rejects(S.invite(O, list.id, { discordId: O }), { code: 'VALIDATION' });
@@ -2634,13 +2631,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const S = db.sharing;
         const O = '200000000000000751';
         const M = '200000000000000752';
-        await db.users.ensureUser(O, { username: 'lim_owner', avatar: null });
-        await db.users.ensureUser(M, { username: 'lim_manager', avatar: null });
+        await db.users.ensureUser(O, { username: 'lim_owner', handle: 'lim_owner', avatar: null });
+        await db.users.ensureUser(M, { username: 'lim_manager', handle: 'lim_manager', avatar: null });
         const { list } = await db.tasks.createList(O, { name: 'Limits' });
         const inv = await S.invite(O, list.id, { discordId: M, role: 'manager' });
         await S.respond(M, inv.id, true);
         const T = '200000000000000753';
-        await db.users.ensureUser(T, { username: 'lim_target', avatar: null });
+        await db.users.ensureUser(T, { username: 'lim_target', handle: 'lim_target', avatar: null });
         await assert.rejects(S.invite(M, list.id, { discordId: T, role: 'manager' }), { code: 'FORBIDDEN' });
         const ti = await S.invite(M, list.id, { discordId: T, role: 'editor' });
         await S.respond(T, ti.id, true);
@@ -2660,8 +2657,59 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             [list.id, T, O]
         );
         const X = '200000000000000754';
-        await db.users.ensureUser(X, { username: 'lim_extra', avatar: null });
+        await db.users.ensureUser(X, { username: 'lim_extra', handle: 'lim_extra', avatar: null });
         await assert.rejects(S.invite(O, list.id, { discordId: X }), { code: 'RATE_LIMITED', status: 429 });
+    });
+
+    await t.test('invite identity: the exact Discord username only, never the display name; a dry run shows who it resolved to', async () => {
+        const S = db.sharing;
+        const O = '200000000000000761';
+        const A = '200000000000000762';
+        const B = '200000000000000763';
+        await db.users.ensureUser(O, { username: 'Owner Olive', handle: 'ident_owner', avatar: null });
+        // Two different people chose the same display name; one's display name is also the other's Discord username.
+        await db.users.ensureUser(A, { username: 'Bob Smith', handle: 'ident_bob_a', avatar: 'abc123' });
+        await db.users.ensureUser(B, { username: 'ident_bob_a', handle: 'ident_bob_b', avatar: null });
+        const { list } = await db.tasks.createList(O, { name: 'Identity' });
+
+        // The display name is never searched: not the shared one, and not the one that looks like somebody else's username.
+        await assert.rejects(S.invite(O, list.id, { username: 'Bob Smith' }), { code: 'VALIDATION' });
+        const viaOther = await S.invite(O, list.id, { username: 'ident_bob_a', dryRun: true });
+        assert.equal(viaOther.name, 'Bob Smith', 'ident_bob_a is A\'s username, even though it is B\'s display name');
+        // Case does not matter on input (Discord usernames are lowercase), accents and look-alikes do not match.
+        assert.equal((await S.invite(O, list.id, { username: '@IDENT_BOB_B', dryRun: true })).name, 'ident_bob_a');
+        await assert.rejects(S.invite(O, list.id, { username: 'ident_bób_b' }), { code: 'VALIDATION' });
+        await assert.rejects(S.invite(O, list.id, { username: 'ident_bob_' }), { code: 'NOT_FOUND' }, 'no prefix match');
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_invites WHERE list_id = ?', [list.id]))[0].n, 0, 'a dry run invites nobody');
+
+        // The dry run says who it is (display name and an avatar, no ids) and still runs every check.
+        assert.deepEqual(Object.keys(viaOther).sort(), ['avatarUrl', 'dryRun', 'name']);
+        assert.equal(viaOther.avatarUrl, null, 'a custom avatar address would contain the Discord ID, so it is not sent');
+        const withDefault = await S.invite(O, list.id, { username: 'ident_bob_b', dryRun: true });
+        assert.match(withDefault.avatarUrl, /^https:\/\/cdn\.discordapp\.com\/embed\/avatars\/[0-5]\.png$/);
+        assert.equal(JSON.stringify([viaOther, withDefault]).match(/\d{15,}/), null);
+        await assert.rejects(S.invite(O, list.id, { username: 'ident_owner', dryRun: true }), { code: 'VALIDATION' }, 'no self-invite even as a dry run');
+        await assert.rejects(S.invite(A, list.id, { username: 'ident_bob_b', dryRun: true }), { code: 'NOT_FOUND' }, 'a stranger cannot even preview');
+
+        // A real invitation goes to exactly that account.
+        const sent = await S.invite(O, list.id, { username: 'ident_bob_b' });
+        assert.equal(sent.inviteeDiscordId, B);
+        assert.deepEqual((await S.listInvites(A)).length, 0);
+
+        // A handle belongs to one account: when someone else logs in with it, the stale holder loses it; no handle passed keeps the old one.
+        await db.users.ensureUser(B, { username: 'Renamed B', avatar: null });
+        assert.equal((await db.users.getUser(B)).discord_handle, 'ident_bob_b', 'a login without a handle leaves it alone');
+        await db.users.ensureUser(A, { username: 'Bob Smith', handle: 'ident_bob_b', avatar: 'abc123' });
+        assert.equal((await db.users.getUser(A)).discord_handle, 'ident_bob_b');
+        assert.equal((await db.users.getUser(B)).discord_handle, null, 'the account that renamed on Discord no longer answers to the old username');
+        await assert.rejects(S.invite(O, list.id, { username: 'ident_bob_a', dryRun: true }), { code: 'NOT_FOUND' });
+        assert.equal((await S.invite(O, list.id, { username: 'ident_bob_b', dryRun: true })).name, 'Bob Smith');
+
+        // Parties work the same way.
+        await db.parties.create(O, 'Identity party');
+        assert.equal((await db.parties.invite(O, { username: 'ident_bob_b', dryRun: true })).name, 'Bob Smith');
+        await assert.rejects(db.parties.invite(O, { username: 'Bob Smith' }), { code: 'VALIDATION' });
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ?', [O]))[0].n, 0, 'a dry run invites nobody');
     });
 
 
@@ -2673,7 +2721,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const u = {};
         for (const [k, n] of Object.entries({ own: 1, two: 2, three: 3, four: 4 })) {
             u[k] = `2000000000000008${String(n).padStart(2, '0')}`;
-            await db.users.ensureUser(u[k], { username: `pty_${k}`, avatar: null });
+            await db.users.ensureUser(u[k], { username: `pty_${k}`, handle: `pty_${k}`, avatar: null });
         }
         assert.equal(await PA.status(u.own), null);
         await assert.rejects(PA.create(u.own, '   '), { code: 'VALIDATION' });
@@ -2768,7 +2816,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const more = [];
         for (let n = 10; n < 10 + LIMITS.MAX_PARTY_MEMBERS - 1; n++) {
             const id = `2000000000000008${n}`;
-            await db.users.ensureUser(id, { username: `pty_fill${n}`, avatar: null });
+            await db.users.ensureUser(id, { username: `pty_fill${n}`, handle: `pty_fill${n}`, avatar: null });
             more.push(id);
         }
         const invites = [];
@@ -2798,7 +2846,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
     await t.test('sharing: races between answering, inviting, removing and working never corrupt anything', async () => {
         const R = { own: '200000000000000901', a: '200000000000000902', b: '200000000000000903' };
-        for (const [k, id] of Object.entries(R)) await db.users.ensureUser(id, { username: `race_${k}`, avatar: null });
+        for (const [k, id] of Object.entries(R)) await db.users.ensureUser(id, { username: `race_${k}`, handle: `race_${k}`, avatar: null });
         const { list } = await db.tasks.createList(R.own, { name: 'Race' });
         // Two invitations of the same person at once: exactly one is created.
         const both = await Promise.allSettled([db.sharing.invite(R.own, list.id, { discordId: R.a, role: 'editor' }), db.sharing.invite(R.own, list.id, { discordId: R.a, role: 'editor' })]);

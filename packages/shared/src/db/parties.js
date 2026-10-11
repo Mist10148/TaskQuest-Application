@@ -2,7 +2,7 @@
  * Parties: up to PARTY_MAX people with one shared weekly quest.
  *
  *   - a user is in at most one party (UNIQUE party_members.discord_id); the owner is a member too and cannot leave, only disband
- *   - invitations work like list invitations (db/sharing.js): named, one person who has used TaskQuest, 7 days, answered by the invitee;
+ *   - invitations work like list invitations (db/sharing.js): named by Discord username, one person who has used TaskQuest, 7 days, answered by the invitee;
  *     only the owner invites
  *   - the party quest is derived data, nothing to keep in sync. The week is the global UTC ISO week, the same window for every member
  *     (members live in different time zones, so no personal week could be shared). The target is PARTY_QUEST.PER_MEMBER_TARGET
@@ -19,7 +19,7 @@ const { withTransaction, getPool } = require('./pool');
 const { lockUser } = require('./users');
 const { awardFlat, requireGamification, unlockAchievements } = require('./progression');
 const { actorSql } = require('./access');
-const { findInvitee } = require('./sharing');
+const { findInvitee, invitePreview } = require('./sharing');
 const { errors, TaskQuestError } = require('../errors');
 const v = require('../validation');
 const { LIMITS, PARTY_QUEST } = require('../constants');
@@ -70,8 +70,9 @@ async function counts(conn, partyId) {
 }
 
 /**
- * Invite someone to the party (owner only). `input`: { username } from the API, or { discordId } from the bot's @mention.
- * @returns {Promise<{ id: number, inviteeName: string|null, inviteeDiscordId: string, expiresAt: Date, partyName: string }>}
+ * Invite someone to the party (owner only). `input`: { username } (the exact Discord username) from the API, or { discordId } from the bot's @mention;
+ * `dryRun` returns { dryRun: true, name, avatarUrl } for the confirmation step and invites nobody.
+ * @returns {Promise<{ id: number, inviteeName: string|null, inviteeDiscordId: string, expiresAt: Date, partyName: string } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
  */
 async function invite(actorId, input = {}) {
     return withTransaction(async (conn) => {
@@ -91,6 +92,7 @@ async function invite(actorId, input = {}) {
         if (c.members + c.invites >= LIMITS.MAX_PARTY_MEMBERS) {
             throw errors.validation(`A party has at most ${LIMITS.MAX_PARTY_MEMBERS} people (members and pending invitations).`);
         }
+        if (input.dryRun) return { dryRun: true, ...invitePreview(invitee) };
         const expiresAt = new Date(Date.now() + LIMITS.INVITE_TTL_DAYS * DAY_MS);
         const [res] = await conn.query('INSERT INTO party_invites (party_id, invitee_discord_id, invited_by, expires_at) VALUES (?, ?, ?, ?)', [party.id, inviteeId, String(actorId), expiresAt]);
         return { id: res.insertId, inviteeName: invitee.discord_username || null, inviteeDiscordId: inviteeId, expiresAt, partyName: party.name };

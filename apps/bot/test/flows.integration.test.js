@@ -447,7 +447,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
     await t.test('shared lists: /share, invitation DM, /invites, roles in /list, /members and /leave', async () => {
         const sharing = require('../commands/sharing');
         const P = { own: '300000000000000901', ed: '300000000000000902', vw: '300000000000000903', st: '300000000000000904', nodm: '300000000000000905' };
-        for (const [k, id] of Object.entries(P)) await db.users.ensureUser(id, { username: `bot_${k}`, avatar: null });
+        for (const [k, id] of Object.entries(P)) await db.users.ensureUser(id, { username: `bot_${k}`, handle: `bot_${k}`, avatar: null });
         const { list: shared } = await db.tasks.createList(P.own, { name: 'Flat chores' });
         const { item } = await db.tasks.addItem(P.own, shared.id, { name: 'Take out bins' });
         const target = (id, username) => {
@@ -619,7 +619,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
     await t.test('/party: create, invite DM, join, status, claim, leave and disband', async () => {
         const party = require('../commands/party');
         const P = { own: '300000000000000951', mem: '300000000000000952', out: '300000000000000953' };
-        for (const [k, id] of Object.entries(P)) await db.users.ensureUser(id, { username: `pbot_${k}`, avatar: null });
+        for (const [k, id] of Object.entries(P)) await db.users.ensureUser(id, { username: `pbot_${k}`, handle: `pbot_${k}`, avatar: null });
         const run = async (userId, subcommand, options = {}) => {
             const i = fake({ userId, commandName: 'party', options: { subcommand, ...options } });
             await party.execute(i);

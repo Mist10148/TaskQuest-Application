@@ -4,16 +4,17 @@ import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { InviteConfirmDialog } from "@/components/feedback/InviteConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  useClaimParty, useCreateParty, useDisbandParty, useInviteToParty, useLeaveParty, useParty, useRespondToPartyInvite, useRevokePartyInvite,
+  useClaimParty, useCreateParty, useDisbandParty, useInvitePartyPreview, useInviteToParty, useLeaveParty, useParty, useRespondToPartyInvite, useRevokePartyInvite,
 } from "@/hooks/useApi";
 import { useCountdown } from "@/hooks/useCountdown";
 import { formatLongCountdown } from "@/lib/countdown";
 import { canInvite, canLeave, progressPercent, remainingLabel, seatsLabel, seatsLeft } from "@/lib/party";
 import { shortDate } from "@/lib/stats";
-import type { MyPartyInvite, PartyStatus } from "@/lib/api";
+import type { InvitePreview, MyPartyInvite, PartyStatus } from "@/lib/api";
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
@@ -109,18 +110,35 @@ const RulesNote = ({ status }: { status: PartyStatus }) => (
   </p>
 );
 
-const InviteForm = ({ seats }: { seats: number }) => {
+const InviteForm = ({ seats, partyName }: { seats: number; partyName: string }) => {
   const invite = useInviteToParty();
+  const previewInvite = useInvitePartyPreview();
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<InvitePreview | null>(null);
 
-  const submit = async () => {
+  /** Step 1: ask who the username is and show them for confirmation. Nothing is sent yet. */
+  const askWho = async () => {
     const name = username.trim();
     if (!name) return;
     setError(null);
     try {
+      setConfirming(await previewInvite.mutateAsync(name));
+    } catch (e) {
+      setError(errorText(e, "Could not send the invitation."));
+    }
+  };
+
+  /** Step 2: the owner confirmed that is the person they meant. */
+  const send = async () => {
+    const name = username.trim();
+    const who = confirming;
+    setConfirming(null);
+    if (!name) return;
+    setError(null);
+    try {
       const result = await invite.mutateAsync(name);
-      toast.success(`Invited ${result.inviteeName ?? name}`);
+      toast.success(`Invited ${result.inviteeName ?? who?.name ?? name}`);
       setUsername("");
     } catch (e) {
       setError(errorText(e, "Could not send the invitation."));
@@ -128,19 +146,20 @@ const InviteForm = ({ seats }: { seats: number }) => {
   };
 
   return (
-    <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+    <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void askWho(); }}>
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-40 flex-1">
           <label htmlFor="party-invite-username" className="mb-1 block text-sm font-medium">Username</label>
           <Input id="party-invite-username" value={username} maxLength={100} autoComplete="off" onChange={(e) => { setUsername(e.target.value); setError(null); }} aria-describedby={error ? "party-invite-error" : "party-invite-hint"} />
         </div>
-        <Button type="submit" disabled={invite.isPending || !username.trim()} className="gap-2">
-          {invite.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />} Invite
+        <Button type="submit" disabled={invite.isPending || previewInvite.isPending || !username.trim()} className="gap-2">
+          {invite.isPending || previewInvite.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />} Invite
         </Button>
       </div>
       {error && <p id="party-invite-error" role="alert" className="text-sm text-destructive-text">{error}</p>}
+      <InviteConfirmDialog preview={confirming} target={`the party "${partyName}"`} onCancel={() => setConfirming(null)} onConfirm={() => void send()} />
       <p id="party-invite-hint" className="text-xs text-foreground-muted">
-        Type their TaskQuest display name exactly. {seats} {seats === 1 ? "seat" : "seats"} left.
+        Type their exact Discord username (not their display name); you will be asked to confirm who it is. {seats} {seats === 1 ? "seat" : "seats"} left.
       </p>
     </form>
   );
@@ -229,7 +248,7 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
         <section aria-label="Invite someone" className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
           <h2 className="font-heading text-sm font-semibold">Invite someone</h2>
           {canInvite(isOwner, seats) ? (
-            <InviteForm seats={seats} />
+            <InviteForm seats={seats} partyName={status.party.name} />
           ) : (
             <p className="text-sm text-foreground-muted">The party is full ({status.limit} people, counting pending invitations).</p>
           )}

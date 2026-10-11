@@ -350,7 +350,7 @@ You can equip one of each kind (or none). **Prestige keeps** everything you own 
 
 ## 5h. Parties
 
-A party is a group of up to **6** people (the owner included) with one shared **weekly quest**. You can be in one party at a time; the owner invites people by name (`/party invite`, the web Party page), they accept, and the owner can disband it. Members see each other's **display names and this week's counts** and nothing else (no XP, levels, lists or progress elsewhere).
+A party is a group of up to **6** people (the owner included) with one shared **weekly quest**. You can be in one party at a time; the owner invites people (`/party invite` with a mention, the web Party page by exact Discord username with a confirmation), they accept, and the owner can disband it. Members see each other's **display names and this week's counts** and nothing else (no XP, levels, lists or progress elsewhere).
 
 | | |
 |---|---|

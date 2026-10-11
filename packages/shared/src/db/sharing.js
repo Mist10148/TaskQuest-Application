@@ -3,8 +3,8 @@
  *
  * Rules (see docs/design/shared-lists.md):
  *   - only a manager (the owner counts as one) invites, changes roles or removes members; only the owner makes or unmakes a manager
- *   - an invitation names one person who has used TaskQuest before, found by their stored display name or by Discord ID when the
- *     bot already has one from a mention; there are no public invite links
+ *   - an invitation names one person who has used TaskQuest before, found by their exact Discord username (never the display name) or
+ *     by Discord ID when the bot already has one from a mention; there are no public invite links
  *   - at most LIMITS.MAX_LIST_MEMBERS people besides the owner, counting members and pending invitations
  *   - an invitation lives LIMITS.INVITE_TTL_DAYS days and is answered by the invitee only
  *   - members see each other's display names and roles. Discord IDs never leave this module: a member is addressed by the
@@ -18,7 +18,7 @@
 const crypto = require('crypto');
 const { withTransaction, getPool } = require('./pool');
 const access = require('./access');
-const { lockUser } = require('./users');
+const { lockUser, normalizeHandle, HANDLE_RE } = require('./users');
 const { errors, TaskQuestError } = require('../errors');
 const v = require('../validation');
 const { LIMITS, LIST_ROLES } = require('../constants');
@@ -38,22 +38,37 @@ function parseRole(role) {
 
 const newPublicId = () => crypto.randomBytes(6).toString('hex'); // 12 characters, random, never derived from a Discord ID
 
-/** Find the invitee: by Discord ID when the bot supplies one, otherwise by exact stored display name. */
-async function findInvitee(conn, { discordId, username, name }) {
+/**
+ * Find the invitee: by Discord ID when the bot supplies one (it got it from a real @mention), otherwise by the exact Discord USERNAME
+ * (users.discord_handle: unique on Discord, lowercase, binary match). The display name is never searched: it is chosen freely, is
+ * not unique and can be stale, so it could reach the wrong person.
+ */
+async function findInvitee(conn, { discordId, username }) {
+    const columns = 'discord_id, discord_username, discord_handle, discord_avatar';
     if (discordId !== undefined && discordId !== null) {
-        const [[row]] = await conn.query('SELECT discord_id, discord_username FROM users WHERE discord_id = ?', [String(discordId)]);
+        const [[row]] = await conn.query(`SELECT ${columns} FROM users WHERE discord_id = ?`, [String(discordId)]);
         if (!row) throw errors.notFound('That person has not used TaskQuest yet.');
         return row;
     }
-    const raw = String(username ?? name ?? '')
-        .trim()
-        .replace(/^@/, '');
-    if (!raw) throw errors.validation('Enter the name of the person to invite.');
-    if (raw.length > 100) throw errors.validation('That name is too long.');
-    const [rows] = await conn.query('SELECT discord_id, discord_username FROM users WHERE discord_username = ? LIMIT 3', [raw]);
-    if (rows.length === 0) throw errors.notFound('No TaskQuest user has that name. They need to have used TaskQuest at least once.');
-    if (rows.length > 1) throw errors.conflict('More than one person has that name, so it is not safe to guess. Ask them to invite you instead.');
-    return rows[0];
+    const handle = normalizeHandle(username);
+    if (!handle) throw errors.validation('Enter the Discord username of the person to invite.');
+    if (!HANDLE_RE.test(handle)) throw errors.validation('Enter their Discord username (letters, digits, "_" and "."), not their display name.');
+    const [[row]] = await conn.query(`SELECT ${columns} FROM users WHERE discord_handle = ?`, [handle]);
+    if (!row) throw errors.notFound('No TaskQuest user has that username. They need to have used TaskQuest at least once.');
+    return row;
+}
+
+/**
+ * What the inviter may see of the person a username resolved to, so they can confirm it is who they meant: the display name and the
+ * avatar, never an ID. A custom avatar lives at a Discord CDN address that contains the user's ID, so it is not sent (null); someone
+ * with no custom avatar gets Discord's default one, whose address has no ID.
+ */
+function invitePreview(invitee) {
+    const defaultIndex = Number((BigInt(invitee.discord_id) >> 22n) % 6n);
+    return {
+        name: invitee.discord_username || invitee.discord_handle || null,
+        avatarUrl: invitee.discord_avatar ? null : `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`
+    };
 }
 
 /** Pending invitations that have not run out. */
@@ -69,8 +84,9 @@ async function memberCount(conn, listId) {
  * Invite someone to a list the actor manages.
  * @param {string} actorId
  * @param {number|string} listId
- * @param {{ username?: string, name?: string, discordId?: string, role?: string }} input `discordId` is for the bot only (the API never passes it)
- * @returns {Promise<{ id: number, role: string, expiresAt: Date, inviteeName: string|null, inviteeDiscordId: string, listName: string }>}
+ * @param {{ username?: string, discordId?: string, role?: string, dryRun?: boolean }} input `discordId` is for the bot only (the API never passes it).
+ *   `dryRun` runs every check and returns { dryRun: true, name, avatarUrl } (who the username resolved to) without inviting anyone.
+ * @returns {Promise<{ id: number, role: string, expiresAt: Date, inviteeName: string|null, inviteeDiscordId: string, listName: string } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
  */
 async function invite(actorId, listId, input = {}) {
     const role = parseRole(input.role);
@@ -98,6 +114,7 @@ async function invite(actorId, listId, input = {}) {
             throw errors.validation(`A list can have at most ${LIMITS.MAX_LIST_MEMBERS} people besides the owner (members and pending invitations).`);
         }
 
+        if (input.dryRun) return { dryRun: true, ...invitePreview(invitee) };
         const expiresAt = new Date(Date.now() + LIMITS.INVITE_TTL_DAYS * DAY_MS);
         const [res] = await conn.query('INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, expires_at) VALUES (?, ?, ?, ?, ?)', [
             list.id,
@@ -266,4 +283,4 @@ async function leave(userId, listId) {
     });
 }
 
-module.exports = { findInvitee, invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };
+module.exports = { findInvitee, invitePreview, invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };

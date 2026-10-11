@@ -20,20 +20,42 @@ async function getUser(discordId, conn) {
     return rows[0] || null;
 }
 
+/** A Discord username as stored for invitations: trimmed and lowercase (Discord usernames are lowercase letters, digits, "_" and "."). */
+const normalizeHandle = (value) => String(value ?? '').trim().replace(/^@/, '').toLowerCase();
+const HANDLE_RE = /^[a-z0-9_.]{2,32}$/;
+
 /**
  * Create the user row if needed and refresh the cached Discord profile.
+ * `username` is the DISPLAY name (shown to other people); `handle` is the unique Discord username, the only key a person
+ * can be invited by. A handle that is not passed leaves the stored one alone. A handle belongs to one account: if a stale
+ * row still holds it (its owner renamed on Discord and has not logged in since), that row loses it first.
  * @param {string} discordId
- * @param {{ username?: string, avatar?: string }} [profile]
+ * @param {{ username?: string, handle?: string, avatar?: string }} [profile]
  */
 async function ensureUser(discordId, profile, conn) {
     const id = String(discordId);
     if (profile) {
-        await run(
-            conn,
-            `INSERT INTO users (discord_id, discord_username, discord_avatar) VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE discord_username = VALUES(discord_username), discord_avatar = VALUES(discord_avatar)`,
-            [id, profile.username ? String(profile.username).slice(0, 100) : null, profile.avatar ? String(profile.avatar).slice(0, 100) : null]
-        );
+        const handle = profile.handle === undefined ? undefined : normalizeHandle(profile.handle);
+        const withHandle = handle !== undefined && HANDLE_RE.test(handle);
+        const upsert = () =>
+            run(
+                conn,
+                `INSERT INTO users (discord_id, discord_username, discord_avatar${withHandle ? ', discord_handle' : ''}) VALUES (?, ?, ?${withHandle ? ', ?' : ''})
+                 ON DUPLICATE KEY UPDATE discord_username = VALUES(discord_username), discord_avatar = VALUES(discord_avatar)${withHandle ? ', discord_handle = VALUES(discord_handle)' : ''}`,
+                [id, profile.username ? String(profile.username).slice(0, 100) : null, profile.avatar ? String(profile.avatar).slice(0, 100) : null, ...(withHandle ? [handle] : [])]
+            );
+        if (withHandle) {
+            // Free the name first. Two accounts logging in with the same (just reassigned) handle at once: the unique key refuses the second, which retries.
+            for (let attempt = 0; ; attempt++) {
+                await run(conn, 'UPDATE users SET discord_handle = NULL WHERE discord_handle = ? AND discord_id <> ?', [handle, id]);
+                try {
+                    await upsert();
+                    break;
+                } catch (err) {
+                    if (err.code !== 'ER_DUP_ENTRY' || attempt >= 2) throw err;
+                }
+            }
+        } else await upsert();
     } else {
         await run(conn, 'INSERT IGNORE INTO users (discord_id) VALUES (?)', [id]);
     }
@@ -400,6 +422,8 @@ module.exports = {
     setAiChatFormat,
     getUser,
     ensureUser,
+    normalizeHandle,
+    HANDLE_RE,
     lockUser,
     updateSettings,
     toggleSetting,

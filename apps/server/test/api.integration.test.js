@@ -728,7 +728,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const cookies = {};
         for (const [k, id] of Object.entries(ids)) {
             cookies[k] = await login(db, id);
-            await db.users.ensureUser(id, { username: `share_${k}`, avatar: null });
+            await db.users.ensureUser(id, { username: `share_${k}`, handle: `share_${k}`, avatar: null });
         }
         const J = async (method, path, who, body) => {
             const res = await call(method, path, { cookie: cookies[who], body });
@@ -749,6 +749,15 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'nobody_here', role: 'editor' })).status, 404);
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_own', role: 'editor' })).status, 400, 'not yourself');
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', role: 'boss' })).status, 400);
+        // A dry run says who the username is (display name and avatar, no ids) and invites nobody.
+        const dry = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', role: 'editor', dryRun: true });
+        assert.equal(dry.status, 200, dry.text);
+        assert.deepEqual(Object.keys(dry.body).sort(), ['avatarUrl', 'name']);
+        assert.equal(dry.body.name, 'share_ed');
+        noIds(dry, 'invite dry run');
+        assert.equal((await J('GET', '/api/invites', 'ed')).body.length, 0, 'a dry run sends nothing');
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'st', { username: 'share_ed', dryRun: true })).status, 404, 'a stranger cannot preview');
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', dryRun: 'yes' })).status, 400);
         const inv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: '@share_ed', role: 'editor' });
         assert.equal(inv.status, 201, inv.text);
         noIds(inv, 'invite');
@@ -860,8 +869,8 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
             const O = '200000000000000611';
             const E = '200000000000000612';
             const ownerCookie = await login(db, O);
-            await db.users.ensureUser(O, { username: 'ai_owner', avatar: null });
-            await db.users.ensureUser(E, { username: 'ai_editor', avatar: null });
+            await db.users.ensureUser(O, { username: 'ai_owner', handle: 'ai_owner', avatar: null });
+            await db.users.ensureUser(E, { username: 'ai_editor', handle: 'ai_editor', avatar: null });
             const { list } = await db.tasks.createList(O, { name: 'Private to the AI owner' });
             const { item } = await db.tasks.addItem(O, list.id, { name: 'Task' });
             await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [list.id, E, 'manager', 'a1b2c3d4e5f6']);
@@ -887,7 +896,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const cookies = {};
         for (const [k, id] of Object.entries(ids)) {
             cookies[k] = await login(db, id);
-            await db.users.ensureUser(id, { username: `api_party_${k}`, avatar: null });
+            await db.users.ensureUser(id, { username: `api_party_${k}`, handle: `api_party_${k}`, avatar: null });
         }
         const J = async (method, path, who, body) => {
             const res = await call(method, path, { cookie: cookies[who], body });
@@ -907,6 +916,9 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem', discordId: ids.mem })).status, 400, 'no Discord IDs from the client');
         assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'nobody_xyz' })).status, 404);
         assert.equal((await J('POST', '/api/parties/invites', 'out', { username: 'api_party_mem' })).status, 404, 'not in a party');
+        const dryParty = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem', dryRun: true });
+        assert.deepEqual([dryParty.status, dryParty.body.name, Object.keys(dryParty.body).sort()], [200, 'api_party_mem', ['avatarUrl', 'name']]);
+        assert.equal((await J('GET', '/api/parties', 'mem')).body.invites.length, 0, 'a dry run sends nothing');
         const inv = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
         assert.equal(inv.status, 201);
         assert.equal(inv.text.includes(ids.mem), false);

@@ -18,7 +18,7 @@ test('an owner invites a friend by username, who accepts, finishes a task and th
     await captain.getByLabel('Quick add a task').press('Enter');
     await expect(captain.getByRole('button', { name: `Mark "${task}" as done` })).toBeVisible();
 
-    // ...and invites the ally by their display name as an editor.
+    // ...and invites the ally by their Discord username as an editor.
     await captain.getByRole('button', { name: 'Members' }).click();
     const members = captain.getByRole('dialog', { name: 'Members' });
     await expect(members.getByTestId('member-row')).toHaveCount(1);
@@ -28,6 +28,10 @@ test('an owner invites a friend by username, who accepts, finishes a task and th
     await members.getByLabel('Username').fill('e2e_ally');
     await members.getByLabel('Role', { exact: true }).selectOption('editor');
     await members.getByRole('button', { name: 'Invite', exact: true }).click();
+    // The invitation is only sent after confirming who the username resolved to.
+    const confirm = captain.getByRole('alertdialog');
+    await expect(confirm).toContainText('Invite e2e_ally?');
+    await confirm.getByRole('button', { name: 'Send invitation' }).click();
     await expect(members.getByTestId('invite-row')).toContainText('e2e_ally');
     await captain.keyboard.press('Escape');
     await expect(members).toBeHidden();

@@ -44,7 +44,7 @@ try {
     // Two more players for the shared-list specs. The captain owns "Viewer board" and has already invited the ally to it as
     // a viewer (accepted), so the read-only experience can be checked without any setup in the test itself.
     for (const p of Object.values(PLAYERS)) {
-        await db.users.ensureUser(p.id, { username: p.username, avatar: null });
+        await db.users.ensureUser(p.id, { username: p.username, handle: p.username, avatar: null });
         await db.query('INSERT INTO web_sessions (session_id, expires, data) VALUES (?, ?, ?)', [
             p.sessionId,
             Math.floor(Date.now() / 1000) + 86_400,

@@ -65,7 +65,7 @@ In code: `access.forList(conn, discordId, listId, minRole)` returns the list or 
 
 ### Web
 
-- A "Members" panel on the list (add by Discord username that has logged in before, change role, remove, leave).
+- A "Members" panel on the list (add by exact Discord username of someone who has logged in before, after confirming who it is, change role, remove, leave).
 - Presence is out of scope: changes appear on refresh or the next query invalidation. Optimistic concurrency for edits uses `updated_at`.
 
 ### AI service
@@ -102,7 +102,7 @@ The open questions above were settled like this (the product owner was not avail
 
 1. **Members cannot see each other's XP or progress.** They see display names and roles only (and, in a party, this week's task count).
 2. **A shared-list completion counts for the actor only**: their XP, their daily caps, their quests, their weekly review and stats. `items.first_completed_by`, `created_by`, `completed_by` and `lists.cleared_by` record the actor; the owner gets nothing for a member's work.
-3. **Named invites only, no public links.** An invitation names one person who has used TaskQuest, found by their exact stored display name (the Discord username they last logged in with) or, for the bot, by the Discord ID Discord already gave it in a mention. The API never accepts a Discord ID.
+3. **Named invites only, no public links.** An invitation names one person who has used TaskQuest, found by their exact Discord username (`users.discord_handle`, unique, refreshed at every login; the display name is not unique and is never searched) and confirmed by the inviter in the web UI (a dry run shows the resolved person's name and avatar) or, for the bot, by the Discord ID Discord already gave it in a mention. The API never accepts a Discord ID.
 4. **At most 10 people besides the owner** (members and pending invitations together, `LIMITS.MAX_LIST_MEMBERS`).
 
 ### As built, and where it differs from the proposal

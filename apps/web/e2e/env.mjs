@@ -26,8 +26,8 @@ export const SESSION_ID = 'e2e00000000000000000000000000001';
 
 /**
  * Two more players for the shared-list specs, so the first player's XP (which the shop and class specs depend on) is never
- * touched: a "captain" who owns shared quests and an "ally" who is invited to them. `username` is the stored display name
- * an invitation is addressed to.
+ * touched: a "captain" who owns shared quests and an "ally" who is invited to them. `username` is both the stored display name
+ * and the Discord username an invitation is addressed to.
  */
 export const PLAYERS = {
     captain: { id: '900000000000000002', sessionId: 'e2e00000000000000000000000000002', username: 'e2e_captain', globalName: 'E2E Captain' },

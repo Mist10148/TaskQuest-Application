@@ -137,6 +137,12 @@ export interface MyInvite {
     expiresAt: string;
 }
 
+/** Who a username resolved to, shown for confirmation before an invitation is sent (a display name and avatar, never an ID). */
+export interface InvitePreview {
+    name: string | null;
+    avatarUrl: string | null;
+}
+
 export interface InviteResponse {
     accepted: boolean;
     list?: { id: number; name: string };
@@ -147,6 +153,8 @@ export const sharingApi = {
     members: (listId: number) => apiFetch<ListMembers>(`/api/lists/${listId}/members`),
     invite: (listId: number, body: { username: string; role: ListRole }) =>
         post<{ id: number; role: ListRole; expiresAt: string; inviteeName: string | null }>(`/api/lists/${listId}/invites`, body),
+    invitePreview: (listId: number, body: { username: string; role: ListRole }) =>
+        post<InvitePreview>(`/api/lists/${listId}/invites`, { ...body, dryRun: true }),
     setRole: (listId: number, memberKey: string, role: ListRole) =>
         patch<{ memberKey: string; role: ListRole }>(`/api/lists/${listId}/members/${memberKey}`, { role }),
     removeMember: (listId: number, memberKey: string) => del<{ success: boolean }>(`/api/lists/${listId}/members/${memberKey}`),
@@ -219,6 +227,7 @@ export const partyApi = {
     get: () => apiFetch<PartyOverview>('/api/parties'),
     create: (name: string) => post<PartyStatus>('/api/parties', { name }),
     invite: (username: string) => post<{ id: number; inviteeName: string | null; expiresAt: string }>('/api/parties/invites', { username }),
+    invitePreview: (username: string) => post<InvitePreview>('/api/parties/invites', { username, dryRun: true }),
     revoke: (id: number) => del<{ success: boolean }>(`/api/parties/invites/${id}`),
     accept: (id: number) => post<{ accepted: boolean; party?: { id: number; name: string } }>(`/api/parties/invites/${id}/accept`),
     decline: (id: number) => post<{ accepted: boolean }>(`/api/parties/invites/${id}/decline`),

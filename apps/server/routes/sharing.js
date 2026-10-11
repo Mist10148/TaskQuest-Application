@@ -1,7 +1,7 @@
 /**
  * Shared lists: members and invitations. Access is decided inside @taskquest/shared (db.sharing, db.access): a stranger gets 404
  * from every route here, a member whose role is too weak gets 403. Discord IDs never appear in a request or a response:
- * people are invited by their stored display name and members are addressed by an opaque member key.
+ * people are invited by their exact Discord username and members are addressed by an opaque member key.
  */
 
 import { Router } from 'express';
@@ -28,6 +28,7 @@ listSharingRouter.post(
         const { id } = parse(idParam, req.params);
         const body = parse(inviteBody, req.body);
         const inv = await db.sharing.invite(uid(req), id, body);
+        if (inv.dryRun) return res.json({ name: inv.name, avatarUrl: inv.avatarUrl });
         res.status(201).json({ id: inv.id, role: inv.role, expiresAt: inv.expiresAt, inviteeName: inv.inviteeName });
     })
 );

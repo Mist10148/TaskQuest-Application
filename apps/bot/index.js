@@ -39,6 +39,7 @@ const quickCommand = require('./commands/quick');
 const sharingCommands = require('./commands/sharing');
 const partyCommand = require('./commands/party');
 const chat = require('./chat');
+const { refreshProfile } = require('./utils/profile');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
 
@@ -159,6 +160,7 @@ async function route(interaction) {
     if (interaction.isChatInputCommand()) {
         const handler = COMMANDS[interaction.commandName];
         if (!handler) return interaction.reply({ content: '❌ Unknown command', flags: MessageFlags.Ephemeral });
+        void refreshProfile(db, interaction.user); // not awaited: never in the way of the command
         return handler(interaction);
     }
 

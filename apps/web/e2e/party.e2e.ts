@@ -26,6 +26,9 @@ test('an owner creates a party, invites a friend by username, who accepts it fro
     await expect(captain.getByRole('alert')).toContainText(/no taskquest user/i);
     await captain.getByLabel('Username').fill('e2e_ally');
     await captain.getByRole('button', { name: 'Invite', exact: true }).click();
+    const confirm = captain.getByRole('alertdialog');
+    await expect(confirm).toContainText('Invite e2e_ally?');
+    await confirm.getByRole('button', { name: 'Send invitation' }).click();
     await expect(captain.getByTestId('party-pending-invite')).toContainText('e2e_ally');
 
     // The friend accepts from the party page.

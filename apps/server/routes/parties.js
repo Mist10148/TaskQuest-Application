@@ -1,6 +1,6 @@
 /**
  * Parties: a small group with a shared weekly quest. Members see each other's display names and this week's counts only;
- * Discord IDs never appear in a request or a response (people are invited by their stored display name).
+ * Discord IDs never appear in a request or a response (people are invited by their exact Discord username).
  */
 
 import { Router } from 'express';
@@ -33,6 +33,7 @@ router.post(
     inviteLimiter,
     asyncRoute(async (req, res) => {
         const inv = await db.parties.invite(uid(req), parse(partyInviteBody, req.body));
+        if (inv.dryRun) return res.json({ name: inv.name, avatarUrl: inv.avatarUrl });
         res.status(201).json({ id: inv.id, inviteeName: inv.inviteeName, expiresAt: inv.expiresAt });
     })
 );

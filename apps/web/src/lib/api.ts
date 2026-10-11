@@ -64,6 +64,8 @@ export const userApi = {
 export interface CsvPreviewRow { row: number; list: string; task: string; due_date: string | null; priority: string | null; tags: string | null; completed: boolean }
 export interface CsvImportCheck { ok: boolean; rows: number; lists: number; items: number; preview: CsvPreviewRow[]; errors: Array<{ row: number; message: string }>; errorCount: number }
 
+export interface TaskSearchHit { id: number; name: string; description: string | null; completed: boolean; parent_id: number | null; due_date: string | null; list_id: number; list_name: string }
+
 export const importApi = {
     /** Validate a CSV without writing anything. */
     checkCsv: (csv: string) => post<CsvImportCheck>('/api/import/csv', { csv, dryRun: true }),
@@ -75,6 +77,8 @@ export const importApi = {
 export const listsApi = {
     getAll: () => apiFetch<ListWithCounts[]>('/api/lists'),
     getById: (id: number) => apiFetch<ListWithItems>(`/api/lists/${id}`),
+    /** Tasks whose name or description contains the text, with their quest (at most 50). */
+    searchTasks: (q: string) => apiFetch<{ lists: List[]; tasks: TaskSearchHit[] }>(`/api/lists/search?${new URLSearchParams({ q, scope: 'tasks' })}`),
     create: (data: CreateListData) => post<List & RewardFields>('/api/lists', data),
     update: (id: number, data: Partial<CreateListData>) => patch<List>(`/api/lists/${id}`, data),
     delete: (id: number) => del<{ success: boolean }>(`/api/lists/${id}`),
@@ -208,6 +212,12 @@ export const gamesApi = {
 export const statsApi = {
     xpHistory: (days: HistoryRange = 30) => apiFetch<XPHistoryDay[]>(`/api/stats/xp-history?days=${days}`),
     summary: () => apiFetch<StatsSummary>('/api/stats/summary'),
+};
+
+export const focusApi = {
+    get: () => apiFetch<FocusStatus>('/api/focus'),
+    start: (minutes: number) => post<FocusStartResult>('/api/focus/start', { minutes }),
+    finish: (sessionId: number) => post<FocusFinishResult>('/api/focus/finish', { sessionId }),
 };
 
 export const reviewApi = {
@@ -663,6 +673,34 @@ export interface StatsSummary {
     tasksCompleted7d: number;
     xpBySource30d: { source: string; label: string; xp: number }[];
     busiestWeekday: { index: number; name: string; count: number } | null;
+}
+
+export interface FocusActive {
+    sessionId: number;
+    startedAt: string;
+    minutes: number;
+    endsAt: string;
+}
+
+export interface FocusStatus {
+    active: FocusActive | null;
+    today: { sessions: number; xp: number; remainingSessions: number; remainingXP: number };
+    config: { minMinutes: number; maxMinutes: number; xpPerMinute: number; xpPerDay: number; sessionsPerDay: number };
+}
+
+export type FocusStartResult = FocusActive & { success: boolean };
+
+export interface FocusFinishResult {
+    success: boolean;
+    sessionId: number;
+    state: 'finished' | 'cancelled' | 'expired';
+    minutesCredited: number;
+    xp: number;
+    capped: boolean;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
 }
 
 export interface WeeklyReview {

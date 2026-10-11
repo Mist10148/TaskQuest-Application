@@ -22,6 +22,7 @@ import {
     gamesApi,
     questsApi,
     statsApi,
+    focusApi,
     reviewApi,
     aiApi,
     type AchievementUnlock,
@@ -69,6 +70,7 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['leaderboard'] });
     qc.invalidateQueries({ queryKey: ['quests'] });
     qc.invalidateQueries({ queryKey: ['review'] });
+    qc.invalidateQueries({ queryKey: ['focus'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
 }
 
@@ -376,6 +378,46 @@ export function useClaimReview() {
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,
+    });
+}
+
+// ─── Focus ───────────────────────────────────────────────────────────────────
+
+export function useFocus() {
+    return useQuery({ queryKey: ['focus'], queryFn: focusApi.get, staleTime: 0 });
+}
+
+export function useStartFocus() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (minutes: number) => focusApi.start(minutes),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['focus'] }),
+        onError: showError,
+    });
+}
+
+export function useFinishFocus() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (sessionId: number) => focusApi.finish(sessionId),
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            if (result.state === 'finished' && result.xp > 0) {
+                celebrate(result.leveledUp ? 'level' : 'quest');
+                toast.success(`⏱️ Focus session done +${result.xp} XP!`, {
+                    description: result.leveledUp
+                        ? `🎉 Level up! You are now level ${result.level}.`
+                        : result.capped
+                          ? `Daily focus XP cap reached, so this was trimmed.`
+                          : `${result.minutesCredited} minutes of focus.`,
+                });
+            }
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: (error) => {
+            qc.invalidateQueries({ queryKey: ['focus'] });
+            showError(error);
+        },
     });
 }
 

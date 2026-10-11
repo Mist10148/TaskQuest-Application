@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ClassInfo } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -9,12 +10,17 @@ import { useClasses, useBuyClass, useEquipClass } from "@/hooks/useApi";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 
 const Classes = () => {
   const { refresh } = useAuth();
   const { data, isLoading, isError, error, refetch, isFetching } = useClasses();
   const buyClass = useBuyClass();
   const equipClass = useEquipClass();
+  const [confirmBuy, setConfirmBuy] = useState<ClassInfo | null>(null);
+  // Only the button whose request is in flight shows a spinner / is disabled.
+  const buyingKey = buyClass.isPending ? buyClass.variables : undefined;
+  const equippingKey = equipClass.isPending ? equipClass.variables : undefined;
 
   const handleBuy = async (classKey: string) => {
     try {
@@ -117,12 +123,12 @@ const Classes = () => {
                     {classInfo.equipped ? (
                       <Button variant="secondary" className="w-full text-xs sm:text-sm" size="sm" disabled>Currently Active</Button>
                     ) : classInfo.owned ? (
-                      <Button variant="glow" className="w-full text-xs sm:text-sm" size="sm" onClick={() => handleEquip(classInfo.key)} disabled={equipClass.isPending}>
-                        {equipClass.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Equip Class'}
+                      <Button variant="glow" className="w-full text-xs sm:text-sm" size="sm" onClick={() => handleEquip(classInfo.key)} disabled={equippingKey === classInfo.key}>
+                        {equippingKey === classInfo.key ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Equip Class'}
                       </Button>
                     ) : (
-                      <Button variant={canAfford ? "xp" : "secondary"} className="w-full text-xs sm:text-sm" size="sm" disabled={!canAfford || buyClass.isPending} onClick={() => handleBuy(classInfo.key)}>
-                        {buyClass.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : canAfford ? `Purchase for ${classInfo.cost} XP` : `Need ${classInfo.cost - playerXP} more XP`}
+                      <Button variant={canAfford ? "xp" : "secondary"} className="w-full text-xs sm:text-sm" size="sm" disabled={!canAfford || buyingKey === classInfo.key} onClick={() => setConfirmBuy(classInfo)}>
+                        {buyingKey === classInfo.key ? <Loader2 className="h-4 w-4 animate-spin" /> : canAfford ? `Purchase for ${classInfo.cost} XP` : `Need ${classInfo.cost - playerXP} more XP`}
                       </Button>
                     )}
                   </div>
@@ -132,6 +138,19 @@ const Classes = () => {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmBuy !== null}
+        onOpenChange={(open) => { if (!open) setConfirmBuy(null); }}
+        title={`Buy ${confirmBuy?.name ?? "class"}?`}
+        description={confirmBuy && (
+          <div className="space-y-1 text-sm">
+            <p>Price: <span className="font-semibold text-xp">{confirmBuy.cost.toLocaleString()} XP</span></p>
+            <p>Balance after: <span className="font-semibold">{Math.max(0, playerXP - confirmBuy.cost).toLocaleString()} XP</span></p>
+          </div>
+        )}
+        confirmLabel={`Spend ${confirmBuy?.cost.toLocaleString() ?? ""} XP`}
+        onConfirm={() => { if (confirmBuy) void handleBuy(confirmBuy.key); setConfirmBuy(null); }}
+      />
     </DashboardLayout>
   );
 };

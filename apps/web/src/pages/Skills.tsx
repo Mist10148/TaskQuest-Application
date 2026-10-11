@@ -10,18 +10,25 @@ import { useSkills, useUnlockSkill } from "@/hooks/useApi";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 
 
 
 const Skills = () => {
-  const { refresh } = useAuth();
+  const { refresh, user } = useAuth();
   const { data, isLoading, isError, error, refetch, isFetching } = useSkills();
   const unlockSkill = useUnlockSkill();
-  const [selectedTreeKey, setSelectedTreeKey] = useState<string>('DEFAULT');
+  const equippedKey: string = user?.user?.player_class || 'DEFAULT';
+  // Until the player picks a tab, show the tree of the class they have equipped.
+  const [pickedTreeKey, setPickedTreeKey] = useState<string | null>(null);
+  const [confirmSkill, setConfirmSkill] = useState<Skill | null>(null);
+  const unlockingId = unlockSkill.isPending ? unlockSkill.variables?.skillId : undefined;
 
   const skillTrees = data?.skillTrees || [];
   const userXP = data?.userXP || 0;
-  const selectedTree = skillTrees.find((t: SkillTree) => t.classKey === selectedTreeKey) || skillTrees[0];
+  const wantedKey = pickedTreeKey ?? equippedKey;
+  const selectedTree = skillTrees.find((t: SkillTree) => t.classKey === wantedKey) || skillTrees[0];
+  const selectedTreeKey = selectedTree?.classKey ?? wantedKey;
   
   // Check if selected class is owned (DEFAULT is always owned)
   const isClassOwned = selectedTree?.classOwned ?? (selectedTreeKey === 'DEFAULT');
@@ -55,6 +62,21 @@ const Skills = () => {
 
   const color = classColor(selectedTreeKey);
 
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const keys: string[] = skillTrees.map((t: SkillTree) => t.classKey);
+    if (keys.length === 0) return;
+    const i = keys.indexOf(selectedTreeKey);
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (i + 1) % keys.length;
+    else if (e.key === 'ArrowLeft') next = (i - 1 + keys.length) % keys.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = keys.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    setPickedTreeKey(keys[next]);
+    document.getElementById(`skill-tab-${keys[next]}`)?.focus();
+  };
+
   return (
     <DashboardLayout>
       <div className="mb-6 sm:mb-8">
@@ -72,13 +94,19 @@ const Skills = () => {
       </motion.div>
 
       {/* Class Tabs - Scrollable on mobile */}
-      <div className="flex gap-1.5 sm:gap-2 mb-6 sm:mb-8 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div role="tablist" aria-label="Class skill trees" onKeyDown={onTabKeyDown} className="flex gap-1.5 sm:gap-2 mb-6 sm:mb-8 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
         {skillTrees.map((tree: SkillTree) => {
           const owned = tree.classOwned ?? (tree.classKey === 'DEFAULT');
           return (
             <button
               key={tree.classKey}
-              onClick={() => setSelectedTreeKey(tree.classKey)}
+              id={`skill-tab-${tree.classKey}`}
+              type="button"
+              role="tab"
+              aria-selected={selectedTreeKey === tree.classKey}
+              aria-controls="skill-tabpanel"
+              tabIndex={selectedTreeKey === tree.classKey ? 0 : -1}
+              onClick={() => setPickedTreeKey(tree.classKey)}
               className={cn(
                 "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap text-xs sm:text-sm flex-shrink-0 relative",
                 selectedTreeKey === tree.classKey ? "bg-primary text-primary-foreground shadow-lg" : "bg-card border border-border hover:border-primary/50",
@@ -116,7 +144,7 @@ const Skills = () => {
       ) : isLoading ? (
         <div className="h-[400px] sm:h-[500px] rounded-2xl bg-card/50 animate-pulse" />
       ) : selectedTree && (
-        <motion.div key={selectedTreeKey} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl bg-card border border-border p-4 sm:p-8">
+        <motion.div key={selectedTreeKey} id="skill-tabpanel" role="tabpanel" aria-labelledby={`skill-tab-${selectedTreeKey}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl bg-card border border-border p-4 sm:p-8">
           <div className="text-center mb-6 sm:mb-8">
             <span className="text-3xl sm:text-4xl">{selectedTree.emoji}</span>
             <h2 className="text-xl sm:text-2xl font-heading font-bold mt-2" style={{ color }}>{selectedTree.name} Tree</h2>
@@ -175,13 +203,13 @@ const Skills = () => {
                     </div>
                   )}
                   {status === 'available' && (
-                    <Button size="sm" variant={canAfford ? "xp" : "secondary"} className="w-full text-xs sm:text-sm" disabled={!canAfford || unlockSkill.isPending} onClick={() => handleUnlock(skill.id)}>
-                      {unlockSkill.isPending ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> : canAfford ? `Unlock (${skill.cost} XP)` : `Need ${skill.cost - userXP} XP`}
+                    <Button size="sm" variant={canAfford ? "xp" : "secondary"} className="w-full text-xs sm:text-sm" disabled={!canAfford || unlockingId === skill.id} onClick={() => setConfirmSkill(skill)}>
+                      {unlockingId === skill.id ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> : canAfford ? `Unlock (${skill.cost} XP)` : `Need ${skill.cost - userXP} XP`}
                     </Button>
                   )}
                   {status === 'unlocked' && skill.currentLevel < skill.maxLevel && (
-                    <Button size="sm" variant={canAfford ? "glow" : "secondary"} className="w-full text-xs sm:text-sm" disabled={!canAfford || unlockSkill.isPending} onClick={() => handleUnlock(skill.id)}>
-                      {unlockSkill.isPending ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> : canAfford ? `Upgrade (${skill.cost} XP)` : `Need ${skill.cost - userXP} XP`}
+                    <Button size="sm" variant={canAfford ? "glow" : "secondary"} className="w-full text-xs sm:text-sm" disabled={!canAfford || unlockingId === skill.id} onClick={() => setConfirmSkill(skill)}>
+                      {unlockingId === skill.id ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> : canAfford ? `Upgrade (${skill.cost} XP)` : `Need ${skill.cost - userXP} XP`}
                     </Button>
                   )}
                   {status === 'maxed' && <div className="text-center text-[10px] sm:text-xs text-success font-medium">MAX LEVEL</div>}
@@ -194,6 +222,19 @@ const Skills = () => {
           </div>
         </motion.div>
       )}
+      <ConfirmDialog
+        open={confirmSkill !== null}
+        onOpenChange={(open) => { if (!open) setConfirmSkill(null); }}
+        title={confirmSkill && confirmSkill.currentLevel > 0 ? `Upgrade ${confirmSkill.name}?` : `Unlock ${confirmSkill?.name ?? "skill"}?`}
+        description={confirmSkill && (
+          <div className="space-y-1 text-sm">
+            <p>Price: <span className="font-semibold text-xp">{confirmSkill.cost.toLocaleString()} XP</span></p>
+            <p>Balance after: <span className="font-semibold">{Math.max(0, userXP - confirmSkill.cost).toLocaleString()} XP</span></p>
+          </div>
+        )}
+        confirmLabel={`Spend ${confirmSkill?.cost.toLocaleString() ?? ""} XP`}
+        onConfirm={() => { if (confirmSkill) void handleUnlock(confirmSkill.id); setConfirmSkill(null); }}
+      />
     </DashboardLayout>
   );
 };

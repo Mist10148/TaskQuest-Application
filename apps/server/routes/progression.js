@@ -121,7 +121,7 @@ leaderboardRouter.get(
     '/me',
     requireAuth,
     asyncRoute(async (req, res) => {
-        const { by } = parse(leaderboardQuery, req.query);
-        res.json({ rank: await db.users.getRank(uid(req), by) });
+        const { by, class: playerClass } = parse(leaderboardQuery, req.query);
+        res.json({ rank: await db.users.getRank(uid(req), by, { playerClass }) });
     })
 );

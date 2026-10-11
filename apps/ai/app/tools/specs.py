@@ -240,6 +240,7 @@ async def get_stats(ctx: ToolContext, a: StatsArgs) -> dict[str, Any]:
         "range": a.range,
         "level": stats["player_level"] if stats else None,
         "streak_days": stats["streak_count"] if stats else None,
+        "lifetime_xp": stats["lifetime_xp_total"] if stats else None,  # never resets, unlike the level basis
         "subtasks_completed": len(done),
         "xp_earned": xp,
     }

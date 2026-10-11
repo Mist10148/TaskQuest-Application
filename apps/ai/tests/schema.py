@@ -12,7 +12,7 @@ from sqlalchemy.pool import NullPool
 
 SCHEMA = [
     "CREATE TABLE users (discord_id TEXT PRIMARY KEY, player_xp INT DEFAULT 0, lifetime_xp INT DEFAULT 0,"
-    " player_level INT DEFAULT 1, streak_count INT DEFAULT 0, ai_enabled INT DEFAULT 1)",
+    " lifetime_xp_total INT DEFAULT 0, player_level INT DEFAULT 1, streak_count INT DEFAULT 0, ai_enabled INT DEFAULT 1)",
     "CREATE TABLE lists (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT, name TEXT, description TEXT,"
     " category TEXT, deadline TEXT, priority TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
     " updated_at TEXT DEFAULT CURRENT_TIMESTAMP)",

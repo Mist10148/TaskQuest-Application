@@ -80,6 +80,11 @@ async def test_repo_reads_the_real_schema(mysql):
         assert lst is not None and lst["items_total"] == 2 and lst["priority"] == "HIGH"
         assert await repo.get_list_with_items(conn, OTHER, list_id) is None
         assert await repo.ai_enabled(conn, UID)
+    async with engine.begin() as conn:  # after a prestige lifetime_xp restarts; the total must win
+        await conn.execute(text("UPDATE users SET lifetime_xp = 40, lifetime_xp_total = 900 WHERE discord_id = :u"), {"u": UID})
+    async with engine.connect() as conn:
+        stats = await repo.get_user_stats(conn, UID)
+        assert stats is not None and stats["lifetime_xp"] == 40 and stats["lifetime_xp_total"] == 900
 
 
 async def test_store_and_reconcile_on_mysql(mysql):

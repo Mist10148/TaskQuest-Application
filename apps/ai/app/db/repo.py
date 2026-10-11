@@ -13,6 +13,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from app.db.dialect import is_mysql
+
 
 def to_date(value: Any) -> date | None:
     if value is None or value == "":
@@ -159,8 +161,14 @@ async def xp_since(conn: AsyncConnection, discord_id: str, since: datetime) -> i
 
 
 async def get_user_stats(conn: AsyncConnection, discord_id: str) -> dict[str, Any] | None:
+    """``lifetime_xp`` restarts with each prestige and drives the level; ``lifetime_xp_total`` never resets
+    (the larger of the two columns, as the server and leaderboard compute it)."""
+    biggest = "GREATEST" if is_mysql(conn) else "MAX"  # SQLite's scalar MAX(a, b)
     result = await conn.execute(
-        text("SELECT player_xp, lifetime_xp, player_level, streak_count FROM users WHERE discord_id = :uid"),
+        text(
+            f"SELECT player_xp, lifetime_xp, {biggest}(lifetime_xp_total, lifetime_xp) AS lifetime_xp_total, "
+            "player_level, streak_count FROM users WHERE discord_id = :uid"
+        ),
         {"uid": discord_id},
     )
     row = result.mappings().first()

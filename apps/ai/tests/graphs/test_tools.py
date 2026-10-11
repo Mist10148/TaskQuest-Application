@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import text
 
 from app.tools import specs
 from app.tools.specs import TOOLS, ToolContext
@@ -68,6 +69,19 @@ async def test_overdue_due_soon_and_stats(seeded):
     assert (await run("get_overdue"))["overdue"] == []
     stats = await run("get_stats", range="week")
     assert stats["xp_earned"] == 25 and stats["subtasks_completed"] == 1
+
+
+async def test_stats_report_the_never_reset_lifetime_xp_after_prestige(seeded):
+    async with seeded.begin() as conn:  # prestige restarted lifetime_xp; the total keeps growing
+        await conn.execute(
+            text("UPDATE users SET lifetime_xp = 40, lifetime_xp_total = 900 WHERE discord_id = :u"), {"u": UID}
+        )
+    assert (await run("get_stats"))["lifetime_xp"] == 900
+    async with seeded.begin() as conn:  # an old row whose total was never filled in: the larger column wins
+        await conn.execute(
+            text("UPDATE users SET lifetime_xp = 40, lifetime_xp_total = 0 WHERE discord_id = :u"), {"u": UID}
+        )
+    assert (await run("get_stats"))["lifetime_xp"] == 40
 
 
 async def test_search_falls_back_to_keywords_without_embeddings(seeded):
@@ -210,13 +224,17 @@ def test_per_task_arguments_are_strictly_validated():
 
 async def test_update_item_calls_express_and_the_preview_lists_every_change(seeded):
     calls: list = []
-    out = await run("update_item", web=make_web(calls=calls), item_id="I1", priority="LOW", due_date="2030-07-01", repeat="daily")
+    out = await run(
+        "update_item", web=make_web(calls=calls), item_id="I1", priority="LOW", due_date="2030-07-01", repeat="daily"
+    )
     assert out == {"ok": True}
     method, path, body, _ = calls[0]
     assert (method, path) == ("PATCH", "/internal/items/1")
     assert body == {"discordId": UID, "priority": "LOW", "due_date": "2030-07-01", "recurrence": "daily"}
     spec = TOOLS["update_item"]
-    text_ = await spec.preview(ctx(), spec.args(item_id="I1", name="Renamed", priority="LOW", tags=["x"], repeat="daily"))
+    text_ = await spec.preview(
+        ctx(), spec.args(item_id="I1", name="Renamed", priority="LOW", tags=["x"], repeat="daily")
+    )
     for expected in ("Problems 1-10", "Renamed", "Priority: LOW", "Tags: x", "Repeats: daily", "Approve?"):
         assert expected in text_
     with pytest.raises(ToolError):
@@ -254,7 +272,24 @@ async def test_break_down_preview_lists_the_steps_and_rejects_foreign_items(seed
 async def test_add_item_preview_shows_per_task_fields_and_the_parent(seeded):
     spec = TOOLS["add_item"]
     text_ = await spec.preview(
-        ctx(), spec.args(list_id="L1", name="Extra", due_date="2030-01-05", priority="MEDIUM", tags=["a"], repeat="monthly", parent_id="I1")
+        ctx(),
+        spec.args(
+            list_id="L1",
+            name="Extra",
+            due_date="2030-01-05",
+            priority="MEDIUM",
+            tags=["a"],
+            repeat="monthly",
+            parent_id="I1",
+        ),
     )
-    for expected in ("Extra", "Math homework", "Due: 2030-01-05", "Priority: MEDIUM", "Tags: a", "Repeats: monthly", "Problems 1-10"):
+    for expected in (
+        "Extra",
+        "Math homework",
+        "Due: 2030-01-05",
+        "Priority: MEDIUM",
+        "Tags: a",
+        "Repeats: monthly",
+        "Problems 1-10",
+    ):
         assert expected in text_

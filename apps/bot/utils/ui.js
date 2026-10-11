@@ -452,33 +452,75 @@ function achButtons(page, total) {
 //  📋 SELECTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function listSelect(lists, id = 'sel_list') {
+const SELECT_MAX = 25;
+/** Prefix of the pseudo option that jumps to another page of a select menu. */
+const PAGE_VALUE = '__page_';
+
+/**
+ * Slice `rows` for a select menu. A menu holds at most 25 options, so when
+ * there are more rows and `paged` is set, the first/last slots become
+ * "previous page" / "next page" options (value `__page_<n>`). Without
+ * `paged` the menu is capped at 25 and the placeholder says how many were
+ * left out.
+ */
+function selectWindow(rows, { page = 0, paged = false, label = 'item' } = {}) {
+    const total = rows.length;
+    if (total <= SELECT_MAX) return { slice: rows, offset: 0, prev: null, next: null, note: '' };
+    if (!paged) return { slice: rows.slice(0, SELECT_MAX), offset: 0, prev: null, next: null, note: ` (showing ${SELECT_MAX} of ${total})` };
+    // A page loses one slot per paging option it needs (first page: next only; last: previous only).
+    const pages = [];
+    for (let start = 0; start < total; ) {
+        const room = SELECT_MAX - (start > 0 ? 1 : 0);
+        const size = total - start > room ? room - 1 : room;
+        pages.push([start, start + size]);
+        start += size;
+    }
+    const current = Math.min(Math.max(0, page), pages.length - 1);
+    const [from, to] = pages[current];
+    const of = `Page %n of ${pages.length}`;
+    return {
+        slice: rows.slice(from, to),
+        offset: from,
+        prev: current > 0 ? { label: `◀ Previous ${label}s`, value: `${PAGE_VALUE}${current - 1}`, description: of.replace('%n', current) } : null,
+        next: current < pages.length - 1 ? { label: `▶ More ${label}s`, value: `${PAGE_VALUE}${current + 1}`, description: of.replace('%n', current + 2) } : null,
+        note: ` (${from + 1}-${to} of ${total})`
+    };
+}
+
+/** The page number a `__page_<n>` select value points at, or null for a normal value. */
+const pageFromValue = (val) => (String(val).startsWith(PAGE_VALUE) ? Number(String(val).slice(PAGE_VALUE.length)) || 0 : null);
+
+function listSelect(lists, id = 'sel_list', { page = 0, paged = false } = {}) {
     if (!lists.length) return null;
+    const w = selectWindow(lists, { page, paged, label: 'list' });
+    const options = w.slice.map((l) => {
+        // Build clean description
+        const descParts = [];
+        if (l.category) descParts.push(l.category);
+        if (l.deadline) descParts.push(formatDeadline(l.deadline));
+
+        return {
+            label: l.name.substring(0, 100),
+            value: String(l.id),
+            emoji: PRIORITY_DOT[l.priority] || '📋',
+            description: descParts.length > 0 ? descParts.join(' · ').substring(0, 100) : undefined
+        };
+    });
+    if (w.prev) options.unshift(w.prev);
+    if (w.next) options.push(w.next);
     return new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder('Select a list').addOptions(
-            lists.slice(0, 25).map(l => {
-                // Build clean description
-                const descParts = [];
-                if (l.category) descParts.push(l.category);
-                if (l.deadline) descParts.push(formatDeadline(l.deadline));
-                
-                return {
-                    label: l.name.substring(0, 100),
-                    value: String(l.id),
-                    emoji: PRIORITY_DOT[l.priority] || '📋',
-                    description: descParts.length > 0 ? descParts.join(' · ').substring(0, 100) : undefined
-                };
-            })
-        )
+        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(`Select a list${w.note}`.slice(0, 150)).addOptions(options)
     );
 }
 
-function itemSelect(items, id, ph = 'Select item...') {
+function itemSelect(items, id, ph = 'Select item...', { page = 0 } = {}) {
     if (!items.length) return null;
+    const w = selectWindow(items, { page, paged: true, label: 'task' });
+    const options = w.slice.map((it, i) => ({ label: `${w.offset + i + 1}. ${it.name.substring(0, 90)}`, value: String(it.id), emoji: it.completed ? '✅' : '⬜' }));
+    if (w.prev) options.unshift(w.prev);
+    if (w.next) options.push(w.next);
     return new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(ph).addOptions(
-            items.slice(0, 25).map((it, i) => ({ label: `${i + 1}. ${it.name.substring(0, 90)}`, value: String(it.id), emoji: it.completed ? '✅' : '⬜' }))
-        )
+        new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(`${ph}${w.note}`.slice(0, 150)).addOptions(options)
     );
 }
 
@@ -970,7 +1012,7 @@ module.exports = {
     viewButtons, editButtons, overviewButtons, confirmButtons, classButtons, achButtons,
     classNavButtons, classBrowserButtons, skillActionButtons,
     // Selects
-    listSelect, itemSelect, catSelect, priSelect, classSelectMenu, skillSelectMenu, categoryFilterSelect,
+    listSelect, itemSelect, pageFromValue, SELECT_MAX, catSelect, priSelect, classSelectMenu, skillSelectMenu, categoryFilterSelect,
     // Modals
     listModal, itemModal, editItemModal, descModal, searchModal
 };

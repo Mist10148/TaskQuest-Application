@@ -26,7 +26,7 @@ const USER = '300000000000000001';
 const OTHER = '300000000000000002';
 
 /** Minimal stand-in for a discord.js interaction that records every response. */
-function fake({ userId = USER, customId, commandName, values, fields = {}, options = {} } = {}) {
+function fake({ userId = USER, customId, commandName, values, fields = {}, options = {}, message } = {}) {
     const calls = [];
     const record = (type) => async (payload) => {
         calls.push({ type, payload });
@@ -40,6 +40,7 @@ function fake({ userId = USER, customId, commandName, values, fields = {}, optio
     const i = {
         user: { id: userId, username: `u${userId.slice(-2)}`, displayName: 'Tester', displayAvatarURL: () => 'https://cdn.discordapp.com/embed/avatars/0.png' },
         customId,
+        message,
         commandName,
         values,
         replied: false,
@@ -127,6 +128,44 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         const add = fake({ userId: OTHER, customId: `m_additem_${listId}`, fields: { name: 'spam' } });
         await list.handleModal(add);
         assert.equal((await db.tasks.getItems(USER, listId)).length, 1);
+    });
+
+    await t.test('/list buttons on a different user public message are rejected', async () => {
+        const mine = { interaction: { user: { id: USER } } };
+        const clicker = fake({ userId: OTHER, customId: 'sort_az', message: mine });
+        await list.handleButton(clicker);
+        assert.deepEqual(clicker.calls.map((c) => c.type), ['reply'], 'must not update the shared message');
+        assert.match(text(clicker.calls[0]), /isn't your list view/);
+        const sel = fake({ userId: OTHER, customId: 'sel_list', values: [String(listId)], message: mine });
+        await list.handleSelectMenu(sel);
+        assert.deepEqual(sel.calls.map((c) => c.type), ['reply']);
+
+        const owner = fake({ customId: 'sort_az', message: mine });
+        await list.handleButton(owner);
+        assert.equal(owner.calls[0].type, 'update');
+    });
+
+    await t.test('/list menus page past 25 lists', async () => {
+        const PAGER = '300000000000000003';
+        await db.users.ensureUser(PAGER);
+        for (let n = 1; n <= 30; n++) await db.tasks.createList(PAGER, { name: `L${String(n).padStart(2, '0')}` });
+        const overview = fake({ userId: PAGER, commandName: 'list' });
+        await list.execute(overview);
+        const menu = overview.calls[0].payload.components.map((c) => c.toJSON()).find((c) => c.components[0].custom_id === 'sel_list').components[0];
+        const menuOf = (call) => call.payload.components.map((c) => c.toJSON()).find((c) => c.components[0].custom_id === 'sel_list').components[0];
+        const labels = new Set();
+        let current = menu;
+        for (let guard = 0; guard < 5; guard++) {
+            assert.ok(current.options.length <= 25);
+            for (const o of current.options) if (!o.value.startsWith('__page_')) labels.add(o.label);
+            const more = current.options.find((o) => o.label.includes('More'));
+            if (!more) break;
+            const next = fake({ userId: PAGER, customId: 'sel_list', values: [more.value] });
+            await list.handleSelectMenu(next);
+            assert.equal(next.calls[0].type, 'update');
+            current = menuOf(next.calls[0]);
+        }
+        assert.equal(labels.size, 30, 'every list reachable through the pages');
     });
 
     await t.test('/daily, /profile, /achievements, /leaderboard', async () => {

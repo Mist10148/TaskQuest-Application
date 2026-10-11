@@ -55,7 +55,8 @@ Overview ──select list──▶ View (read-only) ──Edit──▶ Edit (a
 **Rules:**
 
 - List names are unique per user (1–100 characters).
-- Every button and menu acts only on lists owned by **the person clicking**. Because `/list` overviews are public, someone else clicking your buttons just gets "not found".
+- Every button and menu acts only on lists owned by **the person clicking**. Because `/list` overviews are public, anyone but the person who ran `/list` who clicks its buttons or menus gets an ephemeral "This isn't your list view" and the shared message is left untouched.
+- Select menus hold at most 25 options. With more lists or tasks, the first and last option become **◀ Previous** / **▶ More** entries and the placeholder shows the range (for example `(1-24 of 60)`); on the overview, paging resets any sort or filter. Search results (which are not paged) show `(showing 25 of N)`; narrow the search to reach the rest.
 
 ## `/game`
 

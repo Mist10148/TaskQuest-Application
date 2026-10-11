@@ -27,10 +27,10 @@ const data = new SlashCommandBuilder()
 
 // ─── Rendering helpers ───────────────────────────────────────────────────────
 
-function overviewComponents(lists, { withCategoryFilter = false } = {}) {
+function overviewComponents(lists, { withCategoryFilter = false, page = 0 } = {}) {
     const components = [];
     if (withCategoryFilter) components.push(ui.categoryFilterSelect());
-    const sel = ui.listSelect(lists);
+    const sel = ui.listSelect(lists, 'sel_list', { page, paged: true });
     if (sel) components.push(sel);
     components.push(...ui.overviewButtons());
     return components.slice(0, 5);
@@ -53,6 +53,20 @@ function metaEditComponents(listId, done = false) {
     if (done) buttons.push(new ButtonBuilder().setCustomId(`metadone_${listId}`).setLabel('Done').setEmoji('✅').setStyle(ButtonStyle.Success));
     return [ui.catSelect(`cat_${listId}`), ui.priSelect(`pri_${listId}`), new ActionRowBuilder().addComponents(...buttons)];
 }
+
+/**
+ * True when the clicked message belongs to a different user. /list overviews
+ * are public, so without this a click from anyone else would `update` the
+ * shared message with the clicker's own lists.
+ */
+function notOwner(interaction) {
+    const m = interaction.message;
+    const owner = m?.interactionMetadata?.user?.id ?? m?.interaction?.user?.id;
+    return Boolean(owner) && owner !== interaction.user.id;
+}
+
+const rejectNotOwner = (interaction) =>
+    interaction.reply({ embeds: [ui.error("This isn't your list view", 'Run **/list** to open your own.')], ...EPHEMERAL });
 
 const isExpired = (list) => isPastDeadline(list.deadline);
 
@@ -90,6 +104,7 @@ async function autocomplete(interaction) {
 
 async function handleButton(interaction) {
     try {
+        if (notOwner(interaction)) return await rejectNotOwner(interaction);
         return await routeButton(interaction);
     } catch (err) {
         return handleError(interaction, err);
@@ -204,6 +219,7 @@ async function routeButton(interaction) {
 
 async function handleSelectMenu(interaction) {
     try {
+        if (notOwner(interaction)) return await rejectNotOwner(interaction);
         return await routeSelect(interaction);
     } catch (err) {
         return handleError(interaction, err);
@@ -214,6 +230,10 @@ async function routeSelect(interaction) {
     const id = interaction.customId;
     const userId = interaction.user.id;
     const val = interaction.values[0];
+
+    // "More…" / "Previous…" option of a paged select menu.
+    const page = ui.pageFromValue(val);
+    if (page !== null) return pageSelect(interaction, id, page);
 
     if (id === 'filter_category') {
         let lists = await tasks.getLists(userId);
@@ -293,6 +313,22 @@ async function routeSelect(interaction) {
         aiSync.reindex(userId, listId);
         return interaction.update({ embeds: [ui.success('Swapped', 'Positions swapped')], components: [] });
     }
+}
+
+/** Re-render a paged list/item select menu on another page. */
+async function pageSelect(interaction, id, page) {
+    const userId = interaction.user.id;
+    if (id === 'sel_list') {
+        const lists = await tasks.getLists(userId);
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists)], components: overviewComponents(lists, { page }) });
+    }
+    const m = /^(sel_(?:edit|del|done|desc|swap1|swap2))_(d+)$/.exec(id);
+    if (!m) return interaction.deferUpdate();
+    const listId = Number(m[2]);
+    let items = await tasks.getItems(userId, listId);
+    if (!items) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
+    if (m[1] === 'sel_swap2') items = items.filter((i) => i.id !== swapState.get(`${userId}_${listId}`));
+    return interaction.update({ components: [ui.itemSelect(items, id, undefined, { page })] });
 }
 
 // ─── Modals ──────────────────────────────────────────────────────────────────

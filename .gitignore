@@ -168,3 +168,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# Playwright (apps/web/e2e)
+playwright-report/
+test-results/

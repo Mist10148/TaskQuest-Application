@@ -19,6 +19,7 @@
     "typecheck": "npm run typecheck -w @taskquest/web",
     "db:migrate": "node packages/shared/src/db/migrate.js",
     "test": "npm test --workspaces --if-present",
+    "test:e2e": "npm run e2e -w @taskquest/web",
     "test:db": "echo \"Set TEST_DB_HOST/TEST_DB_PORT/TEST_DB_NAME (a throwaway database that will be WIPED) then run npm test\"",
     "check": "node scripts/check-syntax.js"
   },

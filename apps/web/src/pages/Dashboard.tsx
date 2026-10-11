@@ -6,13 +6,15 @@ import { StatCard } from "@/components/game/StatCard";
 import { TaskListCard } from "@/components/game/TaskComponents";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Sparkles, Flame, Target, ListTodo, Trophy, Gamepad2, Plus, Calendar, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLists, useClaimDaily } from "@/hooks/useApi";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { useCountdown } from "@/hooks/useCountdown";
+import { formatCountdown, nextClaimAt } from "@/lib/countdown";
+import { orderQuestsForDashboard } from "@/lib/questOrder";
 import { BriefingCard } from "@/components/ai/BriefingCard";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { QuestsCard } from "@/components/dashboard/QuestsCard";
@@ -23,9 +25,10 @@ const Dashboard = () => {
   const listsQuery = useLists();
   const apiLists = listsQuery.data;
   const claimDaily = useClaimDaily();
-  const [claimedNow, setClaimedNow] = useState(false);
+  // Earliest time the daily reward is claimable again, learned from this session's claim or server answer.
+  const [claimedUntil, setClaimedUntil] = useState<number | null>(null);
 
-  const lists = apiLists || [];
+  const lists = useMemo(() => orderQuestsForDashboard(apiLists || []), [apiLists]);
   const discord = user?.discord || { username: 'Adventurer', globalName: 'Adventurer' };
   const dbUser: Partial<User> = user?.user ?? {};
   
@@ -42,9 +45,11 @@ const Dashboard = () => {
   const gamesPlayed = user?.games?.played || 0;
   const achievementCount = user?.achievements || 0;
 
-  // Claimed within the last 24 hours (from the server), so the button is right after a reload too.
+  // The reward has a rolling 24h cooldown from the last claim (from the server, so it is right after a reload too).
   const lastClaim = dbUser.last_daily_claim ? new Date(dbUser.last_daily_claim).getTime() : 0;
-  const dailyClaimed = claimedNow || (lastClaim > 0 && Date.now() - lastClaim < 24 * 3600 * 1000);
+  const claimTarget = Math.max(nextClaimAt(lastClaim) ?? 0, claimedUntil ?? 0) || null;
+  const claimWaitMs = useCountdown(claimTarget);
+  const dailyClaimed = claimWaitMs > 0;
 
   const handleClaimDaily = async () => {
     try {
@@ -63,11 +68,11 @@ const Dashboard = () => {
           description: description || undefined,
           duration: 4000,
         });
-        setClaimedNow(true);
+        setClaimedUntil(nextClaimAt(Date.now()));
       } else {
-        const hours = Math.ceil((result.remaining ?? 0) / 3_600_000);
-        toast.error('Already claimed today', { description: hours ? `Come back in about ${hours}h.` : undefined });
-        setClaimedNow(true);
+        const remaining = result.remaining ?? 0;
+        toast.error('Daily reward not ready yet', { description: remaining > 0 ? `Come back in ${formatCountdown(remaining)}.` : undefined });
+        if (remaining > 0) setClaimedUntil(Date.now() + remaining);
       }
     } catch {
       /* error toast shown by the mutation */
@@ -90,14 +95,14 @@ const Dashboard = () => {
           </div>
           <Button variant="outline" onClick={handleClaimDaily} disabled={dailyClaimed || claimDaily.isPending} className="shrink-0 border-xp/50 text-xp hover:bg-xp/10 hover:border-xp hover:shadow-[0_0_15px_rgba(234,179,8,0.3)] transition-all">
             <Calendar className="h-4 w-4 mr-2" />
-            {dailyClaimed ? 'Claimed!' : 'Claim Daily Reward'}
+            {dailyClaimed ? `Next in ${formatCountdown(claimWaitMs)}` : 'Claim Daily Reward'}
           </Button>
         </motion.div>
 
         <OnboardingChecklist
           hasQuest={(user?.lists?.total ?? lists.length) > 0}
           hasTask={totalTasks > 0}
-          claimedDaily={lastClaim > 0 || claimedNow}
+          claimedDaily={lastClaim > 0 || claimedUntil !== null}
           onClaimDaily={handleClaimDaily}
           claiming={claimDaily.isPending}
         />
@@ -172,7 +177,7 @@ const Dashboard = () => {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {lists.slice(0, 3).map((list: ListWithCounts, index: number) => (
                 <motion.div key={list.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + index * 0.05 }}>
-                  <Link to="/tasks">
+                  <Link to={`/tasks?list=${list.id}`}>
                     <TaskListCard name={list.name} description={list.description} itemsCompleted={list.itemsCompleted || 0} itemsTotal={list.itemsTotal || 0} category={list.category} priority={list.priority} />
                   </Link>
                 </motion.div>

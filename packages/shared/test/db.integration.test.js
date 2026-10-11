@@ -2525,5 +2525,112 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual(await taskRows(item.id), []);
     });
 
+
+    // ─── Sharing service ──────────────────────────────────────────────────────────
+
+    await t.test('sharing service: caps, expiry, ambiguity, per-day limit and removal clean-up', async () => {
+        const S = db.sharing;
+        const O = '200000000000000701';
+        await db.users.ensureUser(O, { username: 'svc_owner', avatar: null });
+        const mkUser = async (n, name) => {
+            const id = `2000000000000007${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(id, { username: name, avatar: null });
+            return id;
+        };
+        const { list } = await db.tasks.createList(O, { name: 'Service list' });
+        const { LIMITS } = require('../src');
+
+        // Named lookups: exact stored name, a bot may pass an ID, an ambiguous name is refused, an unknown one is a 404.
+        const a = await mkUser(10, 'svc_alpha');
+        await mkUser(11, 'svc_twin');
+        await mkUser(12, 'svc_twin');
+        await assert.rejects(S.invite(O, list.id, { username: 'svc_twin' }), { code: 'CONFLICT', message: /More than one/ });
+        await assert.rejects(S.invite(O, list.id, { username: 'svc_alph' }), { code: 'NOT_FOUND' }, 'exact names only');
+        await assert.rejects(S.invite(O, list.id, { discordId: '299999999999999999' }), { code: 'NOT_FOUND' });
+        await assert.rejects(S.invite(O, list.id, { discordId: O }), { code: 'VALIDATION' });
+        await assert.rejects(S.invite(O, list.id, { username: '' }), { code: 'VALIDATION' });
+        const first = await S.invite(O, list.id, { discordId: a, role: 'editor' });
+        assert.equal(first.inviteeName, 'svc_alpha');
+        assert.ok(first.expiresAt.getTime() > Date.now() + 6.9 * 86400e3 && first.expiresAt.getTime() < Date.now() + 7.1 * 86400e3, '7 days');
+        await assert.rejects(S.invite(O, list.id, { discordId: a }), { code: 'CONFLICT' });
+
+        // Expiry: an old invitation cannot be accepted, no longer shows up and no longer blocks a new one.
+        await db.query('UPDATE list_invites SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE id = ?', [first.id]);
+        assert.deepEqual(await S.listInvites(a), []);
+        await assert.rejects(S.respond(a, first.id, true), { code: 'CONFLICT', message: /expired/ });
+        const second = await S.invite(O, list.id, { discordId: a, role: 'viewer' });
+        assert.deepEqual((await S.listInvites(a)).map((i) => i.id), [second.id]);
+        assert.deepEqual(await S.respond(a, second.id, true), { accepted: true, list: { id: list.id, name: 'Service list' }, role: 'viewer' });
+        await assert.rejects(S.invite(O, list.id, { discordId: a }), { code: 'CONFLICT', message: /already on this list/ });
+
+        // Declined invitations can be sent again.
+        const b = await mkUser(13, 'svc_bravo');
+        const declined = await S.invite(O, list.id, { discordId: b });
+        assert.equal((await S.respond(b, declined.id, false)).accepted, false);
+        await assert.rejects(S.respond(b, declined.id, true), { code: 'CONFLICT' });
+        const retry = await S.invite(O, list.id, { discordId: b });
+        assert.ok(retry.id > declined.id);
+
+        // The cap counts members and pending invitations together.
+        for (let n = 20; n < 20 + LIMITS.MAX_LIST_MEMBERS - 2; n++) await S.invite(O, list.id, { discordId: await mkUser(n, `svc_fill${n}`) });
+        const overflow = await mkUser(40, 'svc_over');
+        await assert.rejects(S.invite(O, list.id, { discordId: overflow }), { code: 'VALIDATION', message: /at most 10/ });
+
+        // Removing a member also removes their private reminder state; leaving works the same; the owner cannot leave.
+        const { item } = await db.tasks.addItem(O, list.id, { name: 'Due', due_date: '2031-02-02' });
+        await db.tasks.snoozeList(a, list.id, new Date(Date.now() + 3600e3));
+        await db.tasks.snoozeTask(a, item.id, new Date(Date.now() + 3600e3));
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_reminders WHERE discord_id = ?', [a]))[0].n, 1);
+        const key = (await S.listMembers(O, list.id)).members.find((m) => m.name === 'svc_alpha').memberKey;
+        await S.removeMember(O, list.id, key);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_reminders WHERE discord_id = ?', [a]))[0].n, 0);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM item_reminders WHERE discord_id = ?', [a]))[0].n, 0);
+        await assert.rejects(S.removeMember(O, list.id, key), { code: 'NOT_FOUND' });
+        await assert.rejects(S.leave(O, list.id), { code: 'FORBIDDEN' });
+        await assert.rejects(S.leave(a, list.id), { code: 'NOT_FOUND' }, 'no longer a member');
+        assert.equal((await S.respond(b, retry.id, true)).accepted, true);
+        assert.equal(await S.leave(b, list.id), true);
+        assert.equal(await db.tasks.getList(b, list.id), null);
+
+        // Deleting the list or the user clears the sharing rows.
+        await db.tasks.deleteList(O, list.id);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_invites WHERE list_id = ?', [list.id]))[0].n, 0);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [list.id]))[0].n, 0);
+    });
+
+    await t.test('sharing service: the per-day invitation limit and managers\' limits', async () => {
+        const S = db.sharing;
+        const O = '200000000000000751';
+        const M = '200000000000000752';
+        await db.users.ensureUser(O, { username: 'lim_owner', avatar: null });
+        await db.users.ensureUser(M, { username: 'lim_manager', avatar: null });
+        const { list } = await db.tasks.createList(O, { name: 'Limits' });
+        const inv = await S.invite(O, list.id, { discordId: M, role: 'manager' });
+        await S.respond(M, inv.id, true);
+        const T = '200000000000000753';
+        await db.users.ensureUser(T, { username: 'lim_target', avatar: null });
+        await assert.rejects(S.invite(M, list.id, { discordId: T, role: 'manager' }), { code: 'FORBIDDEN' });
+        const ti = await S.invite(M, list.id, { discordId: T, role: 'editor' });
+        await S.respond(T, ti.id, true);
+        const members = (await S.listMembers(M, list.id)).members;
+        assert.deepEqual(members.map((x) => x.name), ['lim_owner', 'lim_manager', 'lim_target']);
+        assert.equal(JSON.stringify(members).match(/\d{15,}/), null, 'no Discord ID in the member list');
+        await assert.rejects(S.setRole(M, list.id, 'owner', 'viewer'), { code: 'NOT_FOUND' }, 'the owner has no row to change');
+        await assert.rejects(S.setRole(T, list.id, members[1].memberKey, 'viewer'), { code: 'FORBIDDEN' });
+        await assert.rejects(S.setRole(M, list.id, members[1].memberKey, 'viewer'), { code: 'FORBIDDEN', message: /owner/ }, 'a manager cannot demote another manager');
+        await assert.rejects(S.removeMember(M, list.id, members[1].memberKey), { code: 'FORBIDDEN' });
+        assert.deepEqual(await S.setRole(O, list.id, members[1].memberKey, 'editor'), { memberKey: members[1].memberKey, role: 'editor' });
+        // Invitations per day: after INVITES_PER_DAY recorded sends the next is refused (429).
+        const { LIMITS } = require('../src');
+        await db.query(
+            `INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, expires_at, status)
+             SELECT ?, ?, 'viewer', ?, UTC_TIMESTAMP() + INTERVAL 1 DAY, 'declined' FROM information_schema.COLUMNS LIMIT ${LIMITS.INVITES_PER_DAY}`,
+            [list.id, T, O]
+        );
+        const X = '200000000000000754';
+        await db.users.ensureUser(X, { username: 'lim_extra', avatar: null });
+        await assert.rejects(S.invite(O, list.id, { discordId: X }), { code: 'RATE_LIMITED', status: 429 });
+    });
+
     await db.closePool();
 });

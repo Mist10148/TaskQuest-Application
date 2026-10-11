@@ -717,6 +717,165 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         }
     });
 
+
+    await t.test('shared lists: invite, accept, roles, members, leave and removal over the API', async () => {
+        const ids = { own: '200000000000000601', ed: '200000000000000602', vw: '200000000000000603', st: '200000000000000604', mg: '200000000000000605' };
+        const cookies = {};
+        for (const [k, id] of Object.entries(ids)) {
+            cookies[k] = await login(db, id);
+            await db.users.ensureUser(id, { username: `share_${k}`, avatar: null });
+        }
+        const J = async (method, path, who, body) => {
+            const res = await call(method, path, { cookie: cookies[who], body });
+            const text = await res.text();
+            return { status: res.status, text, body: text ? JSON.parse(text) : null };
+        };
+        const noIds = (r, what) => {
+            for (const id of Object.values(ids)) assert.equal(r.text.includes(id), false, `${what}: a Discord ID leaked`);
+        };
+
+        const created = await J('POST', '/api/lists', 'own', { name: 'Flat share' });
+        assert.equal(created.status, 201);
+        const listId = created.body.id;
+        const item = (await J('POST', `/api/lists/${listId}/items`, 'own', { name: 'Buy milk' })).body;
+
+        // Inviting: by name only, strict body, real users only, no self, no duplicates.
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', discordId: ids.ed })).status, 400, 'a Discord ID is not accepted from the client');
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'nobody_here', role: 'editor' })).status, 404);
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_own', role: 'editor' })).status, 400, 'not yourself');
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', role: 'boss' })).status, 400);
+        const inv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: '@share_ed', role: 'editor' });
+        assert.equal(inv.status, 201, inv.text);
+        noIds(inv, 'invite');
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed' })).status, 409, 'one pending invitation per person');
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'st', { username: 'share_vw' })).status, 404, 'a stranger cannot invite, and learns nothing');
+        const viewerInv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_vw', role: 'viewer' });
+        const mgrInv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_mg', role: 'manager' });
+
+        // Until accepted, the list is invisible to the invitee.
+        assert.equal((await J('GET', `/api/lists/${listId}`, 'ed')).status, 404);
+        const mine = await J('GET', '/api/invites', 'ed');
+        assert.equal(mine.body.length, 1);
+        assert.equal(mine.body[0].listName, 'Flat share');
+        assert.equal(mine.body[0].ownerName, 'share_own');
+        noIds(mine, 'my invites');
+        assert.equal((await J('POST', `/api/invites/${inv.body.id}/accept`, 'vw')).status, 404, 'only the invitee may answer');
+        assert.equal((await J('DELETE', `/api/invites/${inv.body.id}`, 'st')).status, 404, 'a stranger cannot revoke');
+        assert.equal((await J('POST', `/api/invites/${inv.body.id}/accept`, 'ed')).status, 200);
+        assert.equal((await J('POST', `/api/invites/${inv.body.id}/accept`, 'ed')).status, 409, 'already answered');
+        assert.equal((await J('POST', `/api/invites/${viewerInv.body.id}/accept`, 'vw')).status, 200);
+        assert.equal((await J('POST', `/api/invites/${mgrInv.body.id}/decline`, 'mg')).status, 200);
+        assert.equal((await J('GET', '/api/invites', 'mg')).body.length, 0);
+
+        // What a member sees: the list with sharing fields, no owner ID, no actor IDs on tasks.
+        const open = await J('GET', `/api/lists/${listId}`, 'ed');
+        assert.equal(open.status, 200);
+        assert.deepEqual([open.body.shared, open.body.role, open.body.isOwner, open.body.ownerName, open.body.memberCount], [true, 'editor', false, 'share_own', 3]);
+        assert.equal(open.body.discord_id, undefined);
+        noIds(open, 'list detail');
+        const overview = await J('GET', '/api/lists', 'vw');
+        assert.equal(overview.body.length, 1);
+        assert.equal(overview.body[0].role, 'viewer');
+        noIds(overview, 'overview');
+        assert.equal((await J('GET', '/api/lists', 'st')).body.length, 0);
+        assert.equal((await J('GET', `/api/lists/${listId}`, 'st')).status, 404);
+
+        // Members panel data.
+        const members = await J('GET', `/api/lists/${listId}/members`, 'vw');
+        assert.equal(members.status, 200);
+        assert.deepEqual(members.body.members.map((m) => [m.name, m.role]), [['share_own', 'manager'], ['share_ed', 'editor'], ['share_vw', 'viewer']]);
+        assert.deepEqual(members.body.invites, [], 'a viewer does not see pending invitations');
+        noIds(members, 'members');
+        assert.equal((await J('GET', `/api/lists/${listId}/members`, 'st')).status, 404);
+        const ownerView = await J('GET', `/api/lists/${listId}/members`, 'own');
+        assert.equal(ownerView.body.members.find((m) => m.isYou).name, 'share_own');
+        const edKey = ownerView.body.members.find((m) => m.name === 'share_ed').memberKey;
+        const vwKey = ownerView.body.members.find((m) => m.name === 'share_vw').memberKey;
+        assert.match(edKey, /^[a-f0-9]{12}$/);
+
+        // Roles at work.
+        assert.equal((await J('PATCH', `/api/items/${item.id}/toggle`, 'vw')).status, 403, 'a viewer cannot complete tasks');
+        assert.equal((await J('POST', `/api/lists/${listId}/items`, 'vw', { name: 'x' })).status, 403);
+        assert.equal((await J('DELETE', `/api/items/${item.id}`, 'vw')).status, 403);
+        assert.equal((await J('PATCH', `/api/lists/${listId}`, 'ed', { description: 'x' })).status, 403, 'an editor cannot change the list');
+        assert.equal((await J('DELETE', `/api/lists/${listId}`, 'ed')).status, 403);
+        const done = await J('PATCH', `/api/items/${item.id}/toggle`, 'ed');
+        assert.equal(done.status, 200);
+        assert.equal(done.body.completed, true);
+        assert.ok(done.body.xpResult, 'the editor earned the XP');
+        noIds(done, 'toggle');
+        assert.equal((await J('PATCH', `/api/items/${item.id}/toggle`, 'st')).status, 404);
+        assert.equal((await J('PATCH', `/api/items/${item.id}`, 'st', { name: 'pwn' })).status, 404);
+        const again = (await J('GET', `/api/lists/${listId}`, 'own')).body;
+        assert.equal(again.items[0].completed_by_name, 'share_ed');
+        assert.equal(JSON.stringify(again).includes(ids.ed), false, 'the completer ID is not in the owner view');
+
+        // Changing roles: only managers; the owner alone makes managers.
+        assert.equal((await J('PATCH', `/api/lists/${listId}/members/${vwKey}`, 'ed', { role: 'editor' })).status, 403);
+        assert.equal((await J('PATCH', `/api/lists/${listId}/members/${vwKey}`, 'st', { role: 'editor' })).status, 404);
+        assert.equal((await J('PATCH', `/api/lists/${listId}/members/${vwKey}`, 'own', { role: 'nope' })).status, 400);
+        assert.equal((await J('PATCH', `/api/lists/${listId}/members/${vwKey}`, 'own', { role: 'manager' })).status, 200);
+        assert.equal((await J('PATCH', `/api/lists/${listId}`, 'vw', { description: 'Rules of the flat' })).status, 200, 'the new manager can edit the list');
+        assert.equal((await J('PATCH', `/api/lists/${listId}/members/${edKey}`, 'vw', { role: 'manager' })).status, 403, 'a manager cannot make managers');
+        assert.equal((await J('DELETE', `/api/lists/${listId}`, 'vw')).status, 403, 'nor delete the list');
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'vw', { username: 'share_mg', role: 'manager' })).status, 403, 'nor invite managers');
+        assert.equal((await J('PATCH', `/api/lists/${listId}/members/${'0'.repeat(12)}`, 'own', { role: 'editor' })).status, 404);
+        assert.equal((await J('PATCH', `/api/lists/${listId}/members/not-a-key`, 'own', { role: 'editor' })).status, 400);
+
+        // Removal while the list is open in the member's browser: the next request is a 404.
+        assert.equal((await J('DELETE', `/api/lists/${listId}/members/${edKey}`, 'ed')).status, 403, 'an editor cannot remove people');
+        assert.equal((await J('DELETE', `/api/lists/${listId}/members/${edKey}`, 'own')).status, 200);
+        assert.equal((await J('GET', `/api/lists/${listId}`, 'ed')).status, 404);
+        assert.equal((await J('PATCH', `/api/items/${item.id}/toggle`, 'ed')).status, 404);
+        assert.equal((await J('GET', `/api/lists/${listId}/members`, 'ed')).status, 404);
+
+        // Leaving: the owner cannot, a member can.
+        assert.equal((await J('POST', `/api/lists/${listId}/leave`, 'own')).status, 403);
+        assert.equal((await J('POST', `/api/lists/${listId}/leave`, 'st')).status, 404);
+        assert.equal((await J('POST', `/api/lists/${listId}/leave`, 'vw')).status, 200);
+        assert.equal((await J('GET', `/api/lists/${listId}`, 'vw')).status, 404);
+
+        // Revoking a pending invitation.
+        const again2 = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', role: 'viewer' });
+        assert.equal((await J('GET', `/api/lists/${listId}/members`, 'own')).body.invites.length, 1);
+        assert.equal((await J('DELETE', `/api/invites/${again2.body.id}`, 'own')).status, 200);
+        assert.equal((await J('POST', `/api/invites/${again2.body.id}/accept`, 'ed')).status, 409, 'a revoked invitation cannot be accepted');
+        assert.equal((await J('DELETE', `/api/invites/${again2.body.id}`, 'own')).status, 409);
+
+        // The owner can still delete the list.
+        assert.equal((await J('DELETE', `/api/lists/${listId}`, 'own')).status, 200);
+    });
+
+    await t.test('shared lists: the AI service endpoints stay owner-only', async () => {
+        const { default: config } = await import('../config.js');
+        const saved = { ...config.ai };
+        const TOKEN = 'internal-token-'.padEnd(40, 'y');
+        Object.assign(config.ai, { enabled: true, internalToken: TOKEN, serviceUrl: 'http://127.0.0.1:9', timeoutMs: 200 });
+        try {
+            const O = '200000000000000611';
+            const E = '200000000000000612';
+            const ownerCookie = await login(db, O);
+            await db.users.ensureUser(O, { username: 'ai_owner', avatar: null });
+            await db.users.ensureUser(E, { username: 'ai_editor', avatar: null });
+            const { list } = await db.tasks.createList(O, { name: 'Private to the AI owner' });
+            const { item } = await db.tasks.addItem(O, list.id, { name: 'Task' });
+            await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [list.id, E, 'manager', 'a1b2c3d4e5f6']);
+            const internal = (method, path, body) => call(method, `/internal${path}`, { body, origin: null, headers: { 'x-ai-token': TOKEN } });
+            // A manager of the list, speaking through the AI service, reaches nothing.
+            assert.equal((await internal('POST', `/lists/${list.id}/items`, { discordId: E, name: 'via ai' })).status, 404);
+            assert.equal((await internal('PATCH', `/items/${item.id}/toggle`, { discordId: E })).status, 404);
+            assert.equal((await internal('PATCH', `/items/${item.id}`, { discordId: E, priority: 'HIGH' })).status, 404);
+            assert.equal((await internal('POST', `/items/${item.id}/subtasks`, { discordId: E, names: ['a', 'b'] })).status, 404);
+            assert.equal((await internal('PATCH', `/lists/${list.id}`, { discordId: E, priority: 'HIGH' })).status, 404);
+            assert.equal((await db.tasks.getItems(O, list.id)).length, 1, 'nothing was written');
+            // The owner still works through it.
+            assert.equal((await internal('POST', `/lists/${list.id}/items`, { discordId: O, name: 'via ai' })).status, 201);
+            assert.ok(ownerCookie);
+        } finally {
+            Object.assign(config.ai, saved);
+        }
+    });
+
     server.close();
     await db.closePool();
 });

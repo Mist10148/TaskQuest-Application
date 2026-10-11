@@ -137,6 +137,13 @@ export const createTemplateBody = z
 export const applyTemplateBody = z
     .object({ listName: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional(), listId: z.number().int().positive().optional() })
     .strict();
+// Sharing: people are found by their stored display name, never by Discord ID, and a member is addressed by an opaque key.
+export const inviteBody = z
+    .object({ username: z.string().trim().min(1).max(100), role: z.enum(shared.LIST_ROLES).default('viewer') })
+    .strict();
+export const memberRoleBody = z.object({ role: z.enum(shared.LIST_ROLES) }).strict();
+export const memberKeyParam = z.object({ id: z.coerce.number().int().positive(), memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
+
 export const saveTemplateBody = z.object({ name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional() }).strict();
 
 export const blackjackStartBody = z.object({ bet: z.number().int().positive().max(1_000_000) }).strict();

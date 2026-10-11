@@ -60,7 +60,7 @@ router.post(
         const { discordId, ...fields } = parse(internalAddItemBody, req.body);
         const r = await db.tasks.addItem(discordId, id, fields);
         aiClient.reindex(discordId, id);
-        res.status(201).json({ ...r.item, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
+        res.status(201).json({ ...r.item, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses });
     })
 );
 
@@ -71,7 +71,7 @@ router.patch(
         const { discordId, completed } = parse(internalToggleBody, req.body);
         const r = await db.tasks.setItemCompleted(discordId, id, completed);
         if (r.item?.list_id) aiClient.reindex(discordId, r.item.list_id);
-        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp) });
+        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses });
     })
 );
 

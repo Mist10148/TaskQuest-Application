@@ -43,10 +43,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await db.users.ensureUser(ALICE, { username: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
-    await t.test('migrations 007-011 are idempotent and add the new columns', async () => {
+    await t.test('migrations 007-012 are idempotent and add the new columns', async () => {
         await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
         const again = await db.runMigrations({ log: () => {} });
-        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework']);
+        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources']);
         const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
@@ -58,6 +58,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await pool.query("SHOW TABLES LIKE 'quest_claims'"))[0].length, 1);
         for (const c of ['first_completed_at', 'counts_for_quests', 'first_completed_high', 'repeat_anchor_day']) assert.ok(items.includes(c), `items.${c}`);
         assert.ok(users.includes('assassin_last_at'));
+        assert.ok((await cols('lists')).includes('cleared_at'));
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -961,6 +962,134 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(wiped.monk_day, null);
         assert.equal(wiped.assassin_last_at, null);
         assert.equal(wiped.player_class, 'DEFAULT');
+    });
+
+
+    // ─── Bonus XP sources ────────────────────────────────────────────────────────
+
+    const dayOffset = (n) => new Date(Date.now() + n * 86400e3).toISOString().slice(0, 10);
+    /** Move everything a user earned back by `days`, so "today" is empty again. */
+    const ageXP = (id, days = 1) => db.query('UPDATE xp_transactions SET created_at = created_at - INTERVAL ? DAY WHERE discord_id = ?', [days, id]);
+    const sumSource = async (id, source) => Number((await db.query('SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND source = ?', [id, source]))[0].n);
+    const bonusKeys = (r) => r.bonuses.map((b) => b.key);
+
+    await t.test('bonuses: first task of the day pays once per UTC day, never on re-check', async () => {
+        const U = '100000000000000101';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Bonus' });
+        const ids = [];
+        for (const n of ['a', 'b', 'c']) ids.push((await db.tasks.addItem(U, list.id, { name: n })).item.id);
+        const first = await db.tasks.setItemCompleted(U, ids[0]);
+        assert.deepEqual(first.bonuses, [{ key: 'first_of_day', label: 'First task of the day', xp: 10 }]);
+        assert.deepEqual((await db.tasks.setItemCompleted(U, ids[1])).bonuses, [], 'second task the same day pays nothing extra');
+        await db.tasks.setItemCompleted(U, ids[0], false);
+        const again = await db.tasks.setItemCompleted(U, ids[0], true);
+        assert.deepEqual(again.bonuses, [], 'a re-check is not a first completion');
+        assert.equal(await sumSource(U, 'first_of_day'), 10);
+        await ageXP(U);
+        assert.ok(bonusKeys(await db.tasks.setItemCompleted(U, ids[2])).includes('first_of_day'), 'a new day pays again');
+    });
+
+    await t.test('bonuses: a list pays LIST_CLEARED once, at most 5 lists a day', async () => {
+        const U = '100000000000000102';
+        await db.users.ensureUser(U);
+        const clear = async (name) => {
+            const { list } = await db.tasks.createList(U, { name });
+            const items = [];
+            for (const n of ['1', '2', '3']) items.push((await db.tasks.addItem(U, list.id, { name: n })).item);
+            let last;
+            for (const i of items) last = await db.tasks.setItemCompleted(U, i.id);
+            return { list, last };
+        };
+        const { list, last } = await clear('L0');
+        assert.ok(bonusKeys(last).includes('list_cleared'));
+        assert.equal(last.bonuses.find((b) => b.key === 'list_cleared').xp, 25);
+        // Farming attempt: add a task to the cleared list and finish it again.
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'again' });
+        assert.ok(!bonusKeys(await db.tasks.setItemCompleted(U, item.id)).includes('list_cleared'));
+        for (let n = 1; n < 5; n++) assert.ok(bonusKeys((await clear(`L${n}`)).last).includes('list_cleared'));
+        assert.ok(!bonusKeys((await clear('L5')).last).includes('list_cleared'), 'the sixth list today pays nothing');
+        assert.equal(await sumSource(U, 'list_cleared'), 125);
+    });
+
+    await t.test('bonuses: early finish, overdue clear and their shared daily cap', async () => {
+        const U = '100000000000000103';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Deadlines' });
+        let n = 0;
+        const add = async (due) => (await db.tasks.addItem(U, list.id, { name: `t${n++}`, due_date: due })).item.id;
+        const complete = (id) => db.tasks.setItemCompleted(U, id);
+
+        const soon = await complete(await add(dayOffset(2)));
+        assert.equal(soon.bonuses.find((b) => b.key === 'early_finish').xp, 10, '5 XP per day early');
+        const far = await complete(await add(dayOffset(30)));
+        assert.equal(far.bonuses.find((b) => b.key === 'early_finish').xp, 20, 'capped at 20 per task');
+        assert.ok(!bonusKeys(await complete(await add(dayOffset(0)))).some((k) => k === 'early_finish' || k === 'overdue_clear'), 'due today is neither early nor overdue');
+        const late = await complete(await add(dayOffset(-3)));
+        assert.equal(late.bonuses.find((b) => b.key === 'overdue_clear').xp, 10);
+
+        // Farming attempt: backdated and far-future due dates; the combined cap stops it at 100 XP a day.
+        for (let k = 0; k < 8; k++) await complete(await add(k % 2 ? dayOffset(30) : dayOffset(-5)));
+        const total = (await sumSource(U, 'early_finish')) + (await sumSource(U, 'overdue_clear'));
+        assert.equal(total, 100);
+        assert.deepEqual(bonusKeys(await complete(await add(dayOffset(30)))), []);
+        await ageXP(U);
+        assert.ok(bonusKeys(await complete(await add(dayOffset(30)))).includes('early_finish'), 'the cap resets the next day');
+    });
+
+    await t.test('bonuses: finishing the last subtask pays once per parent, 10 XP a day', async () => {
+        const U = '100000000000000104';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Subs' });
+        const family = async (name) => {
+            const { item: parent } = await db.tasks.addItem(U, list.id, { name });
+            const a = (await db.tasks.addItem(U, list.id, { name: `${name}a`, parent_id: parent.id })).item;
+            const b = (await db.tasks.addItem(U, list.id, { name: `${name}b`, parent_id: parent.id })).item;
+            return { parent, a, b };
+        };
+        const one = await family('P1');
+        assert.ok(!bonusKeys(await db.tasks.setItemCompleted(U, one.a.id)).includes('subtasks_done'), 'one subtask is still open');
+        const done = await db.tasks.setItemCompleted(U, one.b.id);
+        assert.equal(done.bonuses.find((b) => b.key === 'subtasks_done').xp, 10);
+        await db.tasks.setItemCompleted(U, one.b.id, false);
+        assert.ok(!bonusKeys(await db.tasks.setItemCompleted(U, one.b.id, true)).includes('subtasks_done'), 'once per parent');
+        const two = await family('P2');
+        await db.tasks.setItemCompleted(U, two.a.id);
+        assert.ok(!bonusKeys(await db.tasks.setItemCompleted(U, two.b.id)).includes('subtasks_done'), 'the daily 10 XP is used up');
+        assert.equal(await sumSource(U, 'subtasks_done'), 10);
+        await ageXP(U);
+        const three = await family('P3');
+        await db.tasks.setItemCompleted(U, three.a.id);
+        assert.ok(bonusKeys(await db.tasks.setItemCompleted(U, three.b.id)).includes('subtasks_done'));
+    });
+
+    await t.test('bonuses: imported tasks, recurring copies and a capped completion earn none', async () => {
+        const U = '100000000000000105';
+        await db.users.ensureUser(U);
+        await db.transfer.importAll(U, { lists: [{ name: 'Imp', items: [1, 2, 3].map((n) => ({ name: `i${n}`, due_date: dayOffset(20) })) }] });
+        const [imp] = await db.tasks.getLists(U);
+        for (const i of await db.tasks.getItems(U, imp.id)) {
+            assert.deepEqual((await db.tasks.setItemCompleted(U, i.id)).bonuses, []);
+        }
+        const { list } = await db.tasks.createList(U, { name: 'Rec' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'daily', recurrence: 'daily', due_date: dayOffset(0) });
+        const spawned = (await db.tasks.setItemCompleted(U, item.id)).nextItem;
+        assert.ok(spawned);
+        await ageXP(U);
+        assert.deepEqual((await db.tasks.setItemCompleted(U, spawned.id)).bonuses, [], 'a spawned copy has counts_for_quests = 0');
+        // A completion that hit the daily completion cap pays no bonus either.
+        const C = '100000000000000106';
+        await db.users.ensureUser(C);
+        const { list: cl } = await db.tasks.createList(C, { name: 'Cap' });
+        const { item: ci } = await db.tasks.addItem(C, cl.id, { name: 'x' });
+        await db.query(
+            `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after)
+             SELECT ?, 10, 'item_complete', 0, 0 FROM information_schema.COLUMNS LIMIT ${require('../src/constants').LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY}`,
+            [C]
+        );
+        const capped = await db.tasks.setItemCompleted(C, ci.id);
+        assert.equal(capped.xp.capped, true);
+        assert.deepEqual(capped.bonuses, []);
     });
 
     await db.closePool();

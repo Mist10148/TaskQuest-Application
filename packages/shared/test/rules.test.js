@@ -721,3 +721,14 @@ test('Paladin tree: four chained skills', () => {
     assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'paladin_aura', 'paladin_smite', 'paladin_crusade']);
     assert.equal(shared.CLASSES.PALADIN.cost, 750);
 });
+
+test('bonus XP sources: every task bonus is labelled, counted on the weekly board and capped', () => {
+    const { BONUS_LABELS, WEEKLY_XP_SOURCES, REWARDS, LIMITS } = require('../src/constants');
+    for (const key of Object.keys(BONUS_LABELS)) assert.ok(WEEKLY_XP_SOURCES.includes(key), `${key} counts for the weekly board`);
+    assert.equal(REWARDS.FIRST_OF_DAY, 10);
+    assert.equal(REWARDS.LIST_CLEARED, 25);
+    assert.equal(LIMITS.LIST_CLEARED_PER_DAY, 5);
+    assert.equal(LIMITS.EARLY_FINISH_MAX, 20);
+    assert.equal(LIMITS.DEADLINE_BONUS_XP_PER_DAY, 100);
+    assert.equal(LIMITS.SUBTASKS_DONE_XP_PER_DAY, 10);
+});

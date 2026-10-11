@@ -337,7 +337,25 @@ const REWARDS = {
     DAILY_STREAK_MAX_BONUS: 50,
     RPS_WIN: 10,
     HANGMAN_PER_LIFE: 10,
-    HANGMAN_MIN: 10
+    HANGMAN_MIN: 10,
+    // Bonus XP sources: flat amounts, no class or skill modifiers, each with its own cap in LIMITS.
+    FIRST_OF_DAY: 10,
+    LIST_CLEARED: 25,
+    EARLY_FINISH_PER_DAY: 5,
+    OVERDUE_CLEAR: 10,
+    SUBTASKS_DONE: 10
+};
+
+/**
+ * Bonuses paid on top of a task's first completion. The key is the xp_transactions source; UIs
+ * show `label` next to the XP in the completion result's `bonuses` list.
+ */
+const BONUS_LABELS = {
+    first_of_day: 'First task of the day',
+    list_cleared: 'List cleared',
+    early_finish: 'Finished early',
+    overdue_clear: 'Overdue cleared',
+    subtasks_done: 'All subtasks done'
 };
 
 /**
@@ -354,7 +372,10 @@ const QUESTS = {
 
 /** Leaderboard tabs. `weekly` counts XP earned since Monday from these sources (not bets or refunds). */
 const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
-const WEEKLY_XP_SOURCES = ['list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward'];
+const WEEKLY_XP_SOURCES = [
+    'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
+    'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done'
+];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
 const STREAK_FREEZE = { COST: 150, MAX: 3 };
@@ -399,6 +420,14 @@ const LIMITS = {
     ITEM_ADD_REWARDS_PER_DAY: 50,
     /** Only the first N task completions per day award XP (stops add/complete/delete loops). */
     ITEM_COMPLETE_REWARDS_PER_DAY: 50,
+    /** LIST_CLEARED pays at most this many lists a day (and each list only once). */
+    LIST_CLEARED_PER_DAY: 5,
+    /** EARLY_FINISH never pays more than this per task (5 XP per day early). */
+    EARLY_FINISH_MAX: 20,
+    /** early_finish + overdue_clear share this many XP a day. */
+    DEADLINE_BONUS_XP_PER_DAY: 100,
+    /** subtasks_done pays at most this many XP a day (one parent). */
+    SUBTASKS_DONE_XP_PER_DAY: 10,
     /** Total XP that free games (RPS, Hangman, arcade) may award per day. */
     FREE_GAME_XP_PER_DAY: 500,
     /** Minimum time between two free-game rounds. */
@@ -477,6 +506,7 @@ module.exports = {
     ACHIEVEMENTS,
     XP_PER_LEVEL,
     REWARDS,
+    BONUS_LABELS,
     STREAK_FREEZE,
     STREAK_FREEZE_CACHE,
     CLASS_RULES,

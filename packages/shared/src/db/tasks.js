@@ -8,9 +8,9 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
-const { rewardAction, unlockAchievements } = require('./progression');
+const { rewardAction, unlockAchievements, awardFlat, countToday } = require('./progression');
 const { errors } = require('../errors');
-const { REWARDS, LIMITS } = require('../constants');
+const { REWARDS, LIMITS, BONUS_LABELS } = require('../constants');
 const v = require('../validation');
 const { nextDueOnOrAfter, todayInZone, daysBetween } = require('../dates');
 
@@ -400,6 +400,50 @@ async function completionContext(conn, item, user) {
 }
 
 /**
+ * Bonus XP on top of a task's first (paid) completion: first of the day, list cleared, early finish,
+ * overdue cleared and all subtasks done. Each is flat, has its own cap, and is paid at most once per
+ * thing it rewards, so un-checking, re-checking, re-clearing a list or backdating cannot farm it.
+ * Imported tasks and auto-spawned recurring copies (counts_for_quests = 0) earn none.
+ * @returns {Promise<Array<{ key: string, label: string, xp: number }>>}
+ */
+async function completionBonuses(conn, user, item, ctx) {
+    if (!Number(item.counts_for_quests)) return [];
+    const out = [];
+    const pay = async (key, amount, opts = {}) => {
+        const r = await awardFlat(conn, user, key, amount, opts);
+        if (r) out.push({ key, label: BONUS_LABELS[key], xp: r.xp });
+        return r;
+    };
+
+    if ((await countToday(conn, user.discord_id, 'first_of_day')) === 0) await pay('first_of_day', REWARDS.FIRST_OF_DAY, { referenceId: item.id });
+
+    if (ctx.listCleared) {
+        // Marking the list first makes the payout once per list; the daily limit still applies on top.
+        const [mark] = await conn.query('UPDATE lists SET cleared_at = ?, updated_at = updated_at WHERE id = ? AND cleared_at IS NULL', [new Date(), item.list_id]);
+        if (mark.affectedRows === 1 && (await countToday(conn, user.discord_id, 'list_cleared')) < LIMITS.LIST_CLEARED_PER_DAY) {
+            await pay('list_cleared', REWARDS.LIST_CLEARED, { referenceId: item.list_id });
+        }
+    }
+
+    const deadlineCap = { dailyCap: LIMITS.DEADLINE_BONUS_XP_PER_DAY, capSources: ['early_finish', 'overdue_clear'], referenceId: item.id };
+    if (ctx.dueDate && ctx.dueDate > ctx.today) {
+        const early = Math.min(LIMITS.EARLY_FINISH_MAX, REWARDS.EARLY_FINISH_PER_DAY * daysBetween(ctx.today, ctx.dueDate));
+        await pay('early_finish', early, deadlineCap);
+    } else if (ctx.overdueDays > 0) {
+        await pay('overdue_clear', REWARDS.OVERDUE_CLEAR, deadlineCap);
+    }
+
+    if (item.parent_id) {
+        const [[open]] = await conn.query('SELECT COUNT(*) AS n FROM items WHERE parent_id = ? AND completed = 0', [item.parent_id]);
+        const [[done]] = await conn.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'subtasks_done' AND reference_id = ?", [user.discord_id, item.parent_id]);
+        if (Number(open.n) === 0 && Number(done.n) === 0) {
+            await pay('subtasks_done', REWARDS.SUBTASKS_DONE, { dailyCap: LIMITS.SUBTASKS_DONE_XP_PER_DAY, referenceId: item.parent_id });
+        }
+    }
+    return out;
+}
+
+/**
  * Mark an item complete/incomplete (toggle when `completed` is undefined).
  * Completion XP and the completion counter are granted only the first time
  * an item is ever completed, so toggling cannot farm XP.
@@ -422,6 +466,7 @@ async function setItemCompleted(discordId, itemId, completed) {
         let xp = null;
         let achievements = [];
         let nextItem = null;
+        let bonuses = [];
         if (target && !item.xp_awarded) {
             // first_completed_* is what quests count: set once, never rewritten by a re-check or a later priority edit.
             await conn.query('UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_high = ? WHERE id = ?', [
@@ -431,16 +476,19 @@ async function setItemCompleted(discordId, itemId, completed) {
             ]);
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
+            const ctx = await completionContext(conn, item, user);
             xp = await rewardAction(conn, user, 'item_complete', REWARDS.ITEM_COMPLETE, {
-                context: await completionContext(conn, item, user),
+                context: ctx,
                 dailyLimit: LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY,
                 referenceId: id
             });
+            // Bonuses ride on a completion that was actually paid, so the daily completion cap bounds them too.
+            if (xp && xp.finalXP > 0) bonuses = await completionBonuses(conn, user, item, ctx);
             achievements = await unlockAchievements(conn, user);
             if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
-        return { item: updated, completed: target, xp, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
+        return { item: updated, completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }
 

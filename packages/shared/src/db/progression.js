@@ -153,6 +153,25 @@ async function rewardAction(conn, user, source, baseXP, opts = {}) {
     return { ...calc, finalXP, capped, ...tx };
 }
 
+/**
+ * Pay a flat bonus (no class or skill modifiers) from its own source, optionally under a daily cap
+ * shared by `capSources`. Returns { xp, tx } for what was paid, or null when nothing was.
+ *
+ * @param {object} [opts] { dailyCap, capSources, referenceId }
+ */
+async function awardFlat(conn, user, source, amount, opts = {}) {
+    if (!user.gamification_enabled) return null;
+    let pay = Math.trunc(Number(amount));
+    if (opts.dailyCap !== undefined) {
+        let paid = 0;
+        for (const s of opts.capSources || [source]) paid += await sumToday(conn, user.discord_id, s);
+        pay = Math.min(pay, opts.dailyCap - paid);
+    }
+    if (!(pay > 0)) return null;
+    const tx = await applyXP(conn, user, pay, source, { referenceId: opts.referenceId });
+    return { xp: pay, tx };
+}
+
 /** Remaining free-game XP a user can earn today. */
 async function remainingFreeGameXP(conn, discordId) {
     return Math.max(0, LIMITS.FREE_GAME_XP_PER_DAY - (await sumToday(conn, discordId, 'game_reward')));
@@ -349,6 +368,7 @@ async function unlockSkill(discordId, skillId) {
 module.exports = {
     applyXP,
     rewardAction,
+    awardFlat,
     remainingFreeGameXP,
     unlockAchievements,
     checkAchievements,

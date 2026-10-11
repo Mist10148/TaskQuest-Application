@@ -6,9 +6,134 @@
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Dark mode is the `dark` class on <html> (next-themes, attribute="class"). The app also ships a
+   `.light` token block below; `dark:` utilities follow the class like they did under Tailwind 3. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-heading: 'Rajdhani', sans-serif;
+  --font-body: 'Inter', sans-serif;
+
+  /* Tokens live in :root / .light as bare "H S% L%" triples (src/lib/theme.test.ts reads them);
+     these map them to utilities. Opacity modifiers (bg-primary/20) work through color-mix. */
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-background-secondary: hsl(var(--background-secondary));
+  --color-background-tertiary: hsl(var(--background-tertiary));
+  --color-foreground: hsl(var(--foreground));
+  --color-foreground-muted: hsl(var(--foreground-muted));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-text: hsl(var(--primary-text));
+  --color-primary-glow: hsl(var(--primary-glow));
+  --color-xp: hsl(var(--xp));
+  --color-xp-foreground: hsl(var(--xp-foreground));
+  --color-xp-glow: hsl(var(--xp-glow));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-text: hsl(var(--destructive-text));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-hover: hsl(var(--card-hover));
+
+  --color-class-default: hsl(var(--class-default));
+  --color-class-hero: hsl(var(--class-hero));
+  --color-class-gambler: hsl(var(--class-gambler));
+  --color-class-assassin: hsl(var(--class-assassin));
+  --color-class-wizard: hsl(var(--class-wizard));
+  --color-class-archer: hsl(var(--class-archer));
+  --color-class-tank: hsl(var(--class-tank));
+  --color-class-monk: hsl(var(--class-monk));
+  --color-class-artisan: hsl(var(--class-artisan));
+  --color-class-ranger: hsl(var(--class-ranger));
+  --color-class-necromancer: hsl(var(--class-necromancer));
+  --color-class-paladin: hsl(var(--class-paladin));
+
+  --color-priority-high: hsl(var(--priority-high));
+  --color-priority-medium: hsl(var(--priority-medium));
+  --color-priority-low: hsl(var(--priority-low));
+  --color-priority-none: hsl(var(--priority-none));
+
+  --color-category-school: hsl(var(--category-school));
+  --color-category-work: hsl(var(--category-work));
+  --color-category-home: hsl(var(--category-home));
+  --color-category-personal: hsl(var(--category-personal));
+  --color-category-shopping: hsl(var(--category-shopping));
+  --color-category-fitness: hsl(var(--category-fitness));
+
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  /* Same scale as before (shadcn): rounded-lg = --radius, md = -2px, sm = -4px. */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-float: float 3s ease-in-out infinite;
+  --animate-xp-gain: xp-gain 1s ease-out forwards;
+  --animate-level-up: level-up 0.5s ease-out;
+  --animate-shimmer: shimmer 2s linear infinite;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+  @keyframes xp-gain {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-30px); }
+  }
+  @keyframes level-up {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+  /* pulse-glow, float and shimmer keyframes are defined below with the custom utilities. The
+     versions there already won under Tailwind 3 (same name, later in the sheet), so behaviour is unchanged. */
+}
+
+@utility bg-gradient-radial {
+  background-image: radial-gradient(var(--tw-gradient-stops));
+}
+
+@utility bg-shimmer {
+  background-image: linear-gradient(90deg, transparent 0%, hsl(var(--primary) / 0.1) 50%, transparent 100%);
+}
+
+/* Tailwind 4 buttons keep the default cursor; the app relies on the pointer. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
 
 @layer base {
   :root {
@@ -101,9 +226,6 @@
     --sidebar-border: 215 20% 18%;
     --sidebar-ring: 235 86% 65%;
 
-    /* Fonts */
-    --font-heading: 'Rajdhani', sans-serif;
-    --font-body: 'Inter', sans-serif;
   }
 
   /* Light theme: class "light" on <html> (next-themes). Every text/surface pair is checked in src/lib/theme.test.ts. */
@@ -231,81 +353,75 @@
   }
 }
 
-@layer utilities {
-  /* Glow Effects */
-  .glow-primary {
-    box-shadow: 0 0 20px hsl(var(--primary) / 0.3),
-                0 0 40px hsl(var(--primary) / 0.15);
-  }
+/* Custom utilities (tree-shaken: only the ones used in src/ are emitted). */
+@utility glow-primary {
+  box-shadow: 0 0 20px hsl(var(--primary) / 0.3),
+              0 0 40px hsl(var(--primary) / 0.15);
+}
 
-  .glow-xp {
-    box-shadow: 0 0 20px hsl(var(--xp) / 0.4),
-                0 0 40px hsl(var(--xp) / 0.2);
-  }
+@utility glow-xp {
+  box-shadow: 0 0 20px hsl(var(--xp) / 0.4),
+              0 0 40px hsl(var(--xp) / 0.2);
+}
 
-  .glow-success {
-    box-shadow: 0 0 15px hsl(var(--success) / 0.3);
-  }
+@utility glow-success {
+  box-shadow: 0 0 15px hsl(var(--success) / 0.3);
+}
 
-  /* Text Glow */
-  .text-glow-primary {
-    text-shadow: 0 0 20px hsl(var(--primary) / 0.5);
-  }
+@utility text-glow-primary {
+  text-shadow: 0 0 20px hsl(var(--primary) / 0.5);
+}
 
-  .text-glow-xp {
-    text-shadow: 0 0 20px hsl(var(--xp) / 0.6);
-  }
+@utility text-glow-xp {
+  text-shadow: 0 0 20px hsl(var(--xp) / 0.6);
+}
 
-  /* Gradient Backgrounds */
-  .gradient-hero {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--background)) 0%,
-      hsl(var(--background-secondary)) 50%,
-      hsl(235 40% 15%) 100%
-    );
-  }
+@utility gradient-hero {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--background)) 0%,
+    hsl(var(--background-secondary)) 50%,
+    hsl(235 40% 15%) 100%
+  );
+}
 
-  .gradient-card {
-    background: linear-gradient(
-      180deg,
-      hsl(var(--card)) 0%,
-      hsl(var(--background-secondary)) 100%
-    );
-  }
+@utility gradient-card {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--card)) 0%,
+    hsl(var(--background-secondary)) 100%
+  );
+}
 
-  .gradient-xp-bar {
-    background: linear-gradient(
-      90deg,
-      hsl(var(--xp)) 0%,
-      hsl(45 100% 60%) 50%,
-      hsl(var(--xp)) 100%
-    );
-  }
+@utility gradient-xp-bar {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--xp)) 0%,
+    hsl(45 100% 60%) 50%,
+    hsl(var(--xp)) 100%
+  );
+}
 
-  .gradient-primary {
-    background: linear-gradient(
-      90deg,
-      hsl(var(--primary)) 0%,
-      hsl(var(--primary-glow)) 100%
-    );
-  }
+@utility gradient-primary {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary)) 0%,
+    hsl(var(--primary-glow)) 100%
+  );
+}
 
-  /* Glass Effect */
-  .glass {
-    background: hsl(var(--card) / 0.8);
-    backdrop-filter: blur(12px);
-    border: 1px solid hsl(var(--border) / 0.5);
-  }
+@utility glass {
+  background: hsl(var(--card) / 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid hsl(var(--border) / 0.5);
+}
 
-  /* Animated Border */
-  .animated-border {
-    position: relative;
-    background: hsl(var(--card));
-    overflow: hidden;
-  }
+@utility animated-border {
+  position: relative;
+  background: hsl(var(--card));
+  overflow: hidden;
 
-  .animated-border::before {
+  &::before {
     content: '';
     position: absolute;
     inset: -2px;
@@ -320,106 +436,389 @@
     animation: spin 4s linear infinite;
     opacity: 0.5;
   }
+}
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+@utility progress-bar-container {
+  @apply h-4 rounded-full bg-background-secondary overflow-hidden relative;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
 
-  /* Progress Bar Styles */
-  .progress-bar-container {
-    @apply h-4 rounded-full bg-background-secondary overflow-hidden relative;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
-  }
+@utility progress-bar-fill {
+  @apply h-full rounded-full transition-all duration-500 ease-out;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--xp)) 0%,
+    hsl(45 100% 60%) 100%
+  );
+  box-shadow: 0 0 10px hsl(var(--xp) / 0.5);
+}
 
-  .progress-bar-fill {
-    @apply h-full rounded-full transition-all duration-500 ease-out;
-    background: linear-gradient(
-      90deg,
-      hsl(var(--xp)) 0%,
-      hsl(45 100% 60%) 100%
-    );
-    box-shadow: 0 0 10px hsl(var(--xp) / 0.5);
-  }
+@utility skill-node {
+  @apply relative rounded-lg p-3 border-2 transition-all duration-300;
 
-  /* Skill Node Styles */
-  .skill-node {
-    @apply relative rounded-lg p-3 border-2 transition-all duration-300;
-  }
-
-  .skill-node.unlocked {
+  &.unlocked {
     @apply border-primary bg-card;
     box-shadow: 0 0 15px hsl(var(--primary) / 0.3);
   }
 
-  .skill-node.locked {
+  &.locked {
     @apply border-border bg-background-secondary opacity-60;
   }
 
-  .skill-node.available {
+  &.available {
     @apply border-xp bg-card cursor-pointer;
     animation: pulse-glow 2s ease-in-out infinite;
   }
+}
 
-  @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 10px hsl(var(--xp) / 0.3); }
-    50% { box-shadow: 0 0 25px hsl(var(--xp) / 0.6); }
-  }
+@utility achievement-badge {
+  @apply relative rounded-xl p-4 transition-all duration-300;
 
-  /* Achievement Badge */
-  .achievement-badge {
-    @apply relative rounded-xl p-4 transition-all duration-300;
-  }
-
-  .achievement-badge.unlocked {
+  &.unlocked {
     @apply bg-card border border-xp;
     box-shadow: 0 0 20px hsl(var(--xp) / 0.2);
   }
 
-  .achievement-badge.locked {
+  &.locked {
     @apply bg-background-secondary border border-border grayscale opacity-50;
   }
+}
 
-  /* Class Card Glow */
-  .class-card {
-    @apply relative rounded-xl p-6 border-2 transition-all duration-300;
-  }
+@utility class-card {
+  @apply relative rounded-xl p-6 border-2 transition-all duration-300;
 
-  .class-card:hover {
+  &:hover {
     transform: translateY(-4px);
   }
+}
 
-  /* Floating Animation */
-  .float {
-    animation: float 3s ease-in-out infinite;
-  }
+@utility float {
+  animation: float 3s ease-in-out infinite;
+}
 
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
+@utility fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
 
-  /* Fade In Animation */
-  .fade-in {
-    animation: fadeIn 0.5s ease-out forwards;
-  }
+@utility stagger-children {
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* Stagger Children */
-  .stagger-children > * {
+  & > * {
     opacity: 0;
     animation: fadeIn 0.5s ease-out forwards;
   }
 
-  .stagger-children > *:nth-child(1) { animation-delay: 0.1s; }
-  .stagger-children > *:nth-child(2) { animation-delay: 0.2s; }
-  .stagger-children > *:nth-child(3) { animation-delay: 0.3s; }
-  .stagger-children > *:nth-child(4) { animation-delay: 0.4s; }
-  .stagger-children > *:nth-child(5) { animation-delay: 0.5s; }
-  .stagger-children > *:nth-child(6) { animation-delay: 0.6s; }
+  & > *:nth-child(1) {
+    animation-delay: 0.1s; 
+  }
+
+  & > *:nth-child(2) {
+    animation-delay: 0.2s; 
+  }
+
+  & > *:nth-child(3) {
+    animation-delay: 0.3s; 
+  }
+
+  & > *:nth-child(4) {
+    animation-delay: 0.4s; 
+  }
+
+  & > *:nth-child(5) {
+    animation-delay: 0.5s; 
+  }
+
+  & > *:nth-child(6) {
+    animation-delay: 0.6s; 
+  }
+}
+
+@utility neon-text {
+  text-shadow: 
+    0 0 5px currentColor,
+    0 0 10px currentColor,
+    0 0 20px currentColor;
+}
+
+@utility cyber-grid {
+  background-image: 
+    linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+@utility scanlines {
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 2px,
+      rgba(0, 0, 0, 0.03) 4px
+    );
+    pointer-events: none;
+  }
+}
+
+@utility glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+@utility xp-glow-pulse {
+  animation: xpGlowPulse 2s ease-in-out infinite;
+}
+
+@utility gradient-border {
+  position: relative;
+  background: linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
+              linear-gradient(135deg, hsl(var(--primary)), hsl(var(--xp)), hsl(var(--success))) border-box;
+  border: 2px solid transparent;
+  border-radius: 1rem;
+}
+
+@utility shimmer {
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent
+    );
+    transform: translateX(-100%);
+    animation: shimmer 2s infinite;
+  }
+}
+
+@utility level-up-burst {
+  animation: levelUpBurst 0.5s ease-out;
+}
+
+@utility trophy-shine {
+  position: relative;
+
+  &::before {
+    content: '✨';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 0.75rem;
+    animation: sparkle 1.5s ease-in-out infinite;
+  }
+}
+
+@utility rank-gold {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FFD700 100%);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+
+@utility rank-silver {
+  background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 50%, #C0C0C0 100%);
+  box-shadow: 0 0 10px rgba(192, 192, 192, 0.3);
+}
+
+@utility rank-bronze {
+  background: linear-gradient(135deg, #CD7F32 0%, #B8860B 50%, #CD7F32 100%);
+  box-shadow: 0 0 10px rgba(205, 127, 50, 0.3);
+}
+
+@utility game-card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@utility achievement-unlock {
+  animation: achievementUnlock 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@utility neon-cyan {
+  box-shadow: 0 0 5px rgba(6, 182, 212, 0.5), 
+              0 0 20px rgba(6, 182, 212, 0.3),
+              0 0 40px rgba(6, 182, 212, 0.1);
+}
+
+@utility neon-violet {
+  box-shadow: 0 0 5px rgba(139, 92, 246, 0.5), 
+              0 0 20px rgba(139, 92, 246, 0.3),
+              0 0 40px rgba(139, 92, 246, 0.1);
+}
+
+@utility neon-emerald {
+  box-shadow: 0 0 5px rgba(16, 185, 129, 0.5), 
+              0 0 20px rgba(16, 185, 129, 0.3),
+              0 0 40px rgba(16, 185, 129, 0.1);
+}
+
+@utility neon-xp {
+  box-shadow: 0 0 5px rgba(234, 179, 8, 0.5), 
+              0 0 20px rgba(234, 179, 8, 0.3),
+              0 0 40px rgba(234, 179, 8, 0.1);
+}
+
+@utility neon-border-animate {
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(90deg, 
+      rgba(6, 182, 212, 0.5),
+      rgba(139, 92, 246, 0.5),
+      rgba(16, 185, 129, 0.5),
+      rgba(6, 182, 212, 0.5)
+    );
+    background-size: 300% 100%;
+    animation: neonBorderMove 4s linear infinite;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
+}
+
+@utility text-neon-cyan {
+  text-shadow: 0 0 5px rgba(6, 182, 212, 0.8), 
+               0 0 20px rgba(6, 182, 212, 0.4);
+}
+
+@utility text-neon-violet {
+  text-shadow: 0 0 5px rgba(139, 92, 246, 0.8), 
+               0 0 20px rgba(139, 92, 246, 0.4);
+}
+
+@utility text-neon-emerald {
+  text-shadow: 0 0 5px rgba(16, 185, 129, 0.8), 
+               0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+@utility glow-card {
+  position: relative;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: transparent;
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3),
+                0 0 30px -5px rgba(99, 102, 241, 0.3);
+  }
+}
+
+@utility pulse-ring {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: inherit;
+    border: 2px solid currentColor;
+    opacity: 0;
+    animation: pulseRing 2s ease-out infinite;
+  }
+}
+
+@utility gradient-text-primary {
+  background: linear-gradient(135deg, hsl(var(--primary)), #06b6d4, hsl(var(--primary)));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientText 3s linear infinite;
+}
+
+@utility glow-scrollbar {
+
+  &::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.5), rgba(6, 182, 212, 0.5));
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.7), rgba(6, 182, 212, 0.7));
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+  }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 10px hsl(var(--xp) / 0.3); }
+    50% { box-shadow: 0 0 25px hsl(var(--xp) / 0.6); }
+}
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes glowPulse {
+    0%, 100% { 
+      box-shadow: 0 0 5px hsl(var(--primary) / 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 20px hsl(var(--primary) / 0.5), 0 0 30px hsl(var(--primary) / 0.3);
+    }
+}
+@keyframes xpGlowPulse {
+    0%, 100% { 
+      box-shadow: 0 0 5px hsl(var(--xp) / 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 15px hsl(var(--xp) / 0.5), 0 0 25px hsl(var(--xp) / 0.3);
+    }
+}
+@keyframes shimmer {
+    100% { transform: translateX(100%); }
+}
+@keyframes levelUpBurst {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+@keyframes sparkle {
+    0%, 100% { opacity: 0; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1); }
+}
+@keyframes achievementUnlock {
+    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes neonBorderMove {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 300% 50%; }
+}
+@keyframes pulseRing {
+    0% { transform: scale(0.95); opacity: 0.5; }
+    100% { transform: scale(1.1); opacity: 0; }
+}
+@keyframes gradientText {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
 }
 
 /* Custom Scrollbar */
@@ -442,299 +841,4 @@
 }
 
 /* Gamer Vibes - Additional Effects */
-@layer utilities {
-  /* Neon text effect */
-  .neon-text {
-    text-shadow: 
-      0 0 5px currentColor,
-      0 0 10px currentColor,
-      0 0 20px currentColor;
-  }
 
-  /* Cyber grid background */
-  .cyber-grid {
-    background-image: 
-      linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
-    background-size: 50px 50px;
-  }
-
-  /* Scanline effect */
-  .scanlines::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 0, 0, 0.03) 2px,
-      rgba(0, 0, 0, 0.03) 4px
-    );
-    pointer-events: none;
-  }
-
-  /* Glow pulse animation */
-  .glow-pulse {
-    animation: glowPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes glowPulse {
-    0%, 100% { 
-      box-shadow: 0 0 5px hsl(var(--primary) / 0.3);
-    }
-    50% { 
-      box-shadow: 0 0 20px hsl(var(--primary) / 0.5), 0 0 30px hsl(var(--primary) / 0.3);
-    }
-  }
-
-  /* XP glow pulse */
-  .xp-glow-pulse {
-    animation: xpGlowPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes xpGlowPulse {
-    0%, 100% { 
-      box-shadow: 0 0 5px hsl(var(--xp) / 0.3);
-    }
-    50% { 
-      box-shadow: 0 0 15px hsl(var(--xp) / 0.5), 0 0 25px hsl(var(--xp) / 0.3);
-    }
-  }
-
-  /* Gradient border animation */
-  .gradient-border {
-    position: relative;
-    background: linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
-                linear-gradient(135deg, hsl(var(--primary)), hsl(var(--xp)), hsl(var(--success))) border-box;
-    border: 2px solid transparent;
-    border-radius: 1rem;
-  }
-
-  /* Shimmer effect */
-  .shimmer {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .shimmer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.05),
-      transparent
-    );
-    transform: translateX(-100%);
-    animation: shimmer 2s infinite;
-  }
-
-  @keyframes shimmer {
-    100% { transform: translateX(100%); }
-  }
-
-  /* Level up burst animation */
-  .level-up-burst {
-    animation: levelUpBurst 0.5s ease-out;
-  }
-
-  @keyframes levelUpBurst {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
-  }
-
-  /* Trophy shine */
-  .trophy-shine {
-    position: relative;
-  }
-
-  .trophy-shine::before {
-    content: '✨';
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    font-size: 0.75rem;
-    animation: sparkle 1.5s ease-in-out infinite;
-  }
-
-  @keyframes sparkle {
-    0%, 100% { opacity: 0; transform: scale(0.8); }
-    50% { opacity: 1; transform: scale(1); }
-  }
-
-  /* Rank badge styles */
-  .rank-gold {
-    background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FFD700 100%);
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
-  }
-
-  .rank-silver {
-    background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 50%, #C0C0C0 100%);
-    box-shadow: 0 0 10px rgba(192, 192, 192, 0.3);
-  }
-
-  .rank-bronze {
-    background: linear-gradient(135deg, #CD7F32 0%, #B8860B 50%, #CD7F32 100%);
-    box-shadow: 0 0 10px rgba(205, 127, 50, 0.3);
-  }
-
-  /* Gaming card hover effect */
-  .game-card-hover {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .game-card-hover:hover {
-    transform: translateY(-4px) scale(1.02);
-    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
-  }
-
-  /* Achievement unlock animation */
-  .achievement-unlock {
-    animation: achievementUnlock 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  }
-
-  @keyframes achievementUnlock {
-    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-    100% { transform: scale(1) rotate(0deg); opacity: 1; }
-  }
-
-  /* Neon glow effects */
-  .neon-cyan {
-    box-shadow: 0 0 5px rgba(6, 182, 212, 0.5), 
-                0 0 20px rgba(6, 182, 212, 0.3),
-                0 0 40px rgba(6, 182, 212, 0.1);
-  }
-
-  .neon-violet {
-    box-shadow: 0 0 5px rgba(139, 92, 246, 0.5), 
-                0 0 20px rgba(139, 92, 246, 0.3),
-                0 0 40px rgba(139, 92, 246, 0.1);
-  }
-
-  .neon-emerald {
-    box-shadow: 0 0 5px rgba(16, 185, 129, 0.5), 
-                0 0 20px rgba(16, 185, 129, 0.3),
-                0 0 40px rgba(16, 185, 129, 0.1);
-  }
-
-  .neon-xp {
-    box-shadow: 0 0 5px rgba(234, 179, 8, 0.5), 
-                0 0 20px rgba(234, 179, 8, 0.3),
-                0 0 40px rgba(234, 179, 8, 0.1);
-  }
-
-  /* Neon border animation */
-  .neon-border-animate {
-    position: relative;
-  }
-
-  .neon-border-animate::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(90deg, 
-      rgba(6, 182, 212, 0.5),
-      rgba(139, 92, 246, 0.5),
-      rgba(16, 185, 129, 0.5),
-      rgba(6, 182, 212, 0.5)
-    );
-    background-size: 300% 100%;
-    animation: neonBorderMove 4s linear infinite;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-
-  .neon-border-animate:hover::before {
-    opacity: 1;
-  }
-
-  @keyframes neonBorderMove {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 300% 50%; }
-  }
-
-  /* Text neon glow */
-  .text-neon-cyan {
-    text-shadow: 0 0 5px rgba(6, 182, 212, 0.8), 
-                 0 0 20px rgba(6, 182, 212, 0.4);
-  }
-
-  .text-neon-violet {
-    text-shadow: 0 0 5px rgba(139, 92, 246, 0.8), 
-                 0 0 20px rgba(139, 92, 246, 0.4);
-  }
-
-  .text-neon-emerald {
-    text-shadow: 0 0 5px rgba(16, 185, 129, 0.8), 
-                 0 0 20px rgba(16, 185, 129, 0.4);
-  }
-
-  /* Animated glow border for cards */
-  .glow-card {
-    position: relative;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    transition: all 0.3s ease;
-  }
-
-  .glow-card:hover {
-    border-color: transparent;
-    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3),
-                0 0 30px -5px rgba(99, 102, 241, 0.3);
-  }
-
-  /* Pulse ring effect */
-  .pulse-ring {
-    position: relative;
-  }
-
-  .pulse-ring::after {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border-radius: inherit;
-    border: 2px solid currentColor;
-    opacity: 0;
-    animation: pulseRing 2s ease-out infinite;
-  }
-
-  @keyframes pulseRing {
-    0% { transform: scale(0.95); opacity: 0.5; }
-    100% { transform: scale(1.1); opacity: 0; }
-  }
-
-  /* Gradient text */
-  .gradient-text-primary {
-    background: linear-gradient(135deg, hsl(var(--primary)), #06b6d4, hsl(var(--primary)));
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientText 3s linear infinite;
-  }
-
-  @keyframes gradientText {
-    0% { background-position: 0% center; }
-    100% { background-position: 200% center; }
-  }
-
-  /* Custom scrollbar with glow */
-  .glow-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(99, 102, 241, 0.5), rgba(6, 182, 212, 0.5));
-    border-radius: 4px;
-  }
-
-  .glow-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(99, 102, 241, 0.7), rgba(6, 182, 212, 0.7));
-    box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
-  }
-}

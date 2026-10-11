@@ -1,3 +1,4 @@
+import { clampBet, parseBetInput, pickFreeCell } from "@/lib/gameHelpers";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -38,13 +39,23 @@ type GameType = "menu" | "blackjack" | "rps" | "hangman" | "snake" | "dino" | "i
 
 // Neon Number Input Component
 const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) => {
+  // The box keeps what the user types as text; it is clamped on blur/Enter so typing "50" is not fought halfway.
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText((t) => (parseBetInput(t) === value ? t : String(value)));
+  }, [value]);
   const decrease = () => onChange(Math.max(min, value - step));
   const increase = () => onChange(Math.min(max, value + step));
-  
+  const commit = () => {
+    const v = clampBet(text, min, max, value);
+    setText(String(v));
+    onChange(v);
+  };
+
   return (
     <div className="flex items-center gap-1 bg-background-secondary/50 rounded-lg border border-border p-1">
-      <button 
-        onClick={decrease} 
+      <button
+        onClick={decrease}
         disabled={value <= min}
         className="h-8 w-8 rounded-md flex items-center justify-center bg-background hover:bg-primary/20 hover:text-primary disabled:opacity-30 disabled:hover:bg-background transition-all border border-transparent hover:border-primary/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.3)]"
       >
@@ -52,12 +63,18 @@ const NeonNumberInput = ({ value, onChange, min, max, step = 1 }: { value: numbe
       </button>
       <div className="relative">
         <input
-          type="number"
-          value={value}
+          type="text"
+          inputMode="numeric"
+          value={text}
           onChange={(e) => {
-            const v = parseInt(e.target.value) || min;
-            onChange(Math.min(max, Math.max(min, v)));
+            const raw = e.target.value;
+            setText(raw);
+            const n = parseBetInput(raw);
+            if (n !== null && n >= min && n <= max) onChange(n);
           }}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
+          aria-label="Bet"
           min={min}
           max={max}
           className="w-16 h-8 bg-background border border-border rounded-md text-center font-heading font-bold text-lg focus:outline-none focus:border-primary focus:shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -148,12 +165,18 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
   const notifyAchievements = useNotifyAchievements();
   const [hand, setHand] = useState<BlackjackResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  // Resume an unfinished hand (e.g. started from Discord or before a reload).
+  // Resume an unfinished hand (e.g. started from Discord or before a reload). Deal stays disabled until this
+  // resolves, and a resumed hand never replaces one that is already on the table.
   useEffect(() => {
+    let cancelled = false;
     gamesApi.getActive().then((a) => {
-      if (a.blackjack) setHand({ ...a.blackjack, balance: 0, maxBet: 0, settlement: null });
-    }).catch(() => {});
+      if (cancelled) return;
+      const active = a.blackjack;
+      if (active) setHand((cur) => cur ?? { ...active, balance: 0, maxBet: 0, settlement: null });
+    }).catch(() => {}).finally(() => { if (!cancelled) setChecking(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const run = async (fn: () => Promise<BlackjackResult>) => {
@@ -203,8 +226,8 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
           <div className="text-center py-8 relative z-10">
             <Spade className="h-16 w-16 mx-auto text-violet-400 mb-4 drop-shadow-[0_0_20px_rgba(139,92,246,0.5)]" />
             <h2 className="text-2xl font-heading font-bold mb-4 bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Ready to Play?</h2>
-            <Button onClick={deal} disabled={busy} className="gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-[0_0_20px_rgba(139,92,246,0.4)]">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gamepad2 className="h-4 w-4" />} Deal Cards ({bet} XP)
+            <Button onClick={deal} disabled={busy || checking} className="gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-[0_0_20px_rgba(139,92,246,0.4)]">
+              {busy || checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gamepad2 className="h-4 w-4" />} Deal Cards ({bet} XP)
             </Button>
             <GameInstructions game="blackjack" />
           </div>
@@ -565,11 +588,12 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
 //  🐍 SNAKE GAME (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
+const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => Promise<boolean>; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [starting, setStarting] = useState(false);
   
   const gameRef = useRef({
     snake: [{ x: 10, y: 10 }],
@@ -583,18 +607,23 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
   const GRID_SIZE = 20;
   const CELL_SIZE = 15;
 
-  const startGame = () => {
+  // The run only begins once the server has issued its session id, otherwise the XP would be lost.
+  const startGame = async () => {
+    if (starting) return;
+    setStarting(true);
+    const ok = await onStart();
+    setStarting(false);
+    if (!ok) return;
     gameRef.current = {
       snake: [{ x: 10, y: 10 }],
       dir: { x: 1, y: 0 },
-      food: { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) },
+      food: pickFreeCell(GRID_SIZE, [{ x: 10, y: 10 }]) ?? { x: 15, y: 15 },
       score: 0,
       gameOver: false,
       lastDir: { x: 1, y: 0 }
     };
     setScore(0);
     setGameState("playing");
-    onStart();
   };
 
   const endGame = useCallback((finalScore: number) => {
@@ -616,6 +645,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const g = gameRef.current;
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) e.preventDefault();
       if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { if (g.lastDir.y !== 1) g.dir = { x: 0, y: -1 }; }
       else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { if (g.lastDir.y !== -1) g.dir = { x: 0, y: 1 }; }
       else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") { if (g.lastDir.x !== 1) g.dir = { x: -1, y: 0 }; }
@@ -674,7 +704,14 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
         g.score++;
         playSound("eat");
         setScore(g.score);
-        g.food = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+        const free = pickFreeCell(GRID_SIZE, g.snake);
+        if (!free) {
+          // The snake fills the board: nothing left to eat.
+          g.gameOver = true;
+          endGame(g.score);
+          return;
+        }
+        g.food = free;
       } else {
         g.snake.pop();
       }
@@ -764,7 +801,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
               <h2 className="text-2xl font-heading font-bold mb-2 bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">Snake</h2>
               <p className="text-foreground-muted mb-4">Eat pellets, grow longer, don't crash!</p>
               <p className="text-sm text-xp mb-4">🎁 XP = Pellets × 2</p>
-              <Button onClick={startGame} className="gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
+              <Button onClick={startGame} disabled={starting} className="gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
               <GameInstructions game="snake" />
@@ -776,7 +813,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
               ref={canvasRef} 
               width={GRID_SIZE * CELL_SIZE} 
               height={GRID_SIZE * CELL_SIZE}
-              className="rounded-lg border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]"
+              className="touch-none rounded-lg border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]"
             /><TouchPad layout="dpad" /></>
           )}
           
@@ -786,7 +823,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart:
               <p className="text-foreground-muted mb-2">Pellets eaten: {score}</p>
               <p className="text-lg font-bold text-success mb-4">+{score * 2} XP</p>
               <div className="flex justify-center gap-3">
-                <Button onClick={startGame} variant="outline" className="gap-2 border-green-500/50 hover:bg-green-500/10">
+                <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-green-500/50 hover:bg-green-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
                 </Button>
                 <Button onClick={onBack} className="bg-gradient-to-r from-green-600 to-emerald-600">Back to Games</Button>
@@ -810,11 +847,12 @@ const JUMP_FORCE = -16;
 const CANVAS_WIDTH = 600;
 const CANVAS_HEIGHT = 200;
 
-const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
+const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => Promise<boolean>; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [starting, setStarting] = useState(false);
   
   const gameRef = useRef({
     dino: { y: 150, vy: 0, jumping: false, frame: 0 },
@@ -826,7 +864,13 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     groundOffset: 0
   });
 
-  const startGame = () => {
+  // The run only begins once the server has issued its session id, otherwise the XP would be lost.
+  const startGame = async () => {
+    if (starting) return;
+    setStarting(true);
+    const ok = await onStart();
+    setStarting(false);
+    if (!ok) return;
     gameRef.current = {
       dino: { y: GROUND_Y, vy: 0, jumping: false, frame: 0 },
       obstacles: [],
@@ -838,7 +882,6 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
     };
     setScore(0);
     setGameState("playing");
-    onStart();
   };
 
   const endGame = useCallback((finalScore: number) => {
@@ -1155,7 +1198,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
               <h2 className="text-2xl font-heading font-bold mb-2 bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Dino Runner</h2>
               <p className="text-foreground-muted mb-4">Jump over obstacles - endless runner!</p>
               <p className="text-sm text-xp mb-4">🎁 XP = Obstacles Passed</p>
-              <Button onClick={startGame} className="gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500">
+              <Button onClick={startGame} disabled={starting} className="gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
               <GameInstructions game="dino" />
@@ -1169,7 +1212,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
                 width={CANVAS_WIDTH} 
                 height={CANVAS_HEIGHT}
                 onClick={jump}
-                className="rounded-lg border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.2)] cursor-pointer"
+                className="rounded-lg border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.2)] cursor-pointer touch-none"
               /><TouchPad layout="jump" /></>
               <p className="text-center text-xs text-foreground-muted mt-2">Tap screen or press SPACE to jump</p>
             </div>
@@ -1181,7 +1224,7 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
               <p className="text-foreground-muted mb-2">Obstacles passed: {score}</p>
               <p className="text-lg font-bold text-success mb-4">+{score} XP</p>
               <div className="flex justify-center gap-3">
-                <Button onClick={startGame} variant="outline" className="gap-2 border-amber-500/50 hover:bg-amber-500/10">
+                <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-amber-500/50 hover:bg-amber-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
                 </Button>
                 <Button onClick={onBack} className="bg-gradient-to-r from-amber-600 to-orange-600">Back to Games</Button>
@@ -1198,11 +1241,12 @@ const DinoGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: 
 //  👾 SPACE INVADERS (Web Exclusive)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => void; onResult: (r: string, points: number) => void }) => {
+const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; onStart: () => Promise<boolean>; onResult: (r: string, points: number) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [starting, setStarting] = useState(false);
   const [aliensKilled, setAliensKilled] = useState(0);
   
   const gameRef = useRef({
@@ -1219,7 +1263,13 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     lastShot: 0
   });
 
-  const startGame = () => {
+  // The run only begins once the server has issued its session id, otherwise the XP would be lost.
+  const startGame = async () => {
+    if (starting) return;
+    setStarting(true);
+    const ok = await onStart();
+    setStarting(false);
+    if (!ok) return;
     const aliens: { x: number; y: number; alive: boolean }[] = [];
     for (let row = 0; row < 4; row++) {
       for (let col = 0; col < 8; col++) {
@@ -1243,7 +1293,6 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
     setScore(0);
     setAliensKilled(0);
     setGameState("playing");
-    onStart();
   };
 
   const endGame = useCallback((won: boolean, kills: number) => {
@@ -1464,7 +1513,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
               <h2 className="text-2xl font-heading font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Space Invaders</h2>
               <p className="text-foreground-muted mb-4">Destroy all the aliens!</p>
               <p className="text-sm text-xp mb-4">🎁 XP = Aliens × 3</p>
-              <Button onClick={startGame} className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500">
+              <Button onClick={startGame} disabled={starting} className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
               <GameInstructions game="invaders" />
@@ -1477,7 +1526,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
                 ref={canvasRef} 
                 width={500} 
                 height={400}
-                className="rounded-lg border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
+                className="touch-none rounded-lg border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
               /><TouchPad layout="shooter" /></>
               <p className="text-center text-xs text-foreground-muted mt-2">Tap left/right to move & shoot • Arrow keys/WASD + SPACE on desktop</p>
             </div>
@@ -1491,7 +1540,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: { onBack: () => void; 
               <p className="text-foreground-muted mb-2">Aliens destroyed: {aliensKilled}</p>
               <p className="text-lg font-bold text-success mb-4">+{aliensKilled * 3} XP</p>
               <div className="flex justify-center gap-3">
-                <Button onClick={startGame} variant="outline" className="gap-2 border-purple-500/50 hover:bg-purple-500/10">
+                <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-purple-500/50 hover:bg-purple-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
                 </Button>
                 <Button onClick={onBack} className="bg-gradient-to-r from-purple-600 to-pink-600">Back to Games</Button>
@@ -1535,6 +1584,7 @@ const Games = () => {
   const [game, setGame] = useState<GameType>("menu");
   const [bet, setBet] = useState(BLACKJACK_CONFIG.MIN_BET);
   const arcadeRun = useRef<number | null>(null);
+  const arcadeStarting = useRef<Promise<number> | null>(null);
   const notifyAchievements = useNotifyAchievements();
 
   const xp = Number(user?.user?.player_xp) || 0;
@@ -1547,14 +1597,22 @@ const Games = () => {
     qc.invalidateQueries({ queryKey: ['games'] });
   }, [qc]);
 
-  const arcadeStart = useCallback((type: ArcadeType) => {
+  // Resolves true once the server issued a session id; false (after a toast) when the run cannot be recorded.
+  const arcadeStart = useCallback((type: ArcadeType): Promise<boolean> => {
     arcadeRun.current = null;
-    gamesApi.arcadeStart(type).then((r) => { arcadeRun.current = r.sessionId; }).catch(showError);
+    const started = gamesApi.arcadeStart(type).then((r) => r.sessionId);
+    arcadeStarting.current = started;
+    return started.then(
+      (id) => { arcadeRun.current = id; return true; },
+      (err) => { showError(err); return false; }
+    );
   }, []);
 
   const arcadeFinish = useCallback(async (type: ArcadeType, points: number) => {
-    const sessionId = arcadeRun.current;
+    // Wait for the start request if it is somehow still in flight.
+    const sessionId = arcadeRun.current ?? (await arcadeStarting.current?.catch(() => null)) ?? null;
     arcadeRun.current = null;
+    arcadeStarting.current = null;
     if (!sessionId) return;
     try {
       const r = await gamesApi.arcadeFinish(type, sessionId, points);

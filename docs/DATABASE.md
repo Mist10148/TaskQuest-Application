@@ -40,6 +40,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `009_quest_claims` | `quest_claims`, the claim log that keeps a quest to one payout per period |
 | `010_quest_integrity` | `items.first_completed_at`, `first_completed_high`, `counts_for_quests` (what quests count) and `repeat_anchor_day` (monthly repeats keep their day) |
 | `011_class_rework` | Class rebalance and five new classes: `users.assassin_last_at` (Assassin decay), `gambler_streak` (Hot Hand), `assassin_bleed` (Bleed), `owns_monk` / `owns_artisan` / `owns_ranger` / `owns_necromancer` / `owns_paladin`, counters `monk_rhythm`, `monk_day`, `artisan_progress`, `necro_souls`, and `player_class` extended with MONK, ARTISAN, RANGER, NECROMANCER, PALADIN |
+| `012_xp_sources` | New XP sources: `lists.cleared_at` (a list pays the list-cleared bonus once), `users.last_chest_streak` (streak chests pay once per run), `items.habit_streak` (habit streaks), `items.first_completed_early` / `first_completed_overdue` (quest facts recorded at the first completion), `users.prestige` and `users.lifetime_xp_total` (backfilled from `lifetime_xp`), and the `focus_sessions` table |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -77,7 +78,10 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 | `discord_id` | VARCHAR(32) PK | Discord snowflake |
 | `discord_username`, `discord_avatar` | VARCHAR(100) | Cached at web login for the leaderboard |
 | `player_xp` | BIGINT | Spendable balance |
-| `lifetime_xp` | BIGINT | Total ever earned. Drives the level and XP achievements. |
+| `lifetime_xp` | BIGINT | XP earned since the last prestige. Drives the level. |
+| `lifetime_xp_total` | BIGINT | Total ever earned, never reset (kept in sync by `applyXP`). Drives the XP achievements and the lifetime leaderboard. |
+| `prestige` | INT | Times the player has prestiged (0–10); each adds +2% XP |
+| `last_chest_streak` | INT | Streak length of the last streak chest paid; a chest pays only above it, and a broken streak clears it |
 | `player_level` | BIGINT | ⌊lifetime_xp / 100⌋ + 1 (kept in sync by `applyXP`) |
 | `player_class` | ENUM(DEFAULT, HERO, GAMBLER, ASSASSIN, WIZARD, ARCHER, TANK, MONK, ARTISAN, RANGER, NECROMANCER, PALADIN) | Equipped class (the last five arrived with migration 011) |
 | `gamification_enabled`, `automation_enabled`, `auto_delete_old_lists` | BOOLEAN | Settings (default on) |
@@ -103,13 +107,13 @@ Index: `(gamification_enabled, player_xp)` for the leaderboard.
 
 ### `lists`
 
-`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `overdue_notified` BOOLEAN · `remind_at` DATETIME (snooze: remind again at this time) · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
+`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `overdue_notified` BOOLEAN · `remind_at` DATETIME (snooze: remind again at this time) · `cleared_at` DATETIME NULL (when the list-cleared bonus was paid; the Tidy Up quest counts it) · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
 
 Unique key `(discord_id, name)`, index on `deadline`.
 
 ### `items`
 
-`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `created_at` · `updated_at` (auto-updated).
+`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `first_completed_early` / `first_completed_overdue` TINYINT NULL (whether that first completion was before / after the due date; NULL without a due date) · `habit_streak` INT (consecutive on-time completions of a repeating task, copied to each spawned copy) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `created_at` · `updated_at` (auto-updated).
 
 Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`. Positions are kept unique and contiguous (0..n-1) by `moveItem` / `reorderItems`.
 
@@ -145,6 +149,12 @@ Indexes `(discord_id, created_at)` and `(discord_id, source, created_at)`. The s
 
 `id` · `discord_id` FK · `quest_key` VARCHAR(50) · `period_start` DATE · `reward_xp` INT · `claimed_at`. The unique key `(discord_id, quest_key, period_start)` is what makes a claim atomic: two clicks cannot both insert, so a quest pays once per period. Quest *progress* is not stored; it is computed from `items` (`first_completed_at`, `first_completed_high`, `counts_for_quests`, `created_at`) and `xp_transactions`.
 
+The weekly review claim is stored here too, under `quest_key = 'WEEKLY_REVIEW'` with the week's Monday as `period_start`.
+
+### `focus_sessions`
+
+`id` · `discord_id` FK · `started_at` DATETIME · `minutes_planned` INT · `state` VARCHAR(12) (`active`, `finished`, `cancelled`, `expired`) · `finished_at` DATETIME · `minutes_credited` INT (what the server measured and credited) · `xp` INT (what was paid). Indexes `(discord_id, state)` and `(discord_id, finished_at)`. At most one row per user is `active`.
+
 ### `web_sessions`
 
 `session_id` VARCHAR(128) PK · `expires` INT UNSIGNED (unix seconds) · `data` MEDIUMTEXT (JSON). This holds web login sessions. Expired rows are purged every 15 minutes.
@@ -173,6 +183,9 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 |---|---|---|
 | `list_create`, `item_add`, `item_complete` | + | Task rewards |
 | `daily` | + | Daily reward |
+| `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
+| `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review` | + | Flat bonuses from streaks, achievements, focus sessions and the weekly review |
+| `prestige` | − | The balance leaving at a prestige (not spending: `xp_spent` is unchanged) |
 | `game_reward` | + | RPS, Hangman and arcade winnings. These count toward the free-game daily cap. |
 | `blackjack_bet` | − | Bet escrow (and double down) |
 | `blackjack_win`, `blackjack_blackjack` | + | Bet returned plus boosted winnings |

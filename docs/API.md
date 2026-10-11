@@ -31,7 +31,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
   "bonusInfo": { "type": "ARCHER_HIT", "details": "Base: 10 | 🎯 Hit x4 +10 💥+32", "classBonus": 42, "skillBonus": 0, "critBonus": 0, "totalBonus": 37 },
   "balanceAfter": 1290, "newLevel": 13, "leveledUp": false, "capped": false
 },
-"newAchievements": [ { "key": "FIRST_COMPLETE", "name": "First Victory", "description": "...", "emoji": "✅", "category": "completions" } ]
+"newAchievements": [ { "key": "FIRST_COMPLETE", "name": "First Victory", "description": "...", "emoji": "✅", "category": "completions", "xp": 25 } ]   // xp: the reward paid for it (25; 0 when XP is off)
 ```
 
 ---
@@ -63,6 +63,8 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | POST 🔒 | `/api/user/daily` | — | See below |
 | GET 🔒 | `/api/user/xp-history` (alias `/api/xp/history`) | — | Last 50 `xp_transactions` |
 | POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, achievements, skills, games and XP history, and resets stats (including `xp_spent` and streak freezes). Also asks the AI service to forget the user's vectors, chat threads and cached summaries. `{success, message}` |
+| GET 🔒 | `/api/user/prestige` | — | `{prestige, title, nextTitle, bonusPercent, nextBonusPercent, level, minLevel, max, eligible}` |
+| POST 🔒 | `/api/user/prestige` | `{"confirm":"PRESTIGE"}` | Resets balance, level, class, class ownership, skills, class counters and freezes; keeps achievements, quest claims, tasks and the daily streak. `{success, prestige, title, bonusPercent, levelBefore, balanceLost, balance, level, newAchievements}`. `400` below level 30 or without the confirmation, `409` after 10 prestiges, `403` when XP is off. `/api/user` also reports `user.prestige`, `user.prestige_title` and `user.lifetime_xp_total` (the never-reset total; `lifetime_xp` restarts with each prestige). |
 | POST 🔒 | `/api/user/streak-freeze` | — | Buys one streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill). `{success, freezes, cost, max, newBalance, newAchievements}`. `409` at the cap, `400 INSUFFICIENT_XP`. |
 | GET 🔒 | `/api/user/export` | — | Download of everything you own as JSON (`{app, version, exportedAt, lists:[{name, description, category, priority, deadline, items:[{id, parent_id, name, description, completed, due_date, priority, tags, recurrence}]}]}`). |
 | GET 🔒 | `/api/user/export.csv` | — | One row per task (`list, task, subtask_of, done, due_date, priority, tags, repeat, list_deadline, list_category`). Cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets don't run them as formulas. |
@@ -76,6 +78,8 @@ Daily reward response (`200` in both cases):
 ```jsonc
 // claimed (freezeUsed: a bought streak freeze saved a streak that would have broken)
 { "success": true, "baseXP": 100, "classBonus": 25, "streakBonus": 10, "skillDailyBonus": 0,
+  "surpriseBonus": 0,            // Daily Surprise: 0 or 50
+  "chest": null,                 // {streak: 7, xp: 100} when this claim reaches a 7/14/30 day streak (paid on top of totalXP)
   "totalXP": 135, "bonusInfo": {...}, "streak": 3, "streakBroken": false, "streakPreserved": false, "freezeUsed": false,
   "newBalance": 1435, "newLevel": 15, "leveledUp": false, "newAchievements": [] }
 // on cooldown
@@ -96,7 +100,7 @@ All routes are 🔒 and owner-scoped. Another user's IDs return `404`.
 | PATCH | `/api/lists/:id/reorder` | `{itemIds: [int]}`: every task id of the list, exactly once, in the new order | The list's items in the new order. Positions become 0..n-1. `400` if the ids are not exactly the list's tasks. |
 | POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000), due_date?: "YYYY-MM-DD"\|null, priority?, tags?: string\|string[], recurrence?: "daily"\|"weekly"\|"monthly"\|null, parent_id?: int\|null}` | `201 {...item, xpResult, newAchievements}` |
 | PATCH | `/api/items/:id` | Any subset of the create fields, plus `position? (int ≥0)`; ≥1. A position moves the task there and closes the gaps. | Updated item (with `list_name`, `list_priority`) |
-| PATCH | `/api/items/:id/toggle` | optional `{completed: boolean}` (no body toggles) | `{...item, completed, xpResult, newAchievements, nextItem}`. XP only on the **first** completion. `nextItem` is the newly created copy when a repeating task is completed (else `null`). |
+| PATCH | `/api/items/:id/toggle` | optional `{completed: boolean}` (no body toggles) | `{...item, completed, xpResult, bonuses, newAchievements, nextItem}`. XP only on the **first** completion. `bonuses` is `[{key, label, xp}]`, the flat extras paid with that first completion (`first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus`; see [GAMEPLAY](GAMEPLAY.md#5c-bonus-xp-sources)), empty when none. `nextItem` is the newly created copy when a repeating task is completed (else `null`). |
 | DELETE | `/api/items/:id` | — | `{success:true}` |
 
 Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadlines and task due dates must be real calendar dates between 2000 and 2100.
@@ -115,17 +119,34 @@ Completing tasks pays XP for the first **50 completions per UTC day** (like list
 | GET | `/api/skills` | 🔒 | `{skillTrees:[{classKey,name,emoji,description,classOwned,skills:[{id,name,emoji,description,maxLevel,cost,requires,currentLevel}]}], skillPoints, userXP, playerClass}` |
 | POST | `/api/skills/:skillId/unlock` | 🔒 | Unlocks or levels up one skill (cost per level). The tree is derived on the server; any `classKey` in the body is ignored. `{success, skill:{skill_id, skill_level}, balance}` |
 | GET | `/api/achievements` | 🔒 | `{achievements:[{key,name,emoji,description,category,unlocked,unlockedAt}], unlockedCount, totalCount}` |
-| GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]`. `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs. |
+| GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, prestige, prestigeTitle, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]` (`lifetimeXp` is the never-reset total). `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs. |
 | GET | `/api/leaderboard/me?by=&class=` | 🔒 | `{rank}` on that board, within the class when `class` is given (null when XP is off, no score on `weekly`/`streak`, or you are not that class) |
 
 ## Quests
 
-Daily and weekly quests (periods are UTC: the day, and Monday 00:00 to Monday 00:00). Progress is computed from your real activity; a claim pays flat XP (no class or skill modifiers) once per period.
+Daily, weekly and monthly quests (periods are UTC: the day; Monday 00:00 to Monday 00:00; the 1st to the 1st). Progress is computed from your real activity; a claim pays flat XP (no class or skill modifiers) once per period. Exactly one of the four rotating weekly quests (`WEEKLY_ROT_A`..`D`, chosen by ISO week number mod 4) is listed and claimable each week; the other three answer `404` and are not listed. `BOSS_COMPLETE_50` is the monthly boss.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET 🔒 | `/api/quests` | — | `{quests:[{key, name, emoji, description, period: "daily"\|"weekly", target, reward, progress, claimed, claimable, periodStart, resetsAt}]}` |
+| GET 🔒 | `/api/quests` | — | `{quests:[{key, name, emoji, description, period: "daily"\|"weekly"\|"monthly", rotating, target, reward, progress, claimed, claimable, periodStart, resetsAt}]}` |
 | POST 🔒 | `/api/quests/:key/claim` | — | `{success, key, name, reward, balance, level, leveledUp, newAchievements}`. `400` if unfinished, `409` if already claimed this period, `404` for an unknown key, `403` when XP is off. |
+
+## Focus sessions
+
+A server-timed work timer. The server measures the time; the client only says start and finish. All routes are 🔒.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/focus` | — | `{active: {sessionId, startedAt, minutes, endsAt}\|null, today: {sessions, xp, remainingSessions, remainingXP}, config: {minMinutes, maxMinutes, xpPerMinute, xpPerDay, sessionsPerDay}}` |
+| POST | `/api/focus/start` | `{minutes: integer 10–90}` | `{success, sessionId, startedAt, minutes, endsAt}`. Cancels any unfinished session. `409` once 8 sessions finished today, `400` for a bad length. |
+| POST | `/api/focus/finish` | `{sessionId}` | `{success, sessionId, state: "finished"\|"cancelled"\|"expired", minutesCredited, xp, capped, balance, level, leveledUp, newAchievements}`. Credits min(planned, elapsed) minutes if at least 10 passed and pays floor(minutes × 0.6) XP under 100 XP a day (`capped: true` when trimmed). Earlier than 10 minutes cancels with no XP; after 3 hours expires with none. `404` for someone else's or an unknown session, `409` if already over. |
+
+## Weekly review
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET 🔒 | `/api/review` | — | `{weekStart, resetsAt, completed, xpEarned, claimed, claimable, streak, reward}` for the current UTC week |
+| POST 🔒 | `/api/review/claim` | — | `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. Once per week (`409`); `400` unless you finished at least one task this week; `403` when XP is off. |
 
 ## Calendar feed
 

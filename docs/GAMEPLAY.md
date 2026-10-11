@@ -8,8 +8,12 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 2. [How XP is calculated](#2-how-xp-is-calculated)
 3. [Classes](#3-classes)
 4. [Skills](#4-skills)
-5. [Daily reward](#5-daily-reward) (and streak freezes)
+5. [Daily reward](#5-daily-reward) (and streak freezes, streak chests)
    - [Quests](#5b-quests)
+   - [Bonus XP sources](#5c-bonus-xp-sources)
+   - [Focus sessions](#5d-focus-sessions)
+   - [Weekly review](#5e-weekly-review)
+   - [Prestige](#5f-prestige)
 6. [Achievements](#6-achievements)
 7. [Games](#7-games)
 8. [Limits and anti-farming](#8-limits-and-anti-farming)
@@ -220,10 +224,11 @@ There are 62 skills in 12 trees (Default plus the eleven classes).
   - With Unstoppable, the streak always continues.
   - Otherwise the streak resets to 1.
 - **XP** = class and skill modifiers applied to 100 (Momentum uses your streak before this claim), plus min((streak − 1) × 5, 50), plus Early Bird (10 per level), plus Daily Surprise (15% chance of +50).
+- **Streak chests:** the claim that takes your streak to **7, 14 or 30** days also pays a flat **+100, +250 or +600 XP** (source `streak_chest`). A chest pays once per streak run: if the streak breaks and you climb to 7 again, you earn it again, but the same run never pays a milestone twice. The claim's result reports the Daily Surprise (`surpriseBonus`) and the chest (`chest: {streak, xp}`).
 
 ### Leaderboard boards
 
-The leaderboard defaults to **lifetime XP**, so buying a class or skill never lowers your rank. Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins and quests since Monday 00:00 UTC; bets and refunds don't count), **daily streak** (a streak whose claim window has passed shows as 0 instead of lingering until your next claim), and **current balance**. Any board can be filtered by class, and your own rank respects that filter.
+The leaderboard defaults to **lifetime XP** (the never-reset total, so buying a class or skill never lowers your rank and prestiging doesn't either). Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins, quests, the bonus sources, focus sessions and the weekly review since Monday 00:00 UTC; bets and refunds don't count), **daily streak** (a streak whose claim window has passed shows as 0 instead of lingering until your next claim), and **current balance**. Any board can be filtered by class, and your own rank respects that filter.
 
 ### Streak freeze
 
@@ -231,7 +236,7 @@ A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price i
 
 ## 5b. Quests
 
-Five quests, with periods in UTC (daily: the UTC day; weekly: Monday 00:00 to Monday 00:00). Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers).
+Daily, weekly and monthly quests, with periods in UTC (daily: the UTC day; weekly: Monday 00:00 to Monday 00:00; monthly: the 1st to the 1st). Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers).
 
 | Quest | Period | Goal | Reward |
 |---|---|---|---|
@@ -240,8 +245,57 @@ Five quests, with periods in UTC (daily: the UTC day; weekly: Monday 00:00 to Mo
 | 🗒️ Planner | Daily | Add 3 tasks | 15 XP |
 | 🛡️ Weekly Warrior | Weekly | Complete 15 tasks | 120 XP |
 | 📆 Regular | Weekly | Claim the daily reward on 5 days | 80 XP |
+| 🐉 Monthly Boss | Monthly | Complete 50 tasks this month | 400 XP |
 
-What counts: a task counts toward the completion quests once, at the moment it is first completed (the same moment its completion XP is paid), so un-checking and re-checking never moves it into a new period. *Heavy Lifter* uses the task's priority at that moment, so raising it afterwards does not qualify. Imported tasks and the next copy a repeating task creates never count towards any quest (adds or completions). A progress reset clears your claims.
+**Rotating weekly quest.** Besides the fixed weekly quests, exactly one quest from a pool of four is live each ISO week (the ISO week number mod 4 picks it, so the pool cycles every four weeks). The other three are neither listed nor claimable that week.
+
+| Quest | Goal | Reward |
+|---|---|---|
+| 🌅 Early Riser | Finish 5 tasks before their due date | 60 XP |
+| 🧹 Tidy Up | Clear 2 lists (a list of 3+ tasks whose last task you finish; each list counts once) | 60 XP |
+| 🪣 Spring Cleaning | Complete 10 overdue tasks | 80 XP |
+| 🗓️ Planner Pro | Add 10 tasks with due dates | 50 XP |
+
+What counts: a task counts toward the completion quests once, at the moment it is first completed (the same moment its completion XP is paid), so un-checking and re-checking never moves it into a new period. *Heavy Lifter* uses the task's priority at that moment, so raising it afterwards does not qualify. Imported tasks and the next copy a repeating task creates never count towards any quest (adds or completions). *Early Riser* and *Spring Cleaning* use whether the task was early or overdue **at its first completion**, so editing the due date afterwards changes nothing. A progress reset clears your claims.
+
+## 5c. Bonus XP sources
+
+Every source below is **flat XP** (no class or skill modifiers, except the prestige multiplier on class-modified XP), is paid in its own `xp_transactions` source, counts for the weekly board, and has a cap. Task bonuses are paid only on a task's **first, paid completion** (so un-checking and re-checking pays nothing, and neither does a completion that hit the 50-a-day cap) and never for imported tasks or auto-created repeat copies. They are listed in the completion result as `bonuses: [{key, label, xp}]`.
+
+| Source (`xp_transactions.source`) | Amount | Cap |
+|---|---|---|
+| `first_of_day` | +10 for the first task you complete each UTC day | Once per day |
+| `list_cleared` | +25 when your completion leaves a list of 3+ top-level tasks all done | Once per list, 5 lists a day |
+| `early_finish` | +5 per day early (max +20 per task) for a task with a due date | Shares 100 XP a day with `overdue_clear` |
+| `overdue_clear` | +10 for completing an overdue task | Shares 100 XP a day with `early_finish` |
+| `subtasks_done` | +10 when you finish the last open subtask of a parent | Once per parent, 10 XP a day |
+| `streak_chest` | +100 / +250 / +600 at a 7 / 14 / 30 day streak ([daily reward](#5-daily-reward)) | Once per streak run |
+| `achievement_reward` | +25 for each newly unlocked achievement | Each achievement unlocks once |
+| `habit_bonus` | +2 per step of a repeating task's habit streak, from a streak of 2 (max +20 per completion) | 60 XP a day |
+| `focus_session` | floor(minutes × 0.6) per [focus session](#5d-focus-sessions) | 100 XP and 8 sessions a day |
+| `weekly_review` | +40 ([weekly review](#5e-weekly-review)) | Once per week |
+
+**Achievement rewards** are paid in the transaction that unlocks the achievement. The XP can itself unlock an XP or level achievement, which pays in turn; the check repeats until nothing new unlocks (it always ends, because every achievement unlocks once). With XP off, achievements still unlock but pay nothing.
+
+**Habit streaks.** A repeating task carries a `habit_streak`: finishing it on or before its due date adds one to the next copy, finishing it late resets it to 0. Finishing a copy a whole recurrence period early (daily: a day early, weekly: 7 days, monthly: 28) neither adds nor resets, and pays nothing, so ticking copies off the moment they appear cannot grow a streak.
+
+## 5d. Focus sessions
+
+A server-timed work timer. `POST /api/focus/start {minutes}` (10 to 90) starts a session and `POST /api/focus/finish {sessionId}` ends it. The server credits **min(planned, elapsed) real minutes** and only when at least 10 minutes passed; the payout is `floor(minutes × 0.6)` XP. Finishing sooner than 10 minutes cancels the session with no XP, and a session left running for more than 3 hours expires with none. Each session settles once, starting a new session cancels the unfinished one, and a day pays at most **100 XP across 8 sessions** (the ninth start is refused).
+
+## 5e. Weekly review
+
+Once per UTC week (Monday to Monday) you can claim **+40 XP** after finishing at least one task that week (first completions only; imported and auto-created copies don't count). `GET /api/review` shows the week's finished tasks, the XP earned and whether the review is claimable; `POST /api/review/claim` pays it.
+
+## 5f. Prestige
+
+At **level 30** you can prestige (`POST /api/user/prestige` with `{"confirm":"PRESTIGE"}`, at most 10 times). It **resets** your balance, level (back to 1), class (back to Default), class ownership, skills, class counters and streak freezes. It **keeps** your achievements, quest claims, tasks, daily streak and spending history. Each prestige adds a permanent **+2% XP multiplier** (up to +20%) to class-modified XP and gives you a title:
+
+| Prestiges | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Title | Veteran | Seasoned | Champion | Elite | Master | Grandmaster | Legend | Mythic | Ascendant | Eternal |
+
+Level comes from `lifetime_xp`, so prestige resets it; the never-reset `lifetime_xp_total` feeds the XP achievements and the lifetime leaderboard, so neither moves. The multiplier is added to your other multipliers, so on small amounts the extra XP rounds down (10 base XP stays 10 until about +5%).
 
 ## 6. Achievements
 
@@ -305,7 +359,17 @@ A run must be started on the server before playing. A score above `seconds × ra
 | Rewarded task additions per UTC day | 50 |
 | Rewarded task completions per UTC day | 50 (and once per task, ever) |
 | Streak freezes held | 3 (5 with Freeze Cache) |
-| Quest claims | Once per quest per period |
+| Quest claims | Once per quest per period (daily, weekly or monthly) |
+| First-of-day bonus | Once per UTC day |
+| List-cleared bonus | Once per list, 5 a day |
+| Early-finish + overdue-clear bonuses | 100 XP a day together |
+| Subtasks-done bonus | Once per parent, 10 XP a day |
+| Habit bonus | 20 XP per completion, 60 XP a day |
+| Focus sessions | 10 to 90 minutes each, 100 XP and 8 sessions a day, one active session |
+| Weekly review | Once per UTC week |
+| Streak chests | Once per streak run (7, 14, 30 days) |
+| Achievement rewards | 25 XP, once per achievement |
+| Prestige | Level 30, at most 10 times |
 | Import / export | Imports never grant XP, counters or achievements |
 | Free-game XP (RPS + Hangman + arcade) per UTC day | 500 |
 | Cooldown between RPS and Hangman rounds | 3 seconds |

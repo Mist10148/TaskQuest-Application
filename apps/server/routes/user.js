@@ -128,7 +128,6 @@ router.get(
     })
 );
 
-// Destructive: requires {"confirm":"RESET"} in the body.
 router.get(
     '/prestige',
     asyncRoute(async (req, res) => {
@@ -145,6 +144,7 @@ router.post(
     })
 );
 
+// Destructive: requires {"confirm":"RESET"} in the body.
 router.post(
     '/reset',
     asyncRoute(async (req, res) => {

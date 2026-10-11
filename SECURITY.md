@@ -90,6 +90,14 @@ This monorepo was created **without importing either history**, and `.gitignore`
 | **Dev-only dependency advisories** in the Tailwind CSS 3 toolchain (`braces`, `micromatch`, `chokidar`, `postcss-selector-parser`) | Build time only; nothing is shipped to users or servers | Tracked in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Tailwind 4 migration). |
 | **Single shared database user** for both apps | A compromise of either app reaches all data | Use `MIGRATE_ON_START=false` with a DML-only user, and restrict network access to the DB. |
 
+### Known residual risks
+
+These are accepted, bounded and documented rather than fixed:
+
+- **Offline arcade solvers.** A run is verified by replaying its recorded inputs on the server, so a script that solves the game offline can submit a perfect, valid recording. The damage is bounded by the per-run payout, the cooldown and the shared free-game cap (500 XP a day across all free games), not by detection.
+- **Time zone hopping.** The time zone decides when a user's day (and so the daily caps) reset. Changing it is limited to once per 24 hours, so moving the zone back and forth can open one extra capped day now and then; this is worth about 70 XP a day at most.
+- **Invitation name probing.** Inviting a name answers `404` when no one with that name has used TaskQuest and a different result (created, `409` already invited or already a member, or `400` when the list or party is full) when they have. So a name's existence can be probed, at the cost of the invitation rate limit and the 30-a-day send limit; no ID, role or list membership of the named person is revealed. There is no opt-out of invitations yet.
+
 ## 5. Reporting a vulnerability
 
 Please **do not open a public issue** for security problems.

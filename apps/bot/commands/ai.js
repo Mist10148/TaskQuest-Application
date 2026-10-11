@@ -84,7 +84,8 @@ async function assertAllowed(discordId) {
 /** The quest option is a list id (picked from autocomplete) or a typed name. */
 async function resolveListId(discordId, value) {
     if (!value) throw new TaskQuestError('VALIDATION', 'Pick a quest with the `quest` option.', 400);
-    const lists = await tasks.getLists(discordId);
+    // The AI only ever sees the user's own quests; lists shared with them are not offered.
+    const lists = (await tasks.getLists(discordId)).filter((l) => l.is_owner !== false);
     const name = value.trim().toLowerCase();
     // Autocomplete sends the id; a typed value is a name (which may itself be all digits, e.g. "2026").
     const match = lists.find((l) => l.name.toLowerCase() === name) || lists.find((l) => String(l.id) === value.trim());
@@ -208,7 +209,7 @@ async function autocomplete(interaction) {
         const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
         return await interaction.respond(
             lists
-                .filter((l) => l.name.toLowerCase().includes(q))
+                .filter((l) => l.is_owner !== false && l.name.toLowerCase().includes(q))
                 .slice(0, 25)
                 .map((l) => ({ name: l.name.slice(0, 100), value: String(l.id) }))
         );

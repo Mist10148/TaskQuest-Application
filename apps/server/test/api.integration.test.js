@@ -933,7 +933,8 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const view = await J('GET', '/api/parties', 'mem');
         assert.deepEqual(view.body.party.members.map((m) => [m.name, m.count]), [['api_party_own', 0], ['api_party_mem', 0]]);
         for (const id of Object.values(ids)) assert.equal(view.text.includes(id), false, 'no Discord ID in the party');
-        assert.equal(view.body.party.target, 24);
+        assert.equal(view.body.party.target, 12, 'nobody finished a task yet: one member worth');
+        assert.equal(view.body.party.minToClaim, 6);
         assert.equal(view.body.party.claimable, false);
         assert.equal((await J('POST', '/api/parties/claim', 'mem')).status, 400, 'not finished');
         assert.equal((await J('POST', '/api/parties/claim', 'out')).status, 404);
@@ -954,6 +955,20 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal(claim.body.xp, 60);
         assert.equal((await J('POST', '/api/parties/claim', 'own')).status, 409);
         assert.equal((await J('GET', '/api/parties', 'own')).body.party.claimed, true);
+
+        // The owner removes a member by the opaque key; nobody else can, not even oneself.
+        const key = (name) => view.body.party.members.find((m) => m.name === name).memberKey;
+        assert.match(key('api_party_mem'), /^[a-f0-9]{12}$/);
+        assert.equal((await J('DELETE', `/api/parties/members/${key('api_party_mem')}`, 'mem')).status, 403, 'only the owner removes people');
+        assert.equal((await J('DELETE', `/api/parties/members/${key('api_party_own')}`, 'own')).status, 400, 'the owner disbands instead');
+        assert.equal((await J('DELETE', '/api/parties/members/not-a-key', 'own')).status, 400);
+        assert.equal((await J('DELETE', '/api/parties/members/ffffffffffff', 'own')).status, 404);
+        assert.equal((await J('DELETE', `/api/parties/members/${key('api_party_mem')}`, 'out')).status, 404, 'not in a party');
+        assert.equal((await J('DELETE', `/api/parties/members/${key('api_party_mem')}`, 'own')).status, 200);
+        assert.equal((await J('GET', '/api/parties', 'mem')).body.party, null);
+        assert.equal((await J('DELETE', `/api/parties/members/${key('api_party_mem')}`, 'own')).status, 404, 'already gone');
+        const back = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
+        assert.equal((await J('POST', `/api/parties/invites/${back.body.id}/accept`, 'mem')).status, 200);
 
         // Leaving, then disbanding.
         assert.equal((await J('POST', '/api/parties/leave', 'mem')).status, 200);

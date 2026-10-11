@@ -32,3 +32,10 @@ export function remainingLabel(progress: number, target: number): string {
   const left = Math.max(0, target - progress);
   return left === 0 ? "Target reached" : `${left} to go`;
 }
+
+/** Only the owner removes people, and never themselves (the owner disbands instead). */
+export const canKick = (viewerIsOwner: boolean, member: { isOwner: boolean; isYou: boolean }): boolean =>
+  viewerIsOwner && !member.isOwner && !member.isYou;
+
+/** Tasks still to finish yourself before the reward can be claimed, 0 when you have done your share. */
+export const ownShareLeft = (yourCount: number, minToClaim: number): number => Math.max(0, minToClaim - Math.max(0, yourCount));

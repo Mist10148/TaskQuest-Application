@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canInvite, canLeave, progressPercent, remainingLabel, seatsLabel, seatsLeft } from "./party";
+import { canInvite, canKick, canLeave, ownShareLeft, progressPercent, remainingLabel, seatsLabel, seatsLeft } from "./party";
 
 describe("party helpers", () => {
   it("computes the progress percentage, capped and rounded down", () => {
@@ -34,5 +34,20 @@ describe("party helpers", () => {
     expect(remainingLabel(10, 24)).toBe("14 to go");
     expect(remainingLabel(24, 24)).toBe("Target reached");
     expect(remainingLabel(30, 24)).toBe("Target reached");
+  });
+
+  it("lets only the owner remove somebody else", () => {
+    expect(canKick(true, { isOwner: false, isYou: false })).toBe(true);
+    expect(canKick(true, { isOwner: true, isYou: true })).toBe(false);
+    expect(canKick(true, { isOwner: false, isYou: true })).toBe(false);
+    expect(canKick(false, { isOwner: false, isYou: false })).toBe(false);
+  });
+
+  it("says how many tasks are left of your own share", () => {
+    expect(ownShareLeft(0, 6)).toBe(6);
+    expect(ownShareLeft(4, 6)).toBe(2);
+    expect(ownShareLeft(6, 6)).toBe(0);
+    expect(ownShareLeft(9, 6)).toBe(0);
+    expect(ownShareLeft(-1, 6)).toBe(6);
   });
 });

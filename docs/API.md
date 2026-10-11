@@ -140,15 +140,16 @@ All routes are 🔒. A user is in at most one party (up to 6 people, the owner i
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, target, progress, reward, members:[{name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. |
+| GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, minToClaim, yourCount, target, progress, reward, members:[{memberKey, name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. |
 | POST | `/api/parties` | `{name (1–40)}` | `201` the new party in the shape above. `409` if you are already in one. |
 | POST | `/api/parties/invites` | `{username, dryRun?}` | `201 {id, inviteeName, expiresAt}`, or with `dryRun: true` `200 {name, avatarUrl}` and nobody is invited. Owner only (`403`); `409` for someone already in a party or already invited, `400` when the party is full (6, pending invitations included). |
 | DELETE | `/api/parties/invites/:id` | — | Withdraw a pending invitation (owner). |
 | POST | `/api/parties/invites/:id/accept` | — | `{accepted:true, party:{id,name}}`. `409` if you are already in a party or the invitation is no longer open. |
 | POST | `/api/parties/invites/:id/decline` | — | `{accepted:false}` |
 | POST | `/api/parties/leave` | — | `{success:true}`. `403` for the owner (disband instead). |
+| DELETE | `/api/parties/members/:memberKey` | — | Owner only: remove a member, addressed by the opaque `memberKey` from the status. `403` for a non-owner, `400` for yourself (disband instead), `404` for an unknown key or someone who is not in your party. |
 | DELETE | `/api/parties` | — | Disband the party for everyone (owner only). |
-| POST | `/api/parties/claim` | — | `{success:true, weekStart, xp, balance, level, leveledUp, newAchievements}`. Flat +60 XP, once per person per week; `400` while the quest is unfinished, `409` if you already claimed a party reward this week, `403` when XP is off. |
+| POST | `/api/parties/claim` | — | `{success:true, weekStart, xp, balance, level, leveledUp, newAchievements}`. Flat +60 XP, once per person per week; `400` while the quest is unfinished or you have not finished at least `minToClaim` (6) tasks yourself since joining, `409` if you already claimed a party reward this week, `403` when XP is off. |
 
 The party quest is described in [GAMEPLAY](GAMEPLAY.md#5h-parties).
 

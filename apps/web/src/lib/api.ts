@@ -168,6 +168,8 @@ export const sharingApi = {
 // ─── Parties: a small group with a shared weekly quest ───────────────────────
 
 export interface PartyMember {
+    /** Opaque key the owner uses to remove this member. */
+    memberKey: string;
     name: string | null;
     /** First completions this member contributed in the current UTC week. */
     count: number;
@@ -187,6 +189,10 @@ export interface PartyStatus {
     weekStart: string;
     resetsAt: string;
     perMember: number;
+    /** Tasks you must finish yourself (since joining, this week) before you may claim the reward. */
+    minToClaim: number;
+    /** Your own counted completions this week since you joined. */
+    yourCount: number;
     target: number;
     progress: number;
     reward: number;
@@ -232,6 +238,7 @@ export const partyApi = {
     accept: (id: number) => post<{ accepted: boolean; party?: { id: number; name: string } }>(`/api/parties/invites/${id}/accept`),
     decline: (id: number) => post<{ accepted: boolean }>(`/api/parties/invites/${id}/decline`),
     leave: () => post<{ success: boolean }>('/api/parties/leave'),
+    kick: (memberKey: string) => del<{ success: boolean }>(`/api/parties/members/${memberKey}`),
     disband: () => del<{ success: boolean }>('/api/parties'),
     claim: () => post<PartyClaimResult>('/api/parties/claim'),
 };

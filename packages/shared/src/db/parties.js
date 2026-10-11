@@ -1,13 +1,16 @@
 /**
  * Parties: up to PARTY_MAX people with one shared weekly quest.
  *
- *   - a user is in at most one party (UNIQUE party_members.discord_id); the owner is a member too and cannot leave, only disband
+ *   - a user is in at most one party (UNIQUE party_members.discord_id); the owner is a member too and cannot leave, only disband;
+ *     the owner can remove (kick) a member, who is addressed by the opaque party_members.public_id
  *   - invitations work like list invitations (db/sharing.js): named by Discord username, one person who has used TaskQuest, 7 days, answered by the invitee;
  *     only the owner invites
  *   - the party quest is derived data, nothing to keep in sync. The week is the global UTC ISO week, the same window for every member
  *     (members live in different time zones, so no personal week could be shared). The target is PARTY_QUEST.PER_MEMBER_TARGET
- *     first completions per member (items with counts_for_quests = 1, by the person who completed them first); progress is the sum
- *     over today's members. When it is reached every member can claim PARTY_QUEST.REWARD flat XP once a week (a quest_claims row
+ *     first completions for each member who finished at least one task themselves this week (items with counts_for_quests = 1, by the
+ *     person who completed them first, made since that member joined; at least one member's worth); progress is the sum over today's
+ *     members (each member's share capped at PER_MEMBER_TARGET). When it is reached every member who finished at least PARTY_QUEST.MIN_OWN_TO_CLAIM tasks themselves can claim
+ *     PARTY_QUEST.REWARD flat XP once a week (a quest_claims row
  *     with the key PARTY_<partyId>; one party reward per person per week, whichever party it came from, so changing parties
  *     cannot pay twice)
  *   - members see each other's display names and this week's counts, nothing else (no XP, levels or lists)
@@ -15,6 +18,7 @@
 
 'use strict';
 
+const crypto = require('crypto');
 const { withTransaction, getPool } = require('./pool');
 const { lockUser } = require('./users');
 const { awardFlat, requireGamification, unlockAchievements } = require('./progression');
@@ -26,6 +30,7 @@ const { LIMITS, PARTY_QUEST } = require('../constants');
 const { questPeriod } = require('../quests');
 
 const DAY_MS = 86400e3;
+const newPublicId = () => crypto.randomBytes(6).toString('hex'); // 12 characters, random, never derived from a Discord ID
 const LIVE = "status = 'pending' AND expires_at > UTC_TIMESTAMP()";
 
 const unwrap = (result) => {
@@ -49,7 +54,7 @@ async function create(userId, name) {
         const user = await lockUser(conn, userId);
         if (await myParty(conn, user.discord_id)) throw errors.conflict('You are already in a party. Leave it first.');
         const [res] = await conn.query('INSERT INTO parties (name, owner_id) VALUES (?, ?)', [partyName, user.discord_id]);
-        await conn.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?)', [res.insertId, user.discord_id]);
+        await conn.query('INSERT INTO party_members (party_id, discord_id, public_id) VALUES (?, ?, ?)', [res.insertId, user.discord_id, newPublicId()]);
         return { id: res.insertId, name: partyName };
     });
 }
@@ -133,7 +138,7 @@ async function respond(userId, inviteId, accept) {
         const [[party]] = await conn.query('SELECT id, name FROM parties WHERE id = ?', [inv.party_id]);
         const [[m]] = await conn.query('SELECT COUNT(*) AS n FROM party_members WHERE party_id = ?', [party.id]);
         if (Number(m.n) >= LIMITS.MAX_PARTY_MEMBERS) throw errors.validation('This party is full.');
-        await conn.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?)', [party.id, user.discord_id]);
+        await conn.query('INSERT INTO party_members (party_id, discord_id, public_id) VALUES (?, ?, ?)', [party.id, user.discord_id, newPublicId()]);
         await conn.query("UPDATE party_invites SET status = 'accepted' WHERE id = ?", [id]);
         // Any other open invitation of mine is moot now.
         await conn.query("UPDATE party_invites SET status = 'declined' WHERE invitee_discord_id = ? AND status = 'pending'", [user.discord_id]);
@@ -162,6 +167,28 @@ async function leave(userId) {
     });
 }
 
+/**
+ * Remove a member from my party (owner only; never myself, the owner disbands instead). The member is addressed by the opaque member key
+ * the status carries (the API), or by Discord ID when the bot already has one from a mention.
+ */
+async function kick(ownerId, target = {}) {
+    return withTransaction(async (conn) => {
+        const party = await lockMyParty(conn, ownerId, { ownerOnly: true });
+        let row;
+        if (target.discordId !== undefined && target.discordId !== null) {
+            [[row]] = await conn.query('SELECT discord_id FROM party_members WHERE party_id = ? AND discord_id = ? FOR UPDATE', [party.id, String(target.discordId)]);
+        } else {
+            const key = String(target.memberKey || '');
+            if (!/^[a-f0-9]{12}$/.test(key)) throw errors.notFound('Member not found.');
+            [[row]] = await conn.query('SELECT discord_id FROM party_members WHERE party_id = ? AND public_id = ? FOR UPDATE', [party.id, key]);
+        }
+        if (!row) throw errors.notFound('Member not found.');
+        if (String(row.discord_id) === String(ownerId)) throw errors.validation('You own this party, so you cannot remove yourself. Disband it instead.');
+        await conn.query('DELETE FROM party_members WHERE party_id = ? AND discord_id = ?', [party.id, row.discord_id]);
+        return true;
+    });
+}
+
 /** Delete the party for everyone (owner only). */
 async function disband(userId) {
     return withTransaction(async (conn) => {
@@ -171,12 +198,15 @@ async function disband(userId) {
     });
 }
 
-/** First completions the person made in the window (items counted for quests), on any list. */
-async function weeklyCount(conn, discordId, period) {
+/**
+ * First completions the person made in the window (items counted for quests), on any list, and only since they joined the party:
+ * work done before joining (or in another party) was not done for this one.
+ */
+async function weeklyCount(conn, discordId, period, joinedAt) {
     const [[row]] = await conn.query(
         `SELECT COUNT(*) AS n FROM items i
-         WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ?`,
-        [discordId, discordId, period.startsAt, period.endsAt]
+         WHERE ${actorSql('first_completed_by')} AND i.counts_for_quests = 1 AND i.first_completed_at >= ? AND i.first_completed_at < ? AND i.first_completed_at >= ?`,
+        [discordId, discordId, period.startsAt, period.endsAt, joinedAt]
     );
     return Number(row.n);
 }
@@ -184,20 +214,23 @@ async function weeklyCount(conn, discordId, period) {
 async function quest(conn, party, now) {
     const period = questPeriod('weekly', now, null); // one UTC week for the whole party
     const [rows] = await conn.query(
-        `SELECT m.discord_id, u.discord_username FROM party_members m JOIN users u ON u.discord_id = m.discord_id
+        `SELECT m.discord_id, m.public_id, m.joined_at, u.discord_username FROM party_members m JOIN users u ON u.discord_id = m.discord_id
          WHERE m.party_id = ? ORDER BY (m.discord_id = ?) DESC, m.joined_at, u.discord_username`,
         [party.id, party.owner_id]
     );
     const members = [];
-    for (const r of rows) members.push({ discord_id: String(r.discord_id), name: r.discord_username, count: await weeklyCount(conn, r.discord_id, period) });
-    const target = PARTY_QUEST.PER_MEMBER_TARGET * members.length;
-    const progress = members.reduce((n, m) => n + m.count, 0);
+    for (const r of rows) members.push({ discord_id: String(r.discord_id), memberKey: r.public_id, name: r.discord_username, count: await weeklyCount(conn, r.discord_id, period, r.joined_at) });
+    // The target grows only with the members who actually took part, so an idle seat or a spare account does not move it.
+    const active = members.filter((m) => m.count >= 1).length;
+    const target = PARTY_QUEST.PER_MEMBER_TARGET * Math.max(1, active);
+    // One person's contribution is capped at their own share, so a single member cannot carry the whole party.
+    const progress = members.reduce((n, m) => n + Math.min(m.count, PARTY_QUEST.PER_MEMBER_TARGET), 0);
     return { period, members, target, progress };
 }
 
 /**
  * The party I am in with this week's quest, or null. Members are display names and counts, in the order they joined.
- * @returns {Promise<null | { party: { id: number, name: string, isOwner: boolean }, weekStart: string, resetsAt: string, perMember: number, target: number, progress: number, reward: number, members: Array<{ name: string|null, count: number, isYou: boolean, isOwner: boolean }>, invites: Array, limit: number, reached: boolean, claimed: boolean, claimable: boolean }>}
+ * @returns {Promise<null | { party: { id: number, name: string, isOwner: boolean }, weekStart: string, resetsAt: string, perMember: number, minToClaim: number, yourCount: number, target: number, progress: number, reward: number, members: Array<{ memberKey: string, name: string|null, count: number, isYou: boolean, isOwner: boolean }>, invites: Array, limit: number, reached: boolean, claimed: boolean, claimable: boolean }>}
  */
 async function status(userId, now = new Date()) {
     const conn = await getPool().getConnection();
@@ -211,6 +244,8 @@ async function status(userId, now = new Date()) {
         const [[user]] = await conn.query('SELECT gamification_enabled FROM users WHERE discord_id = ?', [me]);
         const isOwner = String(party.owner_id) === me;
         const reached = q.progress >= q.target;
+        const mine = q.members.find((m) => m.discord_id === me);
+        const yourCount = mine ? mine.count : 0;
         let invites = [];
         if (isOwner) {
             const [rows] = await conn.query(
@@ -228,12 +263,14 @@ async function status(userId, now = new Date()) {
             target: q.target,
             progress: q.progress,
             reward: PARTY_QUEST.REWARD,
-            members: q.members.map((m) => ({ name: m.name, count: m.count, isYou: m.discord_id === me, isOwner: m.discord_id === String(party.owner_id) })),
+            minToClaim: PARTY_QUEST.MIN_OWN_TO_CLAIM,
+            yourCount,
+            members: q.members.map((m) => ({ memberKey: m.memberKey, name: m.name, count: m.count, isYou: m.discord_id === me, isOwner: m.discord_id === String(party.owner_id) })),
             invites,
             limit: LIMITS.MAX_PARTY_MEMBERS,
             reached,
             claimed: Boolean(claim) || Boolean(anyClaim),
-            claimable: reached && !claim && !anyClaim && Boolean(user && user.gamification_enabled)
+            claimable: reached && yourCount >= PARTY_QUEST.MIN_OWN_TO_CLAIM && !claim && !anyClaim && Boolean(user && user.gamification_enabled)
         };
     } finally {
         conn.release();
@@ -249,6 +286,10 @@ async function claim(userId, now = new Date()) {
         if (!party) throw errors.notFound('You are not in a party.');
         const q = await quest(conn, party, now);
         if (q.progress < q.target) throw errors.validation(`The party quest isn't finished yet (${q.progress}/${q.target}).`);
+        const own = q.members.find((m) => m.discord_id === String(user.discord_id));
+        if (!own || own.count < PARTY_QUEST.MIN_OWN_TO_CLAIM) {
+            throw errors.validation(`Finish at least ${PARTY_QUEST.MIN_OWN_TO_CLAIM} tasks yourself since joining this party this week to claim its reward (you have ${own ? own.count : 0}).`);
+        }
         const [[already]] = await conn.query("SELECT 1 AS x FROM quest_claims WHERE discord_id = ? AND LEFT(quest_key, 6) = 'PARTY_' AND period_start = ?", [user.discord_id, q.period.start]);
         if (already) throw errors.conflict('You already claimed a party reward this week.');
         const [res] = await conn.query('INSERT IGNORE INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?)', [
@@ -272,4 +313,4 @@ async function claim(userId, now = new Date()) {
     });
 }
 
-module.exports = { create, invite, listInvites, respond, revoke, leave, disband, status, claim };
+module.exports = { create, invite, listInvites, respond, revoke, leave, kick, disband, status, claim };

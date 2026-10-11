@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, CheckCircle2, Crown, Gift, Loader2, LogOut, Mail, Send, Shield, Trash2, X } from "lucide-react";
+import { Check, CheckCircle2, Crown, Gift, Loader2, LogOut, Mail, Send, Shield, Trash2, UserMinus, X } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
@@ -8,13 +8,13 @@ import { InviteConfirmDialog } from "@/components/feedback/InviteConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  useClaimParty, useCreateParty, useDisbandParty, useInvitePartyPreview, useInviteToParty, useLeaveParty, useParty, useRespondToPartyInvite, useRevokePartyInvite,
+  useClaimParty, useCreateParty, useDisbandParty, useInvitePartyPreview, useInviteToParty, useKickPartyMember, useLeaveParty, useParty, useRespondToPartyInvite, useRevokePartyInvite,
 } from "@/hooks/useApi";
 import { useCountdown } from "@/hooks/useCountdown";
 import { formatLongCountdown } from "@/lib/countdown";
-import { canInvite, canLeave, progressPercent, remainingLabel, seatsLabel, seatsLeft } from "@/lib/party";
+import { canInvite, canKick, canLeave, ownShareLeft, progressPercent, remainingLabel, seatsLabel, seatsLeft } from "@/lib/party";
 import { shortDate } from "@/lib/stats";
-import type { InvitePreview, MyPartyInvite, PartyStatus } from "@/lib/api";
+import type { InvitePreview, MyPartyInvite, PartyMember, PartyStatus } from "@/lib/api";
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
@@ -105,8 +105,9 @@ const CreateParty = () => {
 
 const RulesNote = ({ status }: { status: PartyStatus }) => (
   <p className="text-xs text-foreground-muted">
-    A party has up to {status.limit} people, owner included, and you can be in one at a time. Each member&apos;s first {status.perMember} task
-    completions of the week count towards the shared target; the week resets on Monday 00:00 UTC. Members see names and this week&apos;s counts only.
+    A party has up to {status.limit} people, owner included, and you can be in one at a time. The target is {status.perMember} tasks for each member who
+    finished at least one task this week; each member&apos;s first {status.perMember} task completions since joining count towards it, and you need at
+    least {status.minToClaim} of your own to claim the reward. The week resets on Monday 00:00 UTC. Members see names and this week&apos;s counts only.
   </p>
 );
 
@@ -169,7 +170,9 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
   const claim = useClaimParty();
   const revoke = useRevokePartyInvite();
   const leave = useLeaveParty();
+  const kick = useKickPartyMember();
   const disband = useDisbandParty();
+  const [toKick, setToKick] = useState<PartyMember | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [confirmDisband, setConfirmDisband] = useState(false);
   const left = useCountdown(Date.parse(status.resetsAt), 60_000);
@@ -183,7 +186,9 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
     ? "You claimed this week's party reward. A new quest opens on Monday."
     : status.claimable
       ? "Target reached! Claim your reward before the week resets."
-      : `Finish tasks together: ${remainingLabel(status.progress, status.target).toLowerCase()}.`;
+      : status.reached
+        ? `Target reached, but you need ${status.minToClaim} tasks of your own to claim (${ownShareLeft(status.yourCount, status.minToClaim)} to go).`
+        : `Finish tasks together: ${remainingLabel(status.progress, status.target).toLowerCase()}.`;
 
   return (
     <div className="space-y-4">
@@ -231,14 +236,19 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
           Members <span className="font-normal text-foreground-muted">({seatsLabel(status.members.length, status.limit)})</span>
         </h2>
         <ul className="divide-y divide-border rounded-lg border border-border">
-          {status.members.map((m, i) => (
-            <li key={`${m.name ?? "member"}-${i}`} className="flex flex-wrap items-center gap-2 p-3" data-testid="party-member">
+          {status.members.map((m) => (
+            <li key={m.memberKey} className="flex flex-wrap items-center gap-2 p-3" data-testid="party-member">
               <span className="min-w-0 flex-1 truncate font-medium">
                 {m.isOwner && <Crown className="mr-1.5 inline h-4 w-4 text-xp" aria-label="Owner" />}
                 {m.name ?? "Unknown adventurer"}
                 {m.isYou && <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary-text">You</span>}
               </span>
               <span className="text-sm text-foreground-muted" aria-label={`${m.count} of ${status.perMember} tasks`}>{m.count} / {status.perMember}</span>
+              {canKick(isOwner, m) && (
+                <Button variant="ghost" size="sm" className="text-destructive-text hover:bg-destructive/10" aria-label={`Remove ${m.name ?? "member"} from the party`} onClick={() => setToKick(m)}>
+                  <UserMinus className="h-4 w-4" aria-hidden />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
@@ -287,6 +297,17 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
         )}
       </div>
 
+      <ConfirmDialog
+        open={toKick !== null}
+        onOpenChange={(o) => !o && setToKick(null)}
+        title="Remove this member?"
+        description={<>{toKick?.name ?? "This person"} will leave "{status.party.name}" and their count stops adding to its quest. You can invite them again later.</>}
+        confirmLabel="Remove"
+        onConfirm={() => {
+          if (toKick) kick.mutate(toKick.memberKey, { onSuccess: () => toast.success(`${toKick.name ?? "The member"} was removed`) });
+          setToKick(null);
+        }}
+      />
       <ConfirmDialog
         open={confirmLeave}
         onOpenChange={setConfirmLeave}

@@ -2744,12 +2744,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const day = new Date();
         let st = await PA.status(u.two, day);
         assert.deepEqual(st.members.map((m) => [m.name, m.count, m.isYou, m.isOwner]), [['pty_own', 0, false, true], ['pty_two', 0, true, false]]);
-        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET * 2);
+        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET, 'nobody has finished a task yet: the target is one member\'s worth, idle seats do not raise it');
         assert.equal(st.reward, PARTY_QUEST.REWARD);
         assert.equal(st.party.isOwner, false);
         assert.deepEqual(st.invites, [], 'only the owner sees pending invitations');
         assert.equal(JSON.stringify(st).match(/\d{15,}/), null, 'no Discord ID in the party status');
-        assert.deepEqual(Object.keys(st.members[0]).sort(), ['count', 'isOwner', 'isYou', 'name'], 'nothing but a name and a count per member');
+        assert.deepEqual(Object.keys(st.members[0]).sort(), ['count', 'isOwner', 'isYou', 'memberKey', 'name'], 'nothing but a name, a count and an opaque key per member');
         await assert.rejects(PA.claim(u.two, day), { code: 'VALIDATION', message: /isn't finished/ });
 
         // Progress is the sum of first completions (counted for quests) by the members, in the UTC week.
@@ -2801,12 +2801,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // Changing parties does not pay a second reward in the same week.
         await PA.leave(u.two);
         await assert.rejects(PA.leave(u.two), { code: 'NOT_FOUND' });
+        await new Promise((r) => setTimeout(r, 1100)); // timestamps are whole seconds: make sure his work predates the new party
         await PA.create(u.two, 'Solo run');
         const mine = await PA.status(u.two, day);
         assert.equal(mine.members.length, 1);
-        assert.equal(mine.reached, true, 'his 12 completions reach a one-person target');
-        assert.equal(mine.claimed, true, 'but he already claimed a party reward this week');
-        await assert.rejects(PA.claim(u.two, day), { code: 'CONFLICT', message: /already claimed/ });
+        assert.equal(mine.reached, false, 'his 12 completions were made before he joined this party, so they do not count for it');
+        assert.equal(mine.claimed, true, 'and he already claimed a party reward this week');
+        await assert.rejects(PA.claim(u.two, day), { code: 'VALIDATION', message: /isn't finished/ });
         await PA.disband(u.two);
         assert.equal(await PA.status(u.two, day), null);
         await assert.rejects(PA.disband(u.two), { code: 'NOT_FOUND' });
@@ -2841,6 +2842,103 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await PA.disband(u.own);
         assert.equal(await PA.status(more[0]), null);
         assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_members WHERE party_id = ?', [party.id]))[0].n, 0);
+    });
+
+    await t.test('party reward: idle seats and spare accounts earn nothing, only work since joining counts, and the owner can remove a member', async () => {
+        const PA = db.parties;
+        const { PARTY_QUEST } = require('../src');
+        const ids = {};
+        for (const [k, n] of Object.entries({ own: 1, a: 2, b: 3, c: 4 })) {
+            ids[k] = `2000000000000011${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(ids[k], { username: `prw_${k}`, handle: `prw_${k}`, avatar: null });
+        }
+        const finish = async (id, n, list) => {
+            const target = list || (await db.tasks.createList(id, { name: `Reward list ${id.slice(-2)} ${Math.random().toString(36).slice(2, 6)}` })).list;
+            for (let k = 0; k < n; k++) {
+                const { item } = await db.tasks.addItem(id, target.id, { name: `t${k}` });
+                await db.tasks.setItemCompleted(id, item.id);
+            }
+            return target;
+        };
+        const join = async (who) => PA.respond(ids[who], (await PA.invite(ids.own, { discordId: ids[who] })).id, true);
+
+        // Work done BEFORE joining does not count for the party.
+        await finish(ids.a, 4);
+        await new Promise((r) => setTimeout(r, 1100)); // timestamps are whole seconds: make sure his work predates the party
+        await PA.create(ids.own, 'Reward crew');
+        await new Promise((r) => setTimeout(r, 1100));
+        await join('a');
+        await join('b');
+        await join('c');
+        let st = await PA.status(ids.own);
+        assert.deepEqual(st.members.map((m) => m.count), [0, 0, 0, 0], 'a\'s 4 earlier completions are from before he joined');
+        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET, 'no active member yet: one member\'s worth');
+
+        // The owner alone does the whole target: idle seats do not raise it, but only the person who did the work may claim.
+        await finish(ids.own, PARTY_QUEST.PER_MEMBER_TARGET);
+        st = await PA.status(ids.own);
+        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET);
+        assert.equal(st.reached, true);
+        assert.equal(st.claimable, true);
+        assert.equal(st.yourCount, PARTY_QUEST.PER_MEMBER_TARGET);
+        for (const idle of ['a', 'b', 'c']) {
+            const mine = await PA.status(ids[idle]);
+            assert.equal(mine.claimable, false, 'a seat that did nothing is not paid for the owner\'s work');
+            await assert.rejects(PA.claim(ids[idle]), { code: 'VALIDATION', message: /Finish at least 6 tasks yourself/ });
+        }
+
+        // A spare account that finishes one task raises the target by a whole member's worth but adds one task of progress, and
+        // cannot claim: the owner is now short of the target. Nothing was claimed or paid.
+        await finish(ids.b, 1);
+        st = await PA.status(ids.own);
+        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET * 2);
+        assert.equal(st.progress, PARTY_QUEST.PER_MEMBER_TARGET + 1);
+        assert.equal(st.reached, false);
+        await assert.rejects(PA.claim(ids.own), { code: 'VALIDATION', message: /isn't finished/ });
+        assert.equal((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE source = 'party_quest' AND discord_id IN (?, ?, ?, ?)", [ids.own, ids.a, ids.b, ids.c]))[0].n, 0);
+
+        // One member cannot carry the party: their share is capped at the per-member target.
+        await finish(ids.own, 20);
+        st = await PA.status(ids.own);
+        assert.equal(st.progress, PARTY_QUEST.PER_MEMBER_TARGET + 1, 'extra tasks beyond the share add nothing');
+        assert.equal(st.reached, false);
+
+        // A real team effort: b finishes the minimum share, a the rest; everybody who did half or more claims, the idle seat cannot.
+        await finish(ids.b, PARTY_QUEST.MIN_OWN_TO_CLAIM - 1); // now 6 in total
+        await finish(ids.a, PARTY_QUEST.PER_MEMBER_TARGET - 4); // 8: target is 36 now (three active members)
+        st = await PA.status(ids.own);
+        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET * 3);
+        assert.equal(st.progress, PARTY_QUEST.PER_MEMBER_TARGET + PARTY_QUEST.MIN_OWN_TO_CLAIM + 8);
+        assert.equal(st.reached, false);
+        await finish(ids.b, PARTY_QUEST.PER_MEMBER_TARGET - PARTY_QUEST.MIN_OWN_TO_CLAIM); // b: 12
+        await finish(ids.a, 4); // a: 12
+        st = await PA.status(ids.own);
+        assert.equal(st.reached, true);
+        assert.equal((await PA.claim(ids.own)).xp, PARTY_QUEST.REWARD);
+        assert.equal((await PA.claim(ids.a)).xp, PARTY_QUEST.REWARD);
+        await assert.rejects(PA.claim(ids.c), { code: 'VALIDATION', message: /Finish at least 6 tasks yourself/ }, 'the idle seat still gets nothing');
+
+        // Removing a member: the owner only, never themselves, by the opaque key; the member loses the seat and the claim.
+        const keyOf = async (who) => (await PA.status(ids.own)).members.find((m) => m.name === `prw_${who}`).memberKey;
+        const keyC = await keyOf('c');
+        assert.match(keyC, /^[a-f0-9]{12}$/);
+        await assert.rejects(PA.kick(ids.a, { memberKey: keyC }), { code: 'FORBIDDEN' }, 'only the owner removes people');
+        await assert.rejects(PA.kick(ids.own, { memberKey: await keyOf('own') }), { code: 'VALIDATION', message: /Disband/ }, 'not yourself');
+        await assert.rejects(PA.kick(ids.own, { memberKey: 'ffffffffffff' }), { code: 'NOT_FOUND' });
+        await assert.rejects(PA.kick(ids.own, { memberKey: 'nope' }), { code: 'NOT_FOUND' });
+        await assert.rejects(PA.kick(ids.c, { memberKey: keyC }), { code: 'FORBIDDEN' }, 'not even themselves: they leave instead');
+        assert.equal(await PA.kick(ids.own, { memberKey: keyC }), true);
+        assert.equal(await PA.status(ids.c), null);
+        await assert.rejects(PA.kick(ids.own, { memberKey: keyC }), { code: 'NOT_FOUND' }, 'already gone');
+        assert.equal((await PA.status(ids.own)).members.length, 3);
+        await assert.rejects(PA.kick(ids.own, { discordId: ids.c }), { code: 'NOT_FOUND' }, 'the bot path by Discord ID reaches only members of my own party');
+        assert.equal(await PA.kick(ids.own, { discordId: ids.b }), true);
+        assert.equal((await PA.status(ids.own)).members.length, 2);
+        // The owner of another party cannot reach into this one.
+        await PA.create(ids.c, 'Other crew');
+        await assert.rejects(PA.kick(ids.c, { memberKey: await keyOf('a') }), { code: 'NOT_FOUND' });
+        await PA.disband(ids.c);
+        await PA.disband(ids.own);
     });
 
 

@@ -610,6 +610,15 @@ export function useLeaveParty() {
     });
 }
 
+export function useKickPartyMember() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (memberKey: string) => partyApi.kick(memberKey),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
+    });
+}
+
 export function useDisbandParty() {
     const qc = useQueryClient();
     return useMutation({

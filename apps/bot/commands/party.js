@@ -5,6 +5,7 @@
  *   /party create name:<name>     start a party (you can be in one at a time)
  *   /party invite user:<@user>    owner only; the invitee gets a DM with Accept / Decline
  *   /party invites                invitations waiting for you (also where a closed-DM invite ends up)
+ *   /party kick user:<@user>      owner only; remove a member
  *   /party leave | /party disband
  *
  * Everything is ephemeral (it shows XP) and goes through db.parties in @taskquest/shared, which enforces who may do what.
@@ -25,6 +26,7 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('create').setDescription('Start a party').addStringOption((o) => o.setName('name').setDescription('Party name').setRequired(true).setMaxLength(40)))
     .addSubcommand((s) => s.setName('invite').setDescription('Invite someone to your party (owner only)').addUserOption((o) => o.setName('user').setDescription('Who to invite (they must have used TaskQuest before)').setRequired(true)))
     .addSubcommand((s) => s.setName('invites').setDescription('Party invitations waiting for you'))
+    .addSubcommand((s) => s.setName('kick').setDescription('Remove a member from your party (owner only)').addUserOption((o) => o.setName('user').setDescription('Who to remove').setRequired(true)))
     .addSubcommand((s) => s.setName('leave').setDescription('Leave your party'))
     .addSubcommand((s) => s.setName('disband').setDescription('Delete your party for everyone (owner only)'));
 
@@ -39,12 +41,21 @@ function render(st) {
         return { embeds: [ui.info('No party yet', 'Start one with **/party create**, or accept an invitation with **/party invites**.')], components: [] };
     }
     const lines = st.members.map((m) => `${m.isOwner ? '👑' : '•'} **${m.name || 'Unknown'}**${m.isYou ? ' (you)' : ''} · ${m.count} this week`);
-    const state = st.claimed ? '✅ claimed' : st.claimable ? '🎁 ready to claim!' : st.reached ? 'done, but the reward is not claimable (XP is off?)' : `${st.progress}/${st.target}`;
+    const ownLeft = Math.max(0, st.minToClaim - st.yourCount);
+    const state = st.claimed
+        ? '✅ claimed'
+        : st.claimable
+          ? '🎁 ready to claim!'
+          : st.reached
+            ? ownLeft > 0
+                ? `done, but you need ${st.minToClaim} tasks of your own to claim (${ownLeft} to go)`
+                : 'done, but the reward is not claimable (XP is off?)'
+            : `${st.progress}/${st.target}`;
     const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle(`🎉 ${st.party.name}`)
         .setDescription(
-            `**Party quest:** finish ${st.perMember} tasks per member together this week · +${st.reward} XP each\n${bar(st.progress, st.target)} ${state}\n\n${lines.join('\n')}`
+            `**Party quest:** finish ${st.perMember} tasks per active member together this week (at least ${st.minToClaim} of your own to claim) · +${st.reward} XP each\n${bar(st.progress, st.target)} ${state}\n\n${lines.join('\n')}`
         )
         .setFooter({ text: 'The week runs Monday to Monday in UTC for everyone. Only the first completion of a task counts.' });
     if (st.invites.length) embed.addFields({ name: 'Waiting for an answer', value: st.invites.map((i) => i.inviteeName).join(', ').slice(0, 1000) });
@@ -108,6 +119,11 @@ async function execute(interaction) {
                 note = '\n-# I could not send them a DM (their DMs are closed), but the invitation is waiting for them in **/party invites**.';
             }
             return await interaction.editReply({ embeds: [ui.success('Invitation sent', `**${inv.inviteeName || target.username}** was invited to **${inv.partyName}**.${note}`)] });
+        }
+        if (sub === 'kick') {
+            const target = interaction.options.getUser('user');
+            await parties.kick(userId, { discordId: target.id });
+            return await interaction.editReply({ embeds: [ui.success('Member removed', `**${target.displayName || target.username}** is no longer in your party.`)] });
         }
         if (sub === 'invites') return await interaction.editReply(invitesView(await parties.listInvites(userId)));
         if (sub === 'leave') {

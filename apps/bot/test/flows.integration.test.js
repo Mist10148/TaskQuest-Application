@@ -684,6 +684,15 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         await party.handleButton(twice);
         assert.match(text(twice.calls.at(-1)), /already claimed/);
 
+        // Removing a member: the owner only, never themselves; the removed person is out and can be invited again.
+        const memTarget = { id: P.mem, username: 'pbot_mem', displayName: 'pbot_mem', bot: false };
+        assert.match(text((await run(P.mem, 'kick', { user: { id: P.own, username: 'pbot_own', bot: false } })).calls.at(-1)), /Only the owner/);
+        assert.match(text((await run(P.own, 'kick', { user: { id: P.own, username: 'pbot_own', displayName: 'pbot_own', bot: false } })).calls.at(-1)), /Disband/);
+        assert.match(text((await run(P.own, 'kick', { user: { id: P.out, username: 'pbot_out', bot: false } })).calls.at(-1)), /Member not found/);
+        assert.match(text((await run(P.own, 'kick', { user: memTarget })).calls.at(-1)), /Member removed/);
+        assert.equal(await db.parties.status(P.mem), null);
+        await db.parties.respond(P.mem, (await db.parties.invite(P.own, { discordId: P.mem })).id, true);
+
         // Leave and disband (the owner cannot leave; the disband asks first).
         assert.match(text((await run(P.own, 'leave')).calls.at(-1)), /Disband/);
         assert.match(text((await run(P.mem, 'leave')).calls.at(-1)), /Left the party/);

@@ -46,7 +46,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `015_timezone_days` | `users.timezone_changed_at` (throttles zone changes now that the zone sets the user's day) |
 | `016_cosmetics` | The `user_cosmetics` table and `users.equipped_title`, `equipped_frame`, `equipped_accent` |
 | `017_web_push` | The `push_subscriptions` table and `users.web_push` |
-| `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled) |
+| `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `party_members.public_id` (opaque member key for removing a member, backfilled randomly) |
 | `020_due_date_set_at` | `items.due_date_set_at` (when the due date was set or last changed; backfilled from `created_at`). Overdue and early effects apply only to a date set at least 24 hours before the completion |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
@@ -142,7 +142,7 @@ A member's own reminder state, so each member is reminded once: `list_reminders(
 
 ### `parties`, `party_members`, `party_invites`
 
-`parties(id, name VARCHAR(40), owner_id FK, created_at)` with a unique key `(owner_id, name)`. `party_members(party_id FK CASCADE, discord_id FK CASCADE, joined_at)`, primary key `(party_id, discord_id)` plus **UNIQUE `(discord_id)`**: one party per user, enforced by the database; the owner is a member too (at most 6, `LIMITS.MAX_PARTY_MEMBERS`). `party_invites` mirrors `list_invites` without a role. The weekly party quest has no table of its own: progress is derived from `items.first_completed_by`, and a claim is a `quest_claims` row with `quest_key = 'PARTY_<partyId>'` and the UTC week's Monday as `period_start` (the service allows one `PARTY_` claim per person per week). A progress reset removes the user's memberships and invitations, and disbands a party they own.
+`parties(id, name VARCHAR(40), owner_id FK, created_at)` with a unique key `(owner_id, name)`. `party_members(party_id FK CASCADE, discord_id FK CASCADE, joined_at, public_id CHAR(12) UNIQUE)` (`public_id` is the random opaque key the owner uses to remove a member; only completions made at or after `joined_at` count for the party), primary key `(party_id, discord_id)` plus **UNIQUE `(discord_id)`**: one party per user, enforced by the database; the owner is a member too (at most 6, `LIMITS.MAX_PARTY_MEMBERS`). `party_invites` mirrors `list_invites` without a role. The weekly party quest has no table of its own: progress is derived from `items.first_completed_by`, and a claim is a `quest_claims` row with `quest_key = 'PARTY_<partyId>'` and the UTC week's Monday as `period_start` (the service allows one `PARTY_` claim per person per week). A progress reset removes the user's memberships and invitations, and disbands a party they own.
 
 ### `achievements`
 

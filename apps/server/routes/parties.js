@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import { asyncRoute, parse, uid } from '../lib/http.js';
 import { inviteLimiter } from '../lib/security.js';
-import { idParam, createPartyBody, partyInviteBody } from '../lib/schemas.js';
+import { idParam, createPartyBody, partyInviteBody, partyMemberKeyParam } from '../lib/schemas.js';
 
 const router = Router();
 
@@ -76,6 +76,16 @@ router.post(
     asyncRoute(async (req, res) => {
         const r = await db.parties.claim(uid(req));
         res.json({ success: true, ...r, newAchievements: r.achievements });
+    })
+);
+
+// The owner removes a member, addressed by the opaque member key from the status.
+router.delete(
+    '/members/:memberKey',
+    asyncRoute(async (req, res) => {
+        const { memberKey } = parse(partyMemberKeyParam, req.params);
+        await db.parties.kick(uid(req), { memberKey });
+        res.json({ success: true });
     })
 );
 

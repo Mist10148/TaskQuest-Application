@@ -355,12 +355,12 @@ A party is a group of up to **6** people (the owner included) with one shared **
 | | |
 |---|---|
 | Window | One global ISO week, **Monday 00:00 UTC to the next Monday**, the same for every member (members live in different time zones, so no personal week could be shared) |
-| Goal | **12 tasks per member**: a party of 3 needs 36 |
-| Progress | The sum of each member's *first completions* in the window (the same tasks that count for quests: imported tasks and auto-created repeats never count, un-checking and re-checking changes nothing). A task counts for the person who completed it, also on a shared list. |
-| Reward | **+60 XP** (flat, no class or skill modifiers) for **every member**, claimed by each of them once the goal is reached (`/party status` → Claim, or the web Party page) |
+| Goal | **12 tasks for each member who finished at least one task themselves this week** (at least one member's worth): a party of 3 where all three took part needs 36, a seat that did nothing does not raise it |
+| Progress | The sum of each member's *first completions* in the window **since they joined this party** (the same tasks that count for quests: imported tasks and auto-created repeats never count, un-checking and re-checking changes nothing), at most 12 per member, so nobody can carry the party alone. A task counts for the person who completed it, also on a shared list. |
+| Reward | **+60 XP** (flat, no class or skill modifiers) for **every member who finished at least 6 tasks themselves** (half of 12) since joining, claimed by each of them once the goal is reached (`/party status` → Claim, or the web Party page) |
 | Once a week | One party reward per person per week, whichever party it came from, so leaving and joining another party cannot pay twice (the claim is a `quest_claims` row with key `PARTY_<partyId>`) |
 
-The target uses the number of members at the time you look or claim, so the goal grows when someone joins and shrinks when someone leaves. A person with XP turned off sees the quest but cannot claim.
+The target uses the members who have finished a task at the time you look or claim, so the goal grows when someone starts taking part and shrinks when someone leaves or is removed. The owner can remove a member (`/party kick`, the web Party page). A person with XP turned off sees the quest but cannot claim.
 
 ## 6. Achievements
 
@@ -438,7 +438,7 @@ Every "per day" below, the quests, the weekly review and the Stats page use **yo
 | Habit bonus | 20 XP per completion, 60 XP a day |
 | Focus sessions | 10 to 90 minutes each, 100 XP and 8 sessions a day, one active session |
 | Weekly review | Once per week |
-| Party quest | 12 first completions per member in the UTC week; +60 XP once per person per week |
+| Party quest | 12 first completions for each member who took part in the UTC week (at most 12 counted per member, only since joining); +60 XP once per person per week, and only after 6 tasks of their own |
 | List members | 10 people besides the owner (members and pending invitations); 30 invitations a day per person; an invitation lives 7 days |
 | Party members | 6 including the owner, one party per user |
 | Streak chests | Once per streak run (7, 14, 30 days) |

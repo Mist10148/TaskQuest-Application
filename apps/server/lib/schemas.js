@@ -145,6 +145,7 @@ export const inviteBody = z
 export const memberRoleBody = z.object({ role: z.enum(shared.LIST_ROLES) }).strict();
 export const memberKeyParam = z.object({ id: z.coerce.number().int().positive(), memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
 
+export const partyMemberKeyParam = z.object({ memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
 export const createPartyBody = z.object({ name: z.string().trim().min(1).max(TEXT_LIMITS.PARTY_NAME) }).strict();
 export const partyInviteBody = z.object({ username: z.string().trim().min(1).max(100), dryRun: z.boolean().optional() }).strict();
 

@@ -534,10 +534,12 @@ const LIMITS = {
 const LIST_ROLES = ['viewer', 'editor', 'manager'];
 
 /**
- * The party weekly quest: one global ISO week (UTC) for everyone in the party; the target scales with the member count,
- * and every member claims the reward once per week (quest_claims key PARTY_<partyId>).
+ * The party weekly quest: one global ISO week (UTC) for everyone in the party; the target is PER_MEMBER_TARGET for each member who
+ * personally finished at least one task this week (at least one member), only completions made since a member joined count, and every
+ * member claims the reward once per week (quest_claims key PARTY_<partyId>) but only after finishing at least MIN_OWN_TO_CLAIM
+ * tasks themselves (half of PER_MEMBER_TARGET), so a seat that did nothing, or a spare account, is never paid for others' work.
  */
-const PARTY_QUEST = { PER_MEMBER_TARGET: 12, REWARD: 60, KEY_PREFIX: 'PARTY_' };
+const PARTY_QUEST = { PER_MEMBER_TARGET: 12, MIN_OWN_TO_CLAIM: 6, REWARD: 60, KEY_PREFIX: 'PARTY_' };
 
 const DAILY = {
     COOLDOWN_MS: 24 * 60 * 60 * 1000,

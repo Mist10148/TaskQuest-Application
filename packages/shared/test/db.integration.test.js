@@ -1671,5 +1671,42 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Boolean(items.find((i) => i.name === 'Parent' && i.completed)), true);
     });
 
+    await t.test('search: scopes, literal wildcards, ownership and bounds', async () => {
+        const S = '100000000000000311';
+        const T = '100000000000000312';
+        await db.users.ensureUser(S);
+        await db.users.ensureUser(T);
+        const { list: groceries } = await db.tasks.createList(S, { name: 'Groceries', category: 'Home' });
+        const { list: plans } = await db.tasks.createList(S, { name: 'Plans', description: 'weekend 100% fun' });
+        await db.tasks.addItem(S, groceries.id, { name: 'Buy milk', description: 'the oat kind_please' });
+        await db.tasks.addItem(S, groceries.id, { name: 'Pay rent' });
+        await db.tasks.addItem(S, plans.id, { name: 'Call mum', description: 'about milk bills' });
+        const { list: theirs } = await db.tasks.createList(T, { name: 'Milk run' });
+        await db.tasks.addItem(T, theirs.id, { name: 'milk for them', description: 'milk' });
+
+        const names = (rows) => rows.map((r) => r.name);
+        assert.deepEqual(await db.tasks.search(S, 'milk'), { lists: [], tasks: [] }, 'default scope is quests only');
+        const tasks = await db.tasks.search(S, 'MILK', { scope: 'tasks' });
+        assert.deepEqual(names(tasks.tasks), ['Buy milk', 'Call mum'], 'name or description, never someone else\'s');
+        assert.deepEqual(tasks.tasks.map((r) => r.list_name), ['Groceries', 'Plans']);
+        assert.equal(tasks.tasks[0].list_id, groceries.id);
+        assert.deepEqual(tasks.lists, []);
+        const all = await db.tasks.search(S, 'home', { scope: 'all' });
+        assert.deepEqual(names(all.lists), ['Groceries']);
+        assert.deepEqual(all.tasks, []);
+        assert.deepEqual(names((await db.tasks.search(S, '100%', { scope: 'all' })).lists), ['Plans'], 'a literal percent');
+        assert.equal((await db.tasks.search(S, '%', { scope: 'tasks' })).tasks.length, 0, '% is not a wildcard');
+        assert.deepEqual(names((await db.tasks.search(S, 'kind_please', { scope: 'tasks' })).tasks), ['Buy milk']);
+        assert.equal((await db.tasks.search(S, 'kind_pleas_', { scope: 'tasks' })).tasks.length, 0, '_ is not a wildcard');
+        await assert.rejects(db.tasks.search(S, 'x', { scope: 'everything' }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.search(S, '   ', { scope: 'tasks' }), { code: 'VALIDATION' });
+
+        const B = '100000000000000313';
+        await db.users.ensureUser(B);
+        const { list: big } = await db.tasks.createList(B, { name: 'Big' });
+        await db.query('INSERT INTO items (list_id, name, position) SELECT ?, CONCAT(\'needle \', seq), seq FROM (SELECT @n := @n + 1 AS seq FROM information_schema.columns, (SELECT @n := 0) z LIMIT 80) q', [big.id]);
+        assert.equal((await db.tasks.search(B, 'needle', { scope: 'tasks' })).tasks.length, db.tasks.SEARCH_LIMIT, 'results are bounded');
+    });
+
     await db.closePool();
 });

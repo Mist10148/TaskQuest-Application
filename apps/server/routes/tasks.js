@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, uid, xpResult } from '../lib/http.js';
-import { idParam, listIdParam, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody } from '../lib/schemas.js';
+import { idParam, listIdParam, searchQuery, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody } from '../lib/schemas.js';
 
 export const listsRouter = Router();
 export const itemsRouter = Router();
@@ -19,6 +19,15 @@ listsRouter.get(
     asyncRoute(async (req, res) => {
         const lists = await db.tasks.getLists(uid(req));
         res.json(lists.map(listWithCounts));
+    })
+);
+
+// Declared before /:id so "search" is not read as a list id.
+listsRouter.get(
+    '/search',
+    asyncRoute(async (req, res) => {
+        const { q, scope } = parse(searchQuery, req.query);
+        res.json(await db.tasks.search(uid(req), q, { scope }));
     })
 );
 

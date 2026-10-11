@@ -16,6 +16,7 @@ npm run dev                     # run with auto-reload
 | `commands/list.js` | `/list`: lists and tasks |
 | `commands/game.js` | `/game`: Blackjack, RPS, Hangman |
 | `commands/gamification.js` | `/daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping` |
+| `commands/review.js`, `commands/prestige.js` | `/review` (weekly bonus), `/prestige` (two-step reset) |
 | `commands/ai.js` | `/summary /prioritize /ask /forget /ai-format` (AI service) |
 | `chat.js` | Replies to @mentions, replies and DMs through the AI service's `/v1/converse` |
 | `utils/aiSync.js` | Re-indexes quests in the AI service after edits made in Discord |

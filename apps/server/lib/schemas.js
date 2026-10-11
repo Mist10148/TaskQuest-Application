@@ -51,6 +51,9 @@ const listFields = {
     deadline: nullableEmpty(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional())
 };
 
+/** GET /api/lists/search: the text to find and where to look (quests by default). */
+export const searchQuery = z.object({ q: z.string().trim().min(1).max(100), scope: z.enum(['lists', 'tasks', 'all']).default('lists') }).strip();
+
 export const createListBody = z.object(listFields).strict();
 export const updateListBody = z
     .object(listFields)

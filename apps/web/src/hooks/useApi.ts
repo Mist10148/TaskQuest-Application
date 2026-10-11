@@ -178,6 +178,16 @@ export function useList(listId: number) {
     return useQuery({ queryKey: ['lists', listId], queryFn: () => listsApi.getById(listId), enabled: listId > 0 });
 }
 
+/** Task name/description search (needs a query of at least two characters). */
+export function useTaskSearch(q: string | null) {
+    return useQuery({
+        queryKey: ['lists', 'search', q],
+        queryFn: () => listsApi.searchTasks(q as string),
+        enabled: q !== null,
+        placeholderData: (previous) => previous,
+    });
+}
+
 export function useCreateList() {
     const qc = useQueryClient();
     return useMutation({

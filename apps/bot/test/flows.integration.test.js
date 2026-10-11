@@ -205,6 +205,63 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.match(text(done.calls.find((c) => c.type === 'editReply')), /Completed/);
     });
 
+    await t.test('/review claims once and /prestige needs the second confirmation', async () => {
+        const REV = '300000000000000005';
+        await db.users.ensureUser(REV);
+        const reviewCmd = require('../commands/review');
+        const prestigeCmd = require('../commands/prestige');
+        const buttons = (call) => (call.payload.components || []).flatMap((r) => r.toJSON().components.map((c) => c.custom_id));
+
+        const empty = fake({ userId: REV, commandName: 'review' });
+        await reviewCmd.execute(empty);
+        assert.deepEqual(errors(empty), []);
+        assert.deepEqual(buttons(empty.calls.at(-1)), [], 'nothing finished yet: no claim button');
+
+        const made = (await db.tasks.createList(REV, { name: 'Review week' })).list;
+        const task = (await db.tasks.addItem(REV, made.id, { name: 'Do it' })).item;
+        await db.tasks.setItemCompleted(REV, task.id, true);
+        const ready = fake({ userId: REV, commandName: 'review' });
+        await reviewCmd.execute(ready);
+        assert.deepEqual(buttons(ready.calls.at(-1)), ['review_claim']);
+
+        const claim = fake({ userId: REV, customId: 'review_claim' });
+        await reviewCmd.handleButton(claim);
+        assert.deepEqual(errors(claim), []);
+        assert.ok(claim.calls.some((c) => c.type === 'followUp' && /Review claimed/.test(text(c))));
+        const again = fake({ userId: REV, customId: 'review_claim' });
+        await reviewCmd.handleButton(again);
+        assert.match(text(again.calls.at(-1)), /already claimed/i, 'a second click pays nothing');
+
+        // Prestige: not eligible below level 30, and a stale confirm click does nothing.
+        const low = fake({ userId: REV, commandName: 'prestige' });
+        await prestigeCmd.execute(low);
+        assert.deepEqual(buttons(low.calls.at(-1)), []);
+        const stale = fake({ userId: REV, customId: 'prestige_confirm' });
+        await prestigeCmd.handleButton(stale);
+        assert.match(text(stale.calls.at(-1)), /Reach level 30/);
+        assert.equal((await db.users.getUser(REV)).prestige, 0);
+
+        await pool.query('UPDATE users SET player_level = 30, player_class = ?, player_xp = 500 WHERE discord_id = ?', ['DEFAULT', REV]);
+        const ask = fake({ userId: REV, commandName: 'prestige' });
+        await prestigeCmd.execute(ask);
+        assert.deepEqual(buttons(ask.calls.at(-1)), ['prestige_ask']);
+        const warn = fake({ userId: REV, customId: 'prestige_ask' });
+        await prestigeCmd.handleButton(warn);
+        assert.deepEqual(buttons(warn.calls.at(-1)), ['prestige_confirm', 'prestige_cancel']);
+        assert.equal((await db.users.getUser(REV)).prestige, 0, 'asking changes nothing');
+        const cancel = fake({ userId: REV, customId: 'prestige_cancel' });
+        await prestigeCmd.handleButton(cancel);
+        assert.equal((await db.users.getUser(REV)).prestige, 0, 'cancel changes nothing');
+
+        const yes = fake({ userId: REV, customId: 'prestige_confirm' });
+        await prestigeCmd.handleButton(yes);
+        assert.deepEqual(errors(yes), []);
+        const after = await db.users.getUser(REV);
+        assert.equal(after.prestige, 1);
+        assert.equal(after.player_level, 1);
+        assert.match(text(yes.calls.find((c) => c.type === 'editReply')), /Veteran/);
+    });
+
     await t.test('/list menus page past 25 lists', async () => {
         const PAGER = '300000000000000003';
         await db.users.ensureUser(PAGER);

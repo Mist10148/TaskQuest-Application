@@ -11,6 +11,8 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. The reply also shows the Daily Surprise and any milestone chest. |
 | `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill) |
 | `/quests` | — | Ephemeral | 📜 Daily and weekly quests with progress bars and Claim buttons |
+| `/review` | — | Ephemeral | 📝 This week's review: tasks finished, XP earned, streak, and a Claim button for the once-a-week bonus (needs at least one finished task; same rules as the web review page). |
+| `/prestige` | — | Ephemeral | ✦ Shows your prestige title, bonus and whether you can start over (level 30+). **Prestige...** opens a warning listing what is lost and kept; only **Yes, reset** on that second screen resets, **Cancel** backs out. |
 | `/profile` | `user` (optional) | Ephemeral | Level (with your prestige title), balance and lifetime XP (all-time, across prestiges), focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet". |
 | `/achievements` | — | Ephemeral | Paginated achievement list |
 | `/class` | — | Ephemeral | Class browser: buy, equip, view and unlock skills |
@@ -120,10 +122,12 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 | Prefix | Handler |
 |---|---|
 | `quest_claim_<KEY>` | `commands/quests.js` buttons |
+| `review_claim` | `commands/review.js` button |
+| `prestige_ask`, `prestige_confirm`, `prestige_cancel` | `commands/prestige.js` buttons |
 | `remind_snooze_<listId>`, `task_remind_snooze_<itemId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
-| `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_`, `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
-| `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
-| `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_search` | `commands/list.js` modals |
+| `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_` (incl. `item_details_`), `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
+| `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_details_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
+| `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_details_`, `m_search` | `commands/list.js` modals |
 | `bj_`, `rps_`, `hm_`, `game_`, `game_select`, `hm_letter_select_a/n`, `bj_bet_modal` | `commands/game.js` |
 | `class_*`, `cbuy_`, `ceq_`, `skill_unlock_`, `skill_back`, `class_select`, `skill_select`, `ach_*` | `commands/gamification.js` |
 | `ai_ok:<thread id>`, `ai_no:<thread id>` | `commands/ai.js` (approve / cancel a paused `/ask` action) |

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TaskListCard } from "@/components/game/TaskComponents";
 import { PriorityPanel } from "@/components/ai/PriorityPanel";
 import { ListFilters } from "./ListFilters";
+import { TaskSearchResults } from "./TaskSearchResults";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { useHotkeys } from "@/hooks/useHotkeys";
@@ -48,7 +49,9 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
     <PriorityPanel onOpen={onOpen} />
     <ListFilters filters={filters} />
 
-    {error ? (
+    {filters.searchScope === "tasks" ? (
+      <TaskSearchResults query={filters.searchQuery} onOpen={onOpen} />
+    ) : error ? (
       <ErrorCard what="your quests" error={error} onRetry={onRetry} retrying={retrying} />
     ) : loading ? (
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy="true">

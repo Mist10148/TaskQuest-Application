@@ -157,14 +157,50 @@ async function deleteList(discordId, listId) {
     return true;
 }
 
+const SEARCH_LIMIT = 50;
+const SEARCH_SCOPES = ['lists', 'tasks', 'all'];
+
+/** A LIKE pattern that matches the (trimmed, length-capped) query literally, % and _ included. */
+const likeTerm = (query) => `%${v.escapeLike(v.cleanText(query).slice(0, 100))}%`;
+
 async function searchLists(discordId, query) {
-    const term = `%${v.escapeLike(v.cleanText(query).slice(0, 100))}%`;
+    const term = likeTerm(query);
     return run(
         `SELECT * FROM lists WHERE discord_id = ?
            AND (name LIKE ? ESCAPE '\\\\' OR category LIKE ? ESCAPE '\\\\' OR description LIKE ? ESCAPE '\\\\')
-         ORDER BY name`,
+         ORDER BY name
+         LIMIT ${SEARCH_LIMIT * 2}`,
         [String(discordId), term, term, term]
     );
+}
+
+/** Tasks (name or description) of the user's lists, each with its quest, at most SEARCH_LIMIT. */
+async function searchItems(discordId, query) {
+    const term = likeTerm(query);
+    const rows = await run(
+        `SELECT i.id, i.name, i.description, i.completed, i.parent_id, i.due_date, i.list_id, l.name AS list_name
+         FROM items i JOIN lists l ON l.id = i.list_id
+         WHERE l.discord_id = ? AND (i.name LIKE ? ESCAPE '\\\\' OR i.description LIKE ? ESCAPE '\\\\')
+         ORDER BY i.completed, l.name, i.position, i.id
+         LIMIT ${SEARCH_LIMIT}`,
+        [String(discordId), term, term]
+    );
+    return rows.map((r) => ({ ...r, completed: Boolean(r.completed), due_date: v.formatDate(r.due_date) }));
+}
+
+/**
+ * Search by scope: 'lists' (default: name, category and description of quests), 'tasks' (task names and
+ * descriptions) or 'all'. Always owner-scoped and bounded; the part not asked for comes back empty.
+ * @returns {Promise<{ lists: object[], tasks: object[] }>}
+ */
+async function search(discordId, query, { scope = 'lists' } = {}) {
+    if (!SEARCH_SCOPES.includes(scope)) throw errors.validation(`Search scope must be one of ${SEARCH_SCOPES.join(', ')}.`);
+    if (!v.cleanText(query)) throw errors.validation('Enter something to search for.');
+    const [lists, tasks] = await Promise.all([
+        scope === 'tasks' ? [] : searchLists(discordId, query),
+        scope === 'lists' ? [] : searchItems(discordId, query)
+    ]);
+    return { lists, tasks };
 }
 
 // ─── Items ───────────────────────────────────────────────────────────────────
@@ -695,6 +731,9 @@ module.exports = {
     updateList,
     deleteList,
     searchLists,
+    searchItems,
+    search,
+    SEARCH_LIMIT,
     getItems,
     getItem,
     addItem,

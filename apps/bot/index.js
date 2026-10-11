@@ -4,6 +4,7 @@
  *   /list → overview → view (read-only) → edit (all mutations)
  *   /game → blackjack · rock paper scissors · hangman
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
+ *   /review /prestige
  *   /summary /prioritize /ask /forget /ai-format → AI service (when AI_ENABLED)
  *   @mention / reply / DM → AI conversation (chat.js)
  *
@@ -23,6 +24,8 @@ const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
 const questCommands = require('./commands/quests');
+const reviewCommand = require('./commands/review');
+const prestigeCommand = require('./commands/prestige');
 const aiSync = require('./utils/aiSync');
 const reminders = require('./utils/reminders');
 const timezoneCommand = require('./commands/timezone');
@@ -108,6 +111,8 @@ const COMMANDS = {
     daily: gamification.daily,
     freeze: gamification.freeze,
     quests: questCommands.execute,
+    review: reviewCommand.execute,
+    prestige: prestigeCommand.execute,
     timezone: timezoneCommand.execute,
     weekly: weeklyCommand.execute,
     quick: quickCommand.execute,
@@ -145,6 +150,8 @@ async function route(interaction) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
         if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
+        if (id === 'review_claim') return reviewCommand.handleButton(interaction);
+        if (id.startsWith('prestige_')) return prestigeCommand.handleButton(interaction);
         if (id === 'remind_off' || id.startsWith('remind_snooze_') || id.startsWith('task_remind_snooze_')) return reminders.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
         if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {

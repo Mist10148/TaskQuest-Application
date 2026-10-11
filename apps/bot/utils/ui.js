@@ -410,9 +410,9 @@ function helpEmbed() {
         .addFields(
             { name: 'Tasks', value: '`/list` `/quick`', inline: true },
             { name: 'Games', value: '`/game` Mini-games', inline: true },
-            { name: 'Daily', value: '`/daily` `/freeze` `/quests`', inline: true },
+            { name: 'Daily', value: '`/daily` `/freeze` `/quests` `/review`', inline: true },
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },
-            { name: 'Classes', value: '`/class` `/leaderboard`', inline: true },
+            { name: 'Classes', value: '`/class` `/leaderboard` `/prestige`', inline: true },
             { name: 'Settings', value: '`/toggle` `/automation` `/timezone` `/weekly`', inline: true },
             { name: 'Web App', value: '`/app` Open dashboard', inline: true },
             { name: 'AI', value: '`/summary` `/prioritize` `/ask`', inline: true }

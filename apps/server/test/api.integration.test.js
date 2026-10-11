@@ -423,6 +423,29 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     });
 
 
+    await t.test('GET /api/lists/search: scopes, validation and ownership', async () => {
+        const S = await login(db, '200000000000000030');
+        const M = await login(db, '200000000000000031');
+        const list = await (await call('POST', '/api/lists', { cookie: S, body: { name: 'Kitchen' } })).json();
+        await call('POST', `/api/lists/${list.id}/items`, { cookie: S, body: { name: 'Descale kettle', description: 'use vinegar' } });
+        await call('POST', '/api/lists', { cookie: M, body: { name: 'Vinegar club' } });
+
+        assert.equal((await call('GET', '/api/lists/search?q=vinegar')).status, 401);
+        assert.equal((await call('GET', '/api/lists/search', { cookie: S })).status, 400, 'q is required');
+        assert.equal((await call('GET', '/api/lists/search?q=%20%20', { cookie: S })).status, 400);
+        assert.equal((await call('GET', '/api/lists/search?q=x&scope=nope', { cookie: S })).status, 400);
+        assert.equal((await call('GET', `/api/lists/search?q=${'a'.repeat(101)}`, { cookie: S })).status, 400);
+
+        const quests = await (await call('GET', '/api/lists/search?q=vinegar', { cookie: S })).json();
+        assert.deepEqual(quests, { lists: [], tasks: [] }, 'default scope only looks at quests, and never at other people\'s');
+        const found = await (await call('GET', '/api/lists/search?q=vinegar&scope=tasks', { cookie: S })).json();
+        assert.deepEqual(found.tasks.map((r) => [r.name, r.list_id, r.list_name]), [['Descale kettle', list.id, 'Kitchen']]);
+        const all = await (await call('GET', '/api/lists/search?q=kitchen&scope=all', { cookie: S })).json();
+        assert.deepEqual([all.lists.length, all.tasks.length], [1, 0]);
+        assert.equal((await (await call('GET', '/api/lists/search?q=descale&scope=tasks', { cookie: M })).json()).tasks.length, 0);
+        assert.equal((await call('GET', `/api/lists/${list.id}`, { cookie: S })).status, 200, '/search does not shadow /:id');
+    });
+
     await t.test('logout destroys the session', async () => {
         const res = await call('POST', '/api/auth/logout', { cookie: mallory });
         assert.equal(res.status, 200);

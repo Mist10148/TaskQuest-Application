@@ -1646,5 +1646,30 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual([none.streak, none.tasksCompleted7d, none.xpBySource30d.length, none.busiestWeekday], [0, 0, 0, null]);
     });
 
+    await t.test('CSV export round-trips through csvToImport and importAll without rewards', async () => {
+        const { csvToImport } = require('../src/csv');
+        const A = '100000000000000301';
+        const B = '100000000000000302';
+        await db.users.ensureUser(A);
+        await db.users.ensureUser(B);
+        const { list } = await db.tasks.createList(A, { name: 'Round, "trip"', category: 'Work', deadline: '2030-05-01' });
+        const { item: parent } = await db.tasks.addItem(A, list.id, { name: 'Parent', tags: 'a,b', recurrence: 'weekly', due_date: '2030-04-01' });
+        await db.tasks.addItem(A, list.id, { name: '-5 degrees\nsecond line', parent_id: parent.id, priority: 'LOW' });
+        await db.tasks.setItemCompleted(A, parent.id, true);
+        const parsed = csvToImport(db.transfer.toCsv(await db.transfer.exportAll(A)));
+        assert.deepEqual(parsed.errors, []);
+        const before = await db.users.getUser(B);
+        assert.deepEqual(await db.transfer.importAll(B, parsed.data), { lists: 1, items: 3 }, 'completing the weekly task spawned its next copy');
+        const after = await db.users.getUser(B);
+        assert.equal(Number(after.player_xp), Number(before.player_xp));
+        const [copy] = await db.tasks.getLists(B);
+        assert.deepEqual([copy.name, copy.category], ['Round, "trip"', 'Work']);
+        const items = await db.tasks.getItems(B, copy.id);
+        const kid = items.find((i) => i.parent_id);
+        assert.equal(kid.name, '-5 degrees\nsecond line', 'formula guard and newlines survive');
+        assert.equal(items.find((i) => i.name === 'Parent').tags, 'a,b');
+        assert.equal(Boolean(items.find((i) => i.name === 'Parent' && i.completed)), true);
+    });
+
     await db.closePool();
 });

@@ -383,12 +383,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     });
 
     await t.test('CSV import: auth, dry run, row errors, no rewards, quota and size', async () => {
-        const csv = 'list,task,due,priority,done
-Groceries,Milk,2030-01-05,high,no
-Groceries,Bread,,,yes
-Other,"Line one
-still one",,,
-';
+        const csv = 'list,task,due,priority,done\nGroceries,Milk,2030-01-05,high,no\nGroceries,Bread,,,yes\nOther,"Line one\r\nstill one",,,\n';
         assert.equal((await call('POST', '/api/import/csv', { body: { csv } })).status, 401);
         assert.equal((await call('POST', '/api/import/csv', { cookie: alice, body: { csv }, origin: 'https://evil.example' })).status, 403);
         assert.equal((await call('POST', '/api/import/csv', { cookie: alice, body: {} })).status, 400);
@@ -401,11 +396,7 @@ still one",,,
         assert.equal(dry.preview.length, 3);
         assert.equal((await (await call('GET', '/api/lists', { cookie: C })).json()).length, 0, 'a dry run writes nothing');
 
-        const bad = await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task,due
-A,ok,
-A,bad,2030-02-30
-A,,x
-' } });
+        const bad = await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task,due\nA,ok,\nA,bad,2030-02-30\n,,x\n' } });
         assert.equal(bad.status, 400);
         const badBody = await bad.json();
         assert.equal(badBody.details.errorCount, 2);
@@ -422,20 +413,15 @@ A,,x
         const after = await (await call('GET', '/api/user', { cookie: C })).json();
         assert.equal(after.user.player_xp, before.user.player_xp, 'imports never pay XP');
         assert.equal(after.user.total_items_added, before.user.total_items_added);
-        const again = await (await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'task
-x
-' } })).json();
+        const again = await (await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'task\nx\n' } })).json();
         assert.equal(again.lists, 1, 'rows without a list go to "Imported"');
 
-        // The per-user quota applies to CSV too.
+        // The per-user quota applies to CSV too, and oversized text is refused.
         await db.query("INSERT INTO lists (discord_id, name) SELECT '200000000000000020', CONCAT('filler', seq) FROM (SELECT @r := @r + 1 AS seq FROM information_schema.columns, (SELECT @r := 0) z LIMIT 200) n");
-        assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task
-One more,x
-' } })).status, 400);
-        // Over the body limit.
-        const huge = await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'a'.repeat(1_000_001) } });
-        assert.equal(huge.status, 400);
+        assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task\nOne more,x\n' } })).status, 400);
+        assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'a'.repeat(1_000_001) } })).status, 400);
     });
+
 
     await t.test('logout destroys the session', async () => {
         const res = await call('POST', '/api/auth/logout', { cookie: mallory });

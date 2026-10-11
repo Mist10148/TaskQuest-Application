@@ -14,6 +14,7 @@ const dates = require('./dates');
 const { questPeriod, isoWeek, activeRotatingQuest } = require('./quests');
 const { buildIcs } = require('./ics');
 const { parseQuickAdd } = require('./quickAdd');
+const { parseCsv, csvToImport } = require('./csv');
 const blackjack = require('./games/blackjack');
 const rps = require('./games/rps');
 const hangman = require('./games/hangman');
@@ -34,5 +35,7 @@ module.exports = {
     activeRotatingQuest,
     buildIcs,
     parseQuickAdd,
+    parseCsv,
+    csvToImport,
     games: { blackjack, rps, hangman, arcade }
 };

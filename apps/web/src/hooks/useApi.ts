@@ -19,6 +19,7 @@ import {
     itemsApi,
     classesApi,
     cosmeticsApi,
+    pushApi,
     skillsApi,
     achievementsApi,
     leaderboardApi,
@@ -370,6 +371,10 @@ export function useEquipClass() {
         onSuccess: () => invalidateProgress(qc),
         onError: showError,
     });
+}
+
+export function usePushConfig() {
+    return useQuery({ queryKey: ['push-config'], queryFn: pushApi.config, staleTime: 1000 * 60 * 10 });
 }
 
 export function useCosmetics() {

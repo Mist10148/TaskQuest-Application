@@ -219,6 +219,12 @@ export const cosmeticsApi = {
     equip: (kind: CosmeticKind, id: string | null) => post<{ success: boolean; equipped: EquippedCosmetics }>('/api/cosmetics/equip', { kind, id }),
 };
 
+export const pushApi = {
+    config: () => apiFetch<{ enabled: boolean; publicKey?: string }>('/api/push/config'),
+    subscribe: (subscription: PushSubscriptionJSON) => post<{ success: boolean; subscriptions: number }>('/api/push/subscribe', { subscription }),
+    unsubscribe: (endpoint: string) => apiFetch<{ success: boolean; removed: boolean }>('/api/push/subscribe', { method: 'DELETE', json: { endpoint } }),
+};
+
 export const skillsApi = {
     getAll: () => apiFetch<SkillsData>('/api/skills'),
     unlock: (skillId: string) => post<{ success: boolean; skill: { skill_id: string; skill_level: number }; balance: number }>(`/api/skills/${skillId}/unlock`),

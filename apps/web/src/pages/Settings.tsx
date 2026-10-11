@@ -2,12 +2,13 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, Bot, CalendarDays, ExternalLink, Loader2, LogOut, Palette, Settings as SettingsIcon, Sparkles, Zap, Database } from "lucide-react";
+import { AlertTriangle, Bell, Bot, CalendarDays, ExternalLink, Loader2, LogOut, Palette, Settings as SettingsIcon, Sparkles, Zap, Database } from "lucide-react";
 import { userApi, type User } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { SettingRow, SettingsSection, SwitchRow } from "@/components/settings/SettingsSection";
 import { ReminderSettings } from "@/components/settings/ReminderSettings";
+import { PushSettings } from "@/components/settings/PushSettings";
 import { CalendarFeed, DataSettings } from "@/components/settings/DataSettings";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePreferences } from "@/contexts/PreferencesContext";
-import { useUpdateSettings, useResetProgress } from "@/hooks/useApi";
+import { useUpdateSettings, useResetProgress, usePushConfig } from "@/hooks/useApi";
 import { resetTour, startTour } from "@/lib/tour";
 
 // Optional: set VITE_BOT_INVITE_URL at build time to show an "Add the bot" button.
@@ -35,6 +36,8 @@ type SwitchKey = keyof typeof SWITCH_FIELDS;
 const Settings = () => {
   const { user, logout, refresh } = useAuth();
   const updateSettings = useUpdateSettings();
+  // Hidden unless the server has VAPID keys (web push is optional).
+  const pushAvailable = Boolean(usePushConfig().data?.enabled);
   const resetProgress = useResetProgress();
   const { reduceMotion, setReduceMotion, sound, setSound } = usePreferences();
   const [confirmText, setConfirmText] = useState("");
@@ -113,6 +116,12 @@ const Settings = () => {
             saving={saving}
           />
         </SettingsSection>
+
+        {pushAvailable && (
+          <SettingsSection icon={<Bell className="h-5 w-5 text-primary-text" />} title="Push notifications" description="Reminders as browser notifications" delay={0.16}>
+            <PushSettings />
+          </SettingsSection>
+        )}
 
         <SettingsSection icon={<CalendarDays className="h-5 w-5 text-primary-text" />} title="Calendar feed" description="Deadlines in Google, Apple or Outlook Calendar" delay={0.17}>
           <CalendarFeed token={dbUser.has_calendar_token ? calendar.data?.token : null} />

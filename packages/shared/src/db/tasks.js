@@ -274,6 +274,30 @@ async function addItem(discordId, listId, input) {
     return withTransaction((conn) => addItemIn(conn, discordId, parsed));
 }
 
+/**
+ * Break a task down: create several subtasks under an owned top-level task in one transaction
+ * (all or none). Subtasks nest one level only, and each one counts as an added task for XP like
+ * any other (with the usual daily cap).
+ * @returns {Promise<{ parent: object, items: Array<{ item: object, xp: object, achievements: Array }> }>}
+ */
+async function addSubtasks(discordId, parentId, names) {
+    const pid = unwrap(v.id(parentId));
+    if (!Array.isArray(names) || !names.length || names.length > 20) throw errors.validation('Give between 1 and 20 subtask names.');
+    const parsed = names.map((name) => parseItemInput(0, { name }));
+    return withTransaction(async (conn) => {
+        const [[parent]] = await conn.query(
+            `SELECT i.* FROM items i JOIN lists l ON l.id = i.list_id
+             WHERE i.id = ? AND l.discord_id = ? FOR UPDATE`,
+            [pid, String(discordId)]
+        );
+        if (!parent) throw errors.notFound('Task not found.');
+        if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
+        const items = [];
+        for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid }));
+        return { parent, items };
+    });
+}
+
 async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }) {
     const user = await lockUser(conn, discordId);
     const [[list]] = await conn.query('SELECT id FROM lists WHERE id = ? AND discord_id = ? FOR UPDATE', [lid, user.discord_id]);
@@ -737,6 +761,7 @@ module.exports = {
     getItems,
     getItem,
     addItem,
+    addSubtasks,
     updateItem,
     deleteItem,
     setItemCompleted,

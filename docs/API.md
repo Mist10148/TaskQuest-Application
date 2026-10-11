@@ -238,7 +238,9 @@ A `confirm` event pauses the turn. Nothing has been changed yet. Answer with `PO
 | Method | Path | Body | Description |
 |---|---|---|---|
 | POST | `/internal/lists` | `{discordId, name, description?, category?, priority?, deadline?, items?: string[] (≤20)}` | Create a list (and optional tasks) |
-| POST | `/internal/lists/:id/items` | `{discordId, name, description?, ...task detail fields}` | Add a task |
+| POST | `/internal/lists/:id/items` | `{discordId, name, description?, due_date?, priority?, tags?, recurrence?, parent_id?}` | Add a task with its own fields (same validation as `POST /api/lists/:id/items`) |
+| PATCH | `/internal/items/:id` | `{discordId, name?, description?, due_date?, priority?, tags?, recurrence?, parent_id?}` (at least one field; no `position`) | Change a task's own fields. 404 when the task is not the user's |
+| POST | `/internal/items/:id/subtasks` | `{discordId, names: string[] (2-8)}` | Break a top-level task down: creates the subtasks under it in one transaction (all or none) and returns `{parent, items, newAchievements, xpResult}`. 400 when the task is itself a subtask, 404 when it is not the user's |
 | PATCH | `/internal/items/:id/toggle` | `{discordId, completed?}` | Complete or reopen a task |
 | PATCH | `/internal/lists/:id` | `{discordId, priority?, deadline?}` | Change a list's priority or deadline |
 

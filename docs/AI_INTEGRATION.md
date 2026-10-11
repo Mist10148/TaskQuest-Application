@@ -492,7 +492,9 @@ class ChatState(MessagesState):        # messages: Annotated[list, add_messages]
 | `summarize(mode, list_id?)` | read | Feature 1 chain |
 | `prioritize(limit?)` | read | Feature 2 graph (as a subgraph) |
 | `create_list(name, category?, priority?, deadline?, items?)` | **write** (confirm) | `POST /internal/lists` → `db.tasks.createList` |
-| `add_item(list_id, name, description?)` | **write** (confirm) | `POST /internal/lists/:id/items` |
+| `add_item(list_id, name, description?, due_date?, priority?, tags?, repeat?, parent_id?)` | **write** (confirm) | `POST /internal/lists/:id/items` |
+| `update_item(item_id, name?, description?, due_date?, priority?, tags?, repeat?)` | **write** (confirm) | `PATCH /internal/items/:id` |
+| `break_down_task(item_id, subtasks: 2-8 names)` | **write** (confirm) | `POST /internal/items/:id/subtasks` → `db.tasks.addSubtasks` |
 | `complete_item(item_id)` | **write** (confirm) | `PATCH /internal/items/:id/toggle` → XP awarded normally |
 | `update_list(list_id, priority?, deadline?)` | **write** (confirm) | `PATCH /internal/lists/:id` |
 

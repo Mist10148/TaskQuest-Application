@@ -52,6 +52,12 @@ class WebClient:
     async def add_item(self, discord_id: str, list_id: int, fields: dict[str, Any]) -> dict[str, Any]:
         return await self._request("POST", f"/lists/{list_id}/items", {"discordId": discord_id, **fields})
 
+    async def update_item(self, discord_id: str, item_id: int, fields: dict[str, Any]) -> dict[str, Any]:
+        return await self._request("PATCH", f"/items/{item_id}", {"discordId": discord_id, **fields})
+
+    async def add_subtasks(self, discord_id: str, item_id: int, names: list[str]) -> dict[str, Any]:
+        return await self._request("POST", f"/items/{item_id}/subtasks", {"discordId": discord_id, "names": names})
+
     async def complete_item(self, discord_id: str, item_id: int) -> dict[str, Any]:
         return await self._request("PATCH", f"/items/{item_id}/toggle", {"discordId": discord_id, "completed": True})
 

@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from app import usage
 from app.chains import summarize as summarize_chain
@@ -28,7 +28,10 @@ from app.rag.retriever import TaskRetriever
 from app.tools.web_client import ToolError, WebClient
 
 Priority = Literal["LOW", "MEDIUM", "HIGH"]
+Repeat = Literal["daily", "weekly", "monthly"]
 _DATE = r"^\d{4}-\d{2}-\d{2}$"
+MAX_TAGS = 5
+Tag = Annotated[str, StringConstraints(min_length=1, max_length=20, pattern=r"^#?[\w-]+$")]
 
 
 class Args(BaseModel):
@@ -62,6 +65,52 @@ class ToolSpec:
         return StructuredTool.from_function(
             coroutine=_never, name=self.name, description=self.description, args_schema=self.args
         )
+
+
+def _real_date(value: str | None) -> str | None:
+    """A YYYY-MM-DD string that is a real calendar date (the pattern alone lets 2026-02-30 through)."""
+    if value is not None:
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise ValueError("not a real calendar date") from None
+    return value
+
+
+class ItemFields(Args):
+    """A task's own fields. Dates are plain YYYY-MM-DD; the server validates them again."""
+
+    due_date: str | None = Field(default=None, pattern=_DATE, description="Due date, YYYY-MM-DD")
+    priority: Priority | None = None
+    tags: list[Tag] | None = Field(default=None, max_length=MAX_TAGS, description="Up to 5 short tags")
+    repeat: Repeat | None = Field(default=None, description="Repeat when completed: daily, weekly or monthly")
+
+    @field_validator("due_date")
+    @classmethod
+    def _due_is_real(cls, v: str | None) -> str | None:
+        return _real_date(v)
+
+    def item_fields(self) -> dict[str, Any]:
+        """The fields in the internal API's names (``repeat`` is stored as ``recurrence``)."""
+        out = self.model_dump(exclude_none=True, include={"due_date", "priority", "tags"})
+        if self.tags:
+            out["tags"] = [t.lstrip("#") for t in self.tags]
+        if self.repeat:
+            out["recurrence"] = self.repeat
+        return out
+
+    def describe_fields(self) -> list[str]:
+        """Preview lines for the fields that are set."""
+        lines = []
+        for label, value in (
+            ("Due", self.due_date),
+            ("Priority", self.priority),
+            ("Tags", ", ".join(self.tags) if self.tags else None),
+            ("Repeats", self.repeat),
+        ):
+            if value:
+                lines.append(f"- {label}: {value}")
+        return lines
 
 
 def _parse_id(value: str, prefix: str) -> int:
@@ -257,14 +306,21 @@ async def _preview_create_list(ctx: ToolContext, a: CreateListArgs) -> str:
     return "\n".join(lines) + "\nApprove?"
 
 
-class AddItemArgs(Args):
+class AddItemArgs(ItemFields):
     list_id: str = Field(description='Quest id such as "L42"')
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=500)
+    parent_id: str | None = Field(
+        default=None, description='Make it a subtask of this top-level subtask, such as "I311" (one level only)'
+    )
 
 
 async def add_item(ctx: ToolContext, a: AddItemArgs) -> dict[str, Any]:
-    fields = a.model_dump(exclude_none=True, exclude={"list_id"})
+    fields: dict[str, Any] = {"name": a.name, **a.item_fields()}
+    if a.description:
+        fields["description"] = a.description
+    if a.parent_id:
+        fields["parent_id"] = _parse_id(a.parent_id, "I")
     return await ctx.web.add_item(ctx.discord_id, _parse_id(a.list_id, "L"), fields)
 
 
@@ -276,11 +332,76 @@ async def _list_name(ctx: ToolContext, list_id: int) -> str:
     return lst["name"]
 
 
+async def _item_name(ctx: ToolContext, item_id: int) -> str:
+    async with pool.get_engine().connect() as conn:
+        for item in await repo.all_items_for_user(conn, ctx.discord_id):
+            if item["id"] == item_id:
+                return item["name"]
+    raise ToolError(f"Subtask I{item_id} was not found.")
+
+
 async def _preview_add_item(ctx: ToolContext, a: AddItemArgs) -> str:
     quest = await _list_name(ctx, _parse_id(a.list_id, "L"))
-    if not a.description:
+    details = ([f"- Description: {a.description}"] if a.description else []) + a.describe_fields()
+    if a.parent_id:
+        details.append(f'- Under subtask: "{await _item_name(ctx, _parse_id(a.parent_id, "I"))}"')
+    if not details:
         return f'Add subtask "{a.name}" to "{quest}"?'
-    return f'Add subtask "{a.name}" to "{quest}"\n- Description: {a.description}\nApprove?'
+    return "\n".join([f'Add subtask "{a.name}" to "{quest}"', *details, "Approve?"])
+
+
+class UpdateItemArgs(ItemFields):
+    item_id: str = Field(description='Subtask id such as "I311"')
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _something_changes(self) -> UpdateItemArgs:
+        if not self.item_fields() and self.name is None and self.description is None:
+            raise ValueError("give at least one field to change")
+        return self
+
+
+async def update_item(ctx: ToolContext, a: UpdateItemArgs) -> dict[str, Any]:
+    fields = a.item_fields()
+    if a.name is not None:
+        fields["name"] = a.name
+    if a.description is not None:
+        fields["description"] = a.description
+    return await ctx.web.update_item(ctx.discord_id, _parse_id(a.item_id, "I"), fields)
+
+
+async def _preview_update_item(ctx: ToolContext, a: UpdateItemArgs) -> str:
+    current = await _item_name(ctx, _parse_id(a.item_id, "I"))
+    lines = [f'Change subtask "{current}"']
+    if a.name is not None:
+        lines.append(f'- Rename to: "{a.name}"')
+    if a.description is not None:
+        lines.append(f"- Description: {a.description}")
+    lines.extend(a.describe_fields())
+    return "\n".join([*lines, "Approve?"])
+
+
+class BreakDownArgs(Args):
+    item_id: str = Field(description='Top-level subtask id such as "I311" to break down')
+    subtasks: list[Annotated[str, StringConstraints(min_length=1, max_length=200)]] = Field(
+        min_length=2, max_length=8, description="2 to 8 smaller steps, in order"
+    )
+
+
+async def break_down_task(ctx: ToolContext, a: BreakDownArgs) -> dict[str, Any]:
+    return await ctx.web.add_subtasks(ctx.discord_id, _parse_id(a.item_id, "I"), a.subtasks)
+
+
+async def _preview_break_down(ctx: ToolContext, a: BreakDownArgs) -> str:
+    item_id = _parse_id(a.item_id, "I")
+    async with pool.get_engine().connect() as conn:
+        match = next((i for i in await repo.all_items_for_user(conn, ctx.discord_id) if i["id"] == item_id), None)
+    if match is None:
+        raise ToolError(f"Subtask I{item_id} was not found.")
+    lines = [f'Break "{match["name"]}" into {len(a.subtasks)} subtasks:']
+    lines.extend(f"  {n}. {name}" for n, name in enumerate(a.subtasks, 1))
+    return "\n".join([*lines, "Approve?"])
 
 
 class CompleteItemArgs(Args):
@@ -356,11 +477,27 @@ TOOLS: dict[str, ToolSpec] = {
         ),
         ToolSpec(
             "add_item",
-            "Add a subtask to an existing quest. Needs user confirmation.",
+            "Add a subtask to an existing quest, optionally with a due date, priority, tags, repeat or a parent subtask. Needs user confirmation.",
             AddItemArgs,
             add_item,
             True,
             _preview_add_item,
+        ),
+        ToolSpec(
+            "update_item",
+            "Change a subtask's name, description, due date, priority, tags or repeat. Needs user confirmation.",
+            UpdateItemArgs,
+            update_item,
+            True,
+            _preview_update_item,
+        ),
+        ToolSpec(
+            "break_down_task",
+            "Break a subtask into 2-8 smaller subtasks under it (one level only). Needs user confirmation.",
+            BreakDownArgs,
+            break_down_task,
+            True,
+            _preview_break_down,
         ),
         ToolSpec(
             "complete_item",

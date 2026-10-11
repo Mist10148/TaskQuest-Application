@@ -70,7 +70,7 @@ def test_converse_binds_only_read_tools_and_uses_the_persona(monkeypatch):
     build_converse_graph(deps_for(Spy()), None)
     assert ("converse_system", {"persona": True}) in prompts
     tools = {t.name for t in C.langchain_tools() if not C.TOOLS[t.name].write}
-    assert tools and not {"create_list", "add_item", "complete_item", "update_list"} & tools
+    assert tools and not {"create_list", "add_item", "update_item", "break_down_task", "complete_item", "update_list"} & tools
 
 
 async def test_memory_folds_after_twenty_messages(seeded):

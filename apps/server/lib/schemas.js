@@ -138,4 +138,13 @@ export const internalToggleBody = z.object({ ...internalBase, completed: z.boole
 export const internalUpdateListBody = z
     .object({ ...internalBase, priority: listFields.priority, deadline: listFields.deadline })
     .strict();
+// Change a task's own fields (name, description, due date, priority, tags, repeat, parent). Moving is not offered.
+export const internalUpdateItemBody = z
+    .object({ ...internalBase, ...createItemBody.partial().shape })
+    .strict()
+    .refine((o) => Object.keys(o).length > 1, 'Nothing to update');
+// Break a task down into 2-8 subtasks (the AI tool's limits; the shared service allows up to 20).
+export const internalSubtasksBody = z
+    .object({ ...internalBase, names: z.array(z.string().min(1).max(TEXT_LIMITS.ITEM_NAME)).min(2).max(8) })
+    .strict();
 export const internalIndexBody = z.object({ discordId: internalBase.discordId, listId: z.number().int().positive().optional() }).strict();

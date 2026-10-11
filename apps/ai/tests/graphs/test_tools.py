@@ -47,7 +47,7 @@ def test_model_facing_schemas_never_expose_discord_id():
 
 def test_write_tools_are_flagged_and_have_previews():
     writes = {n for n, t in TOOLS.items() if t.write}
-    assert writes == {"create_list", "add_item", "complete_item", "update_list"}
+    assert writes == {"create_list", "add_item", "update_item", "break_down_task", "complete_item", "update_list"}
     assert all(TOOLS[n].preview for n in writes)
     assert not any(t.write for n, t in TOOLS.items() if n not in writes)
 
@@ -146,3 +146,115 @@ async def test_web_client_turns_bad_responses_into_tool_errors(status, content, 
     )
     with pytest.raises(ToolError, match=re.escape(message)):
         await web.create_list(UID, {"name": "x"})
+
+
+# ── per-task fields and break_down_task ──────────────────────────────────────
+
+
+async def test_add_item_sends_the_per_task_fields_in_the_internal_api_names(seeded):
+    calls: list = []
+    await run(
+        "add_item",
+        web=make_web(calls=calls),
+        list_id="L1",
+        name="Essay",
+        due_date="2030-06-01",
+        priority="HIGH",
+        tags=["#school", "essay"],
+        repeat="weekly",
+        parent_id="I1",
+    )
+    method, path, body, token = calls[0]
+    assert (method, path, token) == ("POST", "/internal/lists/1/items", "secret-token")
+    assert body == {
+        "discordId": UID,
+        "name": "Essay",
+        "due_date": "2030-06-01",
+        "priority": "HIGH",
+        "tags": ["school", "essay"],
+        "recurrence": "weekly",
+        "parent_id": 1,
+    }
+
+
+async def test_plain_add_item_still_sends_only_the_name(seeded):
+    calls: list = []
+    await run("add_item", web=make_web(calls=calls), list_id="L1", name="Just this")
+    assert calls[0][2] == {"discordId": UID, "name": "Just this"}
+
+
+def test_per_task_arguments_are_strictly_validated():
+    add = TOOLS["add_item"].args
+    bad_args = [
+        {"due_date": "2030-02-30"},  # not a real date
+        {"due_date": "tomorrow"},
+        {"priority": "URGENT"},
+        {"repeat": "yearly"},
+        {"tags": ["a", "b", "c", "d", "e", "f"]},  # more than 5
+        {"tags": ["has space"]},
+        {"tags": ["x" * 21]},
+        {"xp": 99},  # unknown field
+        {"discord_id": "222"},
+    ]
+    for extra in bad_args:
+        with pytest.raises(ValidationError):
+            add(list_id="L1", name="x", **extra)
+    assert add(list_id="L1", name="x", tags=["a", "b", "c", "d", "e"], due_date="2030-02-28").tags
+    update = TOOLS["update_item"].args
+    with pytest.raises(ValidationError):  # nothing to change
+        update(item_id="I1")
+    with pytest.raises(ValidationError):
+        update(item_id="I1", position=0)  # moving is not a tool
+    assert update(item_id="I1", priority="LOW").priority == "LOW"
+
+
+async def test_update_item_calls_express_and_the_preview_lists_every_change(seeded):
+    calls: list = []
+    out = await run("update_item", web=make_web(calls=calls), item_id="I1", priority="LOW", due_date="2030-07-01", repeat="daily")
+    assert out == {"ok": True}
+    method, path, body, _ = calls[0]
+    assert (method, path) == ("PATCH", "/internal/items/1")
+    assert body == {"discordId": UID, "priority": "LOW", "due_date": "2030-07-01", "recurrence": "daily"}
+    spec = TOOLS["update_item"]
+    text_ = await spec.preview(ctx(), spec.args(item_id="I1", name="Renamed", priority="LOW", tags=["x"], repeat="daily"))
+    for expected in ("Problems 1-10", "Renamed", "Priority: LOW", "Tags: x", "Repeats: daily", "Approve?"):
+        assert expected in text_
+    with pytest.raises(ToolError):
+        await spec.preview(ctx(), spec.args(item_id="I4", priority="LOW"))  # another user's subtask
+
+
+async def test_break_down_task_validates_bounds_and_uses_the_trusted_id(seeded):
+    spec = TOOLS["break_down_task"]
+    assert spec.write and spec.preview
+    for names in (["only one"], [f"s{i}" for i in range(9)], ["ok", ""], ["ok", "x" * 201]):
+        with pytest.raises(ValidationError):
+            spec.args(item_id="I1", subtasks=names)
+    with pytest.raises(ValidationError):
+        spec.args(item_id="I1", subtasks=["a", "b"], discord_id="222")
+    calls: list = []
+    web = make_web({"/internal/items/1/subtasks": (201, {"items": [{"id": 9}, {"id": 10}]})}, calls)
+    out = await run("break_down_task", web=web, item_id="I1", subtasks=["Outline", "Draft"])
+    assert out["items"][0]["id"] == 9
+    method, path, body, token = calls[0]
+    assert (method, path, token) == ("POST", "/internal/items/1/subtasks", "secret-token")
+    assert body == {"discordId": UID, "names": ["Outline", "Draft"]}
+
+
+async def test_break_down_preview_lists_the_steps_and_rejects_foreign_items(seeded):
+    spec = TOOLS["break_down_task"]
+    text_ = await spec.preview(ctx(), spec.args(item_id="I1", subtasks=["Outline", "Draft", "Edit"]))
+    assert 'Break "Problems 1-10" into 3 subtasks' in text_
+    assert "1. Outline" in text_ and "3. Edit" in text_ and text_.endswith("Approve?")
+    with pytest.raises(ToolError):
+        await spec.preview(ctx(), spec.args(item_id="I4", subtasks=["a", "b"]))  # belongs to user 222
+    with pytest.raises(ToolError):
+        await spec.preview(ctx(uid=OTHER), spec.args(item_id="I1", subtasks=["a", "b"]))  # not theirs either
+
+
+async def test_add_item_preview_shows_per_task_fields_and_the_parent(seeded):
+    spec = TOOLS["add_item"]
+    text_ = await spec.preview(
+        ctx(), spec.args(list_id="L1", name="Extra", due_date="2030-01-05", priority="MEDIUM", tags=["a"], repeat="monthly", parent_id="I1")
+    )
+    for expected in ("Extra", "Math homework", "Due: 2030-01-05", "Priority: MEDIUM", "Tags: a", "Repeats: monthly", "Problems 1-10"):
+        assert expected in text_

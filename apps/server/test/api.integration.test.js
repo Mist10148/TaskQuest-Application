@@ -452,6 +452,55 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('GET', '/api/user', { cookie: mallory })).status, 401);
     });
 
+    await t.test('internal API: AI tools set per-task fields and break a task down, owner-scoped', async () => {
+        const { default: config } = await import('../config.js');
+        const saved = { ...config.ai };
+        const TOKEN = 'internal-token-'.padEnd(40, 'x');
+        Object.assign(config.ai, { enabled: true, internalToken: TOKEN, serviceUrl: 'http://127.0.0.1:9', timeoutMs: 200 });
+        try {
+            const aliceId = '200000000000000001';
+            const malloryId = '200000000000000002';
+            const internal = (method, path, body, token = TOKEN) => call(method, `/internal${path}`, { body, origin: null, headers: { 'x-ai-token': token } });
+            const list = await (await call('POST', '/api/lists', { cookie: alice, body: { name: 'AI tools' } })).json();
+
+            // Create with every per-task field, update some, clear nothing it was not asked to.
+            const made = await internal('POST', `/lists/${list.id}/items`, { discordId: aliceId, name: 'Write essay', due_date: '2031-06-01', priority: 'HIGH', tags: ['school', 'essay'], recurrence: 'weekly' });
+            assert.equal(made.status, 201);
+            const item = await made.json();
+            assert.deepEqual([item.priority, item.tags, item.recurrence], ['HIGH', 'school,essay', 'weekly']);
+            assert.equal(String(item.due_date).slice(0, 10), '2031-06-01');
+            assert.equal((await internal('POST', `/lists/${list.id}/items`, { discordId: aliceId, name: 'bad', tags: ['a', 'b', 'c', 'd', 'e', 'f'] })).status, 400, 'at most 5 tags');
+            assert.equal((await internal('POST', `/lists/${list.id}/items`, { discordId: aliceId, name: 'bad', due_date: '2031-02-30' })).status, 400);
+            assert.equal((await internal('POST', `/lists/${list.id}/items`, { discordId: aliceId, name: 'bad', xp: 5000 })).status, 400, 'unknown fields are rejected');
+
+            const patched = await internal('PATCH', `/items/${item.id}`, { discordId: aliceId, priority: 'LOW', due_date: '2031-07-01' });
+            assert.equal(patched.status, 200);
+            const after = await patched.json();
+            assert.equal(after.priority, 'LOW');
+            assert.equal(after.tags, 'school,essay', 'untouched fields stay');
+            assert.equal((await internal('PATCH', `/items/${item.id}`, { discordId: aliceId })).status, 400, 'nothing to update');
+            assert.equal((await internal('PATCH', `/items/${item.id}`, { discordId: malloryId, priority: 'HIGH' })).status, 404, 'another user cannot change it');
+            assert.equal((await internal('PATCH', `/items/${item.id}`, { discordId: aliceId, priority: 'HIGH' }, 'wrong-token')).status, 401);
+
+            // Break down: all or none, one level, owner-scoped, 2-8 names.
+            const names = ['Outline', 'Draft', 'Edit'];
+            const split = await internal('POST', `/items/${item.id}/subtasks`, { discordId: aliceId, names });
+            assert.equal(split.status, 201);
+            const body = await split.json();
+            assert.deepEqual(body.items.map((i) => i.name), names);
+            assert.ok(body.items.every((i) => i.parent_id === item.id && i.list_id === list.id));
+            assert.equal((await internal('POST', `/items/${item.id}/subtasks`, { discordId: malloryId, names })).status, 404);
+            assert.equal((await internal('POST', `/items/${body.items[0].id}/subtasks`, { discordId: aliceId, names })).status, 400, 'a subtask cannot be broken down again');
+            assert.equal((await internal('POST', `/items/${item.id}/subtasks`, { discordId: aliceId, names: ['only one'] })).status, 400);
+            assert.equal((await internal('POST', `/items/${item.id}/subtasks`, { discordId: aliceId, names: Array(9).fill('x') })).status, 400);
+            assert.equal((await internal('POST', `/items/${item.id}/subtasks`, { discordId: aliceId, names, extra: 1 })).status, 400);
+            const items = await (await call('GET', `/api/lists/${list.id}`, { cookie: alice })).json();
+            assert.equal(items.items.filter((i) => i.parent_id === item.id).length, 3, 'rejected requests created nothing');
+        } finally {
+            Object.assign(config.ai, saved);
+        }
+    });
+
     server.close();
     await db.closePool();
 });

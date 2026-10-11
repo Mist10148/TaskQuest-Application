@@ -18,7 +18,9 @@ import {
     internalCreateListBody,
     internalAddItemBody,
     internalToggleBody,
-    internalUpdateListBody
+    internalUpdateListBody,
+    internalUpdateItemBody,
+    internalSubtasksBody
 } from '../lib/schemas.js';
 
 /** Constant-time check of the shared secret. 404s when AI is disabled. */
@@ -72,6 +74,31 @@ router.patch(
         const r = await db.tasks.setItemCompleted(discordId, id, completed);
         if (r.item?.list_id) aiClient.reindex(discordId, r.item.list_id);
         res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses });
+    })
+);
+
+router.patch(
+    '/items/:id',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { discordId, ...fields } = parse(internalUpdateItemBody, req.body);
+        const updated = await db.tasks.updateItem(discordId, id, fields);
+        aiClient.reindex(discordId, updated.list_id);
+        res.json(updated);
+    })
+);
+
+// Break a task down: 2-8 subtasks under it in one transaction, owner-scoped by the discordId the AI service took from its state.
+router.post(
+    '/items/:id/subtasks',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { discordId, names } = parse(internalSubtasksBody, req.body);
+        const r = await db.tasks.addSubtasks(discordId, id, names);
+        aiClient.reindex(discordId, r.parent.list_id);
+        const achievements = r.items.flatMap((x) => x.achievements || []);
+        const xp = r.items.reduce((last, x) => (x.xp?.finalXP ? x.xp : last), null);
+        res.status(201).json({ parent: r.parent, items: r.items.map((x) => x.item), newAchievements: achievements, xpResult: xpResult(xp) });
     })
 );
 

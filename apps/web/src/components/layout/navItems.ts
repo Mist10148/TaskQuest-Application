@@ -1,4 +1,4 @@
-import { LayoutDashboard, ListTodo, User, Sword, Sparkles, Trophy, BarChart3, Gamepad2, Bot, Timer, ClipboardCheck, Activity, ShoppingBag } from "lucide-react";
+import { LayoutDashboard, ListTodo, User, Sword, Sparkles, Trophy, BarChart3, Gamepad2, Bot, Timer, ClipboardCheck, Activity, Shield, ShoppingBag } from "lucide-react";
 
 export const NAV_ITEMS = [
   { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", keywords: "home overview" },
@@ -6,6 +6,7 @@ export const NAV_ITEMS = [
   { path: "/games", icon: Gamepad2, label: "Games", keywords: "arcade play blackjack" },
   { path: "/focus", icon: Timer, label: "Focus", keywords: "pomodoro timer session concentrate" },
   { path: "/review", icon: ClipboardCheck, label: "Weekly review", keywords: "week recap bonus" },
+  { path: "/party", icon: Shield, label: "Party", keywords: "team group friends co-op weekly quest invite" },
   { path: "/stats", icon: Activity, label: "Stats", keywords: "charts history heatmap xp progress" },
   { path: "/profile", icon: User, label: "Profile", keywords: "stats me" },
   { path: "/classes", icon: Sword, label: "Classes", keywords: "shop buy equip" },

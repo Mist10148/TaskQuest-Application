@@ -492,6 +492,8 @@ const LIMITS = {
     LIST_CLEARED_PER_DAY: 5,
     /** EARLY_FINISH never pays more than this per task (5 XP per day early). */
     EARLY_FINISH_MAX: 20,
+    /** A due date must have been set this many hours before the completion to count as early or overdue (stops backdating). */
+    DUE_DATE_MIN_AGE_HOURS: 24,
     /** early_finish + overdue_clear share this many XP a day. */
     DEADLINE_BONUS_XP_PER_DAY: 100,
     /** subtasks_done pays at most this many XP a day (one parent). */

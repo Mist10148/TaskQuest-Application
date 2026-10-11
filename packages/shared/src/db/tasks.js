@@ -369,9 +369,9 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
 
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [lid, name, description, Number(pos.next), extras.due_date, extras.priority, extras.tags, extras.recurrence, parentId, user.discord_id]
+        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [lid, name, description, Number(pos.next), extras.due_date, extras.due_date ? new Date() : null, extras.priority, extras.tags, extras.recurrence, parentId, user.discord_id]
     );
     await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
     user.total_items_added = Number(user.total_items_added) + 1;
@@ -409,6 +409,11 @@ async function updateItem(discordId, itemId, input) {
             // A new due date also re-arms the task's reminder (due-day DM and any snooze).
             let cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
             if (keys.includes('due_date')) cols = [...cols, 'reminded_at', 'remind_at'];
+            // Only a changed date restarts the 24-hour clock that early/overdue effects need (see trustedDueDate).
+            if (keys.includes('due_date') && String(item.due_date || '').slice(0, 10) !== (fields.due_date || '')) {
+                fields.due_date_set_at = fields.due_date ? new Date() : null;
+                cols = [...cols, 'due_date_set_at'];
+            }
             await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
             if (keys.includes('due_date')) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
         });
@@ -483,12 +488,25 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0) {
     if (!due) return null;
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-        [item.list_id, item.name, item.description, Number(pos.next), due, item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
+        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
     return shapeItem(created);
+}
+
+/**
+ * The task's due date as far as early/overdue effects may believe it: only a date that was set at least
+ * LIMITS.DUE_DATE_MIN_AGE_HOURS before `now`. A date typed in just now (say, last year's) completes the task
+ * normally with no overdue or early extras, so backdating cannot farm them.
+ * @returns {string|null} YYYY-MM-DD or null
+ */
+function trustedDueDate(item, now) {
+    if (!item.due_date || !item.due_date_set_at) return null;
+    const setAt = new Date(item.due_date_set_at).getTime();
+    if (!Number.isFinite(setAt) || setAt > now.getTime() - LIMITS.DUE_DATE_MIN_AGE_HOURS * 3600e3) return null;
+    return String(item.due_date).slice(0, 10);
 }
 
 /**
@@ -496,9 +514,9 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0) {
  * repeats, its due date and how overdue it was (in the user's own time zone), and whether this
  * completion emptied a list of at least three tasks. Call after the item row is marked completed.
  */
-async function completionContext(conn, item, user) {
+async function completionContext(conn, item, user, now = new Date()) {
     const today = todayInZone(user.timezone);
-    const dueDate = item.due_date ? String(item.due_date).slice(0, 10) : null;
+    const dueDate = trustedDueDate(item, now);
     const [[counts]] = await conn.query(
         'SELECT COUNT(*) AS total, COALESCE(SUM(completed = 0), 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
         [item.list_id]
@@ -508,6 +526,8 @@ async function completionContext(conn, item, user) {
         recurring: Boolean(item.recurrence),
         today,
         dueDate,
+        // The stored date whatever its age: habit streaks follow the schedule, not the bonuses.
+        scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null,
         overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
         listCleared: !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0
     };
@@ -565,8 +585,8 @@ async function completionBonuses(conn, user, item, ctx) {
  */
 function habitOutcome(item, ctx) {
     const streak = Number(item.habit_streak) || 0;
-    if (ctx.dueDate && ctx.dueDate < ctx.today) return { streak: 0, counted: false };
-    const early = ctx.dueDate ? daysBetween(ctx.today, ctx.dueDate) : 0;
+    if (ctx.scheduledDate && ctx.scheduledDate < ctx.today) return { streak: 0, counted: false };
+    const early = ctx.scheduledDate ? daysBetween(ctx.today, ctx.scheduledDate) : 0;
     if (early >= (HABIT_PERIOD_DAYS[item.recurrence] || 1)) return { streak, counted: false };
     return { streak: streak + 1, counted: true };
 }
@@ -592,7 +612,7 @@ async function setItemCompleted(discordId, itemId, completed) {
         let bonuses = [];
         if (target && !item.xp_awarded) {
             // first_completed_* is what quests count: set once, never rewritten by a re-check or a later priority edit.
-            const dueOn = item.due_date ? String(item.due_date).slice(0, 10) : null;
+            const dueOn = trustedDueDate(item, now);
             const todayLocal = todayInZone(user.timezone);
             await conn.query(
                 `UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_by = ?, first_completed_high = ?,
@@ -601,7 +621,7 @@ async function setItemCompleted(discordId, itemId, completed) {
             );
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
-            const ctx = await completionContext(conn, item, user);
+            const ctx = await completionContext(conn, item, user, now);
             xp = await rewardAction(conn, user, 'item_complete', REWARDS.ITEM_COMPLETE, {
                 context: ctx,
                 dailyLimit: LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY,

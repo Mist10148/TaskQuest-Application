@@ -35,6 +35,12 @@ async function setXP(id, xp) {
     await db.query('UPDATE users SET player_xp = ?, lifetime_xp = GREATEST(lifetime_xp, ?) WHERE discord_id = ?', [xp, xp, id]);
 }
 
+/** Pretend a task's due date was set two days ago, so the 24-hour rule for early/overdue effects is met. Returns the id. */
+async function ageDue(id) {
+    await db.query('UPDATE items SET due_date_set_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 2 DAY) WHERE id = ? AND due_date IS NOT NULL', [id]);
+    return id;
+}
+
 test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     const pool = db.getPool();
     const [tables] = await pool.query('SHOW TABLES');
@@ -961,7 +967,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             return d.toISOString().slice(0, 10);
         };
         const { list } = await db.tasks.createList(G, { name: 'Trail' });
-        const make = async (name, due_date) => (await db.tasks.addItem(G, list.id, { name, due_date })).item.id;
+        const make = async (name, due_date) => ageDue((await db.tasks.addItem(G, list.id, { name, due_date })).item.id);
         const early = await db.tasks.setItemCompleted(G, await make('early', day(3)));
         assert.equal(early.xp.bonusInfo.type, 'RANGER_EARLY');
         assert.equal(early.xp.bonusInfo.classBonus, 3 + 6, '3 days early on a 10 XP task');
@@ -993,7 +999,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             return d.toISOString().slice(0, 10);
         };
         const { list } = await db.tasks.createList(N, { name: 'Crypt' });
-        const add = async (name, due_date) => (await db.tasks.addItem(N, list.id, { name, due_date })).item.id;
+        const add = async (name, due_date) => ageDue((await db.tasks.addItem(N, list.id, { name, due_date })).item.id);
         const first = await db.tasks.setItemCompleted(N, await add('stale', day(-3)));
         assert.equal(first.xp.bonusInfo.type, 'NECROMANCER_REVIVE');
         assert.equal(first.xp.bonusInfo.classBonus, 15 + 9 + 0, '3 days overdue on a 10 XP task, first soul');
@@ -1137,7 +1143,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(U);
         const { list } = await db.tasks.createList(U, { name: 'Deadlines' });
         let n = 0;
-        const add = async (due) => (await db.tasks.addItem(U, list.id, { name: `t${n++}`, due_date: due })).item.id;
+        const add = async (due) => ageDue((await db.tasks.addItem(U, list.id, { name: `t${n++}`, due_date: due })).item.id);
         const complete = (id) => db.tasks.setItemCompleted(U, id);
 
         const soon = await complete(await add(dayOffset(2)));
@@ -1506,7 +1512,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const shared = require('../src');
         const { list } = await db.tasks.createList(U, { name: 'Facts' });
         let n = 0;
-        const add = async (due) => (await db.tasks.addItem(U, list.id, { name: `f${n++}`, due_date: due })).item.id;
+        const add = async (due) => ageDue((await db.tasks.addItem(U, list.id, { name: `f${n++}`, due_date: due })).item.id);
         const early = await add(dayOffset(5));
         const late = await add(dayOffset(-2));
         const today = await add(dayOffset(0));
@@ -2794,6 +2800,72 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const settled = await Promise.allSettled([db.sharing.respond(R.b, inv.id, true), db.tasks.deleteList(R.own, gone.list.id)]);
         for (const r of settled) if (r.status === 'rejected') assert.ok(['NOT_FOUND', 'CONFLICT'].includes(r.reason.code), r.reason && r.reason.message);
         assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [gone.list.id]))[0].n, 0);
+    });
+
+    await t.test('backdated and far-future due dates earn no overdue or early extras until they are 24 hours old', async () => {
+        const N = '100000000000000601';
+        const G = '100000000000000602';
+        const E = '100000000000000603';
+        for (const id of [N, G, E]) await db.users.ensureUser(id);
+        for (const [id, cls] of [[N, 'necromancer'], [G, 'RANGER']]) {
+            await setXP(id, 650);
+            await db.progression.buyClass(id, cls);
+        }
+        const dayOff = (n) => new Date(Date.now() + n * 86400e3).toISOString().slice(0, 10);
+        const setAt = async (id) => (await db.query('SELECT due_date_set_at FROM items WHERE id = ?', [id]))[0].due_date_set_at;
+
+        // Necromancer: a task created already overdue is not a revive; the same task with an aged date is.
+        const crypt = (await db.tasks.createList(N, { name: 'Crypt2' })).list;
+        const fresh = (await db.tasks.addItem(N, crypt.id, { name: 'made up', due_date: '2000-01-01' })).item;
+        assert.ok(await setAt(fresh.id), 'a due date records when it was set');
+        const a = await db.tasks.setItemCompleted(N, fresh.id);
+        assert.equal(a.xp.bonusInfo.type, 'NECROMANCER', 'no revive for a date typed in just now');
+        assert.ok(!bonusKeys(a).includes('overdue_clear'));
+        assert.equal(Number((await db.users.getUser(N)).necro_souls), 0);
+        assert.equal((await db.query('SELECT first_completed_overdue AS o FROM items WHERE id = ?', [fresh.id]))[0].o, null, 'and it is not an overdue fact for quests');
+        const aged = await ageDue((await db.tasks.addItem(N, crypt.id, { name: 'really stale', due_date: dayOff(-3) })).item.id);
+        const b = await db.tasks.setItemCompleted(N, aged);
+        assert.equal(b.xp.bonusInfo.type, 'NECROMANCER_REVIVE');
+        assert.ok(bonusKeys(b).includes('overdue_clear'));
+
+        // Ranger: a far-future date paid +45 before; fresh pays the plain flat, aged pays the early bonus.
+        const trail = (await db.tasks.createList(G, { name: 'Trail2' })).list;
+        const far = await db.tasks.setItemCompleted(G, (await db.tasks.addItem(G, trail.id, { name: 'far', due_date: '2100-01-01' })).item.id);
+        assert.equal(far.xp.bonusInfo.type, 'RANGER');
+        const farAged = await db.tasks.setItemCompleted(G, await ageDue((await db.tasks.addItem(G, trail.id, { name: 'far aged', due_date: dayOff(3) })).item.id));
+        assert.equal(farAged.xp.bonusInfo.type, 'RANGER_EARLY');
+
+        // early_finish and the early quest fact need an aged date too.
+        const l2 = (await db.tasks.createList(E, { name: 'Early2' })).list;
+        const e1 = await db.tasks.setItemCompleted(E, (await db.tasks.addItem(E, l2.id, { name: 'e1', due_date: dayOff(20) })).item.id);
+        assert.ok(!bonusKeys(e1).includes('early_finish'));
+        assert.equal((await db.query('SELECT first_completed_early AS o FROM items WHERE id = ?', [e1.item.id]))[0].o, null);
+        const e2 = await db.tasks.setItemCompleted(E, await ageDue((await db.tasks.addItem(E, l2.id, { name: 'e2', due_date: dayOff(20) })).item.id));
+        assert.ok(bonusKeys(e2).includes('early_finish'));
+
+        // Editing: the same date keeps its age, a different date starts the clock again, clearing it clears the stamp.
+        const edit = await ageDue((await db.tasks.addItem(E, l2.id, { name: 'edit', due_date: dayOff(10) })).item.id);
+        const before = (await setAt(edit)).getTime();
+        await db.tasks.updateItem(E, edit, { due_date: dayOff(10), name: 'edit2' });
+        assert.equal((await setAt(edit)).getTime(), before);
+        await db.tasks.updateItem(E, edit, { due_date: dayOff(11) });
+        assert.ok((await setAt(edit)).getTime() > before + 86400e3, 'a changed date is fresh again');
+        const e3 = await db.tasks.setItemCompleted(E, edit);
+        assert.ok(!bonusKeys(e3).includes('early_finish'));
+        const none = (await db.tasks.addItem(E, l2.id, { name: 'none' })).item;
+        assert.equal(await setAt(none.id), null);
+        await db.tasks.updateItem(E, none.id, { due_date: dayOff(2) });
+        assert.ok(await setAt(none.id));
+        await db.tasks.updateItem(E, none.id, { due_date: '' });
+        assert.equal(await setAt(none.id), null);
+
+        // A repeating copy is stamped when it spawns; imported tasks when they are imported.
+        const rep = (await db.tasks.addItem(E, l2.id, { name: 'daily', recurrence: 'daily', due_date: dayOff(0) })).item;
+        const done = await db.tasks.setItemCompleted(E, rep.id);
+        assert.ok(await setAt(done.nextItem.id));
+        await db.transfer.importAll(E, { lists: [{ name: 'Imp2', items: [{ name: 'x', due_date: dayOff(5) }] }] });
+        const imported = (await db.query("SELECT i.id FROM items i JOIN lists l ON l.id = i.list_id WHERE l.name = 'Imp2' AND l.discord_id = ?", [E]))[0];
+        assert.ok(await setAt(imported.id));
     });
 
     await db.closePool();

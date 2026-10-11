@@ -80,8 +80,8 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🛡️ **Tank** | 500 | +1 shield stack per action, capped at min(15, 3 + ⌊level / 3⌋) (plus 2 per Absorb level). Bonus is ⌊base × stacks × 4%⌋ + ⌊stacks / 2⌋. |
 | 🧘 **Monk** | 550 | **Rhythm** (max 14, counted in your days). The first rewarded action on a new day continues the Rhythm if you were active yesterday (+1), otherwise it restarts at 1. Further actions the same day keep it. Bonus on every action = ⌊base × Rhythm × 3%⌋ + Rhythm. |
 | 🛠️ **Artisan** | 650 | **Project** (max 10). Every action adds 1 progress and pays +2 XP per progress. Completing the last open task of a list that has at least 3 tasks finishes the project: +5 XP per progress on top, then progress resets to 0. Repeating tasks and subtasks never count as the last task. |
-| 🧭 **Ranger** | 600 | **Deadline Hunter.** Completing a task with a due date *early* by d days (up to 7) pays ⌊base × 10% × d⌋ + 2 × d. *Due today* pays ⌊base × 25%⌋. *Overdue* pays nothing. Every other action (including completing a task with no due date) pays +3. No counter. |
-| 💀 **Necromancer** | 600 | **Revive.** Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 5%⌋ to *every* action (counted after the new soul). Souls do not decay. |
+| 🧭 **Ranger** | 600 | **Deadline Hunter.** (The due date must be at least 24 hours old; a freshly set date counts as no due date.) Completing a task with a due date *early* by d days (up to 7) pays ⌊base × 10% × d⌋ + 2 × d. *Due today* pays ⌊base × 25%⌋. *Overdue* pays nothing. Every other action (including completing a task with no due date) pays +3. No counter. |
+| 💀 **Necromancer** | 600 | **Revive.** (The due date must be at least 24 hours old, or the task is not overdue for this purpose.) Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 5%⌋ to *every* action (counted after the new soul). Souls do not decay. |
 | ⚜️ **Paladin** | 750 | **Vow.** Completing a HIGH priority task pays base + 10; every other action pays +5. Passive: your daily streak always has the Streak Shield window (72 hours) for free, including on the streak leaderboard. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
@@ -265,6 +265,8 @@ What counts: a task counts toward the completion quests once, at the moment it i
 ## 5c. Bonus XP sources
 
 Every source below is **flat XP** (no class or skill modifiers, except the prestige multiplier on class-modified XP), is paid in its own `xp_transactions` source, counts for the weekly board, and has a cap. Task bonuses are paid only on a task's **first, paid completion** (so un-checking and re-checking pays nothing, and neither does a completion that hit the 50-a-day cap) and never for imported tasks or auto-created repeat copies. They are listed in the completion result as `bonuses: [{key, label, xp}]`.
+
+**Overdue and early effects need an aged due date.** A due date counts as early or overdue (for `early_finish`, `overdue_clear`, the Ranger and Necromancer bonuses, and the *Early Riser* and *Spring Cleaning* quest facts) only if it was set at least 24 hours before the completion. A task created or re-dated within the last day completes normally, with no overdue or early extras, so a made-up past or far-future date cannot be farmed. Editing a due date to a different day restarts the clock; a repeating copy is stamped when it spawns.
 
 | Source (`xp_transactions.source`) | Amount | Cap |
 |---|---|---|

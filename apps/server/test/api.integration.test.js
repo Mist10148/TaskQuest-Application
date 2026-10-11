@@ -331,6 +331,11 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     await t.test('task bonuses are returned by the toggle route', async () => {
         const list = await (await call('POST', '/api/lists', { cookie: alice, body: { name: 'Bonus API' } })).json();
         const item = await (await call('POST', `/api/lists/${list.id}/items`, { cookie: alice, body: { name: 'early', due_date: '2099-01-01' } })).json();
+        // A due date typed in just now earns no early bonus; one that is a day old does.
+        const justNow = await (await call('POST', `/api/lists/${list.id}/items`, { cookie: alice, body: { name: 'backdated', due_date: '2099-01-01' } })).json();
+        const plain = await (await call('PATCH', `/api/items/${justNow.id}/toggle`, { cookie: alice })).json();
+        assert.equal(plain.bonuses.find((b) => b.key === 'early_finish'), undefined);
+        await db.query('UPDATE items SET due_date_set_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 2 DAY) WHERE id = ?', [item.id]);
         const done = await (await call('PATCH', `/api/items/${item.id}/toggle`, { cookie: alice })).json();
         assert.ok(Array.isArray(done.bonuses));
         assert.deepEqual(done.bonuses.find((b) => b.key === 'early_finish'), { key: 'early_finish', label: 'Finished early', xp: 20 });

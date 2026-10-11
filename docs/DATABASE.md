@@ -46,6 +46,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `015_timezone_days` | `users.timezone_changed_at` (throttles zone changes now that the zone sets the user's day) |
 | `016_cosmetics` | The `user_cosmetics` table and `users.equipped_title`, `equipped_frame`, `equipped_accent` |
 | `017_web_push` | The `push_subscriptions` table and `users.web_push` |
+| `020_due_date_set_at` | `items.due_date_set_at` (when the due date was set or last changed; backfilled from `created_at`). Overdue and early effects apply only to a date set at least 24 hours before the completion |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 

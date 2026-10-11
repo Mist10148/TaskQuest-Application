@@ -324,6 +324,21 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).status, 409);
     });
 
+    await t.test('weekly review endpoints', async () => {
+        assert.equal((await call('GET', '/api/review')).status, 401);
+        assert.equal((await call('POST', '/api/review/claim')).status, 401);
+        const state = await (await call('GET', '/api/review', { cookie: alice })).json();
+        assert.deepEqual(Object.keys(state).sort(), ['claimable', 'claimed', 'completed', 'resetsAt', 'reward', 'streak', 'weekStart', 'xpEarned']);
+        assert.ok(state.completed >= 1, 'alice finished tasks earlier in this run');
+        const claimed = await call('POST', '/api/review/claim', { cookie: alice });
+        assert.equal(claimed.status, 200);
+        assert.equal((await claimed.json()).xp, 40);
+        assert.equal((await call('POST', '/api/review/claim', { cookie: alice })).status, 409);
+        assert.equal((await (await call('GET', '/api/review', { cookie: alice })).json()).claimed, true);
+        assert.equal((await call('POST', '/api/review/claim', { cookie: mallory })).status, 400, 'mallory has finished nothing');
+        assert.equal((await call('POST', '/api/review/claim', { cookie: alice, origin: 'https://evil.example' })).status, 403);
+    });
+
     await t.test('logout destroys the session', async () => {
         const res = await call('POST', '/api/auth/logout', { cookie: mallory });
         assert.equal(res.status, 200);

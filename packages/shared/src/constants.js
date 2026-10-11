@@ -347,8 +347,12 @@ const REWARDS = {
     ACHIEVEMENT: 25,
     HABIT_PER_STREAK: 2,
     HABIT_MIN_STREAK: 2,
-    FOCUS_XP_PER_MINUTE: 0.6
+    FOCUS_XP_PER_MINUTE: 0.6,
+    WEEKLY_REVIEW: 40
 };
+
+/** quest_claims.quest_key under which the weekly review claim is stored. */
+const WEEKLY_REVIEW_KEY = 'WEEKLY_REVIEW';
 
 /** How early (in days) a repeating task may be finished and still continue its habit streak: under one period. */
 const HABIT_PERIOD_DAYS = { daily: 1, weekly: 7, monthly: 28 };
@@ -388,7 +392,7 @@ const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
     'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
     'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest',
-    'achievement_reward', 'habit_bonus', 'focus_session'
+    'achievement_reward', 'habit_bonus', 'focus_session', 'weekly_review'
 ];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
@@ -452,6 +456,8 @@ const LIMITS = {
     FOCUS_XP_PER_DAY: 100,
     FOCUS_SESSIONS_PER_DAY: 8,
     FOCUS_EXPIRE_MINUTES: 180,
+    /** The weekly review needs this many tasks finished that week. */
+    WEEKLY_REVIEW_MIN_COMPLETED: 1,
     /** Total XP that free games (RPS, Hangman, arcade) may award per day. */
     FREE_GAME_XP_PER_DAY: 500,
     /** Minimum time between two free-game rounds. */
@@ -532,6 +538,7 @@ module.exports = {
     REWARDS,
     BONUS_LABELS,
     HABIT_PERIOD_DAYS,
+    WEEKLY_REVIEW_KEY,
     STREAK_CHESTS,
     STREAK_FREEZE,
     STREAK_FREEZE_CACHE,

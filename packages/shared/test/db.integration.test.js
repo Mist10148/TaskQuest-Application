@@ -1306,5 +1306,58 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await db.focus.startFocus(W, 10)).sessionId, 'a new day opens the cap again');
     });
 
+
+    await t.test('weekly review: needs a finished task, pays 40 XP once per week', async () => {
+        const U = '100000000000000151';
+        await db.users.ensureUser(U);
+        const empty = await db.review.getReview(U);
+        assert.deepEqual([empty.completed, empty.claimable, empty.claimed], [0, false, false]);
+        assert.match(empty.weekStart, /^\d{4}-\d{2}-\d{2}$/);
+        assert.equal(new Date(`${empty.weekStart}T00:00:00Z`).getUTCDay(), 1, 'weeks start on Monday');
+        await assert.rejects(db.review.claimReview(U), { code: 'VALIDATION' });
+
+        const { list } = await db.tasks.createList(U, { name: 'Review' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'ship it' });
+        await db.tasks.setItemCompleted(U, item.id);
+        const ready = await db.review.getReview(U);
+        assert.deepEqual([ready.completed, ready.claimable, ready.claimed], [1, true, false]);
+        assert.ok(ready.xpEarned > 0);
+
+        // Two simultaneous claims pay once.
+        const before = Number((await db.users.getUser(U)).player_xp);
+        const rewards0 = await rewardSum(U);
+        const results = await Promise.allSettled([db.review.claimReview(U), db.review.claimReview(U)]);
+        assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+        assert.equal(await sumSource(U, 'weekly_review'), 40);
+        assert.equal(Number((await db.users.getUser(U)).player_xp) - before - ((await rewardSum(U)) - rewards0), 40);
+        const after = await db.review.getReview(U);
+        assert.deepEqual([after.claimed, after.claimable], [true, false]);
+        await assert.rejects(db.review.claimReview(U), { code: 'CONFLICT' });
+        const [[row]] = await db.getPool().query("SELECT COUNT(*) AS n FROM quest_claims WHERE discord_id = ? AND quest_key = 'WEEKLY_REVIEW'", [U]);
+        assert.equal(Number(row.n), 1);
+
+        // Next week it opens again, but only for work done in that week.
+        const nextWeek = new Date(Date.now() + 7 * 86400e3);
+        assert.equal((await db.review.getReview(U, nextWeek)).completed, 0);
+        await assert.rejects(db.review.claimReview(U, nextWeek), { code: 'VALIDATION' }, 'last week\'s task does not count twice');
+        await db.query('UPDATE items SET first_completed_at = first_completed_at + INTERVAL 7 DAY WHERE id = ?', [item.id]);
+        assert.equal((await db.review.claimReview(U, nextWeek)).xp, 40);
+        // ...and unchecking and re-checking a task never moves its first completion into a new week.
+        await db.tasks.setItemCompleted(U, item.id, false);
+        await db.tasks.setItemCompleted(U, item.id, true);
+        assert.equal((await db.review.getReview(U)).completed, 0, 'the first completion was moved into next week above');
+    });
+
+    await t.test('weekly review: imported and spawned tasks do not count, and XP off cannot claim', async () => {
+        const U = '100000000000000152';
+        await db.users.ensureUser(U);
+        await db.transfer.importAll(U, { lists: [{ name: 'Imp', items: [{ name: 'done already', completed: true }] }] });
+        assert.equal((await db.review.getReview(U)).completed, 0);
+        await db.users.updateSettings(U, { gamification_enabled: false });
+        const off = await db.review.getReview(U);
+        assert.equal(off.claimable, false);
+        await assert.rejects(db.review.claimReview(U), { code: 'GAMIFICATION_DISABLED' });
+    });
+
     await db.closePool();
 });

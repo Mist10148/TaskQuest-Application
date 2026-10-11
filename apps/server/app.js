@@ -14,6 +14,7 @@ import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } fr
 import gamesRouter from './routes/games.js';
 import questsRouter from './routes/quests.js';
 import focusRouter from './routes/focus.js';
+import reviewRouter from './routes/review.js';
 import calendarRouter from './routes/calendar.js';
 import aiRouter from './routes/ai.js';
 import internalRouter, { requireInternalToken } from './routes/internal.js';
@@ -68,6 +69,7 @@ export function createApp() {
     app.use('/api/games', requireAuth, gamesRouter);
     app.use('/api/quests', requireAuth, questsRouter);
     app.use('/api/focus', requireAuth, focusRouter);
+    app.use('/api/review', requireAuth, reviewRouter);
     app.use('/api/ai', requireAuth, aiLimiter, aiRouter);
     app.get('/api/xp/history', requireAuth, asyncRoute(async (req, res) => res.json(await db.users.getXPHistory(uid(req), 50))));
 

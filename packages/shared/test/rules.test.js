@@ -765,3 +765,11 @@ test('focus sessions: constants', () => {
     assert.ok(WEEKLY_XP_SOURCES.includes('focus_session'));
     assert.equal(Math.floor(90 * REWARDS.FOCUS_XP_PER_MINUTE), 54);
 });
+
+test('weekly review: constants', () => {
+    const { REWARDS, LIMITS, WEEKLY_REVIEW_KEY, WEEKLY_XP_SOURCES } = require('../src/constants');
+    assert.equal(REWARDS.WEEKLY_REVIEW, 40);
+    assert.equal(LIMITS.WEEKLY_REVIEW_MIN_COMPLETED, 1);
+    assert.equal(WEEKLY_REVIEW_KEY, 'WEEKLY_REVIEW');
+    assert.ok(WEEKLY_XP_SOURCES.includes('weekly_review'));
+});

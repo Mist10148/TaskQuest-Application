@@ -91,13 +91,15 @@ Daily reward response (`200` in both cases):
 
 All routes are 🔒 and scoped to the lists you **own or are a member of** (see [Shared lists](#shared-lists-and-invitations)). A list or task you have no part in returns `404`, exactly like one that does not exist; a member whose role is too weak gets `403 FORBIDDEN` with a readable message. Lists you do not own never carry the owner's `discord_id`, and no response contains another person's Discord ID.
 
+**Account limits:** 200 quests per account and 5000 tasks across a quest owner's quests, enforced on every way of creating them (create, add, add several, break down, import, templates; the next copy of a repeating task is exempt, as it replaces the one just finished): `400`. A member adding to a shared quest counts against the owner.
+
 Every list in `GET /api/lists`, `GET /api/lists/:id` and `PATCH /api/lists/:id` also has `shared` (true when anyone else is on it), `role` (`viewer`, `editor` or `manager`; the owner reads `manager`), `isOwner`, `ownerName` (a display name) and `memberCount` (people, the owner included). On a shared list each task also carries `completed_by_name`. Roles: **viewer** reads; **editor** adds, edits, reorders, completes and deletes tasks; **manager** also edits the list's own fields; only the **owner** deletes the list. XP, quests and stats for a completion go to the person who completed it.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/lists` | — | `[{...list, itemsTotal, itemsCompleted}]`, newest first |
 | GET | `/api/lists/search?q=…&scope=lists\|tasks\|all` | `q` 1–100 characters (required), `scope` (default `lists`) | `{lists:[list rows], tasks:[{id, name, description, completed, parent_id, due_date, list_id, list_name}]}`; the part not in scope is `[]`. `lists` matches quest name, category and description; `tasks` matches task names and descriptions. Case-insensitive, `%` and `_` are matched literally, owner-scoped, and bounded (50 tasks, 100 quests). Declared before `/:id`. |
-| POST | `/api/lists` | `{name, description?, category?, priority?: "LOW"\|"MEDIUM"\|"HIGH"\|null, deadline?: "YYYY-MM-DD"\|null}` | `201 {...list, xpResult, newAchievements}`. `409` on duplicate name. |
+| POST | `/api/lists` | `{name, description?, category?, priority?: "LOW"\|"MEDIUM"\|"HIGH"\|null, deadline?: "YYYY-MM-DD"\|null}` | `201 {...list, xpResult, newAchievements}`. `409` on duplicate name; `400` at 200 quests. |
 | GET | `/api/lists/:id` | — | `{...list, items:[...]}` (items by position) |
 | PATCH | `/api/lists/:id` | Any subset of the create fields (≥1). Changing `deadline` re-arms the reminder. | Updated list |
 | DELETE | `/api/lists/:id` | — | `{success:true}` (items cascade). Owner only: `403` for a member (leave it instead). |

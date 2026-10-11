@@ -153,6 +153,8 @@ async function createListWithItems(discordId, input, names = []) {
 
 async function createListIn(conn, discordId, fields) {
     const user = await lockUser(conn, discordId);
+    const [[lists]] = await conn.query('SELECT COUNT(*) AS n FROM lists WHERE discord_id = ?', [user.discord_id]);
+    if (Number(lists.n) >= LIMITS.MAX_LISTS_PER_USER) throw errors.validation(`You can have at most ${LIMITS.MAX_LISTS_PER_USER} lists. Delete one first.`);
     let insertId;
     try {
         const [res] = await conn.query(
@@ -366,7 +368,13 @@ async function addItems(discordId, listId, inputs) {
 
 async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }) {
     const user = await lockUser(conn, discordId);
-    await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
+    const { list } = await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
+    // The quota is the list OWNER's: a member adding to a shared list grows the owner's data. (Repeat copies from
+    // spawnNextOccurrence are not counted against it: each one replaces the task just completed.)
+    const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [list.discord_id]);
+    if (Number(owned.n) >= LIMITS.MAX_ITEMS_PER_USER) {
+        throw errors.validation(`That quest's owner is at the limit of ${LIMITS.MAX_ITEMS_PER_USER} tasks. Delete some first.`);
+    }
     await assertValidParent(conn, lid, parentId);
 
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);

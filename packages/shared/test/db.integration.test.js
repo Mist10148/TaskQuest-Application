@@ -2908,5 +2908,45 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         if (before !== null) assert.equal(after, before, 'no deadlock was even raised');
     });
 
+    await t.test('per-user quotas hold on every way of creating lists and tasks', async () => {
+        const { LIMITS: L } = require('../src/constants');
+        const Q = '100000000000000621';
+        const M = '100000000000000622';
+        await db.users.ensureUser(Q);
+        await db.users.ensureUser(M);
+        // Lists: fill to the cap with plain rows, then the next one is refused.
+        const base = (await db.tasks.createList(Q, { name: 'Quota 0' })).list;
+        const rows = [];
+        for (let n = 1; n < L.MAX_LISTS_PER_USER; n++) rows.push([Q, `Quota ${n}`]);
+        await pool.query('INSERT INTO lists (discord_id, name) VALUES ?', [rows]);
+        await assert.rejects(db.tasks.createList(Q, { name: 'One too many' }), { code: 'VALIDATION', message: /at most 200 lists/ });
+        await assert.rejects(db.tasks.createListWithItems(Q, { name: 'Also too many' }, ['a']), { code: 'VALIDATION' });
+        await db.query("DELETE FROM lists WHERE discord_id = ? AND name = 'Quota 1'", [Q]);
+        await db.tasks.createList(Q, { name: 'Room again' });
+
+        // Tasks: fill the user's lists to the cap, then every way of adding one is refused.
+        const recurring = (await db.tasks.addItem(Q, base.id, { name: 'repeat', recurrence: 'daily' })).item;
+        const parent = (await db.tasks.addItem(Q, base.id, { name: 'parent' })).item;
+        const have = Number((await db.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [Q]))[0].n);
+        const fill = [];
+        for (let n = have; n < L.MAX_ITEMS_PER_USER; n++) fill.push([base.id, `bulk${n}`, n + 10, Q]);
+        await pool.query('INSERT INTO items (list_id, name, position, created_by) VALUES ?', [fill]);
+        await assert.rejects(db.tasks.addItem(Q, base.id, { name: 'over' }), { code: 'VALIDATION', message: /5000 tasks/ });
+        await assert.rejects(db.tasks.addItems(Q, base.id, [{ name: 'o1' }, { name: 'o2' }]), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.addSubtasks(Q, parent.id, ['s1']), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.createListWithItems(Q, { name: 'Fresh list' }, ['x']), { code: 'VALIDATION' });
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM lists WHERE name = 'Fresh list'"))[0].n), 0, 'all or nothing');
+        // A member adding to the capped owner's list is refused too: the owner's data grows.
+        await db.query("INSERT INTO list_members (list_id, discord_id, role, public_id, added_by) VALUES (?, ?, 'editor', 'abcdef012345', ?)", [base.id, M, Q]);
+        await assert.rejects(db.tasks.addItem(M, base.id, { name: 'member over' }), { code: 'VALIDATION' });
+        // Finishing a repeating task at the cap still spawns its next copy (it replaces the one just completed).
+        const done = await db.tasks.setItemCompleted(Q, recurring.id);
+        assert.ok(done.nextItem, 'the next occurrence is created at the cap');
+        // Deleting makes room.
+        await db.tasks.deleteItem(Q, done.nextItem.id);
+        await db.tasks.deleteItem(Q, parent.id);
+        await db.tasks.addItem(Q, base.id, { name: 'fits now' });
+    });
+
     await db.closePool();
 });

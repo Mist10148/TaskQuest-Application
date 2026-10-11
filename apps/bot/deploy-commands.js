@@ -24,6 +24,7 @@ const timezoneCommand = require('./commands/timezone');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
 const sharingCommands = require('./commands/sharing');
+const partyCommand = require('./commands/party');
 
 const commands = [
     listCommand.data,
@@ -38,6 +39,7 @@ const commands = [
     timezoneCommand.data,
     weeklyCommand.data,
     quickCommand.data,
+    partyCommand.data,
     sharingCommands.shareData,
     sharingCommands.invitesData,
     sharingCommands.membersData,

@@ -6,6 +6,7 @@
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
  *   /review /prestige /shop
  *   /share /invites /members /leave → shared lists
+ *   /party → a small group with a shared weekly quest
  *   /summary /prioritize /ask /forget /ai-format → AI service (when AI_ENABLED)
  *   @mention / reply / DM → AI conversation (chat.js)
  *
@@ -36,6 +37,7 @@ const digest = require('./utils/digest');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
 const sharingCommands = require('./commands/sharing');
+const partyCommand = require('./commands/party');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -124,6 +126,7 @@ const COMMANDS = {
     timezone: timezoneCommand.execute,
     weekly: weeklyCommand.execute,
     quick: quickCommand.execute,
+    party: partyCommand.execute,
     share: sharingCommands.share,
     invites: sharingCommands.invites,
     members: sharingCommands.members,
@@ -163,6 +166,7 @@ async function route(interaction) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
         if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
+        if (id.startsWith('party_')) return partyCommand.handleButton(interaction);
         if (id.startsWith('inv_accept_') || id.startsWith('inv_decline_')) return sharingCommands.handleInviteButton(interaction);
         if (id.startsWith('leave_yes_') || id === 'leave_no') return sharingCommands.handleLeaveButton(interaction);
         if (id === 'review_claim') return reviewCommand.handleButton(interaction);

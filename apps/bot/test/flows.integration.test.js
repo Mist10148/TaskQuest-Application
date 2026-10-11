@@ -49,6 +49,7 @@ function fake({ userId = USER, customId, commandName, values, fields = {}, optio
         client: { users: { cache: new Map(), fetch: async () => null }, ws: { ping: 5 } },
         fields: { getTextInputValue: (k) => (k in fields ? fields[k] : '') },
         options: {
+            getSubcommand: () => options.subcommand ?? null,
             getString: (k) => options[k] ?? null,
             getUser: (k) => options[k] ?? null,
             getInteger: (k) => options[k] ?? null,
@@ -612,6 +613,91 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         await sharing.autocomplete(ac2);
         assert.deepEqual(ac2.calls[0].payload.map((o) => o.value), ['Flat chores 2']);
         void P.nodm;
+    });
+
+
+    await t.test('/party: create, invite DM, join, status, claim, leave and disband', async () => {
+        const party = require('../commands/party');
+        const P = { own: '300000000000000951', mem: '300000000000000952', out: '300000000000000953' };
+        for (const [k, id] of Object.entries(P)) await db.users.ensureUser(id, { username: `pbot_${k}`, avatar: null });
+        const run = async (userId, subcommand, options = {}) => {
+            const i = fake({ userId, commandName: 'party', options: { subcommand, ...options } });
+            await party.execute(i);
+            return i;
+        };
+        assert.match(text((await run(P.own, 'status')).calls.at(-1)), /No party yet/);
+        assert.match(text((await run(P.own, 'invite', { user: { id: P.mem, username: 'pbot_mem', bot: false, send: async () => {} } })).calls.at(-1)), /not in a party/i);
+        const created = await run(P.own, 'create', { name: 'Bot Crew' });
+        assert.match(text(created.calls.at(-1)), /Party created/);
+        assert.match(text((await run(P.own, 'create', { name: 'Two' })).calls.at(-1)), /already in a party/);
+
+        const sent = [];
+        const target = { id: P.mem, username: 'pbot_mem', bot: false, send: async (m) => sent.push(m) };
+        const inv = await run(P.own, 'invite', { user: target });
+        assert.match(text(inv.calls.at(-1)), /Invitation sent/);
+        assert.equal(sent.length, 1);
+        const ids = sent[0].components[0].toJSON().components.map((c) => c.custom_id);
+        assert.match(ids[0], /^party_accept_\d+$/);
+        const closed = await run(P.own, 'invite', { user: { id: P.out, username: 'pbot_out', bot: false, send: async () => { throw new Error('closed'); } } });
+        assert.match(text(closed.calls.at(-1)), /DMs are closed[\s\S]*\/party invites/);
+        assert.match(text((await run(P.own, 'invite', { user: { ...target, bot: true } })).calls.at(-1)), /Bots cannot/);
+
+        // A stranger's click is refused; the invitee joins from the DM.
+        const invite = (await db.parties.listInvites(P.mem))[0];
+        const hijack = fake({ userId: P.out, customId: `party_accept_${invite.id}`, message: { embeds: [] } });
+        await party.handleButton(hijack);
+        assert.match(text(hijack.calls.at(-1)), /No longer open|Invitation not found/);
+        const join = fake({ userId: P.mem, customId: `party_accept_${invite.id}`, message: { embeds: [] } });
+        await party.handleButton(join);
+        assert.match(text(join.calls[0]), /Joined the party/);
+        assert.match(text((await run(P.mem, 'invite', { user: { id: P.out, username: 'pbot_out', bot: false, send: async () => {} } })).calls.at(-1)), /Only the owner/);
+        // The out user sees the closed-DM invitation under /party invites and can decline it.
+        const list = await run(P.out, 'invites');
+        assert.match(text(list.calls.at(-1)), /Bot Crew/);
+        const decline = fake({ userId: P.out, customId: `party_decline_${(await db.parties.listInvites(P.out))[0].id}`, message: { embeds: [{ title: '📨 Party invitations' }] } });
+        await party.handleButton(decline);
+        assert.match(decline.calls[0].payload.content, /declined/i);
+
+        // Status: names and counts, no Discord IDs, no Claim button until the quest is done.
+        const st = await run(P.mem, 'status');
+        const body = text(st.calls.at(-1));
+        assert.match(body, /pbot_own[\s\S]*pbot_mem/);
+        assert.equal(/\d{15,}/.test(body), false);
+        assert.deepEqual(st.calls.at(-1).payload.components, []);
+        const early = fake({ userId: P.mem, customId: 'party_claim' });
+        await party.handleButton(early);
+        assert.match(text(early.calls.at(-1)), /isn't finished/);
+
+        for (const who of [P.own, P.mem]) {
+            const { list: l } = await db.tasks.createList(who, { name: `Party tasks ${who.slice(-2)}` });
+            for (let n = 0; n < 12; n++) await db.tasks.setItemCompleted(who, (await db.tasks.addItem(who, l.id, { name: `t${n}` })).item.id);
+        }
+        const ready = await run(P.mem, 'status');
+        const readyIds = ready.calls.at(-1).payload.components.flatMap((r) => r.toJSON().components.map((c) => c.custom_id));
+        assert.deepEqual(readyIds, ['party_claim']);
+        const claim = fake({ userId: P.mem, customId: 'party_claim' });
+        await party.handleButton(claim);
+        assert.deepEqual(errors(claim), []);
+        assert.ok(claim.calls.some((c) => c.type === 'followUp' && /Party reward claimed/.test(text(c))));
+        assert.equal((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'party_quest'", [P.mem]))[0].n, 1);
+        const twice = fake({ userId: P.mem, customId: 'party_claim' });
+        await party.handleButton(twice);
+        assert.match(text(twice.calls.at(-1)), /already claimed/);
+
+        // Leave and disband (the owner cannot leave; the disband asks first).
+        assert.match(text((await run(P.own, 'leave')).calls.at(-1)), /Disband/);
+        assert.match(text((await run(P.mem, 'leave')).calls.at(-1)), /Left the party/);
+        const ask = await run(P.own, 'disband');
+        assert.match(text(ask.calls.at(-1)), /Disband the party/);
+        const keep = fake({ userId: P.own, customId: 'party_disband_no' });
+        await party.handleButton(keep);
+        assert.ok(await db.parties.status(P.own));
+        const yes = fake({ userId: P.own, customId: 'party_disband_yes' });
+        await party.handleButton(yes);
+        assert.equal(await db.parties.status(P.own), null);
+        const notOwner = fake({ userId: P.mem, customId: 'party_disband_yes' });
+        await party.handleButton(notOwner);
+        assert.match(text(notOwner.calls.at(-1)), /not in a party/i);
     });
 
     await db.closePool();

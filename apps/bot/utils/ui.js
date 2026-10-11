@@ -413,6 +413,7 @@ function helpEmbed() {
         .addFields(
             { name: 'Tasks', value: '`/list` `/quick`', inline: true },
             { name: 'Sharing', value: '`/share` `/invites` `/members` `/leave`', inline: true },
+            { name: 'Party', value: '`/party` Team weekly quest', inline: true },
             { name: 'Games', value: '`/game` Mini-games', inline: true },
             { name: 'Daily', value: '`/daily` `/freeze` `/quests` `/review`', inline: true },
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },

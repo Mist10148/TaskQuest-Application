@@ -2597,8 +2597,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const declined = await S.invite(O, list.id, { discordId: b });
         assert.equal((await S.respond(b, declined.id, false)).accepted, false);
         await assert.rejects(S.respond(b, declined.id, true), { code: 'CONFLICT' });
+        // ...but not by the same inviter within the cooldown, and the inviter is not told (nothing is sent, nothing is stored).
+        assert.deepEqual(await S.invite(O, list.id, { discordId: b }), { sent: false });
+        assert.equal((await db.query("SELECT COUNT(*) AS n FROM list_invites WHERE invitee_discord_id = ? AND status = 'pending'", [b]))[0].n, 0);
+        await db.query('UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE id = ?', [declined.id]);
         const retry = await S.invite(O, list.id, { discordId: b });
-        assert.ok(retry.id > declined.id);
+        assert.ok(retry.sent && retry.id > declined.id, 'after the cooldown they can be invited again');
 
         // The cap counts members and pending invitations together.
         for (let n = 20; n < 20 + LIMITS.MAX_LIST_MEMBERS - 2; n++) await S.invite(O, list.id, { discordId: await mkUser(n, `svc_fill${n}`) });
@@ -2710,6 +2714,62 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.parties.invite(O, { username: 'ident_bob_b', dryRun: true })).name, 'Bob Smith');
         await assert.rejects(db.parties.invite(O, { username: 'Bob Smith' }), { code: 'VALIDATION' });
         assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ?', [O]))[0].n, 0, 'a dry run invites nobody');
+    });
+
+    await t.test('invite abuse: a decline cooldown per inviter and person, and a switch that turns every invitation off', async () => {
+        const S = db.sharing;
+        const { LIMITS } = require('../src');
+        const mk = async (n) => {
+            const id = `2000000000000012${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(id, { username: `abuse_${n}`, handle: `abuse_${n}`, avatar: null });
+            return id;
+        };
+        const [O, M, V, W] = [await mk(1), await mk(2), await mk(3), await mk(4)];
+        const { list } = await db.tasks.createList(O, { name: 'Abuse list' });
+        const { list: other } = await db.tasks.createList(O, { name: 'Abuse list 2' });
+        assert.equal(LIMITS.INVITE_DECLINE_COOLDOWN_DAYS, 7);
+
+        // Declining blocks the SAME inviter for 7 days, on any of their lists; nothing is sent and nothing is stored.
+        await S.respond(M, (await S.invite(O, list.id, { discordId: M, role: 'manager' })).id, true);
+        const first = await S.invite(O, list.id, { discordId: V });
+        await S.respond(V, first.id, false);
+        assert.deepEqual(await S.invite(O, list.id, { discordId: V }), { sent: false });
+        assert.deepEqual(await S.invite(O, other.id, { username: 'abuse_3' }), { sent: false }, 'a different list of the same inviter, by username');
+        assert.deepEqual(await S.invite(O, list.id, { username: 'abuse_3', dryRun: true }), { dryRun: true, name: null, avatarUrl: null }, 'a dry run says nothing either');
+        assert.equal((await S.listInvites(V)).length, 0);
+        // Another inviter (a manager) is not blocked by it.
+        const viaManager = await S.invite(M, list.id, { discordId: V, role: 'viewer' });
+        assert.equal(viaManager.sent, true);
+        await S.respond(V, viaManager.id, false);
+        assert.deepEqual(await S.invite(M, list.id, { discordId: V }), { sent: false }, 'the manager now has their own cooldown');
+        // After the cooldown (counted from when the declined invitation was made) it works again.
+        await db.query("UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ? AND status = 'declined'", [V]);
+        assert.equal((await S.invite(O, list.id, { discordId: V })).sent, true);
+
+        // Parties have the same cooldown (their own declines).
+        await db.parties.create(O, 'Abuse party');
+        const pi = await db.parties.invite(O, { discordId: W });
+        assert.equal(pi.sent, true);
+        await db.parties.respond(W, pi.id, false);
+        assert.deepEqual(await db.parties.invite(O, { discordId: W }), { sent: false });
+        assert.equal((await db.parties.invite(O, { username: 'abuse_4', dryRun: true })).name, null);
+        await db.query("UPDATE party_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ?", [W]);
+        assert.equal((await db.parties.invite(O, { discordId: W })).sent, true);
+
+        // The switch: with invitations off nothing is sent to a list or a party, by name or by ID, and the answer gives nothing away.
+        const X = await mk(5);
+        assert.equal((await db.users.getUser(X)).accept_invites, 1, 'on by default');
+        await db.users.updateSettings(X, { accept_invites: false });
+        assert.equal((await db.users.getUser(X)).accept_invites, 0);
+        assert.deepEqual(await S.invite(O, list.id, { discordId: X }), { sent: false });
+        assert.deepEqual(await S.invite(O, list.id, { username: 'abuse_5' }), { sent: false });
+        assert.deepEqual(await S.invite(O, list.id, { username: 'abuse_5', dryRun: true }), { dryRun: true, name: null, avatarUrl: null });
+        assert.deepEqual(await db.parties.invite(O, { discordId: X }), { sent: false });
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_invites WHERE invitee_discord_id = ?', [X]))[0].n, 0);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_invites WHERE invitee_discord_id = ?', [X]))[0].n, 0);
+        await db.users.updateSettings(X, { accept_invites: true });
+        assert.equal((await S.invite(O, list.id, { discordId: X })).sent, true);
+        assert.equal((await db.parties.invite(O, { discordId: X })).sent, true);
     });
 
 

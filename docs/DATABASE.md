@@ -46,7 +46,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `015_timezone_days` | `users.timezone_changed_at` (throttles zone changes now that the zone sets the user's day) |
 | `016_cosmetics` | The `user_cosmetics` table and `users.equipped_title`, `equipped_frame`, `equipped_accent` |
 | `017_web_push` | The `push_subscriptions` table and `users.web_push` |
-| `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `party_members.public_id` (opaque member key for removing a member, backfilled randomly) |
+| `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `users.accept_invites` (1 default; 0 refuses every invitation silently), `party_members.public_id` (opaque member key for removing a member, backfilled randomly) |
 | `020_due_date_set_at` | `items.due_date_set_at` (when the due date was set or last changed; backfilled from `created_at`). Overdue and early effects apply only to a date set at least 24 hours before the completion |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
@@ -84,6 +84,7 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 |---|---|---|
 | `discord_id` | VARCHAR(32) PK | Discord snowflake |
 | `discord_username`, `discord_avatar` | VARCHAR(100) | The **display name** (global name, else username) and avatar hash, cached at web login and by the bot (at most hourly). Shown to other people, never searched |
+| `accept_invites` | TINYINT(1) default 1 | 0: nobody can invite this account to a list or party; the inviter gets the neutral answer (Settings, `PATCH /api/user`) |
 | `discord_handle` | VARCHAR(40) utf8mb4_bin, UNIQUE | The Discord **username** (lowercase, unique on Discord): the only key a person can be invited by from the web app. A login that brings a handle clears it from any stale row that still held it. NULL until the person's next login or slash command |
 | `player_xp` | BIGINT | Spendable balance |
 | `lifetime_xp` | BIGINT | XP earned since the last prestige. Drives the level. |
@@ -134,7 +135,7 @@ Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`, `(created_by, create
 
 ### `list_invites`
 
-`id` · `list_id` FK CASCADE · `invitee_discord_id` FK CASCADE · `role` · `invited_by` · `created_at` · `expires_at` DATETIME (7 days) · `status` ENUM(pending, accepted, declined, revoked). One live pending invitation per list and person is enforced by the service under the list's row lock (MariaDB has no partial unique index); an expired pending row is treated as not pending and is marked `revoked` when the person is invited again. Index `(invited_by, created_at)` serves the 30-invitations-a-day limit.
+`id` · `list_id` FK CASCADE · `invitee_discord_id` FK CASCADE · `role` · `invited_by` · `created_at` · `expires_at` DATETIME (7 days) · `status` ENUM(pending, accepted, declined, revoked). One live pending invitation per list and person is enforced by the service under the list's row lock (MariaDB has no partial unique index); an expired pending row is treated as not pending and is marked `revoked` when the person is invited again. Index `(invited_by, created_at)` serves the 30-invitations-a-day limit and the 7-day decline cooldown (the same inviter cannot invite the same person again within 7 days of a `declined` invitation).
 
 ### `list_reminders` and `item_reminders`
 

@@ -758,6 +758,14 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('GET', '/api/invites', 'ed')).body.length, 0, 'a dry run sends nothing');
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'st', { username: 'share_ed', dryRun: true })).status, 404, 'a stranger cannot preview');
         assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_ed', dryRun: 'yes' })).status, 400);
+        // A person can turn invitations off (PATCH /api/user): nothing is sent and the answer is the neutral message.
+        assert.equal((await J('PATCH', '/api/user', 'vw', { accept_invites: false })).status, 200);
+        const refused = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_vw', role: 'viewer' });
+        assert.deepEqual([refused.status, refused.body], [200, { message: 'If that person can be invited, they have been sent an invitation.' }]);
+        assert.equal((await J('GET', '/api/invites', 'vw')).body.length, 0);
+        assert.equal((await J('POST', `/api/lists/${listId}/invites`, 'own', { username: 'share_vw', dryRun: true })).body.name, null);
+        assert.equal((await J('PATCH', '/api/user', 'vw', { accept_invites: true })).status, 200);
+        assert.equal((await J('PATCH', '/api/user', 'vw', { accept_invites: 'no' })).status, 400);
         const inv = await J('POST', `/api/lists/${listId}/invites`, 'own', { username: '@share_ed', role: 'editor' });
         assert.equal(inv.status, 201, inv.text);
         noIds(inv, 'invite');

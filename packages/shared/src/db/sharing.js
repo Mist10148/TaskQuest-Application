@@ -5,6 +5,8 @@
  *   - only a manager (the owner counts as one) invites, changes roles or removes members; only the owner makes or unmakes a manager
  *   - an invitation names one person who has used TaskQuest before, found by their exact Discord username (never the display name) or
  *     by Discord ID when the bot already has one from a mention; there are no public invite links
+ *   - a person can turn invitations off (users.accept_invites) and after a decline the same inviter cannot invite them again for
+ *     LIMITS.INVITE_DECLINE_COOLDOWN_DAYS days; neither is revealed to the inviter (see notSent)
  *   - at most LIMITS.MAX_LIST_MEMBERS people besides the owner, counting members and pending invitations
  *   - an invitation lives LIMITS.INVITE_TTL_DAYS days and is answered by the invitee only
  *   - members see each other's display names and roles. Discord IDs never leave this module: a member is addressed by the
@@ -44,7 +46,7 @@ const newPublicId = () => crypto.randomBytes(6).toString('hex'); // 12 character
  * not unique and can be stale, so it could reach the wrong person.
  */
 async function findInvitee(conn, { discordId, username }) {
-    const columns = 'discord_id, discord_username, discord_handle, discord_avatar';
+    const columns = 'discord_id, discord_username, discord_handle, discord_avatar, accept_invites';
     if (discordId !== undefined && discordId !== null) {
         const [[row]] = await conn.query(`SELECT ${columns} FROM users WHERE discord_id = ?`, [String(discordId)]);
         if (!row) throw errors.notFound('That person has not used TaskQuest yet.');
@@ -71,6 +73,12 @@ function invitePreview(invitee) {
     };
 }
 
+/**
+ * The answer when an invitation is not sent for a reason the inviter must not learn (the person takes no invitations, or declined this
+ * inviter recently). A dry run answers with no name. Callers show the same neutral message as for a name that matches nobody.
+ */
+const notSent = (input) => (input.dryRun ? { dryRun: true, name: null, avatarUrl: null } : { sent: false });
+
 /** Pending invitations that have not run out. */
 const LIVE = "status = 'pending' AND expires_at > UTC_TIMESTAMP()";
 
@@ -86,7 +94,8 @@ async function memberCount(conn, listId) {
  * @param {number|string} listId
  * @param {{ username?: string, discordId?: string, role?: string, dryRun?: boolean }} input `discordId` is for the bot only (the API never passes it).
  *   `dryRun` runs every check and returns { dryRun: true, name, avatarUrl } (who the username resolved to) without inviting anyone.
- * @returns {Promise<{ id: number, role: string, expiresAt: Date, inviteeName: string|null, inviteeDiscordId: string, listName: string } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
+ * @returns {Promise<{ sent: true, id: number, role: string, expiresAt: Date, inviteeName: string|null, inviteeDiscordId: string, listName: string } | { sent: false } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
+ *   `{ sent: false }`: nothing was sent and the inviter must not learn why (the person takes no invitations, or declined them recently)
  */
 async function invite(actorId, listId, input = {}) {
     const role = parseRole(input.role);
@@ -109,6 +118,14 @@ async function invite(actorId, listId, input = {}) {
         const [[pending]] = await conn.query(`SELECT 1 AS x FROM list_invites WHERE list_id = ? AND invitee_discord_id = ? AND ${LIVE}`, [list.id, inviteeId]);
         if (pending) throw errors.conflict('That person already has an invitation to this list.');
 
+        // Hidden from the inviter: the person takes no invitations, or declined this inviter in the last few days (on any list).
+        if (!Number(invitee.accept_invites)) return notSent(input);
+        const [[declined]] = await conn.query(
+            "SELECT 1 AS x FROM list_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND created_at > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
+            [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
+        );
+        if (declined) return notSent(input);
+
         const counts = await memberCount(conn, list.id);
         if (counts.members + counts.invites >= LIMITS.MAX_LIST_MEMBERS) {
             throw errors.validation(`A list can have at most ${LIMITS.MAX_LIST_MEMBERS} people besides the owner (members and pending invitations).`);
@@ -123,7 +140,7 @@ async function invite(actorId, listId, input = {}) {
             String(actorId),
             expiresAt
         ]);
-        return { id: res.insertId, role, expiresAt, inviteeName: invitee.discord_username || null, inviteeDiscordId: inviteeId, listName: list.name };
+        return { sent: true, id: res.insertId, role, expiresAt, inviteeName: invitee.discord_username || null, inviteeDiscordId: inviteeId, listName: list.name };
     });
 }
 
@@ -283,4 +300,4 @@ async function leave(userId, listId) {
     });
 }
 
-module.exports = { findInvitee, invitePreview, invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };
+module.exports = { findInvitee, invitePreview, notSent, invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };

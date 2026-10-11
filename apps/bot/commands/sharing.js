@@ -15,7 +15,7 @@
 
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const { tasks, users, sharing } = require('@taskquest/shared/db');
-const { LIST_ROLES, errors } = require('@taskquest/shared');
+const { LIST_ROLES, INVITE_NEUTRAL_MESSAGE, errors, escapeDiscord } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, idFrom } = require('../utils/respond');
 
@@ -79,12 +79,15 @@ const inviteButtons = (inviteId) =>
         new ButtonBuilder().setCustomId(`inv_decline_${inviteId}`).setLabel('Decline').setEmoji('✖️').setStyle(ButtonStyle.Secondary)
     );
 
+/** Names in an invitation come from other people: escaped, so they cannot add links, formatting or mentions to a message sent in the bot's name. */
 function inviteEmbed({ listName, ownerName, invitedByName, role }) {
+    const inviter = escapeDiscord(invitedByName, { max: 80 }) || 'Someone';
+    const owner = escapeDiscord(ownerName, { max: 80 });
     return new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle('👥 List invitation')
         .setDescription(
-            `**${invitedByName || 'Someone'}** invited you to **${listName}**${ownerName && ownerName !== invitedByName ? ` (owned by ${ownerName})` : ''} as **${role}**: you ${ROLE_BLURB[role]}.\n` +
+            `**${inviter}** invited you to **${escapeDiscord(listName, { max: 100 })}**${owner && owner !== inviter ? ` (owned by ${owner})` : ''} as **${role}**: you ${ROLE_BLURB[role]}.\n` +
                 '-# XP you earn there is yours alone. The invitation is valid for 7 days; you can also answer it with /invites.'
         );
 }
@@ -98,17 +101,19 @@ async function share(interaction) {
         if (target.bot) throw errors.validation('Bots cannot be invited.');
         const role = interaction.options.getString('role') || 'viewer';
         const inv = await sharing.invite(interaction.user.id, list.id, { discordId: target.id, role });
+        if (!inv.sent) return await interaction.editReply({ embeds: [ui.info('Invitation', INVITE_NEUTRAL_MESSAGE)] });
 
         let dmNote = '';
         try {
             await target.send({
                 embeds: [inviteEmbed({ listName: list.name, ownerName: list.owner_name, invitedByName: interaction.user.displayName || interaction.user.username, role })],
-                components: [inviteButtons(inv.id)]
+                components: [inviteButtons(inv.id)],
+                allowedMentions: { parse: [] }
             });
         } catch {
             dmNote = '\n-# I could not send them a DM (their DMs are closed), but the invitation is waiting for them in **/invites**.';
         }
-        await interaction.editReply({ embeds: [ui.success('Invitation sent', `**${inv.inviteeName || target.username}** was invited to **${list.name}** as **${role}**.${dmNote}`)] });
+        await interaction.editReply({ embeds: [ui.success('Invitation sent', `**${escapeDiscord(inv.inviteeName || target.username, { max: 80 })}** was invited to **${escapeDiscord(list.name, { max: 100 })}** as **${role}**.${dmNote}`)] });
     } catch (err) {
         await handleError(interaction, err);
     }
@@ -122,7 +127,7 @@ function invitesView(invites) {
     const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle('📨 Invitations')
-        .setDescription(shown.map((i, n) => `**${n + 1}.** **${i.listName}** · ${i.role} · from ${i.invitedByName || i.ownerName || 'someone'}`).join('\n'))
+        .setDescription(shown.map((i, n) => `**${n + 1}.** **${escapeDiscord(i.listName, { max: 100 })}** · ${i.role} · from ${escapeDiscord(i.invitedByName || i.ownerName, { max: 80 }) || 'someone'}`).join('\n'))
         .setFooter({ text: invites.length > shown.length ? `Showing ${shown.length} of ${invites.length}` : 'They expire after 7 days.' });
     const components = shown.map((i, n) =>
         new ActionRowBuilder().addComponents(
@@ -151,12 +156,12 @@ async function handleInviteButton(interaction) {
         const r = await sharing.respond(interaction.user.id, id, accept);
         const isInvitesView = Boolean(interaction.message?.embeds?.some?.((e) => (e.title || e.data?.title) === '📨 Invitations'));
         if (isInvitesView) {
-            const note = r.accepted ? `Joined **${r.list.name}**.` : 'Invitation declined.';
+            const note = r.accepted ? `Joined **${escapeDiscord(r.list.name, { max: 100 })}**.` : 'Invitation declined.';
             const view = invitesView(await sharing.listInvites(interaction.user.id));
             return interaction.update({ ...view, content: note });
         }
         return interaction.update({
-            embeds: [r.accepted ? ui.success('Joined', `You can now open **${r.list.name}** with /list (your role: ${r.role}).`) : ui.info('Declined', 'Invitation declined.')],
+            embeds: [r.accepted ? ui.success('Joined', `You can now open **${escapeDiscord(r.list.name, { max: 100 })}** with /list (your role: ${r.role}).`) : ui.info('Declined', 'Invitation declined.')],
             components: []
         });
     } catch (err) {
@@ -176,13 +181,13 @@ const ROLE_ICON = { manager: '🛡️', editor: '✏️', viewer: '👁️' };
 
 async function membersView(userId, listId) {
     const data = await sharing.listMembers(userId, listId);
-    const lines = data.members.map((m) => `${ROLE_ICON[m.role]} **${m.name || 'Unknown'}** · ${m.isOwner ? 'owner' : m.role}${m.isYou ? ' (you)' : ''}`);
+    const lines = data.members.map((m) => `${ROLE_ICON[m.role]} **${escapeDiscord(m.name, { max: 80 }) || 'Unknown'}** · ${m.isOwner ? 'owner' : m.role}${m.isYou ? ' (you)' : ''}`);
     const embed = new EmbedBuilder()
         .setColor(0x5865f2)
-        .setTitle(`👥 ${data.list.name}`)
+        .setTitle(`👥 ${data.list.name}`.slice(0, 256))
         .setDescription(lines.join('\n'))
         .setFooter({ text: `Your role: ${data.isOwner ? 'owner' : data.role} · up to ${data.limit} people besides the owner` });
-    if (data.invites.length) embed.addFields({ name: 'Waiting for an answer', value: data.invites.map((i) => `${i.inviteeName} · ${i.role}`).join('\n').slice(0, 1000) });
+    if (data.invites.length) embed.addFields({ name: 'Waiting for an answer', value: data.invites.map((i) => `${escapeDiscord(i.inviteeName, { max: 80 }) || 'Unknown'} · ${i.role}`).join('\n').slice(0, 1000) });
     const removable = data.members.filter((m) => !m.isOwner && !m.isYou && (data.isOwner || m.role !== 'manager'));
     const components = [];
     if (data.role === 'manager' && removable.length) {
@@ -230,7 +235,7 @@ async function leave(interaction) {
         if (!list) return;
         if (list.is_owner) throw errors.forbidden('You own this list, so you cannot leave it. Delete it with /list instead.');
         await interaction.editReply({
-            embeds: [ui.warn('Leave this list?', `You will lose access to **${list.name}**. The owner can invite you again.`)],
+            embeds: [ui.warn('Leave this list?', `You will lose access to **${escapeDiscord(list.name, { max: 100 })}**. The owner can invite you again.`)],
             components: [
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`leave_yes_${list.id}`).setLabel('Leave').setStyle(ButtonStyle.Danger),

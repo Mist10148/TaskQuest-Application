@@ -466,6 +466,19 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.match(dmButtons[0], /^inv_accept_\d+$/);
         assert.match(dmButtons[1], /^inv_decline_\d+$/);
         assert.match(JSON.stringify(edUser.sent[0].embeds[0].toJSON()), /Flat chores/);
+        assert.deepEqual(edUser.sent[0].allowedMentions, { parse: [] }, 'an invitation DM never pings anybody');
+
+        // Names written by other people cannot add links, formatting or mentions to a DM sent in the bot's name.
+        const hostile = JSON.parse(JSON.stringify(sharing.inviteEmbed({
+            listName: '[Claim your prize](https://evil.example/login) @everyone <@123456789012345678>',
+            ownerName: '**Boss** https://evil.example',
+            invitedByName: '__Eve__ @here',
+            role: 'viewer'
+        }).toJSON())).description;
+        assert.equal(/\]\(/.test(hostile), false, 'no masked link');
+        assert.equal(/https?:\/\//.test(hostile), false, 'no clickable link');
+        assert.equal(/@(everyone|here)|<@\d/.test(hostile), false, 'no mention');
+        assert.match(hostile, /\\\*\\\*Boss\\\*\\\*/, 'markdown is escaped');
 
         // Closed DMs: the owner is told, and the invitation is still in /invites.
         const closed = { ...target(P.vw, 'bot_vw'), send: async () => { throw new Error('Cannot send messages to this user'); } };
@@ -515,7 +528,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         // /list shows the sharing marker and role; an editor edits, a viewer only reads.
         const ov = fake({ userId: P.ed, commandName: 'list' });
         await list.execute(ov);
-        assert.match(text(ov.calls[0]), /Flat chores[\s\S]*👥[\s\S]*editor · by bot_own/);
+        assert.match(text(ov.calls[0]), /Flat chores[\s\S]*👥[\s\S]*editor · by bot\\\\_own/);
         const editorView = fake({ userId: P.ed, commandName: 'list', options: { name: 'Flat chores' } });
         await list.execute(editorView);
         const rowIds = (call) => call.payload.components.flatMap((r) => r.toJSON().components.map((c) => c.custom_id));
@@ -564,7 +577,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         const mem = fake({ userId: P.own, commandName: 'members', options: { list: 'Flat chores' } });
         await sharing.members(mem);
         const memText = text(mem.calls.at(-1));
-        assert.match(memText, /bot_own[\s\S]*owner[\s\S]*bot_ed[\s\S]*editor[\s\S]*bot_vw[\s\S]*viewer/);
+        assert.match(memText, /bot\\\\_own[\s\S]*owner[\s\S]*bot\\\\_ed[\s\S]*editor[\s\S]*bot\\\\_vw[\s\S]*viewer/);
         assert.equal(/\d{15,}/.test(memText), false, 'no Discord ID is shown');
         const menu = mem.calls.at(-1).payload.components[0].toJSON().components[0];
         assert.equal(menu.custom_id, `mem_rm_${shared.id}`);
@@ -661,7 +674,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         // Status: names and counts, no Discord IDs, no Claim button until the quest is done.
         const st = await run(P.mem, 'status');
         const body = text(st.calls.at(-1));
-        assert.match(body, /pbot_own[\s\S]*pbot_mem/);
+        assert.match(body, /pbot\\\\_own[\s\S]*pbot\\\\_mem/);
         assert.equal(/\d{15,}/.test(body), false);
         assert.deepEqual(st.calls.at(-1).payload.components, []);
         const early = fake({ userId: P.mem, customId: 'party_claim' });

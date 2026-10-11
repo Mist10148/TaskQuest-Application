@@ -8,7 +8,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
-const { TEXT_LIMITS, CLASSES, CLASS_RULES, PRESTIGE_TITLES, validation, levelProgress, isPastDeadline, formatDeadline, todayInZone } = require('@taskquest/shared');
+const { escapeDiscord, TEXT_LIMITS, CLASSES, CLASS_RULES, PRESTIGE_TITLES, validation, levelProgress, isPastDeadline, formatDeadline, todayInZone } = require('@taskquest/shared');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🎨 COLOR SYSTEM
@@ -242,7 +242,7 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
         const dateStr = formatDeadline(list.deadline);
         footerParts.push(isPastDeadline(list.deadline) ? `⚠️ Overdue: ${dateStr}` : `Due: ${dateStr}`);
     }
-    if (list.shared) footerParts.push(list.is_owner ? `👥 ${list.member_count} people` : `👥 ${list.role} · by ${list.owner_name || 'someone'}`);
+    if (list.shared) footerParts.push(list.is_owner ? `👥 ${list.member_count} people` : `👥 ${list.role} · by ${escapeDiscord(list.owner_name, { max: 60 }) || 'someone'}`);
     footerParts.push(mode === 'edit' ? '✏️ Edit Mode' : list.shared && list.role === 'viewer' ? '👁️ View only' : '👁️ View Mode');
     
     embed.setFooter({ text: footerParts.join(' • ') });
@@ -291,7 +291,7 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
             if (dateStr) metaParts.push(isPastDeadline(l.deadline) ? `⚠️ ${dateStr}` : `📅 ${dateStr}`);
         }
         
-        if (l.shared) metaParts.push(l.is_owner ? `shared with ${Number(l.member_count) - 1}` : `${l.role} · by ${l.owner_name || 'someone'}`);
+        if (l.shared) metaParts.push(l.is_owner ? `shared with ${Number(l.member_count) - 1}` : `${l.role} · by ${escapeDiscord(l.owner_name, { max: 60 }) || 'someone'}`);
 
         if (metaParts.length > 0) {
             desc += `-# ${metaParts.join(' · ')}\n`;

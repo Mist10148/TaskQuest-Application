@@ -11,7 +11,7 @@ const { prestigeTitle } = require('../xp');
 const { describeEquipped } = require('../cosmetics');
 const { accessSql, actorSql } = require('./access');
 
-const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled', 'weekly_digest', 'web_push'];
+const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled', 'weekly_digest', 'web_push', 'accept_invites'];
 
 const run = async (conn, sql, params = []) => (await (conn || getPool()).query(sql, params))[0];
 

@@ -15,7 +15,7 @@
 
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { parties, users } = require('@taskquest/shared/db');
-const { errors } = require('@taskquest/shared');
+const { errors, escapeDiscord, INVITE_NEUTRAL_MESSAGE } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, idFrom, sendRewards } = require('../utils/respond');
 
@@ -40,7 +40,7 @@ function render(st) {
     if (!st) {
         return { embeds: [ui.info('No party yet', 'Start one with **/party create**, or accept an invitation with **/party invites**.')], components: [] };
     }
-    const lines = st.members.map((m) => `${m.isOwner ? '👑' : '•'} **${m.name || 'Unknown'}**${m.isYou ? ' (you)' : ''} · ${m.count} this week`);
+    const lines = st.members.map((m) => `${m.isOwner ? '👑' : '•'} **${escapeDiscord(m.name, { max: 80 }) || 'Unknown'}**${m.isYou ? ' (you)' : ''} · ${m.count} this week`);
     const ownLeft = Math.max(0, st.minToClaim - st.yourCount);
     const state = st.claimed
         ? '✅ claimed'
@@ -53,12 +53,12 @@ function render(st) {
             : `${st.progress}/${st.target}`;
     const embed = new EmbedBuilder()
         .setColor(0x5865f2)
-        .setTitle(`🎉 ${st.party.name}`)
+        .setTitle(`🎉 ${escapeDiscord(st.party.name, { max: 40 })}`)
         .setDescription(
             `**Party quest:** finish ${st.perMember} tasks per active member together this week (at least ${st.minToClaim} of your own to claim) · +${st.reward} XP each\n${bar(st.progress, st.target)} ${state}\n\n${lines.join('\n')}`
         )
         .setFooter({ text: 'The week runs Monday to Monday in UTC for everyone. Only the first completion of a task counts.' });
-    if (st.invites.length) embed.addFields({ name: 'Waiting for an answer', value: st.invites.map((i) => i.inviteeName).join(', ').slice(0, 1000) });
+    if (st.invites.length) embed.addFields({ name: 'Waiting for an answer', value: st.invites.map((i) => escapeDiscord(i.inviteeName, { max: 80 }) || 'Unknown').join(', ').slice(0, 1000) });
     const components = st.claimable
         ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('party_claim').setLabel('Claim reward').setEmoji('🎁').setStyle(ButtonStyle.Success))]
         : [];
@@ -77,7 +77,7 @@ function invitesView(list) {
     const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle('📨 Party invitations')
-        .setDescription(shown.map((i, n) => `**${n + 1}.** **${i.partyName}** · owner ${i.ownerName || 'someone'}`).join('\n'))
+        .setDescription(shown.map((i, n) => `**${n + 1}.** **${escapeDiscord(i.partyName, { max: 40 })}** · owner ${escapeDiscord(i.ownerName, { max: 80 }) || 'someone'}`).join('\n'))
         .setFooter({ text: 'You can be in one party at a time.' });
     const components = shown.map((i, n) =>
         new ActionRowBuilder().addComponents(
@@ -98,12 +98,13 @@ async function execute(interaction) {
 
         if (sub === 'create') {
             const created = await parties.create(userId, interaction.options.getString('name'));
-            return await interaction.editReply({ embeds: [ui.success('Party created', `**${created.name}** is ready. Invite people with **/party invite**.`)] });
+            return await interaction.editReply({ embeds: [ui.success('Party created', `**${escapeDiscord(created.name, { max: 40 })}** is ready. Invite people with **/party invite**.`)] });
         }
         if (sub === 'invite') {
             const target = interaction.options.getUser('user');
             if (target.bot) throw errors.validation('Bots cannot be invited.');
             const inv = await parties.invite(userId, { discordId: target.id });
+            if (!inv.sent) return await interaction.editReply({ embeds: [ui.info('Invitation', INVITE_NEUTRAL_MESSAGE)] });
             let note = '';
             try {
                 await target.send({
@@ -111,19 +112,20 @@ async function execute(interaction) {
                         new EmbedBuilder()
                             .setColor(0x5865f2)
                             .setTitle('🎉 Party invitation')
-                            .setDescription(`**${interaction.user.displayName || interaction.user.username}** invited you to the party **${inv.partyName}**.\n-# Finish tasks together for a shared weekly quest. Valid for 7 days; you can also answer with /party invites.`)
+                            .setDescription(`**${escapeDiscord(interaction.user.displayName || interaction.user.username, { max: 80 }) || 'Someone'}** invited you to the party **${escapeDiscord(inv.partyName, { max: 40 })}**.\n-# Finish tasks together for a shared weekly quest. Valid for 7 days; you can also answer with /party invites.`)
                     ],
-                    components: [inviteButtons(inv.id)]
+                    components: [inviteButtons(inv.id)],
+                    allowedMentions: { parse: [] }
                 });
             } catch {
                 note = '\n-# I could not send them a DM (their DMs are closed), but the invitation is waiting for them in **/party invites**.';
             }
-            return await interaction.editReply({ embeds: [ui.success('Invitation sent', `**${inv.inviteeName || target.username}** was invited to **${inv.partyName}**.${note}`)] });
+            return await interaction.editReply({ embeds: [ui.success('Invitation sent', `**${escapeDiscord(inv.inviteeName || target.username, { max: 80 })}** was invited to **${escapeDiscord(inv.partyName, { max: 40 })}**.${note}`)] });
         }
         if (sub === 'kick') {
             const target = interaction.options.getUser('user');
             await parties.kick(userId, { discordId: target.id });
-            return await interaction.editReply({ embeds: [ui.success('Member removed', `**${target.displayName || target.username}** is no longer in your party.`)] });
+            return await interaction.editReply({ embeds: [ui.success('Member removed', `**${escapeDiscord(target.displayName || target.username, { max: 80 })}** is no longer in your party.`)] });
         }
         if (sub === 'invites') return await interaction.editReply(invitesView(await parties.listInvites(userId)));
         if (sub === 'leave') {
@@ -135,7 +137,7 @@ async function execute(interaction) {
             if (!st) throw errors.notFound('You are not in a party.');
             if (!st.party.isOwner) throw errors.forbidden('Only the owner of the party can do that.');
             return await interaction.editReply({
-                embeds: [ui.warn('Disband the party?', `**${st.party.name}** will be deleted for all ${st.members.length} members.`)],
+                embeds: [ui.warn('Disband the party?', `**${escapeDiscord(st.party.name, { max: 40 })}** will be deleted for all ${st.members.length} members.`)],
                 components: [
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('party_disband_yes').setLabel('Disband').setStyle(ButtonStyle.Danger),
@@ -169,9 +171,9 @@ async function handleButton(interaction) {
         const inviteId = idFrom(id, accept ? 'party_accept_' : 'party_decline_');
         const r = await parties.respond(interaction.user.id, inviteId, accept);
         const inList = Boolean(interaction.message?.embeds?.some?.((e) => (e.title || e.data?.title) === '📨 Party invitations'));
-        if (inList) return await interaction.update({ ...invitesView(await parties.listInvites(interaction.user.id)), content: r.accepted ? `Joined **${r.party.name}**.` : 'Invitation declined.' });
+        if (inList) return await interaction.update({ ...invitesView(await parties.listInvites(interaction.user.id)), content: r.accepted ? `Joined **${escapeDiscord(r.party.name, { max: 40 })}**.` : 'Invitation declined.' });
         return await interaction.update({
-            embeds: [r.accepted ? ui.success('Joined the party', `Welcome to **${r.party.name}**. See the quest with /party status.`) : ui.info('Declined', 'Invitation declined.')],
+            embeds: [r.accepted ? ui.success('Joined the party', `Welcome to **${escapeDiscord(r.party.name, { max: 40 })}**. See the quest with /party status.`) : ui.info('Declined', 'Invitation declined.')],
             components: []
         });
     } catch (err) {

@@ -526,6 +526,8 @@ const LIMITS = {
     MAX_LIST_MEMBERS: 10,
     INVITE_TTL_DAYS: 7,
     INVITES_PER_DAY: 30,
+    /** After someone declines an invitation, the same inviter cannot invite the same person again for this many days. */
+    INVITE_DECLINE_COOLDOWN_DAYS: 7,
     /** Parties: members including the owner. A user is in at most one party. */
     MAX_PARTY_MEMBERS: 6
 };
@@ -540,6 +542,9 @@ const LIST_ROLES = ['viewer', 'editor', 'manager'];
  * tasks themselves (half of PER_MEMBER_TARGET), so a seat that did nothing, or a spare account, is never paid for others' work.
  */
 const PARTY_QUEST = { PER_MEMBER_TARGET: 12, MIN_OWN_TO_CLAIM: 6, REWARD: 60, KEY_PREFIX: 'PARTY_' };
+
+/** What every invite call answers when it did not (or did) send anything for a reason the inviter must not learn: nobody, someone who does not take invitations, a recent decline. */
+const INVITE_NEUTRAL_MESSAGE = 'If that person can be invited, they have been sent an invitation.';
 
 const DAILY = {
     COOLDOWN_MS: 24 * 60 * 60 * 1000,
@@ -630,6 +635,7 @@ module.exports = {
     LIMITS,
     LIST_ROLES,
     PARTY_QUEST,
+    INVITE_NEUTRAL_MESSAGE,
     DAILY,
     TEXT_LIMITS,
     PRIORITIES,

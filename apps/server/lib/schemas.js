@@ -34,6 +34,7 @@ export const settingsBody = z
         ai_enabled: z.boolean().optional(),
         weekly_digest: z.boolean().optional(),
         web_push: z.boolean().optional(),
+        accept_invites: z.boolean().optional(),
         timezone: z.string().min(1).max(64).nullable().optional(),
         reminder_hour: z.number().int().min(0).max(23).optional()
     })

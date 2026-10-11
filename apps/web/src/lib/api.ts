@@ -52,7 +52,7 @@ export const authApi = {
 
 export const userApi = {
     getProfile: () => apiFetch<UserStats>('/api/user'),
-    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'weekly_digest' | 'timezone' | 'reminder_hour'>>) =>
+    updateSettings: (settings: Partial<Pick<User, 'gamification_enabled' | 'automation_enabled' | 'auto_delete_old_lists' | 'ai_enabled' | 'weekly_digest' | 'accept_invites' | 'timezone' | 'reminder_hour'>>) =>
         patch<User>('/api/user', settings),
     claimDaily: () => post<DailyClaimResult>('/api/user/daily'),
     resetProgress: () => post<{ success: boolean; message: string }>('/api/user/reset', { confirm: 'RESET' }),
@@ -480,6 +480,8 @@ export interface User {
     timezone?: string | null;
     reminder_hour?: number;
     weekly_digest?: boolean | number;
+    /** 1 (default): other people may invite you to lists and parties; 0: every invitation is refused silently. */
+    accept_invites?: boolean | number;
     has_calendar_token?: boolean;
     /** What the player has equipped from the shop (titles, avatar frames, profile accents). */
     cosmetics?: EquippedCosmetics;

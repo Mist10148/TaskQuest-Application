@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, Bell, Bot, CalendarDays, ExternalLink, Loader2, LogOut, Palette, Settings as SettingsIcon, Sparkles, Zap, Database } from "lucide-react";
+import { AlertTriangle, Bell, Bot, CalendarDays, ExternalLink, Loader2, LogOut, Palette, Settings as SettingsIcon, Sparkles, Users, Zap, Database } from "lucide-react";
 import { userApi, type User } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -29,6 +29,7 @@ const SWITCH_FIELDS = {
   autoDelete: "auto_delete_old_lists",
   ai: "ai_enabled",
   weekly: "weekly_digest",
+  acceptInvites: "accept_invites",
 } as const;
 
 type SwitchKey = keyof typeof SWITCH_FIELDS;
@@ -103,6 +104,16 @@ const Settings = () => {
 
         <SettingsSection icon={<Sparkles className="h-5 w-5 text-xp" />} title="Gamification" description="XP rewards and leveling" tint="bg-xp/20" delay={0.1}>
           <SwitchRow label="Enable gamification" description="Earn XP for tasks" checked={on(dbUser.gamification_enabled, true)} disabled={saving.has("gamification_enabled")} onChange={(v) => void toggle("gamification", v)} />
+        </SettingsSection>
+
+        <SettingsSection icon={<Users className="h-5 w-5 text-primary-text" />} title="Sharing" description="Shared quests and parties" delay={0.12}>
+          <SwitchRow
+            label="Accept invitations"
+            description="Let other people invite you to their shared quests and parties. When off, nobody can invite you, and they are not told why."
+            checked={on(dbUser.accept_invites, true)}
+            disabled={saving.has("accept_invites")}
+            onChange={(v) => void toggle("acceptInvites", v)}
+          />
         </SettingsSection>
 
         <SettingsSection icon={<Zap className="h-5 w-5 text-primary-text" />} title="Reminders & automation" description="When and how TaskQuest nudges you on Discord" delay={0.15}>

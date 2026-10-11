@@ -23,7 +23,7 @@ const { withTransaction, getPool } = require('./pool');
 const { lockUser } = require('./users');
 const { awardFlat, requireGamification, unlockAchievements } = require('./progression');
 const { actorSql } = require('./access');
-const { findInvitee, invitePreview } = require('./sharing');
+const { findInvitee, invitePreview, notSent } = require('./sharing');
 const { errors, TaskQuestError } = require('../errors');
 const v = require('../validation');
 const { LIMITS, PARTY_QUEST } = require('../constants');
@@ -77,7 +77,8 @@ async function counts(conn, partyId) {
 /**
  * Invite someone to the party (owner only). `input`: { username } (the exact Discord username) from the API, or { discordId } from the bot's @mention;
  * `dryRun` returns { dryRun: true, name, avatarUrl } for the confirmation step and invites nobody.
- * @returns {Promise<{ id: number, inviteeName: string|null, inviteeDiscordId: string, expiresAt: Date, partyName: string } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
+ * @returns {Promise<{ sent: true, id: number, inviteeName: string|null, inviteeDiscordId: string, expiresAt: Date, partyName: string } | { sent: false } | { dryRun: true, name: string|null, avatarUrl: string|null }>}
+ *   `{ sent: false }`: the person takes no invitations or declined this inviter recently; the inviter must not learn which
  */
 async function invite(actorId, input = {}) {
     return withTransaction(async (conn) => {
@@ -86,6 +87,13 @@ async function invite(actorId, input = {}) {
         const inviteeId = String(invitee.discord_id);
         if (inviteeId === String(actorId)) throw errors.validation('You cannot invite yourself.');
         if (await myParty(conn, inviteeId)) throw errors.conflict('That person is already in a party.');
+
+        if (!Number(invitee.accept_invites)) return notSent(input);
+        const [[declined]] = await conn.query(
+            "SELECT 1 AS x FROM party_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND created_at > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
+            [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
+        );
+        if (declined) return notSent(input);
 
         const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)', [String(actorId)]);
         if (Number(sent.n) >= LIMITS.INVITES_PER_DAY) throw new TaskQuestError('RATE_LIMITED', 'You have sent a lot of invitations today. Try again tomorrow.', 429);
@@ -100,7 +108,7 @@ async function invite(actorId, input = {}) {
         if (input.dryRun) return { dryRun: true, ...invitePreview(invitee) };
         const expiresAt = new Date(Date.now() + LIMITS.INVITE_TTL_DAYS * DAY_MS);
         const [res] = await conn.query('INSERT INTO party_invites (party_id, invitee_discord_id, invited_by, expires_at) VALUES (?, ?, ?, ?)', [party.id, inviteeId, String(actorId), expiresAt]);
-        return { id: res.insertId, inviteeName: invitee.discord_username || null, inviteeDiscordId: inviteeId, expiresAt, partyName: party.name };
+        return { sent: true, id: res.insertId, inviteeName: invitee.discord_username || null, inviteeDiscordId: inviteeId, expiresAt, partyName: party.name };
     });
 }
 

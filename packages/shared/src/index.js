@@ -23,6 +23,7 @@ const rps = require('./games/rps');
 const hangman = require('./games/hangman');
 const arcade = require('./games/arcade');
 const { TaskQuestError, errors } = require('./errors');
+const { escapeDiscord } = require('./text');
 
 module.exports = {
     ...constants,
@@ -30,6 +31,7 @@ module.exports = {
     ...achievements,
     TaskQuestError,
     errors,
+    escapeDiscord,
     validation,
     random,
     ...dates,

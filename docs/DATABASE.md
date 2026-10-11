@@ -46,8 +46,12 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `015_timezone_days` | `users.timezone_changed_at` (throttles zone changes now that the zone sets the user's day) |
 | `016_cosmetics` | The `user_cosmetics` table and `users.equipped_title`, `equipped_frame`, `equipped_accent` |
 | `017_web_push` | The `push_subscriptions` table and `users.web_push` |
-| `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `users.accept_invites` (1 default; 0 refuses every invitation silently), `party_members.public_id` (opaque member key for removing a member, backfilled randomly), `items.rearm_count` / `rearm_day` and `lists.rearm_count` / `rearm_day` (how often today, UTC, a changed due date or deadline re-armed everyone's reminders; limited to 3 a day), `users.progress_reset_at` (set by a progress reset; quest, weekly review and party metrics ignore completions before it) |
+| `018_list_members` | Shared lists: `list_members` (roles), `list_invites`, the per-member reminder tables `list_reminders` and `item_reminders`, and the actor columns `items.created_by`, `completed_by`, `first_completed_by` and `lists.cleared_by` (backfilled from the list owner) |
+| `019_parties` | `parties`, `party_members` (UNIQUE per user) and `party_invites` |
 | `020_due_date_set_at` | `items.due_date_set_at` (when the due date was set or last changed; backfilled from `created_at`). Overdue and early effects apply only to a date set at least 24 hours before the completion |
+| `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `users.accept_invites` (1 default; 0 refuses every invitation silently), `party_members.public_id` (opaque member key for removing a member, backfilled randomly), `items.rearm_count` / `rearm_day` and `lists.rearm_count` / `rearm_day` (how often today, UTC, a changed due date or deadline re-armed everyone's reminders; limited to 3 a day), `users.progress_reset_at` (set by a progress reset; quest, weekly review and party metrics ignore completions before it) |
+
+The release that introduced migrations `010` to `021` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -120,13 +124,13 @@ Index: `(gamification_enabled, player_xp)` for the leaderboard.
 
 ### `lists`
 
-`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `overdue_notified` BOOLEAN · `remind_at` DATETIME (snooze: remind again at this time) · `cleared_at` DATETIME NULL (when the list-cleared bonus was paid; the Tidy Up quest counts it) · `cleared_by` VARCHAR(32) NULL (who was paid for clearing it; the Tidy Up quest counts that person) · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
+`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `overdue_notified` BOOLEAN · `remind_at` DATETIME (snooze: remind again at this time) · `cleared_at` DATETIME NULL (when the list-cleared bonus was paid; the Tidy Up quest counts it) · `cleared_by` VARCHAR(32) NULL (who was paid for clearing it; the Tidy Up quest counts that person) · `rearm_count` / `rearm_day` (re-arms of everybody's reminder by a changed deadline today; at most 3) · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
 
 `discord_id` is the **owner**. Unique key `(discord_id, name)`, index on `deadline`. Other people use a list through `list_members`; the rule for who may touch a list lives in `packages/shared/src/db/access.js` (owner, or a member with a role that is enough; anyone else gets NOT_FOUND).
 
 ### `items`
 
-`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `first_completed_early` / `first_completed_overdue` TINYINT NULL (whether that first completion was before / after the due date; NULL without a due date) · `habit_streak` INT (consecutive on-time completions of a repeating task, copied to each spawned copy) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `reminded_at` DATETIME (the due-day DM was sent) · `remind_at` DATETIME (snooze) · `created_by`, `completed_by`, `first_completed_by` VARCHAR(32) NULL (the **actor** of each event; quests, the weekly review, stats and the daily caps count a person's own actions, whoever owns the list; backfilled from the list owner by migration `018`; never sent to a client, which sees only `completed_by_name`) · `created_at` · `updated_at` (auto-updated).
+`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `due_date_set_at` DATETIME (when the date was set or changed; early and overdue effects need it at least 24 hours before the completion) · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `first_completed_early` / `first_completed_overdue` TINYINT NULL (whether that first completion was before / after the due date; NULL without a due date) · `habit_streak` INT (consecutive on-time completions of a repeating task, copied to each spawned copy) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `reminded_at` DATETIME (the due-day DM was sent) · `remind_at` DATETIME (snooze) · `rearm_count` / `rearm_day` (re-arms of everybody's reminder by a changed due date today; at most 3) · `created_by`, `completed_by`, `first_completed_by` VARCHAR(32) NULL (the **actor** of each event; quests, the weekly review, stats and the daily caps count a person's own actions, whoever owns the list; backfilled from the list owner by migration `018`; never sent to a client, which sees only `completed_by_name`) · `created_at` · `updated_at` (auto-updated).
 
 Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`, `(created_by, created_at)`, `(completed_by, completed_at)`, `(first_completed_by, first_completed_at)`. Positions are kept unique and contiguous (0..n-1) by `moveItem` / `reorderItems`. A row whose actor column is NULL (written by a script that skipped it) counts for its list's owner in every metric (`actorSql`).
 
@@ -225,18 +229,18 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | `list_create`, `item_add`, `item_complete` | + | Task rewards |
 | `daily` | + | Daily reward |
 | `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
-| `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review`, `party_quest` | + | Flat bonuses from streaks, achievements, focus sessions, the weekly review and the party quest |
+| `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review`, `quest_reward`, `party_quest` | + | Flat bonuses from streaks, achievements, focus sessions, the weekly review, daily/weekly/monthly quests and the party quest |
 | `prestige` | − | The balance leaving at a prestige (not spending: `xp_spent` is unchanged) |
 | `game_reward` | + | RPS, Hangman and arcade winnings. These count toward the free-game daily cap. |
 | `blackjack_bet` | − | Bet escrow (and double down) |
-| `blackjack_win`, `blackjack_blackjack` | + | Bet returned plus boosted winnings |
-| `blackjack_push`, `blackjack_refund` | + | Bet returned (push or expired hand). Not lifetime XP. |
+| `blackjack_win`, `blackjack_blackjack` | + | Bet returned plus flat winnings (1:1, or 3:2 for a natural; no class or skill bonuses). Only the winnings count as lifetime XP |
+| `blackjack_push` | + | Bet returned on a push. Not lifetime XP. |
 | `class_purchase`, `skill_purchase`, `streak_freeze`, `cosmetic_purchase` | − | Spending (counted in `xp_spent`) |
-| *legacy* `blackjack_loss`, `task_complete`, `item_create`, `manual` | ± | Written by pre-4.0 versions |
+| *legacy* `blackjack_loss`, `blackjack_refund`, `task_complete`, `item_create`, `manual` | ± | Written by pre-4.0 versions (and by migration 002's refund of stuck hands); current code never writes them |
 
 ## Game session states
 
-`active` → `won` · `lost` · `push` · `blackjack` · `expired` (timed out; bets refunded) · `cancelled` (quit, replaced by a new game, or an implausible arcade score).
+`active` → `won` · `lost` · `push` · `blackjack` · `expired` (a non-blackjack game that timed out, with no payout) · `cancelled` (quit, replaced by a new game, or an arcade run that was rejected). A Blackjack hand that times out is auto-stood and ends in one of the outcome states, with no refund.
 
 ## Automation queries
 

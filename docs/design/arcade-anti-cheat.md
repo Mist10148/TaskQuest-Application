@@ -13,7 +13,7 @@ Snake, Dino Runner and Space Invaders run **in the browser**. The server cannot 
 1. issues a run (`startArcade`, which cancels any previous active run of that game),
 2. measures how long the run lasted (server clock),
 3. rejects a score above `floor(seconds × maxPointsPerSecond) + 1` (a rejected score now cancels the run for good),
-4. caps XP per run (`maxXP`: 100 / 100 / 150) and, across all free games, at 500 XP per UTC day.
+4. caps XP per run (`maxXP`: 100 / 100 / 150) and, across all free games, at 500 XP per day (the user's own day since the per-user days change).
 
 **Worst case today:** a script that waits long enough and submits the highest plausible score earns the daily 500 XP cap. It cannot mint more, cannot affect other players' balances, and cannot do it faster than real time. The maximum damage is therefore **500 XP per account per day**, which is about the same as playing honestly for a while.
 

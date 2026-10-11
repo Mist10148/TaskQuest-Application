@@ -39,7 +39,7 @@ Use a **separate Discord application** for development, register commands to a t
 - **Never edit a released migration.** Add a new one, and make it idempotent with the `h.*IfMissing` helpers.
 - **Date-only values stay strings.** Deadlines and due dates are `YYYY-MM-DD` with no zone. Compare and format them with `packages/shared/src/dates.js` (or `apps/web/src/lib/dates.ts`), never `new Date('2030-01-05')`, which is UTC midnight and shifts the day.
 - **Rewards need a cap.** Anything that pays XP for something a user can repeat cheaply must have a per-day limit (see `LIMITS` in `constants.js`) and a test that proves it.
-- **Update the docs** (`docs/GAMEPLAY.md`, `docs/API.md`, `docs/COMMANDS.md`, `docs/DATABASE.md`) when behaviour changes, and add a line to `CHANGELOG.md`.
+- **Update the docs** (`docs/GAMEPLAY.md`, `docs/XP_GUIDE.md`, `docs/API.md`, `docs/COMMANDS.md`, `docs/DATABASE.md`; the index is [docs/README.md](docs/README.md)) when behaviour changes, and add a line to `CHANGELOG.md`. `packages/shared/test/docs.test.js` fails when the tables in `docs/GAMEPLAY.md` (class costs, skills, quests, achievements, limits, cosmetics, prestige, arcade) disagree with `constants.js`; the code is the source of truth, so fix the document.
 
 ## Testing
 
@@ -51,7 +51,7 @@ npm run typecheck
 npm run build
 ```
 
-The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). There are no component tests; browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
+The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop, CSV, stats, sharing and party helpers and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). There are no component tests; browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
 
 ### Integration tests
 

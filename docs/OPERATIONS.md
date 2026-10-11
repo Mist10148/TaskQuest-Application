@@ -61,7 +61,7 @@ After restoring:
 
 - **AI vectors** missing or stale? They rebuild themselves (the reconcile loop re-embeds changed lists every `AI_RECONCILE_MINUTES`). To rebuild everything at once: `python -m app.rag.backfill` from `apps/ai`.
 - **Reminders** are safe: the `deadline_notified` / `overdue_notified` flags are restored with the data, so nobody is reminded twice. A reminder missed while you were down is sent late (up to 3 days).
-- **Game sessions** that were active in the backup expire after 30 minutes and Blackjack bets are refunded by the bot's expiry job.
+- **Game sessions** that were active in the backup expire after 30 minutes. An unfinished Blackjack hand is settled as a stand by the expiry job (the bet is not refunded), so players who were mid-hand at backup time may see a result.
 
 ### Test your backups
 
@@ -87,22 +87,26 @@ Start with the health checks: web `GET /api/health` (`{status:"ok", database:"co
 | Deadline DMs never arrive | `/automation` is off, the user's DMs are closed, or their reminder hour hasn't come yet | Check the user's `automation_enabled`, `timezone` and `reminder_hour`. A closed inbox is skipped by design (Discord error 50007). |
 | A reminder arrived a day early or late | The user's time zone isn't set, so UTC dates are used | Ask them to run `/timezone` (or set it in Settings). |
 | Finishing a task pays no XP (the web shows "capped") | The daily cap of 50 rewarded completions (per day in the user's time zone) is reached, or XP is turned off | Expected; the cap resets at the user's local midnight (`users.timezone`, UTC when unset). |
+| Quests, review or caps reset at the "wrong" hour | They follow the user's time zone, and a zone change moves the day from then on (changes are limited to once every 24 hours) | Check `users.timezone` and `timezone_changed_at`. The weekly leaderboard and the party quest use one UTC week by design. |
 | Games: "cooldown" or wins paying 0 | 3-second cooldown, or the 500 XP daily free-game cap is used up | The Games page shows how much allowance is left. |
 | AI: 503 `AI_UNAVAILABLE` / `AI_DISABLED` | The AI service is down or timing out, or `AI_ENABLED` is not `true` on the web server | Check `GET /health` on the AI service, `AI_SERVICE_URL`, and that `AI_INTERNAL_TOKEN` is identical everywhere. |
 | AI: 429 `AI_QUOTA` | The user hit `AI_DAILY_REQUEST_LIMIT` | It resets at 00:00 UTC; raise the limit if it is too tight. |
+| Push notifications never arrive | Web push is off (the three `WEB_PUSH_*` VAPID variables unset), the site is not HTTPS, the bot has no `WEB_PUSH_INTERNAL_URL` or the shared token differs, or the browser's subscription expired (the server deletes it on a 404 or 410) | See [DEPLOYMENT.md](DEPLOYMENT.md#web-push-optional); check `GET /api/push/config` and that the user turned it on per browser in Settings. |
 | Calendar feed returns 404 | The token was rotated or turned off, or the URL was copied wrongly | Create a new address in Settings → Calendar feed and re-subscribe. |
-| Import fails with a 400 message | The file isn't a TaskQuest export, or breaks a limit (100 lists, 500 tasks per list, 1000 in total, 1 MB) | The message names the entry (for example `lists[3]: ... deadline`). Fix it and retry; nothing is imported on error. |
+| Import fails with a 400 message | The file isn't a TaskQuest export (or a CSV with a header row), or breaks a limit (JSON: 100 lists, 500 tasks per list, 1000 in total, 1 MB; CSV: 1,000,000 characters; both: 200 lists and 5,000 tasks per account) | The message names the entry (for example `lists[3]: ... deadline`) or, for CSV, the file row. Fix it and retry; nothing is imported on error. |
 | "Could not acquire migration lock" at startup | Another process is migrating, or a crashed one left the named lock | Wait a minute; the lock dies with its connection. If it persists, restart the database connection pool (restart the service). |
 | Site works but is slow on the first request | Free hosting plans sleep when idle | Expected on Render's free tier; use a paid plan for the bot. |
 
 ### Useful queries
 
 ```sql
--- Who is close to a daily cap?
+-- Who is close to a daily cap? Days are per user (users.timezone), so this UTC window is only an approximation;
+-- the real cap counts from each user's own local midnight.
 SELECT discord_id, COUNT(*) AS completions FROM xp_transactions
  WHERE source = 'item_complete' AND created_at >= UTC_DATE() GROUP BY discord_id ORDER BY completions DESC LIMIT 10;
 
--- Lists whose reminder is pending
+-- Lists whose reminder is pending (owners only: members' state is in list_reminders; a deadline is a date, but whether
+-- it is due today depends on the owner's time zone, so the window is one day wide on purpose)
 SELECT id, discord_id, name, deadline FROM lists
  WHERE deadline_notified = 0 AND deadline <= UTC_DATE() + INTERVAL 1 DAY;
 

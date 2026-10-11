@@ -17,6 +17,8 @@ npm test                # integration tests need TEST_DB_NAME (see CONTRIBUTING.
 | `lib/security.js` | helmet/CSP, rate limits, CSRF origin check, session middleware |
 | `lib/sessionStore.js` | express-session store on the `web_sessions` table |
 | `lib/schemas.js` | zod request schemas |
-| `routes/*` | auth, user, tasks, progression, games |
+| `lib/push.js`, `lib/pushConfig.js` | Web push sending and the optional VAPID configuration |
+| `lib/aiClient.js`, `lib/http.js` | The AI service client and shared HTTP helpers |
+| `routes/*` | auth, user, tasks, sharing (list members and invitations), parties, templates, import, progression (classes, skills, achievements, leaderboard), quests, cosmetics, focus, review, stats, push, calendar, games, ai, internal |
 
 See [docs/API.md](../../docs/API.md) and [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md).

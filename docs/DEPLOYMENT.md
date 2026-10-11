@@ -107,6 +107,7 @@ In production, set the variables in your host's dashboard instead. Because the b
 |---|---|
 | `VITE_API_URL` | Only for split deployments where the API is on another origin. Not recommended: third-party cookies are often blocked. |
 | `VITE_DEV_API_TARGET` | Dev proxy target (default `http://localhost:3001`) |
+| `VITE_BOT_INVITE_URL` | An `https://` Discord invite URL (scopes `bot applications.commands`) at build time; Settings then shows an "Add the bot" button. Without it there is no button. |
 
 ### AI service (`apps/ai`, optional)
 
@@ -125,6 +126,11 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [A
 | `AI_DAILY_REQUEST_LIMIT` | ai | Requests per user per UTC day across all features (default `100`) |
 | `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate MySQL user for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables. It never writes tasks directly. |
 | `LANGSMITH_API_KEY` | ai | Optional tracing |
+| `AI_RECONCILE_MINUTES` | ai | How often missed re-index calls are caught up (default `15`) |
+| `SUMMARY_MAP_REDUCE_CHARS` | ai | Summaries are made in parts above this input size (default `40000`) |
+| `MAX_TOOL_ITERATIONS` | ai | Tool rounds per chat turn (default `6`) |
+| `DB_POOL_SIZE` | ai | The AI service's own MySQL pool (default `5`; the Node apps default to `10`) |
+| `LOG_LEVEL` | ai | AI service JSON log level (default `INFO`) |
 
 The AI service reads the same root `.env` as the other apps, plus the database variables above. It needs migrations `003_ai` to `006_ai_chat_format`, which the web service and the bot apply on startup.
 
@@ -206,6 +212,8 @@ If you ran `taskquest-botv2` (v3.x) and/or `taskquest-web_deploy` (v1.5):
 5. **Re-run `deploy:commands`.** The `/list` command definition changed (its `name` option now has a length limit).
 
 Behaviour changes players may notice are listed in [CHANGELOG.md](../CHANGELOG.md#400).
+
+**Upgrading to the improvement pass** (migrations `010` to `021`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
 
 ## 7. Operations
 

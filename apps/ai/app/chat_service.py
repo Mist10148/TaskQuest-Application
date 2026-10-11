@@ -110,7 +110,7 @@ async def history(deps: ChatDeps, thread_id: str) -> dict[str, Any]:
 
 
 async def converse_turn(
-    deps: ChatDeps, discord_id: str, channel_id: str, message: str, image: str | None = None
+    deps: ChatDeps, discord_id: str, channel_id: str, message: str, image: str | None = None, *, public: bool = False
 ) -> dict[str, Any]:
     """Run one Discord conversation turn to completion (no streaming: Discord gets one message)."""
     from app.graphs.converse import build_converse_graph, thread_id_for
@@ -121,7 +121,7 @@ async def converse_turn(
             await threads.create_thread(
                 conn, discord_id, f"Discord {channel_id}", thread_id=thread_id, source=threads.DISCORD
             )
-    graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()))
+    graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()), public=public)
     config = {"configurable": {"thread_id": thread_id, "image": image}, "recursion_limit": 40}
     text = f"{message}\n[attached an image]" if image else message
     tools: list[dict[str, Any]] = []  # every tool round of this turn (state keeps only the last one)

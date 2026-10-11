@@ -20,6 +20,7 @@ class ConverseBody(BaseModel):
     channelId: str = Field(pattern=CHANNEL_ID)
     message: str = Field(min_length=1, max_length=4000)
     imageUrl: str | None = Field(default=None, max_length=2000)
+    public: bool = False  # sent from a guild channel: replies are visible to everyone, so no quest access
 
 
 def get_image_transport():
@@ -44,7 +45,7 @@ async def converse(
             raise HTTPException(status_code=400, detail=str(err)) from None
         except Exception:  # noqa: BLE001 - a CDN hiccup should not fail the whole message
             raise HTTPException(status_code=400, detail="Could not download the image.") from None
-    return await chat_service.converse_turn(deps, caller.discord_id, body.channelId, body.message, image)
+    return await chat_service.converse_turn(deps, caller.discord_id, body.channelId, body.message, image, public=body.public)
 
 
 @router.delete("/converse/{channel_id}")

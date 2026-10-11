@@ -22,7 +22,14 @@ def thread_id_for(discord_id: str, channel_id: str) -> str:
     return str(uuid.uuid5(_NAMESPACE, f"discord:{channel_id}:{discord_id}"))
 
 
-def build_converse_graph(deps: ChatDeps, checkpointer: Any):
+def build_converse_graph(deps: ChatDeps, checkpointer: Any, *, public: bool = False):
+    """``public``: the message came from a guild channel, so quests are off limits (see build_chat_graph)."""
     return build_chat_graph(
-        deps, checkpointer, prompt_name="converse_system", read_only=True, fold_at=FOLD_AT, keep=KEEP
+        deps,
+        checkpointer,
+        prompt_name="converse_public_system" if public else "converse_system",
+        read_only=True,
+        public=public,
+        fold_at=FOLD_AT,
+        keep=KEEP,
     )

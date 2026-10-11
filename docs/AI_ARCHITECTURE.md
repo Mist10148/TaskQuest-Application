@@ -160,6 +160,7 @@ The bot answers @mentions, replies to its own messages and DMs, Zephyr-style (`a
 - **Same graph, read-only:** `build_chat_graph(..., prompt_name="converse_system", read_only=True, fold_at=20, keep=10)`.
   - Only read tools are bound, and the graph never routes to `confirm`.
   - A write call the model invents is answered with a refusal that points to `/ask` or the website.
+- **Guild channels are public:** the bot sends `public: true` when the message came from a server. The service then builds the graph with `public=True` and `prompt_name="converse_public_system"`: **no tools are bound** (every read tool exposes private quests), retrieval is limited to the `doc` source type, and a tool call the model invents anyway is answered with a refusal. Quest lookups therefore work only in DMs (and `/ask`, which replies ephemerally).
 - **Memory is per user per channel**, using thread id `uuid5("discord:<channel>:<user>")`. Zephyr shares memory across a channel; TaskQuest can't, because retrieval and tools read each user's private quests.
 - **Threads are saved with `source='discord'`** (migration 005), so they never appear in the web app's thread list. `/forget` deletes the thread and its checkpoints.
 - **Images:** only `https` URLs on Discord's CDN are fetched, up to 4 MB, image types only. The bytes go to Gemini through the run config and are never written to the checkpoint.

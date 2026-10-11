@@ -196,14 +196,15 @@ function createAiClient(options = {}) {
         chat,
         /**
          * One Discord conversation turn (mention, reply or DM). Memory is kept per user per
-         * channel by the AI service. Resolves to { reply, sources, tools, usage }.
+         * channel by the AI service. `public: true` (a guild channel) keeps the user's quests out of
+         * the answer. Resolves to { reply, sources, tools, usage }.
          */
-        converse: (discordId, { channelId, message, imageUrl }, opts = {}) =>
+        converse: (discordId, { channelId, message, imageUrl, public: isPublic }, opts = {}) =>
             request(
                 'POST',
                 '/v1/converse',
                 discordId,
-                { channelId: String(channelId), message, ...(imageUrl ? { imageUrl } : {}) },
+                { channelId: String(channelId), message, ...(imageUrl ? { imageUrl } : {}), ...(isPublic ? { public: true } : {}) },
                 { timeoutMs: Math.max(config.timeoutMs, 60000), ...opts }
             ),
         /** Wipe the caller's conversation memory in one channel. Resolves to true if there was any. */

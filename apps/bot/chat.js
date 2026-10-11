@@ -168,7 +168,9 @@ async function handleMessage(message, { log = console.warn, now = Date.now } = {
             result = await ai().converse(userId, {
                 channelId: message.channelId,
                 message: (text || '(no text, just the attached image)').slice(0, MAX_INPUT),
-                imageUrl: attachment?.imageUrl
+                imageUrl: attachment?.imageUrl,
+                // Replies in a server channel are visible to everyone: the AI must not read private quests there.
+                public: Boolean(message.guildId)
             });
         } finally {
             clearInterval(typing);

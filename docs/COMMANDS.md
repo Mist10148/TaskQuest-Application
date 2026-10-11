@@ -95,8 +95,9 @@ You can learn skills from the Default tree and from trees of classes you own. Ev
 
 With AI enabled, the bot also chats like a person. **@mention it**, **reply to one of its messages**, or **DM it**. Its voice is calm, witty and kind. It teases back, gets snappy if you are rude, never uses emojis, and writes its own actions in *italics*.
 
-- It remembers the conversation **per user, per channel**, so other people in the channel never see your quests through it. `/forget` wipes its memory of you in that channel.
-- It can talk about anything and look up your quests, but it **cannot change** anything from a mention. Ask it to complete or add something and it points you to `/ask`, which asks you to approve.
+- It remembers the conversation **per user, per channel**, and `/forget` wipes its memory of you in that channel. Nobody else's messages share your memory.
+- **In a server channel the reply is public, so it never touches your quests there.** The bot is given no quest tools and no quest search in a guild: ask about your quests and it says lookups work in a **DM with the bot** or through `/ask` (private reply). General questions and TaskQuest how-tos work everywhere.
+- In a DM it can look up your quests, but it **cannot change** anything from a mention. Ask it to complete or add something and it points you to `/ask`, which asks you to approve.
 - Attach an image and it looks at it. Attach a `.txt` file and it reads the file as your message.
 - Long answers are split into several messages or sent as `response.txt`. `/ai-format` switches to embeds.
 - It ignores other bots, answers each user at most once every 3 seconds, and its replies never ping anyone.

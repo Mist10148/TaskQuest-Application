@@ -129,3 +129,34 @@ async def test_http_converse_reads_discord_images_without_saving_them(http):  # 
         blobs = (await conn.execute(text("SELECT checkpoint FROM ai_checkpoints"))).scalars().all()
         writes = (await conn.execute(text("SELECT value FROM ai_checkpoint_writes"))).scalars().all()
     assert blobs and not any(b"base64" in bytes(b or b"") for b in [*blobs, *writes])
+
+
+async def test_public_channel_never_reads_quests(seeded, monkeypatch):
+    """In a guild the answer is visible to everyone: no tools, no quest retrieval, made-up calls refused."""
+    from tests.graphs.test_chat import retriever_for
+
+    retriever = await retriever_for(seeded)
+    bound: list = []
+    llm = make_llm(
+        [call("get_overdue", {}), AIMessage("Quest lookups work in DMs or /ask.")],
+        [RouterOut(intent="task_question")],
+    )
+    monkeypatch.setattr(type(llm), "bind_tools", lambda self, tools, **kw: bound.extend(t.name for t in tools) or self)
+    out = await chat_service.converse_turn(
+        deps_for(llm, retriever=retriever), UID, CHANNEL, "what is due for math?", public=True
+    )
+    assert bound == [], "no tools are offered in a public channel"
+    assert out["tools"] == [{"name": "get_overdue", "status": "declined"}]
+    assert out["sources"] == [], "quest context is never retrieved"
+    assert "Math homework" not in out["reply"]
+
+    # The same question in a DM may use the tools.
+    llm2 = make_llm([call("get_overdue", {}), AIMessage("Nothing overdue.")], [RouterOut(intent="task_question")])
+    dm = await chat_service.converse_turn(deps_for(llm2), UID, "901", "what is overdue?")
+    assert dm["tools"] == [{"name": "get_overdue", "status": "done"}]
+
+
+async def test_http_converse_accepts_the_public_flag(http):  # noqa: F811
+    async with http(make_llm([AIMessage("Hi.")], [RouterOut(intent="chitchat")])) as c:
+        r = await c.post("/v1/converse", json={"channelId": CHANNEL, "message": "hi", "public": True}, headers=auth())
+        assert r.status_code == 200

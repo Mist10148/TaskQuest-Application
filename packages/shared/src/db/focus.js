@@ -8,7 +8,7 @@
 
 const { withTransaction } = require('./pool');
 const { lockUser } = require('./users');
-const { awardFlat, unlockAchievements, startOfUtcDay, sumToday } = require('./progression');
+const { awardFlat, unlockAchievements, dayWindow, sumToday } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS } = require('../constants');
 
@@ -22,11 +22,12 @@ function validateMinutes(minutes) {
     return n;
 }
 
-/** Sessions that paid today (the daily session cap counts finished ones only, so a cancelled start costs nothing). */
-async function finishedToday(conn, discordId) {
+/** Sessions that paid in the user's day (the daily session cap counts finished ones only, so a cancelled start costs nothing). */
+async function finishedToday(conn, who, now = new Date()) {
+    const { from, to } = await dayWindow(conn, who, now);
     const [[row]] = await conn.query(
-        "SELECT COUNT(*) AS n FROM focus_sessions WHERE discord_id = ? AND state = 'finished' AND minutes_credited > 0 AND finished_at >= ?",
-        [discordId, startOfUtcDay()]
+        "SELECT COUNT(*) AS n FROM focus_sessions WHERE discord_id = ? AND state = 'finished' AND minutes_credited > 0 AND finished_at >= ? AND finished_at < ?",
+        [who && typeof who === 'object' ? who.discord_id : String(who), from, to]
     );
     return Number(row.n);
 }
@@ -72,7 +73,7 @@ async function startFocus(discordId, minutes, now = new Date()) {
     const planned = validateMinutes(minutes);
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
-        if ((await finishedToday(conn, user.discord_id)) >= LIMITS.FOCUS_SESSIONS_PER_DAY) {
+        if ((await finishedToday(conn, user)) >= LIMITS.FOCUS_SESSIONS_PER_DAY) {
             throw errors.conflict(`You have already finished ${LIMITS.FOCUS_SESSIONS_PER_DAY} focus sessions today.`);
         }
         await conn.query("UPDATE focus_sessions SET state = 'cancelled', finished_at = ? WHERE discord_id = ? AND state = 'active'", [now, user.discord_id]);
@@ -121,7 +122,7 @@ async function finishFocus(discordId, sessionId, now = new Date()) {
         const wanted = Math.floor(credited * REWARDS.FOCUS_XP_PER_MINUTE);
         let paid = null;
         let capped = true;
-        if ((await finishedToday(conn, user.discord_id)) < LIMITS.FOCUS_SESSIONS_PER_DAY) {
+        if ((await finishedToday(conn, user)) < LIMITS.FOCUS_SESSIONS_PER_DAY) {
             paid = await awardFlat(conn, user, 'focus_session', wanted, { dailyCap: LIMITS.FOCUS_XP_PER_DAY, referenceId: sid });
             capped = !paid || paid.xp < wanted;
         }

@@ -12,7 +12,7 @@
 
 const { XP_PER_LEVEL, REWARDS, DAILY, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES, PRESTIGE, PRESTIGE_TITLES } = require('./constants');
 const { secureRandom } = require('./random');
-const { daysBetween } = require('./dates');
+const { daysBetween, todayInZone } = require('./dates');
 
 /** YYYY-MM-DD for a DATE column value (string or Date); null when empty. */
 function dayString(value) {
@@ -249,7 +249,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
         case 'MONK': {
             const m = CLASS_RULES.MONK;
-            const today = new Date(toMs(opts.now) ?? Date.now()).toISOString().slice(0, 10);
+            const today = todayInZone(user.timezone, new Date(toMs(opts.now) ?? Date.now())); // the user's own day
             const last = dayString(user.monk_day);
             const cap = m.MAX_RHYTHM + (lvl('monk_discipline') ? m.DISCIPLINE_CAP : 0);
             const gap = last ? daysBetween(last, today) : null;
@@ -297,7 +297,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
                 bonusInfo = { type: 'RANGER', details: `🧭 Ranger +${r.OTHER_FLAT}`, classBonus: r.OTHER_FLAT };
                 break;
             }
-            const today = context.today ? String(context.today).slice(0, 10) : new Date(toMs(opts.now) ?? Date.now()).toISOString().slice(0, 10);
+            const today = context.today ? String(context.today).slice(0, 10) : todayInZone(user.timezone, new Date(toMs(opts.now) ?? Date.now()));
             const daysEarly = daysBetween(today, dueDate);
             const dueTodayBonus = Math.floor((baseXP * r.DUE_TODAY_PERCENT) / 100) + (lvl('ranger_bullseye') ? r.BULLSEYE_FLAT : 0);
             let bonus = 0;

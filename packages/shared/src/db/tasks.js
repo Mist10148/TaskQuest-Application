@@ -491,12 +491,12 @@ async function completionBonuses(conn, user, item, ctx) {
         return r;
     };
 
-    if ((await countToday(conn, user.discord_id, 'first_of_day')) === 0) await pay('first_of_day', REWARDS.FIRST_OF_DAY, { referenceId: item.id });
+    if ((await countToday(conn, user, 'first_of_day')) === 0) await pay('first_of_day', REWARDS.FIRST_OF_DAY, { referenceId: item.id });
 
     if (ctx.listCleared) {
         // Marking the list first makes the payout once per list; the daily limit still applies on top.
         const [mark] = await conn.query('UPDATE lists SET cleared_at = ?, updated_at = updated_at WHERE id = ? AND cleared_at IS NULL', [new Date(), item.list_id]);
-        if (mark.affectedRows === 1 && (await countToday(conn, user.discord_id, 'list_cleared')) < LIMITS.LIST_CLEARED_PER_DAY) {
+        if (mark.affectedRows === 1 && (await countToday(conn, user, 'list_cleared')) < LIMITS.LIST_CLEARED_PER_DAY) {
             await pay('list_cleared', REWARDS.LIST_CLEARED, { referenceId: item.list_id });
         }
     }

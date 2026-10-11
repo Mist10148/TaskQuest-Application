@@ -23,6 +23,8 @@ const {
 } = require('../constants');
 const { levelFromXP, prestigeTitle, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
+const tz = require('../tz');
+const { todayInZone } = require('../dates');
 
 /** Columns applyXP() may update alongside the balance. */
 const UPDATABLE_COLUMNS = new Set([
@@ -105,23 +107,39 @@ async function applyXP(conn, user, amount, source, opts = {}) {
     };
 }
 
-/** Start of the current UTC day as a JS Date. */
-function startOfUtcDay(now = new Date()) {
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+/**
+ * The user's day window [from, to) containing `now`: 00:00 to 00:00 in their own time zone (users.timezone,
+ * UTC when unset). `who` is a user row (its zone is used, no query) or a discord id (its zone is looked up).
+ * Every daily reward cap reads this window, so "today" is the user's own day.
+ */
+async function dayWindow(conn, who, now = new Date()) {
+    let zone = null;
+    if (who && typeof who === 'object') zone = who.timezone;
+    else {
+        const [rows] = await conn.query('SELECT timezone FROM users WHERE discord_id = ?', [String(who)]);
+        zone = rows[0] ? rows[0].timezone : null;
+    }
+    return { from: tz.dayStart(zone, now), to: tz.nextDayStart(zone, now) };
 }
 
-async function countToday(conn, discordId, source) {
+/** XP transactions of `source` the user earned in their current day. */
+async function countToday(conn, who, source, now = new Date()) {
+    const { from, to } = await dayWindow(conn, who, now);
+    const id = who && typeof who === 'object' ? who.discord_id : String(who);
     const [[row]] = await conn.query(
-        'SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ?',
-        [discordId, source, startOfUtcDay()]
+        'SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ? AND created_at < ?',
+        [id, source, from, to]
     );
     return Number(row.n);
 }
 
-async function sumToday(conn, discordId, source) {
+/** XP of `source` the user earned in their current day. */
+async function sumToday(conn, who, source, now = new Date()) {
+    const { from, to } = await dayWindow(conn, who, now);
+    const id = who && typeof who === 'object' ? who.discord_id : String(who);
     const [[row]] = await conn.query(
-        'SELECT COALESCE(SUM(amount), 0) AS total FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ?',
-        [discordId, source, startOfUtcDay()]
+        'SELECT COALESCE(SUM(amount), 0) AS total FROM xp_transactions WHERE discord_id = ? AND source = ? AND created_at >= ? AND created_at < ?',
+        [id, source, from, to]
     );
     return Number(row.total);
 }
@@ -138,7 +156,7 @@ async function sumToday(conn, discordId, source) {
  */
 async function rewardAction(conn, user, source, baseXP, opts = {}) {
     if (!user.gamification_enabled || baseXP <= 0) return null;
-    if (opts.dailyLimit !== undefined && (await countToday(conn, user.discord_id, source)) >= opts.dailyLimit) {
+    if (opts.dailyLimit !== undefined && (await countToday(conn, user, source)) >= opts.dailyLimit) {
         return { capped: true, finalXP: 0, baseXP };
     }
 
@@ -171,7 +189,7 @@ async function awardFlat(conn, user, source, amount, opts = {}) {
     let pay = Math.trunc(Number(amount));
     if (opts.dailyCap !== undefined) {
         let paid = 0;
-        for (const s of opts.capSources || [source]) paid += await sumToday(conn, user.discord_id, s);
+        for (const s of opts.capSources || [source]) paid += await sumToday(conn, user, s);
         pay = Math.min(pay, opts.dailyCap - paid);
     }
     if (!(pay > 0)) return null;
@@ -179,9 +197,9 @@ async function awardFlat(conn, user, source, amount, opts = {}) {
     return { xp: pay, tx };
 }
 
-/** Remaining free-game XP a user can earn today. */
-async function remainingFreeGameXP(conn, discordId) {
-    return Math.max(0, LIMITS.FREE_GAME_XP_PER_DAY - (await sumToday(conn, discordId, 'game_reward')));
+/** Remaining free-game XP a user can earn today (their own day). */
+async function remainingFreeGameXP(conn, discordId, now = new Date()) {
+    return Math.max(0, LIMITS.FREE_GAME_XP_PER_DAY - (await sumToday(conn, discordId, 'game_reward', now)));
 }
 
 /**
@@ -249,7 +267,7 @@ async function claimDaily(discordId) {
                 ...(reward.freezeUsed ? { streak_freezes: Number(user.streak_freezes) - 1 } : {}),
                 streak_count: reward.newStreak,
                 last_daily_claim: new Date(),
-                last_active_day: new Date().toISOString().slice(0, 10)
+                last_active_day: todayInZone(user.timezone)
             }
         });
         let chest = null;
@@ -457,7 +475,7 @@ module.exports = {
     updateUserColumns,
     countToday,
     sumToday,
-    startOfUtcDay,
+    dayWindow,
     claimDaily,
     buyStreakFreeze,
     buyClass,

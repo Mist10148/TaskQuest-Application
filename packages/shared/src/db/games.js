@@ -16,6 +16,7 @@ const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const { applyXP, rewardAction, remainingFreeGameXP, unlockAchievements, requireGamification, updateUserColumns } = require('./progression');
 const { errors } = require('../errors');
+const tz = require('../tz');
 const { REWARDS, LIMITS, ARCADE_CONFIG } = require('../constants');
 const blackjack = require('../games/blackjack');
 const rps = require('../games/rps');
@@ -340,9 +341,11 @@ async function finishArcade(discordId, sessionId, score) {
 
 /** How much free-game XP (RPS, hangman, arcade) the user can still earn today, and when it resets. */
 async function getFreeGameAllowance(discordId, now = new Date()) {
-    const remaining = await remainingFreeGameXP(getPool(), String(discordId));
+    const pool = getPool();
+    const remaining = await remainingFreeGameXP(pool, String(discordId), now);
     const cap = LIMITS.FREE_GAME_XP_PER_DAY;
-    const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    const [[user]] = await pool.query('SELECT timezone FROM users WHERE discord_id = ?', [String(discordId)]);
+    const resetsAt = tz.nextDayStart(user ? user.timezone : null, now); // the user's own midnight
     return { cap, remainingXP: remaining, usedXP: Math.max(0, cap - remaining), resetsAt: resetsAt.toISOString() };
 }
 

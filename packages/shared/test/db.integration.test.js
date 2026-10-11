@@ -2883,5 +2883,30 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(await setAt(imported.id));
     });
 
+    await t.test('lock order: breaking a task down while the same user adds and completes tasks never deadlocks', async () => {
+        const U = '100000000000000611';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Lock order' });
+        const parents = [];
+        for (let n = 0; n < 6; n++) parents.push((await db.tasks.addItem(U, list.id, { name: `p${n}` })).item.id);
+        const deadlocks = async () => {
+            const [rows] = await pool.query("SHOW GLOBAL STATUS LIKE 'Innodb_deadlocks'");
+            return rows[0] ? Number(rows[0].Value) : null;
+        };
+        const before = await deadlocks();
+        for (let round = 0; round < 5; round++) {
+            const results = await Promise.allSettled([
+                ...parents.map((id) => db.tasks.addSubtasks(U, id, ['a', 'b'])),
+                ...parents.map((id, n) => db.tasks.addItem(U, list.id, { name: `r${round}-${n}` })),
+                ...parents.map((id) => db.tasks.setItemCompleted(U, id, round % 2 === 0))
+            ]);
+            for (const r of results) assert.equal(r.status, 'fulfilled', r.reason && r.reason.message);
+        }
+        // Retries would hide a deadlock, so also read the server's counter (MariaDB exposes it; other servers skip this).
+        // Other test files run against other databases at the same time, so only a rise is a failure when it is ours.
+        const after = await deadlocks();
+        if (before !== null) assert.equal(after, before, 'no deadlock was even raised');
+    });
+
     await db.closePool();
 });

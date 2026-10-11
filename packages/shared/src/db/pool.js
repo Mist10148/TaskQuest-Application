@@ -83,11 +83,31 @@ async function closePool() {
     }
 }
 
+/** InnoDB picked this transaction as the victim of a deadlock; nothing it did was kept, so it is safe to run again. */
+function isDeadlock(err) {
+    return Boolean(err) && (err.code === 'ER_LOCK_DEADLOCK' || err.errno === 1213);
+}
+
+const DEADLOCK_ATTEMPTS = 3;
+
 /**
  * Run `fn(conn)` inside a transaction. Commits on success, rolls back on any
- * thrown error (which is re-thrown).
+ * thrown error (which is re-thrown). A deadlock victim (and only that) is retried on a fresh
+ * connection, up to 3 attempts in all, so `fn` must keep its side effects inside the transaction.
+ * Lock order everywhere is: the user row first, then the list or item rows, so this stays rare.
  */
 async function withTransaction(fn) {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await runTransaction(fn);
+        } catch (err) {
+            if (!isDeadlock(err) || attempt >= DEADLOCK_ATTEMPTS) throw err;
+            await new Promise((resolve) => setTimeout(resolve, attempt * 10 + Math.floor(Math.random() * 20)));
+        }
+    }
+}
+
+async function runTransaction(fn) {
     const conn = await getPool().getConnection();
     try {
         await conn.beginTransaction();
@@ -112,4 +132,4 @@ async function query(sql, params = []) {
     return rows;
 }
 
-module.exports = { buildConfig, getPool, ping, closePool, withTransaction, query };
+module.exports = { buildConfig, getPool, ping, closePool, withTransaction, isDeadlock, query };

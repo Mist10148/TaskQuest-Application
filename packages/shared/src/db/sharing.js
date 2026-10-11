@@ -18,6 +18,7 @@
 const crypto = require('crypto');
 const { withTransaction, getPool } = require('./pool');
 const access = require('./access');
+const { lockUser } = require('./users');
 const { errors, TaskQuestError } = require('../errors');
 const v = require('../validation');
 const { LIMITS, LIST_ROLES } = require('../constants');
@@ -136,7 +137,9 @@ async function listInvites(userId) {
 async function respond(userId, inviteId, accept) {
     const id = unwrap(v.id(inviteId));
     return withTransaction(async (conn) => {
-        // Lock order is always list, then invitation (as in invite and revoke), so the three never deadlock.
+        // Lock order is the invitee's user row, then the list, then the invitation (the user row first, as everywhere else:
+        // inserting the membership takes a share lock on it, which would otherwise wait behind this person's own work on the list).
+        await lockUser(conn, userId);
         const [[peek]] = await conn.query('SELECT list_id FROM list_invites WHERE id = ? AND invitee_discord_id = ?', [id, String(userId)]);
         if (!peek) throw errors.notFound('Invitation not found.');
         await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [peek.list_id]);

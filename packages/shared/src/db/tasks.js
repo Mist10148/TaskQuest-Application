@@ -341,6 +341,8 @@ async function addSubtasks(discordId, parentId, names) {
     if (!Array.isArray(names) || !names.length || names.length > 20) throw errors.validation('Give between 1 and 20 subtask names.');
     const parsed = names.map((name) => parseItemInput(0, { name }));
     return withTransaction(async (conn) => {
+        // Lock order is the user row first, then list and item rows (as addItemIn and setItemCompleted do), or two requests deadlock.
+        await lockUser(conn, discordId);
         const { item: parent } = await access.forItem(conn, discordId, pid, 'editor', { lock: true });
         if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
         const items = [];

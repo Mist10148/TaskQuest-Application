@@ -440,5 +440,179 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.deepEqual(errors(board), []);
     });
 
+
+    // ─── Shared lists ─────────────────────────────────────────────────────────────
+
+    await t.test('shared lists: /share, invitation DM, /invites, roles in /list, /members and /leave', async () => {
+        const sharing = require('../commands/sharing');
+        const P = { own: '300000000000000901', ed: '300000000000000902', vw: '300000000000000903', st: '300000000000000904', nodm: '300000000000000905' };
+        for (const [k, id] of Object.entries(P)) await db.users.ensureUser(id, { username: `bot_${k}`, avatar: null });
+        const { list: shared } = await db.tasks.createList(P.own, { name: 'Flat chores' });
+        const { item } = await db.tasks.addItem(P.own, shared.id, { name: 'Take out bins' });
+        const target = (id, username) => {
+            const sent = [];
+            return { id, username, bot: false, sent, send: async (payload) => sent.push(payload) };
+        };
+
+        // /share by the owner: the invitee gets a DM with Accept / Decline.
+        const edUser = target(P.ed, 'bot_ed');
+        const s1 = fake({ userId: P.own, commandName: 'share', options: { list: 'Flat chores', user: edUser, role: 'editor' } });
+        await sharing.share(s1);
+        assert.deepEqual(errors(s1), []);
+        assert.match(text(s1.calls.at(-1)), /Invitation sent/);
+        assert.equal(edUser.sent.length, 1);
+        const dmButtons = edUser.sent[0].components[0].toJSON().components.map((c) => c.custom_id);
+        assert.match(dmButtons[0], /^inv_accept_\d+$/);
+        assert.match(dmButtons[1], /^inv_decline_\d+$/);
+        assert.match(JSON.stringify(edUser.sent[0].embeds[0].toJSON()), /Flat chores/);
+
+        // Closed DMs: the owner is told, and the invitation is still in /invites.
+        const closed = { ...target(P.vw, 'bot_vw'), send: async () => { throw new Error('Cannot send messages to this user'); } };
+        const s2 = fake({ userId: P.own, commandName: 'share', options: { list: 'Flat chores', user: closed } });
+        await sharing.share(s2);
+        assert.match(text(s2.calls.at(-1)), /DMs are closed[\s\S]*\/invites/);
+        const inv = fake({ userId: P.vw, commandName: 'invites' });
+        await sharing.invites(inv);
+        const invView = inv.calls.at(-1).payload;
+        assert.match(JSON.stringify(invView.embeds[0].toJSON()), /Flat chores[\s\S]*viewer/);
+        assert.equal(invView.components.length, 1);
+
+        // A stranger, an unknown person and a self-invite are refused with a friendly message; a bot account cannot be invited.
+        const noList = fake({ userId: P.st, commandName: 'share', options: { list: 'Flat chores', user: target(P.ed, 'bot_ed') } });
+        await sharing.share(noList);
+        assert.match(text(noList.calls.at(-1)), /List not found/);
+        const unknown = fake({ userId: P.own, commandName: 'share', options: { list: 'Flat chores', user: target('399999999999999999', 'ghost') } });
+        await sharing.share(unknown);
+        assert.match(text(unknown.calls.at(-1)), /not used TaskQuest/);
+        const self = fake({ userId: P.own, commandName: 'share', options: { list: 'Flat chores', user: target(P.own, 'bot_own') } });
+        await sharing.share(self);
+        assert.match(text(self.calls.at(-1)), /yourself/);
+        const botUser = fake({ userId: P.own, commandName: 'share', options: { list: 'Flat chores', user: { ...target(P.st, 'robot'), bot: true } } });
+        await sharing.share(botUser);
+        assert.match(text(botUser.calls.at(-1)), /Bots cannot/);
+
+        // Someone else cannot answer the invitation; the invitee can (from the DM, which has no interaction metadata).
+        const edInvite = (await db.sharing.listInvites(P.ed))[0];
+        const hijack = fake({ userId: P.st, customId: `inv_accept_${edInvite.id}`, message: { embeds: [] } });
+        await sharing.handleInviteButton(hijack);
+        assert.match(text(hijack.calls.at(-1)), /No longer open|Invitation not found/);
+        assert.equal(await db.tasks.getList(P.st, shared.id), null);
+        const accept = fake({ userId: P.ed, customId: `inv_accept_${edInvite.id}`, message: { embeds: [] } });
+        await sharing.handleInviteButton(accept);
+        assert.equal(accept.calls[0].type, 'update');
+        assert.match(text(accept.calls[0]), /Joined/);
+        const again = fake({ userId: P.ed, customId: `inv_accept_${edInvite.id}`, message: { embeds: [] } });
+        await sharing.handleInviteButton(again);
+        assert.match(text(again.calls.at(-1)), /no longer open/i, 'a stale button explains itself');
+        // The viewer accepts from the /invites message, which re-renders.
+        const vwInvite = (await db.sharing.listInvites(P.vw))[0];
+        const accept2 = fake({ userId: P.vw, customId: `inv_accept_${vwInvite.id}`, message: { embeds: [{ title: '📨 Invitations' }] } });
+        await sharing.handleInviteButton(accept2);
+        assert.match(accept2.calls[0].payload.content, /Joined/);
+        assert.match(text(accept2.calls[0]), /No invitations/);
+
+        // /list shows the sharing marker and role; an editor edits, a viewer only reads.
+        const ov = fake({ userId: P.ed, commandName: 'list' });
+        await list.execute(ov);
+        assert.match(text(ov.calls[0]), /Flat chores[\s\S]*👥[\s\S]*editor · by bot_own/);
+        const editorView = fake({ userId: P.ed, commandName: 'list', options: { name: 'Flat chores' } });
+        await list.execute(editorView);
+        const rowIds = (call) => call.payload.components.flatMap((r) => r.toJSON().components.map((c) => c.custom_id));
+        assert.ok(rowIds(editorView.calls[0]).includes(`edit_${shared.id}`));
+        const editMode = fake({ userId: P.ed, customId: `edit_${shared.id}` });
+        await list.handleButton(editMode);
+        const editIds = rowIds(editMode.calls[0]);
+        assert.ok(editIds.includes(`item_add_${shared.id}`));
+        assert.ok(!editIds.includes(`list_meta_${shared.id}`) && !editIds.includes(`list_del_${shared.id}`), 'an editor has no list settings and no delete');
+        const viewerView = fake({ userId: P.vw, commandName: 'list', options: { name: 'Flat chores' } });
+        await list.execute(viewerView);
+        assert.ok(!rowIds(viewerView.calls[0]).includes(`edit_${shared.id}`), 'a viewer gets no Edit button');
+        assert.match(text(viewerView.calls[0]), /View only/);
+        const forced = fake({ userId: P.vw, customId: `edit_${shared.id}` });
+        await list.handleButton(forced);
+        assert.equal(forced.calls[0].type, 'reply');
+        assert.match(text(forced.calls[0]), /view access/);
+        const addModal = fake({ userId: P.vw, customId: `item_add_${shared.id}` });
+        await list.handleButton(addModal);
+        assert.equal(addModal.calls[0].type, 'reply', 'no modal for a viewer');
+        const toggle = fake({ userId: P.vw, customId: `sel_done_${shared.id}`, values: [String(item.id)] });
+        await list.handleSelectMenu(toggle);
+        assert.equal((await db.tasks.getItem(P.own, item.id)).completed, 0, 'the viewer changed nothing');
+        assert.match(text(toggle.calls.at(-1)), /view access/);
+        const submit = fake({ userId: P.vw, customId: `m_additem_${shared.id}`, fields: { name: 'sneaky' } });
+        await list.handleModal(submit);
+        assert.equal((await db.tasks.getItems(P.own, shared.id)).length, 1);
+        // The editor completes a task: the XP and the item are theirs.
+        const doneEd = fake({ userId: P.ed, customId: `sel_done_${shared.id}`, values: [String(item.id)] });
+        await list.handleSelectMenu(doneEd);
+        assert.deepEqual(errors(doneEd), []);
+        assert.equal(Number((await db.users.getUser(P.ed)).total_items_completed), 1);
+        assert.equal(Number((await db.users.getUser(P.own)).total_items_completed), 0);
+
+        // The public-message guard still holds on a shared list: a stranger clicking the owner's message is turned away first.
+        const mineMsg = { interaction: { user: { id: P.own } } };
+        const stranger = fake({ userId: P.st, customId: `view_${shared.id}`, message: mineMsg });
+        await list.handleButton(stranger);
+        assert.deepEqual(stranger.calls.map((c) => c.type), ['reply']);
+        assert.match(text(stranger.calls[0]), /isn't your list view/);
+        const stranger2 = fake({ userId: P.st, customId: `sel_list`, values: [String(shared.id)] });
+        await list.handleSelectMenu(stranger2);
+        assert.match(text(stranger2.calls.at(-1)), /Not found/i, 'without the guard the service still says not found');
+
+        // /members: names and roles, no IDs; only a manager gets the remove menu, and only the owner can remove a manager.
+        const mem = fake({ userId: P.own, commandName: 'members', options: { list: 'Flat chores' } });
+        await sharing.members(mem);
+        const memText = text(mem.calls.at(-1));
+        assert.match(memText, /bot_own[\s\S]*owner[\s\S]*bot_ed[\s\S]*editor[\s\S]*bot_vw[\s\S]*viewer/);
+        assert.equal(/\d{15,}/.test(memText), false, 'no Discord ID is shown');
+        const menu = mem.calls.at(-1).payload.components[0].toJSON().components[0];
+        assert.equal(menu.custom_id, `mem_rm_${shared.id}`);
+        assert.deepEqual(menu.options.map((o) => o.label).sort(), ['bot_ed', 'bot_vw']);
+        const memEd = fake({ userId: P.ed, commandName: 'members', options: { list: 'Flat chores' } });
+        await sharing.members(memEd);
+        assert.deepEqual(memEd.calls.at(-1).payload.components, [], 'an editor cannot remove people');
+        const strangerMembers = fake({ userId: P.st, commandName: 'members', options: { list: 'Flat chores' } });
+        await sharing.members(strangerMembers);
+        assert.match(text(strangerMembers.calls.at(-1)), /List not found/);
+        const forgedRemove = fake({ userId: P.ed, customId: `mem_rm_${shared.id}`, values: [menu.options.find((o) => o.label === 'bot_vw').value] });
+        await sharing.handleSelect(forgedRemove);
+        assert.match(text(forgedRemove.calls.at(-1)), /manager/i, 'a forged select from an editor is refused by the service');
+        assert.ok(await db.tasks.getList(P.vw, shared.id));
+        const remove = fake({ userId: P.own, customId: `mem_rm_${shared.id}`, values: [menu.options.find((o) => o.label === 'bot_vw').value] });
+        await sharing.handleSelect(remove);
+        assert.equal(remove.calls[0].type, 'update');
+        assert.equal(await db.tasks.getList(P.vw, shared.id), null, 'removed');
+        const staleView = fake({ userId: P.vw, customId: `edit_${shared.id}` });
+        await list.handleButton(staleView);
+        assert.match(text(staleView.calls[0]), /Not found/i, 'a removed member\'s open message stops working');
+
+        // /leave asks first, then the member is out; the owner cannot leave.
+        const lv = fake({ userId: P.ed, commandName: 'leave', options: { list: 'Flat chores' } });
+        await sharing.leave(lv);
+        assert.match(text(lv.calls.at(-1)), /Leave this list/);
+        const no = fake({ userId: P.ed, customId: 'leave_no' });
+        await sharing.handleLeaveButton(no);
+        assert.ok(await db.tasks.getList(P.ed, shared.id));
+        const yes = fake({ userId: P.ed, customId: `leave_yes_${shared.id}` });
+        await sharing.handleLeaveButton(yes);
+        assert.equal(await db.tasks.getList(P.ed, shared.id), null);
+        const ownerLeave = fake({ userId: P.own, commandName: 'leave', options: { list: 'Flat chores' } });
+        await sharing.leave(ownerLeave);
+        assert.match(text(ownerLeave.calls.at(-1)), /cannot leave/);
+
+        // Autocomplete: /share offers only lists you manage.
+        const { list: other } = await db.tasks.createList(P.st, { name: 'Flat chores 2' });
+        await db.tasks.addItem(P.st, other.id, { name: 'x' });
+        const inv3 = await db.sharing.invite(P.st, other.id, { discordId: P.ed, role: 'viewer' });
+        await db.sharing.respond(P.ed, inv3.id, true);
+        const ac = fake({ userId: P.ed, commandName: 'share', options: { focused: 'flat', focusedName: 'list' } });
+        await sharing.autocomplete(ac);
+        assert.deepEqual(ac.calls[0].payload, [], 'a viewer manages nothing');
+        const ac2 = fake({ userId: P.ed, commandName: 'leave', options: { focused: 'flat', focusedName: 'list' } });
+        await sharing.autocomplete(ac2);
+        assert.deepEqual(ac2.calls[0].payload.map((o) => o.value), ['Flat chores 2']);
+        void P.nodm;
+    });
+
     await db.closePool();
 });

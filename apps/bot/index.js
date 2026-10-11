@@ -5,6 +5,7 @@
  *   /game → blackjack · rock paper scissors · hangman
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
  *   /review /prestige /shop
+ *   /share /invites /members /leave → shared lists
  *   /summary /prioritize /ask /forget /ai-format → AI service (when AI_ENABLED)
  *   @mention / reply / DM → AI conversation (chat.js)
  *
@@ -34,6 +35,7 @@ const timezoneCommand = require('./commands/timezone');
 const digest = require('./utils/digest');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
+const sharingCommands = require('./commands/sharing');
 const chat = require('./chat');
 
 const log = (emoji, scope, msg) => console.log(`[${new Date().toISOString()}] ${emoji} [${scope}] ${msg}`);
@@ -122,6 +124,10 @@ const COMMANDS = {
     timezone: timezoneCommand.execute,
     weekly: weeklyCommand.execute,
     quick: quickCommand.execute,
+    share: sharingCommands.share,
+    invites: sharingCommands.invites,
+    members: sharingCommands.members,
+    leave: sharingCommands.leave,
     automation: gamification.automation,
     profile: gamification.profile,
     achievements: gamification.achievements,
@@ -143,6 +149,7 @@ async function route(interaction) {
         if (interaction.commandName === 'summary') return aiCommands.autocomplete(interaction);
         if (interaction.commandName === 'timezone') return timezoneCommand.autocomplete(interaction);
         if (interaction.commandName === 'quick') return quickCommand.autocomplete(interaction);
+        if (['share', 'members', 'leave'].includes(interaction.commandName)) return sharingCommands.autocomplete(interaction);
         return interaction.respond([]);
     }
 
@@ -156,6 +163,8 @@ async function route(interaction) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
         if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
+        if (id.startsWith('inv_accept_') || id.startsWith('inv_decline_')) return sharingCommands.handleInviteButton(interaction);
+        if (id.startsWith('leave_yes_') || id === 'leave_no') return sharingCommands.handleLeaveButton(interaction);
         if (id === 'review_claim') return reviewCommand.handleButton(interaction);
         if (id.startsWith('prestige_')) return prestigeCommand.handleButton(interaction);
         if (id.startsWith('shop_')) return shopCommand.handleButton(interaction);
@@ -175,6 +184,7 @@ async function route(interaction) {
         if (id === 'game_select') return gameCommand.handleSelectMenu(interaction);
         if (id.startsWith('hm_letter_select')) return gameCommand.handleHangmanSelect(interaction);
         if (id.startsWith('shop_pick_')) return shopCommand.handleSelect(interaction);
+        if (id.startsWith('mem_rm_')) return sharingCommands.handleSelect(interaction);
         if (id === 'class_select') return gamification.handleClassSelect(interaction);
         if (id === 'skill_select') return gamification.handleSkillSelect(interaction);
         return listCommand.handleSelectMenu(interaction);

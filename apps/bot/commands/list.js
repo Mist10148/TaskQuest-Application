@@ -5,9 +5,13 @@
  *                 → LIST_EDIT (all mutations)
  *
  * Every lookup and mutation goes through @taskquest/shared/db tasks
- * services, which only ever match rows owned by the clicking user. A
- * button on someone else's (public) list message therefore just reports
- * "not found" instead of acting on their data.
+ * services, which only ever match lists the clicking user owns or is a member
+ * of (and check their role). A button on someone else's (public) list message
+ * is also refused up front (notOwner), and otherwise just reports "not found"
+ * instead of acting on their data.
+ *
+ * Shared lists show 👥 and the viewer's role; a viewer gets a read-only view and
+ * no Edit button, an editor no list settings, and only the owner can delete.
  */
 
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -36,17 +40,23 @@ function overviewComponents(lists, { withCategoryFilter = false, page = 0 } = {}
     return components.slice(0, 5);
 }
 
+/** A viewer of a shared list never gets edit mode, whatever button was pressed. */
+const canEdit = (list) => list.role !== 'viewer';
+
 async function renderList(userId, listId, mode) {
     const list = await tasks.getList(userId, listId);
     if (!list) return null;
     const items = await tasks.getItems(userId, listId);
+    const shown = mode === 'edit' && !canEdit(list) ? 'view' : mode;
     return {
-        embeds: [ui.listViewEmbed(list, items, mode)],
-        components: mode === 'edit' ? ui.editButtons(list.id) : ui.viewButtons(list.id)
+        embeds: [ui.listViewEmbed(list, items, shown)],
+        components: shown === 'edit' ? ui.editButtons(list.id, { role: list.role, isOwner: list.is_owner }) : ui.viewButtons(list.id, { canEdit: canEdit(list) })
     };
 }
 
-const denied = (interaction) => interaction.reply({ embeds: [ui.error('Not found', 'That list no longer exists or is not yours.')], ...EPHEMERAL });
+const viewOnly = (interaction) => interaction.reply({ embeds: [ui.error('View only', 'You only have view access to this list.')], ...EPHEMERAL });
+
+const denied = (interaction) => interaction.reply({ embeds: [ui.error('Not found', 'That list no longer exists, or you no longer have access to it.')], ...EPHEMERAL });
 
 function metaEditComponents(listId, done = false) {
     const buttons = [new ButtonBuilder().setCustomId(`rename_${listId}`).setLabel('Edit Name/Desc/Deadline').setStyle(done ? ButtonStyle.Secondary : ButtonStyle.Primary)];
@@ -144,13 +154,18 @@ async function routeButton(interaction) {
             const list = listId && (await tasks.getList(userId, listId));
             if (!list) return denied(interaction);
             const items = await tasks.getItems(userId, listId, { sortBy, order });
-            return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId) });
+            return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId, { canEdit: canEdit(list) }) });
         }
     }
     if (id.startsWith('search_')) return interaction.showModal(ui.searchModal());
 
     for (const [prefix, mode] of [['refresh_', 'view'], ['view_', 'view'], ['edit_', 'edit'], ['metadone_', 'edit']]) {
         if (id.startsWith(prefix)) {
+            if (mode === 'edit') {
+                const target = await tasks.getList(userId, idFrom(id, prefix));
+                if (!target) return denied(interaction);
+                if (!canEdit(target)) return viewOnly(interaction);
+            }
             const view = await renderList(userId, idFrom(id, prefix), mode);
             if (!view) return denied(interaction);
             return interaction.update(view);
@@ -161,6 +176,7 @@ async function routeButton(interaction) {
     if (id.startsWith('item_add_')) {
         const list = await tasks.getList(userId, idFrom(id, 'item_add_'));
         if (!list) return denied(interaction);
+        if (!canEdit(list)) return viewOnly(interaction);
         return interaction.showModal(ui.itemModal(list.id));
     }
 
@@ -177,6 +193,7 @@ async function routeButton(interaction) {
             const listId = idFrom(id, prefix);
             const items = listId ? await tasks.getItems(userId, listId) : null;
             if (!items) return denied(interaction);
+            if (!canEdit(await tasks.getList(userId, listId))) return viewOnly(interaction);
             if (items.length < min) {
                 return interaction.reply({ embeds: [ui.info('Not enough tasks', min > 1 ? 'You need at least 2 tasks.' : 'This list has no tasks.')], ...EPHEMERAL });
             }

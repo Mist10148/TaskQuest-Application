@@ -290,3 +290,22 @@ test('task reminders push too, titled by lateness', async () => {
     assert.equal(pushForTask(task(), 'snooze', NOW).title, 'Task reminder');
     assert.equal(pushForList(list({ deadline: '2030-03-08' }), 'overdue', NOW).title, 'Overdue');
 });
+
+test('a member of a shared list is marked for themselves; the owner keeps the list-level marker', async () => {
+    const ctx = setup({ lists: [list({ id: 1, owner_id: '42', discord_id: '42' }), list({ id: 1, owner_id: '42', discord_id: '77' })] });
+    const calls = [];
+    ctx.db.tasks.markReminderSent = async (id, kind, opts) => calls.push([id, kind, opts]);
+    await sendDeadlineReminders({ ...ctx, now: new Date('2030-03-10T10:00:00Z') });
+    assert.deepEqual(calls.map(([, , opts]) => opts.recipientId), [undefined, '77'], 'only the member row carries a recipient');
+    assert.equal(ctx.sent.length, 2, 'each of them is messaged once');
+
+    const marked = [];
+    const db = {
+        tasks: {
+            getTaskReminderCandidates: async () => [task({ id: 5, owner_id: '42', discord_id: '42' }), task({ id: 5, owner_id: '42', discord_id: '77' })],
+            markTaskReminderSent: async (...args) => marked.push(args.slice(2))
+        }
+    };
+    await sendTaskReminders({ db, client: ctx.client, log: () => {}, now: new Date('2030-03-10T10:00:00Z') });
+    assert.deepEqual(marked, [[], ['77']]);
+});

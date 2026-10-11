@@ -23,6 +23,7 @@ const shopCommand = require('./commands/shop');
 const timezoneCommand = require('./commands/timezone');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
+const sharingCommands = require('./commands/sharing');
 
 const commands = [
     listCommand.data,
@@ -37,6 +38,10 @@ const commands = [
     timezoneCommand.data,
     weeklyCommand.data,
     quickCommand.data,
+    sharingCommands.shareData,
+    sharingCommands.invitesData,
+    sharingCommands.membersData,
+    sharingCommands.leaveData,
     gamification.automationData,
     gamification.profileData,
     gamification.achievementsData,

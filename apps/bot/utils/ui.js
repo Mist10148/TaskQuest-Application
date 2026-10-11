@@ -200,7 +200,7 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     // Title with category emoji if present
     const catEmoji = list.category ? (CATEGORY_EMOJI[list.category] || '📁') : '📋';
     const titleSuffix = filterLabel ? ` • ${filterLabel}` : '';
-    embed.setTitle(`${catEmoji} ${list.name}${titleSuffix}`);
+    embed.setTitle(`${catEmoji} ${list.name}${list.shared ? ' 👥' : ''}${titleSuffix}`);
     
     // Build clean description
     let desc = '';
@@ -242,7 +242,8 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
         const dateStr = formatDeadline(list.deadline);
         footerParts.push(isPastDeadline(list.deadline) ? `⚠️ Overdue: ${dateStr}` : `Due: ${dateStr}`);
     }
-    footerParts.push(mode === 'edit' ? '✏️ Edit Mode' : '👁️ View Mode');
+    if (list.shared) footerParts.push(list.is_owner ? `👥 ${list.member_count} people` : `👥 ${list.role} · by ${list.owner_name || 'someone'}`);
+    footerParts.push(mode === 'edit' ? '✏️ Edit Mode' : list.shared && list.role === 'viewer' ? '👁️ View only' : '👁️ View Mode');
     
     embed.setFooter({ text: footerParts.join(' • ') });
     
@@ -272,7 +273,7 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
         
         // Build clean list entry
         // Line 1: Priority dot + List Name
-        desc += `${priorityDot} **${l.name}**\n`;
+        desc += `${priorityDot} **${l.name}**${l.shared ? ' 👥' : ''}\n`;
         
         // Line 2: Metadata (category + deadline) in muted text
         const metaParts = [];
@@ -290,6 +291,8 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
             if (dateStr) metaParts.push(isPastDeadline(l.deadline) ? `⚠️ ${dateStr}` : `📅 ${dateStr}`);
         }
         
+        if (l.shared) metaParts.push(l.is_owner ? `shared with ${Number(l.member_count) - 1}` : `${l.role} · by ${l.owner_name || 'someone'}`);
+
         if (metaParts.length > 0) {
             desc += `-# ${metaParts.join(' · ')}\n`;
         }
@@ -409,6 +412,7 @@ function helpEmbed() {
         .setDescription('A gamified task manager with RPG elements')
         .addFields(
             { name: 'Tasks', value: '`/list` `/quick`', inline: true },
+            { name: 'Sharing', value: '`/share` `/invites` `/members` `/leave`', inline: true },
             { name: 'Games', value: '`/game` Mini-games', inline: true },
             { name: 'Daily', value: '`/daily` `/freeze` `/quests` `/review`', inline: true },
             { name: 'Profile', value: '`/profile` `/achievements`', inline: true },
@@ -429,7 +433,11 @@ const warn = (t, d) => new EmbedBuilder().setColor(COLORS.warning).setDescriptio
 //  🔘 BUTTONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function viewButtons(listId) {
+/** `canEdit`: false for a viewer of a shared list, who gets no Edit button. */
+function viewButtons(listId, { canEdit = true } = {}) {
+    const lastRow = new ActionRowBuilder();
+    if (canEdit) lastRow.addComponents(new ButtonBuilder().setCustomId(`edit_${listId}`).setLabel('Edit List').setEmoji('✏️').setStyle(ButtonStyle.Primary));
+    lastRow.addComponents(new ButtonBuilder().setCustomId('back').setLabel('Back').setStyle(ButtonStyle.Secondary));
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`sort_az_${listId}`).setLabel('A→Z').setStyle(ButtonStyle.Secondary),
@@ -438,14 +446,16 @@ function viewButtons(listId) {
             new ButtonBuilder().setCustomId(`search_${listId}`).setEmoji('🔍').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`refresh_${listId}`).setEmoji('🔄').setStyle(ButtonStyle.Secondary)
         ),
-        new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`edit_${listId}`).setLabel('Edit List').setEmoji('✏️').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('back').setLabel('Back').setStyle(ButtonStyle.Secondary)
-        )
+        lastRow
     ];
 }
 
-function editButtons(listId) {
+/** `role`: viewer/editor/manager on a shared list (an own list is a manager's). The list settings are a manager's, deleting the list the owner's. */
+function editButtons(listId, { role = 'manager', isOwner = true } = {}) {
+    const lastRow = new ActionRowBuilder();
+    if (role === 'manager') lastRow.addComponents(new ButtonBuilder().setCustomId(`list_meta_${listId}`).setLabel('List Info').setEmoji('📋').setStyle(ButtonStyle.Primary));
+    if (isOwner) lastRow.addComponents(new ButtonBuilder().setCustomId(`list_del_${listId}`).setLabel('Delete List').setEmoji('🗑️').setStyle(ButtonStyle.Danger));
+    lastRow.addComponents(new ButtonBuilder().setCustomId(`view_${listId}`).setLabel('Done').setStyle(ButtonStyle.Secondary));
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`item_add_${listId}`).setLabel('Add').setEmoji('➕').setStyle(ButtonStyle.Success),
@@ -458,11 +468,7 @@ function editButtons(listId) {
             new ButtonBuilder().setCustomId(`item_desc_${listId}`).setLabel('Description').setEmoji('📝').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`item_details_${listId}`).setLabel('Details').setEmoji('🗓️').setStyle(ButtonStyle.Secondary)
         ),
-        new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`list_meta_${listId}`).setLabel('List Info').setEmoji('📋').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`list_del_${listId}`).setLabel('Delete List').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`view_${listId}`).setLabel('Done').setStyle(ButtonStyle.Secondary)
-        )
+        lastRow
     ];
 }
 
@@ -604,6 +610,7 @@ function listSelect(lists, id = 'sel_list', { page = 0, paged = false } = {}) {
         const descParts = [];
         if (l.category) descParts.push(l.category);
         if (l.deadline) descParts.push(formatDeadline(l.deadline));
+        if (l.shared) descParts.unshift(l.is_owner ? '👥 shared' : `👥 ${l.role}`);
 
         return {
             label: l.name.substring(0, 100),

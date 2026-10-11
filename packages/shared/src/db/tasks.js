@@ -769,7 +769,7 @@ async function getTaskReminderCandidates(now = new Date()) {
     const day = (offset) => new Date(now.getTime() + offset * 86400e3).toISOString().slice(0, 10);
     const owners = await run(
         `SELECT i.id, i.name, i.list_id, i.due_date, i.priority, i.remind_at, i.reminded_at, i.parent_id,
-                l.name AS list_name, l.discord_id, u.timezone, u.reminder_hour
+                l.name AS list_name, l.discord_id, l.discord_id AS owner_id, u.timezone, u.reminder_hour
          FROM items i JOIN lists l ON l.id = i.list_id JOIN users u ON u.discord_id = l.discord_id
          WHERE u.automation_enabled = TRUE AND i.completed = FALSE AND i.due_date IS NOT NULL AND (
              (i.remind_at IS NOT NULL AND i.remind_at <= ?)
@@ -780,7 +780,7 @@ async function getTaskReminderCandidates(now = new Date()) {
     );
     const members = await run(
         `SELECT i.id, i.name, i.list_id, i.due_date, i.priority, r.remind_at AS remind_at, r.reminded_at AS reminded_at, i.parent_id,
-                l.name AS list_name, m.discord_id, u.timezone, u.reminder_hour
+                l.name AS list_name, m.discord_id, l.discord_id AS owner_id, u.timezone, u.reminder_hour
          FROM list_members m
          JOIN lists l ON l.id = m.list_id
          JOIN items i ON i.list_id = l.id

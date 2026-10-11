@@ -4,7 +4,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
-import { settingsBody, resetBody } from '../lib/schemas.js';
+import { settingsBody, resetBody, prestigeBody } from '../lib/schemas.js';
 import aiClient from '../lib/aiClient.js';
 
 const router = Router();
@@ -129,6 +129,22 @@ router.get(
 );
 
 // Destructive: requires {"confirm":"RESET"} in the body.
+router.get(
+    '/prestige',
+    asyncRoute(async (req, res) => {
+        res.json(await db.progression.getPrestige(uid(req)));
+    })
+);
+
+router.post(
+    '/prestige',
+    asyncRoute(async (req, res) => {
+        parse(prestigeBody, req.body);
+        const r = await db.progression.prestige(uid(req));
+        res.json({ success: true, ...r, newAchievements: r.achievements });
+    })
+);
+
 router.post(
     '/reset',
     asyncRoute(async (req, res) => {

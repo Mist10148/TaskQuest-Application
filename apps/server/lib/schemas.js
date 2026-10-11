@@ -38,6 +38,7 @@ export const settingsBody = z
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
 export const resetBody = z.object({ confirm: z.literal('RESET') }).strict();
+export const prestigeBody = z.object({ confirm: z.literal('PRESTIGE') }).strict();
 
 const listFields = {
     name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME),

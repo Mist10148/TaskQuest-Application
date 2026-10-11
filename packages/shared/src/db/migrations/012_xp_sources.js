@@ -7,13 +7,20 @@
  *   items.habit_streak  consecutive on-time completions of a repeating task, carried onto each spawned copy
  *   focus_sessions     server-timed focus sessions; minutes_credited and xp are what the server measured and paid
  *   items.first_completed_early / first_completed_overdue  whether the first completion was before / after the due date (NULL: no due date or not recorded)
+ *   users.prestige            how many times the player has prestiged
+ *   users.lifetime_xp_total   all XP ever earned, never reset (lifetime_xp is reset by prestige because it drives the level)
  */
 
-exports.description = 'xp sources: list cleared marker, streak chests, habit streaks, focus sessions, quest facts';
+exports.description = 'xp sources: list cleared marker, streak chests, habit streaks, focus sessions, quest facts, prestige';
 
 exports.up = async (h) => {
     await h.addColumnIfMissing('lists', 'cleared_at', 'DATETIME NULL DEFAULT NULL');
     await h.addColumnIfMissing('users', 'last_chest_streak', 'INT NOT NULL DEFAULT 0');
+    await h.addColumnIfMissing('users', 'prestige', 'INT NOT NULL DEFAULT 0');
+    if (!(await h.columnExists('users', 'lifetime_xp_total'))) {
+        await h.exec('ALTER TABLE users ADD COLUMN lifetime_xp_total BIGINT NOT NULL DEFAULT 0');
+        await h.exec('UPDATE users SET lifetime_xp_total = lifetime_xp');
+    }
     await h.addColumnIfMissing('items', 'habit_streak', 'INT NOT NULL DEFAULT 0');
     await h.addColumnIfMissing('items', 'first_completed_early', 'TINYINT(1) NULL DEFAULT NULL');
     await h.addColumnIfMissing('items', 'first_completed_overdue', 'TINYINT(1) NULL DEFAULT NULL');

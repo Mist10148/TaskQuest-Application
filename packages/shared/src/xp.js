@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { XP_PER_LEVEL, REWARDS, DAILY, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES } = require('./constants');
+const { XP_PER_LEVEL, REWARDS, DAILY, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES, PRESTIGE, PRESTIGE_TITLES } = require('./constants');
 const { secureRandom } = require('./random');
 const { daysBetween } = require('./dates');
 
@@ -28,6 +28,18 @@ function toMs(value) {
 }
 
 // ─── Levels ───────────────────────────────────────────────────────────────────
+
+/** The permanent XP multiplier from prestige, added to the other multipliers (0.02 per prestige, max 10). */
+function prestigeMultiplier(user) {
+    const n = Math.min(PRESTIGE.MAX, Math.max(0, Number(user && user.prestige) || 0));
+    return (n * PRESTIGE.BONUS_PERCENT) / 100;
+}
+
+/** The title for a number of prestiges ('' for none). */
+function prestigeTitle(prestige) {
+    const n = Math.min(PRESTIGE.MAX, Math.max(0, Math.trunc(Number(prestige)) || 0));
+    return PRESTIGE_TITLES[n];
+}
 
 /** Level for a given amount of lifetime XP. Level never drops when XP is spent. */
 function levelFromXP(lifetimeXP) {
@@ -370,7 +382,7 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     const bonuses = getSkillBonuses(skills);
 
     // Conditional multipliers that depend on class state after this action.
-    let multiplier = bonuses.xpMultiplier;
+    let multiplier = bonuses.xpMultiplier + prestigeMultiplier(user);
     if (user.player_class === 'ASSASSIN' && lvl('assassin_execute') && userUpdates.assassin_stacks === CLASS_RULES.ASSASSIN.MAX_STACKS) {
         multiplier += 1.0;
     }
@@ -518,6 +530,8 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 }
 
 module.exports = {
+    prestigeMultiplier,
+    prestigeTitle,
     levelFromXP,
     levelProgress,
     toSkillMap,

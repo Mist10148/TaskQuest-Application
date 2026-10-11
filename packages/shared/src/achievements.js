@@ -20,7 +20,8 @@ function achievementConditions(stats, events = {}) {
     const lists = num(stats.total_lists_created);
     const items = num(stats.total_items_added);
     const done = num(stats.total_items_completed);
-    const xp = num(stats.lifetime_xp ?? stats.player_xp);
+    // Prestige resets lifetime_xp (it drives the level); the XP achievements count everything ever earned.
+    const xp = Math.max(num(stats.lifetime_xp_total), num(stats.lifetime_xp ?? stats.player_xp));
     const level = num(stats.player_level) || 1;
     const streak = num(stats.streak_count);
     const owned = PURCHASABLE_CLASS_KEYS.map((k) => Boolean(stats[classOwnershipColumn(k)]));

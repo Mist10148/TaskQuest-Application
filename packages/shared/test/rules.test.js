@@ -796,3 +796,21 @@ test('quest rotation: ISO week numbers pick one of four weekly quests', () => {
     for (const key of shared.ROTATING_QUESTS) assert.ok(shared.QUESTS[key].rotating && shared.QUESTS[key].period === 'weekly');
     assert.deepEqual(shared.QUESTS.BOSS_COMPLETE_50, { name: 'Monthly Boss', emoji: '🐉', description: 'Complete 50 tasks this month', period: 'monthly', metric: 'completions', target: 50, reward: 400 });
 });
+
+test('prestige: +2% XP per prestige (max 10) in the final multiplier, and a title per step', () => {
+    const base = (prestige) => shared.calculateFinalXP(user({ prestige }), [], 100, { context: { action: 'item_complete' }, rng: () => 0.99 }).finalXP;
+    assert.equal(base(0), 100);
+    assert.equal(base(1), 102);
+    assert.equal(base(5), 110);
+    assert.equal(base(10), 120);
+    assert.equal(base(25), 120, 'capped at 10 prestiges');
+    assert.equal(shared.prestigeMultiplier({ prestige: 3 }), 0.06);
+    assert.equal(shared.prestigeTitle(0), '');
+    assert.equal(shared.prestigeTitle(1), 'Veteran');
+    assert.equal(shared.prestigeTitle(99), shared.PRESTIGE_TITLES[10]);
+    assert.equal(shared.PRESTIGE_TITLES.length, shared.PRESTIGE.MAX + 1);
+    assert.equal(shared.PRESTIGE.MIN_LEVEL, 30);
+    // XP achievements count the never-reset total, not the level-driving lifetime_xp.
+    const keys = shared.evaluateAchievements({ lifetime_xp: 20, lifetime_xp_total: 5200 }, []).map((a) => a.key);
+    assert.ok(keys.includes('XP_5000') && !keys.includes('XP_10000'));
+});

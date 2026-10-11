@@ -8,7 +8,7 @@
 'use strict';
 
 const { withTransaction } = require('./pool');
-const { lockUser, getUserSkills, getGameCounts } = require('./users');
+const { lockUser, getUser, getUserSkills, getGameCounts } = require('./users');
 const { errors } = require('../errors');
 const {
     CLASSES,
@@ -18,9 +18,10 @@ const {
     LIMITS,
     REWARDS,
     SPEND_SOURCES,
-    STREAK_CHESTS
+    STREAK_CHESTS,
+    PRESTIGE
 } = require('../constants');
-const { levelFromXP, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
+const { levelFromXP, prestigeTitle, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
 
 /** Columns applyXP() may update alongside the balance. */
@@ -68,16 +69,19 @@ async function applyXP(conn, user, amount, source, opts = {}) {
 
     const lifetimeDelta = Math.max(0, opts.lifetimeDelta ?? Math.max(delta, 0));
     const lifetimeAfter = Number(user.lifetime_xp) + lifetimeDelta;
+    // lifetime_xp drives the level and is reset by prestige; the total is never reset.
+    const totalAfter = Math.max(Number(user.lifetime_xp_total) || 0, Number(user.lifetime_xp)) + lifetimeDelta;
     const previousLevel = Number(user.player_level);
     const level = levelFromXP(lifetimeAfter);
 
-    await conn.query('UPDATE users SET player_xp = ?, lifetime_xp = ?, player_level = ? WHERE discord_id = ?', [
+    await conn.query('UPDATE users SET player_xp = ?, lifetime_xp = ?, lifetime_xp_total = ?, player_level = ? WHERE discord_id = ?', [
         balanceAfter,
         lifetimeAfter,
+        totalAfter,
         level,
         user.discord_id
     ]);
-    Object.assign(user, { player_xp: balanceAfter, lifetime_xp: lifetimeAfter, player_level: level });
+    Object.assign(user, { player_xp: balanceAfter, lifetime_xp: lifetimeAfter, lifetime_xp_total: totalAfter, player_level: level });
     await updateUserColumns(conn, user, opts.userUpdates);
     if (delta < 0 && SPEND_SOURCES.includes(source)) {
         await conn.query('UPDATE users SET xp_spent = xp_spent + ? WHERE discord_id = ?', [-delta, user.discord_id]);
@@ -278,6 +282,62 @@ async function claimDaily(discordId) {
     });
 }
 
+// ─── Prestige ────────────────────────────────────────────────────────────────
+
+/**
+ * Start over for a permanent XP multiplier and a title. Resets the balance, level (lifetime_xp), class,
+ * class ownership, skills, class counters and streak freezes. Achievements, quest claims, tasks, the
+ * daily streak and lifetime_xp_total (which the XP achievements and the lifetime board read) are kept.
+ */
+async function prestige(discordId) {
+    return withTransaction(async (conn) => {
+        const user = await lockUser(conn, discordId);
+        requireGamification(user);
+        const done = Number(user.prestige) || 0;
+        if (Number(user.player_level) < PRESTIGE.MIN_LEVEL) throw errors.validation(`Reach level ${PRESTIGE.MIN_LEVEL} to prestige.`);
+        if (done >= PRESTIGE.MAX) throw errors.conflict(`You have already prestiged ${PRESTIGE.MAX} times.`);
+
+        const levelBefore = Number(user.player_level);
+        const balanceBefore = Number(user.player_xp);
+        // The balance leaves through the ledger, so the history shows where it went.
+        await applyXP(conn, user, -balanceBefore, 'prestige', { referenceId: done + 1 });
+        const owned = Object.fromEntries(PURCHASABLE_CLASS_KEYS.map((k) => [classOwnershipColumn(k), 0]));
+        const sets = { lifetime_xp: 0, player_level: 1, player_class: 'DEFAULT', streak_freezes: 0, prestige: done + 1, ...owned, ...CLASS_COUNTER_RESET };
+        const keys = Object.keys(sets);
+        await conn.query(`UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE discord_id = ?`, [...keys.map((k) => sets[k]), user.discord_id]);
+        Object.assign(user, sets);
+        await conn.query('DELETE FROM user_skills WHERE discord_id = ?', [user.discord_id]);
+        const achievements = await unlockAchievements(conn, user);
+        return {
+            prestige: done + 1,
+            title: prestigeTitle(done + 1),
+            bonusPercent: (done + 1) * PRESTIGE.BONUS_PERCENT,
+            levelBefore,
+            balanceLost: balanceBefore,
+            balance: Number(user.player_xp),
+            level: Number(user.player_level),
+            achievements
+        };
+    });
+}
+
+/** What prestige would do for this user right now. */
+async function getPrestige(discordId) {
+    const user = (await getUser(discordId)) || {};
+    const done = Number(user.prestige) || 0;
+    return {
+        prestige: done,
+        title: prestigeTitle(done),
+        nextTitle: done < PRESTIGE.MAX ? prestigeTitle(done + 1) : null,
+        bonusPercent: Math.min(done, PRESTIGE.MAX) * PRESTIGE.BONUS_PERCENT,
+        nextBonusPercent: done < PRESTIGE.MAX ? (done + 1) * PRESTIGE.BONUS_PERCENT : null,
+        level: Number(user.player_level) || 1,
+        minLevel: PRESTIGE.MIN_LEVEL,
+        max: PRESTIGE.MAX,
+        eligible: Boolean(user.gamification_enabled) && Number(user.player_level) >= PRESTIGE.MIN_LEVEL && done < PRESTIGE.MAX
+    };
+}
+
 // ─── Streak freeze ───────────────────────────────────────────────────────────
 
 /** Buy one streak freeze (kept until a daily claim would otherwise break the streak). */
@@ -403,6 +463,8 @@ module.exports = {
     buyClass,
     equipClass,
     unlockSkill,
+    prestige,
+    getPrestige,
     ownsClass,
     normaliseClassKey,
     CLASS_COUNTER_RESET

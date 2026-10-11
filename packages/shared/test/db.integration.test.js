@@ -64,6 +64,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await cols('lists')).includes('cleared_at'));
         assert.ok(users.includes('last_chest_streak'));
         assert.ok(items.includes('habit_streak'));
+        for (const c of ['prestige', 'lifetime_xp_total']) assert.ok(users.includes(c), c);
         for (const c of ['first_completed_early', 'first_completed_overdue']) assert.ok(items.includes(c), c);
         assert.equal((await pool.query("SHOW TABLES LIKE 'focus_sessions'"))[0].length, 1);
     });
@@ -1467,6 +1468,89 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number((await db.users.getUser(U)).player_xp) - before - ((await rewardSum(U)) - rewards0), 400);
         await assert.rejects(db.quests.claimQuest(U, 'BOSS_COMPLETE_50'), { code: 'CONFLICT', message: /this month/ });
         assert.equal((await db.quests.getQuests(U)).find((q) => q.key === 'BOSS_COMPLETE_50').claimed, true);
+    });
+
+
+    await t.test('prestige: level 30 gate, what resets and what is kept', async () => {
+        const U = '100000000000000171';
+        await db.users.ensureUser(U);
+        await assert.rejects(db.progression.prestige(U), { code: 'VALIDATION' }, 'level 1 cannot prestige');
+        assert.equal((await db.progression.getPrestige(U)).eligible, false);
+
+        // A veteran: 2900+ lifetime XP (level 30), a class, skills, freezes, a quest claim and an achievement.
+        await db.query(
+            `UPDATE users SET player_xp = 700, lifetime_xp = 2950, lifetime_xp_total = 2950, player_level = 30, player_class = 'HERO', owns_hero = 1,
+                    streak_freezes = 2, streak_count = 9, xp_spent = 600 WHERE discord_id = ?`,
+            [U]
+        );
+        await db.query("INSERT INTO user_skills (discord_id, skill_id, skill_level) VALUES (?, 'hero_valor', 1)", [U]);
+        await db.query("INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, 'DAILY_ADD_3', CURDATE(), 15)", [U]);
+        const { list } = await db.tasks.createList(U, { name: 'Survives prestige' });
+        await db.progression.checkAchievements(U);
+        const achievementsBefore = Number((await db.query('SELECT COUNT(*) AS n FROM achievements WHERE discord_id = ?', [U]))[0].n);
+        assert.ok(achievementsBefore >= 3);
+        assert.equal((await db.progression.getPrestige(U)).eligible, true);
+        const balanceBefore = Number((await db.users.getUser(U)).player_xp);
+        const totalBefore = Number((await db.users.getUser(U)).lifetime_xp_total);
+
+        const r = await db.progression.prestige(U);
+        assert.deepEqual([r.prestige, r.title, r.bonusPercent], [1, 'Veteran', 2]);
+        const u = await db.users.getUser(U);
+        assert.deepEqual([Number(u.player_xp), Number(u.lifetime_xp), Number(u.player_level), u.player_class], [0, 0, 1, 'DEFAULT']);
+        assert.equal(Number(u.owns_hero), 0);
+        assert.equal(Number(u.streak_freezes), 0);
+        assert.equal(Number(u.prestige), 1);
+        assert.equal(Number(u.streak_count), 9, 'the daily streak is kept');
+        assert.equal(Number(u.xp_spent), 600);
+        assert.equal(Number(u.lifetime_xp_total), totalBefore, 'the total is never reset');
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM user_skills WHERE discord_id = ?', [U]))[0].n, 0);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM quest_claims WHERE discord_id = ?', [U]))[0].n), 1, 'quest claims are kept');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM achievements WHERE discord_id = ?', [U]))[0].n), achievementsBefore, 'achievements are kept');
+        assert.ok(await db.tasks.getList(U, list.id), 'tasks are kept');
+        assert.equal(await sumSource(U, 'prestige'), -balanceBefore, 'the balance left through the ledger');
+        assert.equal((await db.users.getUserStats(U)).user.prestige_title, 'Veteran');
+        await assert.rejects(db.progression.prestige(U), { code: 'VALIDATION' }, 'level is derived from lifetime XP, so level 30 must be earned again');
+    });
+
+    await t.test('prestige: XP achievements and the lifetime board read the never-reset total', async () => {
+        const U = '100000000000000172';
+        const V = '100000000000000173';
+        await db.users.ensureUser(U);
+        await db.users.ensureUser(V);
+        await db.query('UPDATE users SET player_xp = 100, lifetime_xp = 3000, lifetime_xp_total = 4995, player_level = 31 WHERE discord_id = ?', [U]);
+        await db.progression.prestige(U);
+        await db.tasks.createList(U, { name: 'Post prestige' }); // +10 XP: total 5005, lifetime_xp 10
+        const u = await db.users.getUser(U);
+        assert.ok(Number(u.lifetime_xp) < 500 && Number(u.lifetime_xp_total) >= 5000, 'only post-prestige XP counts towards the level');
+        const keys = (await db.query('SELECT achievement_key FROM achievements WHERE discord_id = ?', [U])).map((r) => r.achievement_key);
+        for (const k of ['XP_100', 'XP_500', 'XP_1000', 'XP_5000']) assert.ok(keys.includes(k), `${k} from the total`);
+        assert.ok(!keys.includes('XP_10000'));
+        assert.ok(Number(u.player_level) < 10, 'the level restarted');
+
+        await db.query('UPDATE users SET lifetime_xp = 4000, lifetime_xp_total = 4000, player_xp = 0 WHERE discord_id = ?', [V]);
+        const board = await db.users.getLeaderboard(100, { by: 'lifetime' });
+        const rankOf = (id) => board.findIndex((r) => r.discord_id === id);
+        assert.ok(rankOf(U) >= 0 && rankOf(U) < rankOf(V), 'the prestiged player (5005 total) outranks 4000 lifetime XP');
+        const row = board[rankOf(U)];
+        assert.equal(Number(row.lifetime_xp_total), Number(u.lifetime_xp_total));
+        assert.equal(Number(row.prestige), 1);
+        assert.equal(await db.users.getRank(U, 'lifetime') < (await db.users.getRank(V, 'lifetime')), true);
+    });
+
+    await t.test('prestige: capped at 10, needs XP on and a confirmation upstream, and a full reset clears it', async () => {
+        const U = '100000000000000174';
+        await db.users.ensureUser(U);
+        await db.query('UPDATE users SET player_xp = 0, lifetime_xp = 2900, lifetime_xp_total = 2900, player_level = 30, prestige = 10 WHERE discord_id = ?', [U]);
+        await assert.rejects(db.progression.prestige(U), { code: 'CONFLICT' });
+        assert.equal((await db.progression.getPrestige(U)).eligible, false);
+        await db.query('UPDATE users SET prestige = 3 WHERE discord_id = ?', [U]);
+        await db.users.updateSettings(U, { gamification_enabled: false });
+        await assert.rejects(db.progression.prestige(U), { code: 'GAMIFICATION_DISABLED' });
+        await db.users.updateSettings(U, { gamification_enabled: true });
+        assert.equal((await db.progression.prestige(U)).title, 'Elite');
+        await db.users.resetProgress(U);
+        const wiped = await db.users.getUser(U);
+        assert.deepEqual([Number(wiped.prestige), Number(wiped.lifetime_xp_total), Number(wiped.lifetime_xp)], [0, 0, 0]);
     });
 
     await db.closePool();

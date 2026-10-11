@@ -341,6 +341,30 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('POST', '/api/review/claim', { cookie: alice, origin: 'https://evil.example' })).status, 403);
     });
 
+    await t.test('prestige endpoints: confirmation, level gate, then the title shows on profile and board', async () => {
+        const P = await login(db, '200000000000000009');
+        assert.equal((await call('POST', '/api/user/prestige', { body: { confirm: 'PRESTIGE' } })).status, 401);
+        const info = await (await call('GET', '/api/user/prestige', { cookie: P })).json();
+        assert.deepEqual([info.prestige, info.eligible, info.minLevel, info.max], [0, false, 30, 10]);
+        assert.equal((await call('POST', '/api/user/prestige', { cookie: P, body: {} })).status, 400, 'no confirmation');
+        assert.equal((await call('POST', '/api/user/prestige', { cookie: P, body: { confirm: 'yes' } })).status, 400);
+        assert.equal((await call('POST', '/api/user/prestige', { cookie: P, body: { confirm: 'PRESTIGE' } })).status, 400, 'level 1');
+
+        await db.query("UPDATE users SET player_xp = 50, lifetime_xp = 3000, lifetime_xp_total = 3000, player_level = 31, discord_username = 'pres' WHERE discord_id = '200000000000000009'");
+        const done = await call('POST', '/api/user/prestige', { cookie: P, body: { confirm: 'PRESTIGE' } });
+        assert.equal(done.status, 200);
+        const body = await done.json();
+        assert.deepEqual([body.prestige, body.title, body.bonusPercent, body.level], [1, 'Veteran', 2, 1]);
+        assert.equal(body.balance, body.achievements.length * 25, 'only achievement rewards earned right after the reset remain');
+        const profile = await (await call('GET', '/api/user', { cookie: P })).json();
+        assert.equal(profile.user.prestige, 1);
+        assert.equal(profile.user.prestige_title, 'Veteran');
+        const board = await (await call('GET', '/api/leaderboard?by=lifetime')).json();
+        const me = board.find((r) => r.username === 'pres');
+        assert.deepEqual([me.prestige, me.prestigeTitle, me.level], [1, 'Veteran', 1]);
+        assert.ok(me.lifetimeXp >= 3000, 'the board shows the never-reset total');
+    });
+
     await t.test('logout destroys the session', async () => {
         const res = await call('POST', '/api/auth/logout', { cookie: mallory });
         assert.equal(res.status, 200);

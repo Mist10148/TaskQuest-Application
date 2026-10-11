@@ -396,6 +396,14 @@ const QUESTS = {
 /** The rotating weekly quests in rotation order: ISO week number mod 4 picks the live one. */
 const ROTATING_QUESTS = ['WEEKLY_ROT_A', 'WEEKLY_ROT_B', 'WEEKLY_ROT_C', 'WEEKLY_ROT_D'];
 
+/**
+ * Prestige: from MIN_LEVEL a player may start over (level, balance, classes and skills reset; achievements,
+ * quest claims, tasks and the daily streak stay) for a permanent +BONUS_PERCENT% XP multiplier and a title.
+ * PRESTIGE_TITLES[n] is the title for n prestiges (index 0: none).
+ */
+const PRESTIGE = { MIN_LEVEL: 30, MAX: 10, BONUS_PERCENT: 2, CONFIRM: 'PRESTIGE' };
+const PRESTIGE_TITLES = ['', 'Veteran', 'Seasoned', 'Champion', 'Elite', 'Master', 'Grandmaster', 'Legend', 'Mythic', 'Ascendant', 'Eternal'];
+
 /** Leaderboard tabs. `weekly` counts XP earned since Monday from these sources (not bets or refunds). */
 const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
@@ -556,6 +564,8 @@ module.exports = {
     SPEND_SOURCES,
     QUESTS,
     ROTATING_QUESTS,
+    PRESTIGE,
+    PRESTIGE_TITLES,
     LEADERBOARDS,
     WEEKLY_XP_SOURCES,
     LIMITS,

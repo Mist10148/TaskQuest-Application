@@ -7,6 +7,7 @@ const { LEADERBOARDS, WEEKLY_XP_SOURCES, DAILY } = require('../constants');
 const { errors } = require('../errors');
 const { isValidTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
+const { prestigeTitle } = require('../xp');
 
 const SETTINGS = ['gamification_enabled', 'automation_enabled', 'auto_delete_old_lists', 'ai_enabled', 'weekly_digest'];
 
@@ -130,7 +131,7 @@ async function getUserStats(discordId) {
     // from GET /api/user/calendar-token, which only returns it when asked.
     const { calendar_token: calendarToken, ...safeUser } = user;
     return {
-        user: { ...safeUser, has_calendar_token: Boolean(calendarToken) },
+        user: { ...safeUser, has_calendar_token: Boolean(calendarToken), prestige_title: prestigeTitle(safeUser.prestige) },
         lists: { total: Number(lists.total) },
         items: { total: Number(items.total), completed: Number(items.completed) },
         achievements: Number(achs.count),
@@ -185,7 +186,7 @@ function scoreSql(by, now = new Date()) {
         }
         case 'lifetime':
         default:
-            return { sql: 'u.lifetime_xp', params: [] };
+            return { sql: 'GREATEST(u.lifetime_xp_total, u.lifetime_xp)', params: [] };
     }
 }
 
@@ -207,7 +208,7 @@ async function getLeaderboard(limit = 10, { by = 'lifetime', playerClass, now } 
     }
     const rows = await run(
         null,
-        `SELECT u.discord_id, u.discord_username, u.discord_avatar, u.player_xp, u.lifetime_xp, u.player_level,
+        `SELECT u.discord_id, u.discord_username, u.discord_avatar, u.player_xp, u.lifetime_xp, GREATEST(u.lifetime_xp_total, u.lifetime_xp) AS lifetime_xp_total, u.prestige, u.player_level,
                 u.player_class, u.streak_count, u.total_items_completed,
                 ${score.sql} AS score,
                 (SELECT COUNT(*) FROM game_sessions g
@@ -215,7 +216,7 @@ async function getLeaderboard(limit = 10, { by = 'lifetime', playerClass, now } 
          FROM users u
          WHERE ${where.join(' AND ')}
          ${board === 'weekly' || board === 'streak' ? 'HAVING score > 0' : ''}
-         ORDER BY score DESC, u.lifetime_xp DESC, u.discord_id
+         ORDER BY score DESC, GREATEST(u.lifetime_xp_total, u.lifetime_xp) DESC, u.discord_id
          LIMIT ${n}`,
         params
     );
@@ -334,7 +335,7 @@ async function resetProgress(discordId) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }
         await conn.query(
-            `UPDATE users SET player_xp = 0, lifetime_xp = 0, player_level = 1, player_class = 'DEFAULT',
+            `UPDATE users SET player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,
                 total_lists_created = 0, total_items_added = 0, total_items_completed = 0,
                 owns_hero = FALSE, owns_gambler = FALSE, owns_assassin = FALSE, owns_wizard = FALSE,

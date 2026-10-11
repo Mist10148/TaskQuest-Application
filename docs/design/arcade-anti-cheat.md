@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | Proposal, not built |
-| **Why a design and not code** | Every option has a real cost in complexity or fairness, and the current exposure is small and bounded. This note makes the trade-off explicit so it can be decided on purpose. |
+| **Status** | **Option D implemented** (input replay validation); options B and C were not built. See [Implementation](#implementation-option-d). |
+| **Why a design** | Every option has a real cost in complexity or fairness. This note made the trade-off explicit; the sections up to "Metrics to watch" describe the state and options before option D was built. |
 | **Related** | [KNOWN_ISSUES #1](../KNOWN_ISSUES.md), `packages/shared/src/games/arcade.js`, `packages/shared/src/db/games.js` (`startArcade`, `finishArcade`) |
 
 ## Where we are
@@ -65,3 +65,40 @@ Effort: weeks. Worth it only if arcade XP becomes valuable (for example if the c
 - Share of finished runs that hit the plausibility bound exactly (a spike means scripted submissions).
 - Accounts reaching the 500 XP cap with arcade games only, per day.
 - Rejected-score rate per account.
+
+## Implementation (option D)
+
+Built for all three games at once, since the simulators share their structure. Where this note left a choice open, this is what was chosen (the simplest robust option).
+
+**Protocol**
+
+- `startArcade` draws a seed (unsigned 32-bit, CSPRNG) and stores it in `game_sessions.game_data` (`{type, seed}`; no new column or migration). It returns `{sessionId, seed}`.
+- The browser plays the simulator from the seed and records every input as `step, code` in a flat array. At game over it sends `{sessionId, score, ticks, inputs}`.
+- `finishArcade` replays the inputs (`verifyRun` in `packages/shared/src/games/arcade.js`) and pays on the **replayed** score. The claimed score is only checked for equality with it (tolerance 0: the simulation is deterministic, so any difference is tampering or a client bug). `game_data` keeps the seed, replayed score and tick count of finished runs.
+- Every rejection cancels the run for good (as before) and answers `400 VALIDATION`. A submission without `ticks`/`inputs` (an old client, or a run started before the update) gets "This version of the game is out of date. Please refresh the page and try again."
+
+**Simulators**
+
+- Pure code in `packages/shared/src/games/{snake,dino,invaders,rng}.js`: fixed time step (Snake 100 ms, Dino and Invaders 1000/60 ms), a mulberry32 PRNG seeded per run, no wall-clock reads. `step(state, inputs)` advances one step.
+- The web app cannot import the CommonJS package, so `apps/web/src/lib/arcade/` holds a TypeScript mirror. `packages/shared/test/fixtures/arcade-timelines.json` stores recorded timelines (played by the bots in `test/helpers`) with their scores; the node tests replay them through the JS simulators and `arcade.parity.test.ts` through the TS ones, so a rule changed on one side only fails a test. Regenerate the fixtures only for a deliberate rule change (`node packages/shared/test/helpers/generateArcadeFixtures.js`).
+- Rule changes made to make the games deterministic: Invaders' fire cooldown counts steps (15) instead of wall time; each bullet destroys at most one alien (the old loop could remove several and skip bullets while splicing); the seed offsets the Invaders formation and picks its first direction (otherwise one recorded run would replay against any new run); Snake food and Dino obstacles come from the seeded generator. Inputs the simulation ignores (a reversal, a jump in the air) may still be recorded.
+
+**Checks in `verifyRun`** (limits live in `TELEMETRY_LIMITS` and `TIME_TOLERANCE` in `arcade.js`, not in `ARCADE_CONFIG`, which is sent to browsers)
+
+| Check | Snake | Dino | Invaders |
+|---|---|---|---|
+| Max steps per run (about 10 minutes) | 6,000 | 36,000 | 36,000 |
+| Max inputs per rolling second of simulated time | 15 | 8 | 20 |
+| Max inputs per run | 3,000 | 3,000 | 6,000 |
+
+- The timeline must be well formed: ascending steps, each below `ticks`, known input codes.
+- The run must end by game over on exactly step `ticks` (a truncated or extended claim fails).
+- Wall time: the simulated duration (`ticks` times the step length) may not exceed the server-measured time by more than 5 % plus 2 s (nothing plays faster than real time), and the measured time may not exceed it by more than 10 minutes (a hidden tab pauses the loop, so some idle time is legitimate; this only stops stockpiled, long-delayed submissions).
+- The old plausibility bound (`seconds x maxPointsPerSecond + 1`) and the XP caps (per run and 500 a day) still apply, on the replayed score.
+- The arcade routes accept bodies up to 128 KB (other routes 16 KB); a maximal legitimate timeline is far smaller.
+
+**What is still trusted**
+
+- A bot that *plays* the game (reads the simulator state and sends legitimate inputs in real time at human input rates) earns what a human of that skill would; the per-run caps and the 500 XP a day bound it. Only edited, fabricated, replayed (wrong seed), accelerated or impossible runs are stopped.
+- A script that runs the simulator itself still needs the real time the run would take: it cannot finish faster than playing.
+- Option B (calibrating the bounds, dropping arcade XP from the weekly board, a per-run cooldown) was not part of this change.

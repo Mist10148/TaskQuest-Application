@@ -117,4 +117,10 @@ function nextDueOnOrAfter(date, rule, today, anchorDay = null) {
     return next;
 }
 
-module.exports = { isValidTimeZone, hourInZone, weekdayInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };
+/** Whole days from one YYYY-MM-DD date to another (positive when `to` is later). Zone-free. */
+function daysBetween(from, to) {
+    const parse = (s) => Date.UTC(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+    return Math.round((parse(String(to)) - parse(String(from))) / 86400e3);
+}
+
+module.exports = { daysBetween, isValidTimeZone, hourInZone, weekdayInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };

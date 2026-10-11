@@ -13,6 +13,16 @@
 const { XP_PER_LEVEL, REWARDS, DAILY } = require('./constants');
 const { secureRandom } = require('./random');
 
+/** How long an Assassin may stay idle before the streak and stacks reset. */
+const ASSASSIN_DECAY_MS = 36 * 60 * 60 * 1000;
+
+/** Milliseconds for a Date, ISO string or number; null for empty/invalid. */
+function toMs(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const ms = value instanceof Date ? value.getTime() : typeof value === 'number' ? value : Date.parse(value);
+    return Number.isFinite(ms) ? ms : null;
+}
+
 // ─── Levels ───────────────────────────────────────────────────────────────────
 
 /** Level for a given amount of lifetime XP. Level never drops when XP is spent. */
@@ -76,7 +86,8 @@ function getSkillBonuses(userSkills) {
  * @param {number} baseXP   base reward
  * @param {object} [opts]
  * @param {Map|Array} [opts.skills]  user skills
- * @param {object} [opts.context]    { action, priority }
+ * @param {object} [opts.context]    { action, priority, recurring, dueDate, overdueDays, listCleared }
+ * @param {number|Date} [opts.now]   clock for time-based mechanics (Assassin decay)
  * @param {function} [opts.rng]
  * @returns {{ finalXP: number, bonusInfo: object, userUpdates: object }}
  */
@@ -92,10 +103,12 @@ function calculateClassXP(user, baseXP, opts = {}) {
     const userUpdates = {};
 
     switch (user.player_class) {
-        case 'HERO':
-            finalXP += 25;
-            bonusInfo = { type: 'HERO', details: '⚔️ Hero +25', classBonus: 25 };
+        case 'HERO': {
+            const bonus = Math.min(25, baseXP * 3);
+            finalXP += bonus;
+            bonusInfo = { type: 'HERO', details: `⚔️ Hero +${bonus}`, classBonus: bonus };
             break;
+        }
 
         case 'GAMBLER': {
             const bonus = Math.floor(rng() * (baseXP + 100));
@@ -113,10 +126,18 @@ function calculateClassXP(user, baseXP, opts = {}) {
         }
 
         case 'ASSASSIN': {
-            const streak = (Number(user.assassin_streak) || 0) + 1 + lvl('assassin_swift');
+            // A streak only lives while you keep acting: after the decay window it starts over.
+            const nowMs = toMs(opts.now) ?? Date.now();
+            const lastAt = toMs(user.assassin_last_at);
+            const decayed = lastAt !== null && nowMs - lastAt > ASSASSIN_DECAY_MS;
+            userUpdates.assassin_last_at = new Date(nowMs);
+            const prevStreak = decayed ? 0 : Number(user.assassin_streak) || 0;
+            const prevStacks = decayed ? 0 : Number(user.assassin_stacks) || 0;
+            if (decayed) userUpdates.assassin_stacks = 0;
+            const streak = prevStreak + 1 + lvl('assassin_swift');
             userUpdates.assassin_streak = streak;
             if (streak >= 3) {
-                const stacks = Math.min(10, (Number(user.assassin_stacks) || 0) + 1);
+                const stacks = Math.min(10, prevStacks + 1);
                 userUpdates.assassin_stacks = stacks;
                 const bonusXP = Math.floor((baseXP * 5 * stacks) / 100);
                 finalXP = baseXP + bonusXP;
@@ -197,7 +218,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
 function tankStackCap(level, skills) {
     const absorb = toSkillMap(skills).get('tank_absorb') || 0;
-    return Math.max(3, 20 - level) + absorb * 2;
+    return Math.min(15, 3 + Math.floor(level / 3)) + absorb * 2;
 }
 
 // ─── Final XP ─────────────────────────────────────────────────────────────────
@@ -217,7 +238,7 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     const lvl = (id) => skills.get(id) || 0;
     const level = Number(user.player_level) || 1;
 
-    const { finalXP: classXP, bonusInfo, userUpdates } = calculateClassXP(user, baseXP, { skills, context, rng });
+    const { finalXP: classXP, bonusInfo, userUpdates } = calculateClassXP(user, baseXP, { skills, context, rng, now: opts.now });
     const bonuses = getSkillBonuses(skills);
 
     // Conditional multipliers that depend on class state after this action.

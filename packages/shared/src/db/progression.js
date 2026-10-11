@@ -24,12 +24,12 @@ const { evaluateAchievements } = require('../achievements');
 
 /** Columns applyXP() may update alongside the balance. */
 const UPDATABLE_COLUMNS = new Set([
-    'assassin_streak', 'assassin_stacks', 'wizard_counter', 'archer_streak', 'tank_stacks',
+    'assassin_streak', 'assassin_stacks', 'assassin_last_at', 'wizard_counter', 'archer_streak', 'tank_stacks',
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
     'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes'
 ]);
 
-const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
+const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
 
 /** Persist column updates on a locked user and mirror them on the object. */
 async function updateUserColumns(conn, user, updates) {
@@ -127,7 +127,7 @@ async function sumToday(conn, discordId, source) {
  * @param {object} user locked user row
  * @param {string} source  'list_create' | 'item_add' | 'item_complete' | 'game_reward' ...
  * @param {number} baseXP
- * @param {object} [opts] { context, dailyLimit, maxXP, referenceId }
+ * @param {object} [opts] { context, dailyLimit, maxXP, referenceId, now }
  */
 async function rewardAction(conn, user, source, baseXP, opts = {}) {
     if (!user.gamification_enabled || baseXP <= 0) return null;
@@ -136,7 +136,7 @@ async function rewardAction(conn, user, source, baseXP, opts = {}) {
     }
 
     const skills = await getUserSkills(user.discord_id, conn);
-    const calc = calculateFinalXP(user, skills, baseXP, { context: { action: source, ...(opts.context || {}) } });
+    const calc = calculateFinalXP(user, skills, baseXP, { context: { action: source, ...(opts.context || {}) }, now: opts.now });
     let finalXP = calc.finalXP;
     let capped = false;
     if (opts.maxXP !== undefined && finalXP > opts.maxXP) {

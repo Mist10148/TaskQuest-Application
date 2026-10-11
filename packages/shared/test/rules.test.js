@@ -49,8 +49,8 @@ test('class mechanics', () => {
     assert.equal(wizard.finalXP, 10 + 4 * 5 * 2, 'burst on 5th action');
     assert.equal(wizard.userUpdates.wizard_counter, 0);
 
-    const tank = shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: 3 }), 100);
-    assert.equal(tank.userUpdates.tank_stacks, 3, 'stack cap is max(3, 20 - level)');
+    const tank = shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: 99 }), 100);
+    assert.equal(tank.userUpdates.tank_stacks, 13, 'stack cap is min(15, 3 + level / 3)');
 
     const miss = shared.calculateClassXP(user({ player_class: 'ARCHER', archer_streak: 5 }), base, { rng: seq(0.99) });
     assert.equal(miss.userUpdates.archer_streak, 3);
@@ -251,4 +251,54 @@ test('quest periods: daily is the UTC day, weekly runs Monday to Monday', () => 
     assert.equal(week.endsAt.toISOString(), '2030-01-14T00:00:00.000Z');
     assert.equal(shared.questPeriod('weekly', new Date('2030-01-13T10:00:00Z')).start, '2030-01-07', 'Sunday belongs to the week that started Monday');
     assert.equal(shared.questPeriod('weekly', new Date('2030-01-14T00:00:00Z')).start, '2030-01-14');
+});
+
+// ─── Class rebalance ─────────────────────────────────────────────────────────
+
+const NOW = Date.parse('2030-01-10T12:00:00Z');
+const hoursAgo = (h) => new Date(NOW - h * 3600e3);
+
+test('Hero flat bonus is min(25, base x 3)', () => {
+    for (const [base, bonus] of [[5, 15], [8, 24], [9, 25], [10, 25], [100, 25]]) {
+        const r = shared.calculateClassXP(user({ player_class: 'HERO' }), base);
+        assert.equal(r.bonusInfo.classBonus, bonus, `base ${base}`);
+        assert.equal(r.finalXP, base + bonus);
+    }
+});
+
+test('Tank stack cap is min(15, 3 + floor(level / 3)) + 2 per Absorb', () => {
+    // [level, absorb levels, expected cap]
+    const cases = [[1, 0, 3], [3, 0, 4], [8, 0, 5], [30, 0, 13], [36, 0, 15], [90, 0, 15], [1, 1, 5], [1, 2, 7], [12, 2, 11], [90, 2, 19]];
+    for (const [level, absorb, cap] of cases) {
+        const skills = absorb ? [{ skill_id: 'tank_absorb', skill_level: absorb }] : [];
+        // level 30 gives 3 + 10 = 13 (the 15 ceiling is only hit from level 36)
+        assert.equal(shared.tankStackCap(level, skills), level === 30 ? 13 : cap, `level ${level} absorb ${absorb}`);
+        const r = shared.calculateClassXP(user({ player_class: 'TANK', player_level: level, tank_stacks: 99 }), 100, { skills });
+        assert.equal(r.userUpdates.tank_stacks, shared.tankStackCap(level, skills), 'stacks are clamped to the cap');
+    }
+});
+
+test('Assassin streak and stacks decay after 36 hours idle and every action stamps assassin_last_at', () => {
+    const base = { player_class: 'ASSASSIN', assassin_streak: 6, assassin_stacks: 7 };
+    // [label, last action, expected streak, expected stacks, expected type]
+    const cases = [
+        ['inside the window', hoursAgo(35), 7, 8, 'ASSASSIN'],
+        ['exactly 36h is still alive', hoursAgo(36), 7, 8, 'ASSASSIN'],
+        ['past the window', hoursAgo(37), 1, 0, 'ASSASSIN_BUILDING'],
+        ['never acted before', null, 7, 8, 'ASSASSIN']
+    ];
+    for (const [label, last, streak, stacks, type] of cases) {
+        const r = shared.calculateClassXP(user({ ...base, assassin_last_at: last }), 100, { now: NOW });
+        assert.equal(r.userUpdates.assassin_streak, streak, label);
+        assert.equal(r.userUpdates.assassin_stacks ?? 0, stacks, label);
+        assert.equal(r.bonusInfo.type, type, label);
+        assert.equal(r.userUpdates.assassin_last_at.getTime(), NOW, label);
+    }
+    // A decayed streak restarts at the Swift Strike boost, not at the old value.
+    const swift = shared.calculateClassXP(user({ ...base, assassin_last_at: hoursAgo(40) }), 100, {
+        now: NOW,
+        skills: [{ skill_id: 'assassin_swift', skill_level: 2 }]
+    });
+    assert.equal(swift.userUpdates.assassin_streak, 3);
+    assert.equal(swift.userUpdates.assassin_stacks, 1);
 });

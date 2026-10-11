@@ -30,6 +30,7 @@ async function toError(response) {
     if (response.status === 429) {
         return new TaskQuestError('AI_QUOTA', message || 'Daily AI energy used up. It resets at midnight UTC.', 429);
     }
+    if (response.status === 403) return new TaskQuestError('AI_OPTED_OUT', message || 'AI features are turned off for your account.', 403);
     if (response.status === 404) return new TaskQuestError(body.code || 'NOT_FOUND', message || 'Not found.', 404);
     if (response.status === 409) return new TaskQuestError('CONFLICT', message || 'Nothing is waiting for confirmation.', 409);
     if (response.status === 400) return new TaskQuestError(body.code || 'VALIDATION', message || 'Request rejected by the AI service.', 400);

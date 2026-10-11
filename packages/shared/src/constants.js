@@ -24,7 +24,7 @@ const CLASSES = {
         name: 'Hero',
         emoji: '⚔️',
         cost: 500,
-        description: '+25 flat XP on every action. Reliable and simple.',
+        description: '+25 flat XP on every action (never more than 3× the base reward, so tiny actions stay small). Reliable and simple.',
         playstyle: 'Consistent bonus XP on everything.'
     },
     GAMBLER: {
@@ -38,7 +38,7 @@ const CLASSES = {
         name: 'Assassin',
         emoji: '🗡️',
         cost: 400,
-        description: 'From the 3rd consecutive action, gain one stack per action (max 10). Each stack adds +5% XP. Stacks reset when you change class.',
+        description: 'From the 3rd consecutive action, gain one stack per action (max 10). Each stack adds +5% XP. Stacks reset when you change class or after 36 hours without acting.',
         playstyle: 'Rewards long, uninterrupted streaks of activity.'
     },
     WIZARD: {
@@ -59,7 +59,7 @@ const CLASSES = {
         name: 'Tank',
         emoji: '🛡️',
         cost: 500,
-        description: 'Every action adds a shield stack (cap = max(3, 20 − level)). Each stack adds +4% XP plus +1 XP per two stacks.',
+        description: 'Every action adds a shield stack (cap = min(15, 3 + level ÷ 3), plus Absorb). Each stack adds +4% XP plus +1 XP per two stacks.',
         playstyle: 'Strong early, steady momentum.'
     }
 };

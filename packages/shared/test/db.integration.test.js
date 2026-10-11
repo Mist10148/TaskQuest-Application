@@ -43,10 +43,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await db.users.ensureUser(ALICE, { username: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
-    await t.test('migrations 007-010 are idempotent and add the new columns', async () => {
+    await t.test('migrations 007-011 are idempotent and add the new columns', async () => {
         await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
         const again = await db.runMigrations({ log: () => {} });
-        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity']);
+        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework']);
         const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
@@ -57,6 +57,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await cols('lists')).includes('remind_at'));
         assert.equal((await pool.query("SHOW TABLES LIKE 'quest_claims'"))[0].length, 1);
         for (const c of ['first_completed_at', 'counts_for_quests', 'first_completed_high', 'repeat_anchor_day']) assert.ok(items.includes(c), `items.${c}`);
+        assert.ok(users.includes('assassin_last_at'));
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -647,6 +648,23 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await db.users.getRank(S3, 'lifetime', { playerClass: 'WIZARD' }), wizRank);
         assert.equal(await db.users.getRank(S3, 'lifetime', { playerClass: 'hero' }), null, 'not on that class board');
         assert.ok((await db.users.getRank(S3, 'lifetime')) >= wizRank, 'the all-class rank is never better than the class rank');
+    });
+
+    await t.test('Assassin streak decays in the database after a long gap, and every action stamps assassin_last_at', async () => {
+        const A = '100000000000000201';
+        await db.users.ensureUser(A);
+        await db.query(
+            "UPDATE users SET player_class = 'ASSASSIN', assassin_streak = 6, assassin_stacks = 7, assassin_last_at = NOW() - INTERVAL 40 HOUR WHERE discord_id = ?",
+            [A]
+        );
+        const { list } = await db.tasks.createList(A, { name: 'Decay' });
+        const row = async () => (await db.query('SELECT assassin_streak, assassin_stacks, assassin_last_at FROM users WHERE discord_id = ?', [A]))[0];
+        const after = await row();
+        assert.equal(after.assassin_streak, 1, 'the 40h-old streak restarted with this action');
+        assert.equal(after.assassin_stacks, 0);
+        assert.ok(Date.now() - new Date(after.assassin_last_at).getTime() < 60_000);
+        await db.tasks.addItem(A, list.id, { name: 'Another' });
+        assert.equal((await row()).assassin_streak, 2, 'inside the window it keeps building');
     });
 
     await db.closePool();

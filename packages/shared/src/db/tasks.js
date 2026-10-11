@@ -12,7 +12,7 @@ const { rewardAction, unlockAchievements } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS } = require('../constants');
 const v = require('../validation');
-const { nextDueOnOrAfter, todayInZone } = require('../dates');
+const { nextDueOnOrAfter, todayInZone, daysBetween } = require('../dates');
 
 const run = async (sql, params = []) => (await getPool().query(sql, params))[0];
 
@@ -352,6 +352,28 @@ async function spawnNextOccurrence(conn, item, user) {
 }
 
 /**
+ * What class and skill rules may look at when a task is completed: its priority, whether it
+ * repeats, its due date and how overdue it was (in the user's own time zone), and whether this
+ * completion emptied a list of at least three tasks. Call after the item row is marked completed.
+ */
+async function completionContext(conn, item, user) {
+    const today = todayInZone(user.timezone);
+    const dueDate = item.due_date ? String(item.due_date).slice(0, 10) : null;
+    const [[counts]] = await conn.query(
+        'SELECT COUNT(*) AS total, COALESCE(SUM(completed = 0), 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
+        [item.list_id]
+    );
+    return {
+        priority: item.priority || item.list_priority,
+        recurring: Boolean(item.recurrence),
+        today,
+        dueDate,
+        overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
+        listCleared: !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0
+    };
+}
+
+/**
  * Mark an item complete/incomplete (toggle when `completed` is undefined).
  * Completion XP and the completion counter are granted only the first time
  * an item is ever completed, so toggling cannot farm XP.
@@ -384,7 +406,7 @@ async function setItemCompleted(discordId, itemId, completed) {
             await conn.query('UPDATE users SET total_items_completed = total_items_completed + 1 WHERE discord_id = ?', [user.discord_id]);
             user.total_items_completed = Number(user.total_items_completed) + 1;
             xp = await rewardAction(conn, user, 'item_complete', REWARDS.ITEM_COMPLETE, {
-                context: { priority: item.priority || item.list_priority },
+                context: await completionContext(conn, item, user),
                 dailyLimit: LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY,
                 referenceId: id
             });

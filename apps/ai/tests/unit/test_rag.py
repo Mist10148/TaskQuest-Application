@@ -318,11 +318,14 @@ async def test_forget_without_list_wipes_vectors_threads_and_summaries_but_keeps
                     {"t": tid},
                 )
                 await conn.execute(
-                    text("INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) VALUES (:u, 'd', 'h', '{}')"),
+                    text(
+                        "INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) VALUES (:u, 'd', 'h', '{}')"
+                    ),
                     {"u": uid},
                 )
             await conn.execute(
-                text("INSERT INTO ai_usage (discord_id, day, feature, requests) VALUES (:u, '2030-01-01', 'chat', 3)"), {"u": UID}
+                text("INSERT INTO ai_usage (discord_id, day, feature, requests) VALUES (:u, '2030-01-01', 'chat', 3)"),
+                {"u": UID},
             )
         import httpx
 
@@ -342,9 +345,76 @@ async def test_forget_without_list_wipes_vectors_threads_and_summaries_but_keeps
         for table in ("ai_embeddings", "ai_chat_threads", "ai_summary_cache"):
             assert await count(table, UID) == 0, table
         async with seeded.connect() as conn:
-            leftover = (await conn.execute(text("SELECT COUNT(*) FROM ai_checkpoints WHERE thread_id = 't-mine'"))).scalar()
+            leftover = (
+                await conn.execute(text("SELECT COUNT(*) FROM ai_checkpoints WHERE thread_id = 't-mine'"))
+            ).scalar()
         assert leftover == 0
         assert await count("ai_chat_threads", OTHER) == 1 and await count("ai_summary_cache", OTHER) == 1
         assert await count("ai_usage", UID) == 1  # the daily quota is not refunded by a reset
     finally:
         runtime.set_runtime(None, None)
+
+
+# ── shared quests are never the owner's AI context ───────────────────────────
+
+
+async def _share(conn, list_id: int, member: str = "999") -> None:
+    await conn.execute(
+        text("INSERT INTO list_members (list_id, discord_id, role) VALUES (:l, :m, 'editor')"),
+        {"l": list_id, "m": member},
+    )
+
+
+async def test_shared_lists_are_invisible_to_every_owner_read(seeded):
+    from app.db import repo
+
+    async with seeded.begin() as conn:
+        await conn.execute(
+            text("UPDATE items SET completed = 1, completed_at = :t WHERE list_id = 1"),
+            {"t": datetime.now(UTC).replace(tzinfo=None)},
+        )
+        before = {lst["id"] for lst in await repo.lists_for_user(conn, UID)}
+        assert before == {1, 2, 3}
+        assert await repo.items_for_list(conn, UID, 1)
+        assert await repo.get_list_with_items(conn, UID, 1) is not None
+        done_before = await repo.completions_since(conn, UID, datetime(2000, 1, 1))
+        assert done_before
+
+        await _share(conn, 1)  # somebody else is on quest 1 now: its text is no longer only the owner's
+        assert {lst["id"] for lst in await repo.lists_for_user(conn, UID)} == {2, 3}
+        assert {lst["id"] for lst in await repo.lists_for_user(conn, UID, open_only=True)} <= {2, 3}
+        assert await repo.get_list_with_items(conn, UID, 1) is None
+        assert await repo.items_for_list(conn, UID, 1) == []
+        assert 1 not in {i["list_id"] for i in await repo.all_items_for_user(conn, UID)}
+        assert all(d["list_id"] != 1 for d in await repo.completions_since(conn, UID, datetime(2000, 1, 1)))
+        # Unshared quests are exactly as before.
+        assert await repo.items_for_list(conn, UID, 2)
+
+
+async def test_a_quest_shared_after_indexing_is_purged_and_never_indexed_again(seeded):
+    store, emb = make_store(), FakeEmbedder()
+    async with seeded.begin() as conn:
+        await indexer.reconcile(conn, store, emb)
+        assert (await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE list_id = 1"))).scalar() >= 1
+        assert await indexer.stale_lists(conn, store) == []
+
+        await _share(conn, 1)
+        assert (UID, 1) in await indexer.stale_lists(conn, store), (
+            "an indexed quest that became shared is stale until purged"
+        )
+        await indexer.reconcile(conn, store, emb)
+        assert (await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE list_id = 1"))).scalar() == 0
+        assert await indexer.stale_lists(conn, store) == [], "and a shared quest is not picked up again"
+        assert await indexer.index_list(conn, store, emb, UID, 1) == 0
+        assert (await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE list_id = 1"))).scalar() == 0
+
+        # Retrieval cannot reach it either.
+        results = await TaskRetriever(store, emb).retrieve(
+            conn, UID, "math homework problems", k=5, today=datetime.now(UTC).date()
+        )
+        assert "L1" not in [r.id for r in results]
+
+        # index_user also sweeps up leftovers of a quest that is shared (or gone).
+        await conn.execute(text("UPDATE ai_embeddings SET list_id = 1 WHERE source_id = 'L2'"))
+        await indexer.index_user(conn, store, emb, UID)
+        assert (await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE list_id = 1"))).scalar() == 0

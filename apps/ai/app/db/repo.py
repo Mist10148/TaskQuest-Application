@@ -42,6 +42,11 @@ def _rows(result) -> list[dict[str, Any]]:
 
 # ── lists / items ────────────────────────────────────────────────────────────
 
+# A list that anybody else belongs to is not the owner's alone: its text (names, descriptions, task titles) can be written by
+# other people, so it is untrusted and never indexed, retrieved, summarised or given to the model as the owner's own data.
+# The sharing tables are the source of truth (the shared package's list_members); a list with no members is exactly as before.
+UNSHARED = "NOT EXISTS (SELECT 1 FROM list_members sm WHERE sm.list_id = l.id)"
+
 _LIST_COLUMNS = """
     l.id, l.name, l.description, l.category, l.deadline, l.priority, l.created_at,
     (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id) AS items_total,
@@ -51,7 +56,7 @@ _LIST_COLUMNS = """
 
 
 async def _load_lists(conn: AsyncConnection, discord_id: str, list_id: int | None = None) -> list[dict[str, Any]]:
-    where = "l.discord_id = :uid" + (" AND l.id = :lid" if list_id is not None else "")
+    where = f"l.discord_id = :uid AND {UNSHARED}" + (" AND l.id = :lid" if list_id is not None else "")
     rows = _rows(
         await conn.execute(
             text(f"SELECT {_LIST_COLUMNS} FROM lists l WHERE {where} ORDER BY l.id"),
@@ -80,7 +85,7 @@ async def items_for_list(conn: AsyncConnection, discord_id: str, list_id: int) -
         text(
             "SELECT i.id, i.list_id, i.name, i.description, i.completed, i.completed_at, i.position "
             "FROM items i JOIN lists l ON l.id = i.list_id "
-            "WHERE l.discord_id = :uid AND i.list_id = :lid ORDER BY i.position, i.id"
+            f"WHERE l.discord_id = :uid AND {UNSHARED} AND i.list_id = :lid ORDER BY i.position, i.id"
         ),
         {"uid": discord_id, "lid": list_id},
     )
@@ -105,7 +110,8 @@ async def all_items_for_user(conn: AsyncConnection, discord_id: str) -> list[dic
     result = await conn.execute(
         text(
             "SELECT i.id, i.list_id, i.name, i.description, i.completed, i.completed_at, i.position "
-            "FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = :uid ORDER BY i.list_id, i.position, i.id"
+            f"FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = :uid AND {UNSHARED} "
+            "ORDER BY i.list_id, i.position, i.id"
         ),
         {"uid": discord_id},
     )
@@ -122,7 +128,7 @@ async def completions_since(conn: AsyncConnection, discord_id: str, since: datet
         text(
             "SELECT i.id, i.list_id, i.name, i.completed_at, l.name AS list_name "
             "FROM items i JOIN lists l ON l.id = i.list_id "
-            "WHERE l.discord_id = :uid AND i.completed = 1 AND i.completed_at >= :since ORDER BY i.completed_at"
+            f"WHERE l.discord_id = :uid AND {UNSHARED} AND i.completed = 1 AND i.completed_at >= :since ORDER BY i.completed_at"
         ),
         {"uid": discord_id, "since": since},
     )

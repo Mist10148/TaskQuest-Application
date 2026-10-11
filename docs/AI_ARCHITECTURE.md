@@ -83,6 +83,7 @@ flowchart TB
 - **Chunks:** one per quest (name, description, category, deadline, priority and its subtasks), one per subtask longer than 300 characters, one per week of completed subtasks with the XP earned that week, and the help docs split by heading.
 - **Only changed text is embedded.** Each chunk stores a SHA-256 `content_hash`. Unchanged chunks are only "touched" so the reconcile job stops flagging them.
 - **Staying fresh:** web writes and bot edits trigger a fire-and-forget `/internal/index`. The reconcile loop catches anything missed: changed lists, new completions or XP for history, and users who opted out, whose vectors are deleted. Toggling AI in settings re-indexes or purges straight away.
+- **Shared quests are never AI context.** A quest that anybody else belongs to (`list_members`) is excluded from every read in `apps/ai/app/db/repo.py` (`UNSHARED`), is never indexed or summarised, and its existing vectors are purged by the next reconcile, because its names and task titles can be written by other people and are untrusted.
 - **Retrieval reads fresh data.** Stored vectors only decide which quests are candidates. The text shown to the model is rebuilt from MySQL, so completion state is never stale.
 - **Filters:** a `status` or `category` filter drops doc chunks. History chunks count as finished work, so they appear only under `status="done"`.
 - **Vector store:** MySQL plus numpy, so there is no extra infrastructure. [AI_INTEGRATION.md §17](AI_INTEGRATION.md) lists when to move to a dedicated vector database.

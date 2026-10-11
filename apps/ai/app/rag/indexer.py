@@ -57,7 +57,7 @@ async def _sync(
 async def index_list(
     conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str, list_id: int
 ) -> int:
-    """(Re)index one quest and its long subtasks. Removes the rows if the quest is gone."""
+    """(Re)index one quest and its long subtasks. Removes the rows if the quest is gone, or has become shared with anybody."""
     lst = await repo.get_list_with_items(conn, discord_id, list_id)
     if lst is None:
         await store.delete(conn, discord_id, list_id=list_id)
@@ -101,8 +101,20 @@ async def index_history(conn: AsyncConnection, store: MySQLNumpyStore, embedder:
 
 async def index_user(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str) -> int:
     total = 0
+    visible = set()
     for lst in await repo.lists_for_user(conn, discord_id):
+        visible.add(lst["id"])
         total += await index_list(conn, store, embedder, discord_id, lst["id"])
+    # Quests that became shared (or were deleted) since they were indexed: purge what is left of them.
+    embedded = (
+        await conn.execute(
+            text("SELECT DISTINCT list_id FROM ai_embeddings WHERE discord_id = :u AND list_id IS NOT NULL"),
+            {"u": discord_id},
+        )
+    ).all()
+    for (list_id,) in embedded:
+        if list_id not in visible:
+            await store.delete(conn, discord_id, list_id=list_id)
     total += await index_history(conn, store, embedder, discord_id)
     return total
 
@@ -128,7 +140,8 @@ async def stale_lists(conn: AsyncConnection, store: MySQLNumpyStore) -> list[tup
         await conn.execute(
             text(
                 "SELECT l.discord_id, l.id, l.updated_at, "
-                "(SELECT MAX(i.updated_at) FROM items i WHERE i.list_id = l.id) AS last_item "
+                "(SELECT MAX(i.updated_at) FROM items i WHERE i.list_id = l.id) AS last_item, "
+                "(SELECT COUNT(*) FROM list_members sm WHERE sm.list_id = l.id) AS members "
                 "FROM lists l JOIN users u ON u.discord_id = l.discord_id WHERE u.ai_enabled = 1"
             )
         )
@@ -143,8 +156,13 @@ async def stale_lists(conn: AsyncConnection, store: MySQLNumpyStore) -> list[tup
         ).all()
     }
     out = []
-    for discord_id, list_id, list_updated, last_item in lists:
+    for discord_id, list_id, list_updated, last_item, members in lists:
         at = embedded.get(f"L{list_id}")
+        if members:
+            # A shared quest is never indexed. If it was indexed before it was shared, it is stale until index_list purges it.
+            if at is not None:
+                out.append((discord_id, list_id))
+            continue
         changes = [d for d in (repo.to_datetime(list_updated), repo.to_datetime(last_item)) if d is not None]
         if at is None or (changes and max(changes) > at):
             out.append((discord_id, list_id))
@@ -159,9 +177,11 @@ async def stale_history_users(conn: AsyncConnection, store: MySQLNumpyStore) -> 
             text(
                 "SELECT u.discord_id, "
                 "(SELECT MAX(i.completed_at) FROM items i JOIN lists l ON l.id = i.list_id "
-                " WHERE l.discord_id = u.discord_id AND i.completed = 1 AND i.completed_at >= :since), "
+                f" WHERE l.discord_id = u.discord_id AND {repo.UNSHARED} AND i.completed = 1 AND i.completed_at >= :since), "
                 "(SELECT MAX(x.created_at) FROM xp_transactions x "
-                " WHERE x.discord_id = u.discord_id AND x.amount > 0 AND x.created_at >= :since) "
+                " WHERE x.discord_id = u.discord_id AND x.amount > 0 AND x.created_at >= :since), "
+                # A quest shared after the history was written must drop out of it: a newer membership makes it stale.
+                "(SELECT MAX(m.created_at) FROM list_members m JOIN lists l ON l.id = m.list_id WHERE l.discord_id = u.discord_id) "
                 "FROM users u WHERE u.ai_enabled = 1"
             ),
             {"since": since},
@@ -180,8 +200,12 @@ async def stale_history_users(conn: AsyncConnection, store: MySQLNumpyStore) -> 
         ).all()
     }
     out = []
-    for discord_id, last_done, last_xp in activity:
-        changes = [d for d in (repo.to_datetime(last_done), repo.to_datetime(last_xp)) if d is not None]
+    for discord_id, last_done, last_xp, last_shared in activity:
+        changes = [
+            d
+            for d in (repo.to_datetime(last_done), repo.to_datetime(last_xp), repo.to_datetime(last_shared))
+            if d is not None
+        ]
         at = embedded.get(discord_id)
         if changes and (at is None or max(changes) > at):
             out.append(discord_id)

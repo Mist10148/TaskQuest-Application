@@ -32,7 +32,8 @@ const SOURCE_LABELS = {
     achievement_reward: 'Achievements',
     habit_bonus: 'Habit bonus',
     focus_session: 'Focus sessions',
-    weekly_review: 'Weekly review'
+    weekly_review: 'Weekly review',
+    party_quest: 'Party quest'
 };
 
 function sourceLabel(source) {

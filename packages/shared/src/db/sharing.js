@@ -261,4 +261,4 @@ async function leave(userId, listId) {
     });
 }
 
-module.exports = { invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };
+module.exports = { findInvitee, invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };

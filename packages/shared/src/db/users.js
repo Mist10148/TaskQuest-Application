@@ -367,6 +367,9 @@ async function resetProgress(discordId) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }
         await conn.query('DELETE FROM list_invites WHERE invitee_discord_id = ?', [id]);
+        await conn.query('DELETE FROM party_invites WHERE invitee_discord_id = ?', [id]);
+        await conn.query('DELETE FROM parties WHERE owner_id = ?', [id]); // a party the user owns goes with them
+        await conn.query('DELETE FROM party_members WHERE discord_id = ?', [id]);
         await conn.query(
             `UPDATE users SET player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,

@@ -409,7 +409,7 @@ const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
     'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
     'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest',
-    'achievement_reward', 'habit_bonus', 'focus_session', 'weekly_review'
+    'achievement_reward', 'habit_bonus', 'focus_session', 'weekly_review', 'party_quest'
 ];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
@@ -525,8 +525,7 @@ const LIMITS = {
     INVITE_TTL_DAYS: 7,
     INVITES_PER_DAY: 30,
     /** Parties: members including the owner. A user is in at most one party. */
-    MAX_PARTY_MEMBERS: 6,
-    MAX_PARTY_NAME: 40
+    MAX_PARTY_MEMBERS: 6
 };
 
 /** Roles on a shared list, weakest first. The owner is an implicit manager. */
@@ -551,7 +550,8 @@ const TEXT_LIMITS = {
     LIST_NAME: 100,
     ITEM_NAME: 200,
     CATEGORY: 50,
-    DESCRIPTION: 1000
+    DESCRIPTION: 1000,
+    PARTY_NAME: 40
 };
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];

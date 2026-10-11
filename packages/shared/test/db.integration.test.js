@@ -2632,5 +2632,136 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(S.invite(O, list.id, { discordId: X }), { code: 'RATE_LIMITED', status: 429 });
     });
 
+
+    // ─── Parties ──────────────────────────────────────────────────────────────────
+
+    await t.test('parties: one per user, named invitations, weekly quest progress and a once-a-week claim', async () => {
+        const PA = db.parties;
+        const { PARTY_QUEST, LIMITS } = require('../src');
+        const u = {};
+        for (const [k, n] of Object.entries({ own: 1, two: 2, three: 3, four: 4 })) {
+            u[k] = `2000000000000008${String(n).padStart(2, '0')}`;
+            await db.users.ensureUser(u[k], { username: `pty_${k}`, avatar: null });
+        }
+        assert.equal(await PA.status(u.own), null);
+        await assert.rejects(PA.create(u.own, '   '), { code: 'VALIDATION' });
+        await assert.rejects(PA.create(u.own, 'x'.repeat(41)), { code: 'VALIDATION' });
+        const party = await PA.create(u.own, 'Night Owls');
+        await assert.rejects(PA.create(u.own, 'Second'), { code: 'CONFLICT', message: /already in a party/ });
+        await assert.rejects(PA.invite(u.two, { username: 'pty_three' }), { code: 'NOT_FOUND' }, 'not in a party');
+        await assert.rejects(PA.invite(u.own, { username: 'pty_own' }), { code: 'VALIDATION' });
+        await assert.rejects(PA.invite(u.own, { username: 'nobody_x' }), { code: 'NOT_FOUND' });
+        const i2 = await PA.invite(u.own, { username: 'pty_two' });
+        await assert.rejects(PA.invite(u.own, { discordId: u.two }), { code: 'CONFLICT' });
+        assert.deepEqual((await PA.listInvites(u.two)).map((i) => [i.id, i.partyName, i.ownerName]), [[i2.id, 'Night Owls', 'pty_own']]);
+        await assert.rejects(PA.respond(u.three, i2.id, true), { code: 'NOT_FOUND' }, 'only the invitee answers');
+        assert.deepEqual(await PA.respond(u.two, i2.id, true), { accepted: true, party: { id: party.id, name: 'Night Owls' } });
+        await assert.rejects(PA.invite(u.own, { discordId: u.two }), { code: 'CONFLICT', message: /already in a party/ });
+        await assert.rejects(PA.invite(u.two, { discordId: u.three }), { code: 'FORBIDDEN' }, 'only the owner invites');
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_members WHERE discord_id = ?', [u.two]))[0].n, 1);
+
+        // The status shows names and counts only.
+        const day = new Date();
+        let st = await PA.status(u.two, day);
+        assert.deepEqual(st.members.map((m) => [m.name, m.count, m.isYou, m.isOwner]), [['pty_own', 0, false, true], ['pty_two', 0, true, false]]);
+        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET * 2);
+        assert.equal(st.reward, PARTY_QUEST.REWARD);
+        assert.equal(st.party.isOwner, false);
+        assert.deepEqual(st.invites, [], 'only the owner sees pending invitations');
+        assert.equal(JSON.stringify(st).match(/\d{15,}/), null, 'no Discord ID in the party status');
+        assert.deepEqual(Object.keys(st.members[0]).sort(), ['count', 'isOwner', 'isYou', 'name'], 'nothing but a name and a count per member');
+        await assert.rejects(PA.claim(u.two, day), { code: 'VALIDATION', message: /isn't finished/ });
+
+        // Progress is the sum of first completions (counted for quests) by the members, in the UTC week.
+        const finish = async (id, n) => {
+            const { list } = await db.tasks.createList(id, { name: `Quest list ${n}` });
+            for (let k = 0; k < n; k++) {
+                const { item } = await db.tasks.addItem(id, list.id, { name: `t${k}` });
+                await db.tasks.setItemCompleted(id, item.id);
+            }
+            return list;
+        };
+        const ownList = await finish(u.own, 12);
+        await finish(u.two, 11);
+        st = await PA.status(u.own, day);
+        assert.equal(st.progress, 23);
+        assert.equal(st.reached, false);
+        // Re-checking a finished task adds nothing; a task completed by someone else on a shared list counts for them.
+        const [first] = await db.tasks.getItems(u.own, ownList.id);
+        await db.tasks.setItemCompleted(u.own, first.id, false);
+        await db.tasks.setItemCompleted(u.own, first.id, true);
+        assert.equal((await PA.status(u.own, day)).progress, 23);
+        await db.sharing.respond(u.two, (await db.sharing.invite(u.own, ownList.id, { discordId: u.two, role: 'editor' })).id, true);
+        const { item: extra } = await db.tasks.addItem(u.own, ownList.id, { name: 'for the partner' });
+        await db.tasks.setItemCompleted(u.two, extra.id);
+        st = await PA.status(u.own, day);
+        assert.deepEqual(st.members.map((m) => m.count), [12, 12], 'it counts for the one who finished it');
+        assert.equal(st.reached, true);
+        assert.equal(st.claimable, true);
+
+        // Claiming: flat XP once per person per week; non-members and XP-off users cannot.
+        await assert.rejects(PA.claim(u.three, day), { code: 'NOT_FOUND' });
+        const before = Number((await db.users.getUser(u.own)).player_xp);
+        const paid = await PA.claim(u.own, day);
+        assert.equal(paid.xp, PARTY_QUEST.REWARD);
+        assert.ok(Number((await db.users.getUser(u.own)).player_xp) - before >= PARTY_QUEST.REWARD);
+        assert.equal((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'party_quest'", [u.own]))[0].n, 1);
+        await assert.rejects(PA.claim(u.own, day), { code: 'CONFLICT' });
+        assert.equal((await PA.status(u.own, day)).claimed, true);
+        assert.equal((await PA.status(u.two, day)).claimable, true, 'each member claims for themselves');
+        await db.users.updateSettings(u.two, { gamification_enabled: false });
+        assert.equal((await PA.status(u.two, day)).claimable, false);
+        await assert.rejects(PA.claim(u.two, day), { code: 'GAMIFICATION_DISABLED' });
+        await db.users.updateSettings(u.two, { gamification_enabled: true });
+        assert.equal((await PA.claim(u.two, day)).xp, PARTY_QUEST.REWARD);
+        // The next week starts from zero and the reward can be claimed again.
+        const nextWeek = new Date(day.getTime() + 7 * 86400e3);
+        assert.deepEqual((await PA.status(u.own, nextWeek)).members.map((m) => m.count), [0, 0]);
+
+        // Changing parties does not pay a second reward in the same week.
+        await PA.leave(u.two);
+        await assert.rejects(PA.leave(u.two), { code: 'NOT_FOUND' });
+        await PA.create(u.two, 'Solo run');
+        const mine = await PA.status(u.two, day);
+        assert.equal(mine.members.length, 1);
+        assert.equal(mine.reached, true, 'his 12 completions reach a one-person target');
+        assert.equal(mine.claimed, true, 'but he already claimed a party reward this week');
+        await assert.rejects(PA.claim(u.two, day), { code: 'CONFLICT', message: /already claimed/ });
+        await PA.disband(u.two);
+        assert.equal(await PA.status(u.two, day), null);
+        await assert.rejects(PA.disband(u.two), { code: 'NOT_FOUND' });
+
+        // Owner rules and the size cap (6 including the owner, counting pending invitations).
+        await assert.rejects(PA.leave(u.own), { code: 'FORBIDDEN', message: /Disband/ });
+        const more = [];
+        for (let n = 10; n < 10 + LIMITS.MAX_PARTY_MEMBERS - 1; n++) {
+            const id = `2000000000000008${n}`;
+            await db.users.ensureUser(id, { username: `pty_fill${n}`, avatar: null });
+            more.push(id);
+        }
+        const invites = [];
+        for (const id of more.slice(0, LIMITS.MAX_PARTY_MEMBERS - 2)) invites.push(await PA.invite(u.own, { discordId: id }));
+        for (const inv of invites) await PA.respond(more[invites.indexOf(inv)], inv.id, true);
+        assert.equal((await PA.status(u.own)).members.length, LIMITS.MAX_PARTY_MEMBERS - 1);
+        await PA.invite(u.own, { discordId: more.at(-1) }); // the sixth seat is held by a pending invitation
+        await assert.rejects(PA.invite(u.own, { discordId: u.three }), { code: 'VALIDATION', message: /at most 6/ });
+        const pending = (await PA.status(u.own)).invites;
+        assert.equal(pending.length, 1);
+        await PA.revoke(u.own, pending[0].id);
+        await assert.rejects(PA.revoke(u.own, pending[0].id), { code: 'NOT_FOUND' });
+        await assert.rejects(PA.respond(more.at(-1), pending[0].id, true), { code: 'CONFLICT' });
+        // Declined and expired invitations behave like list invitations.
+        const again = await PA.invite(u.own, { discordId: more.at(-1) });
+        await db.query('UPDATE party_invites SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE id = ?', [again.id]);
+        assert.deepEqual(await PA.listInvites(more.at(-1)), []);
+        await assert.rejects(PA.respond(more.at(-1), again.id, true), { code: 'CONFLICT', message: /expired/ });
+        const declined = await PA.invite(u.own, { discordId: more.at(-1) });
+        assert.equal((await PA.respond(more.at(-1), declined.id, false)).accepted, false);
+        // Disbanding removes everyone; a member who was in it is free to join elsewhere.
+        await PA.disband(u.own);
+        assert.equal(await PA.status(more[0]), null);
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_members WHERE party_id = ?', [party.id]))[0].n, 0);
+    });
+
     await db.closePool();
 });

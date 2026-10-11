@@ -33,6 +33,7 @@ function optionalText(value, max, label) {
 }
 
 const listName = (v) => requiredText(v, TEXT_LIMITS.LIST_NAME, 'List name');
+const partyName = (v) => requiredText(v, TEXT_LIMITS.PARTY_NAME, 'Party name');
 const itemName = (v) => requiredText(v, TEXT_LIMITS.ITEM_NAME, 'Task name');
 const description = (v) => optionalText(v, TEXT_LIMITS.DESCRIPTION, 'Description');
 const category = (v) => optionalText(v, TEXT_LIMITS.CATEGORY, 'Category');
@@ -121,6 +122,7 @@ function escapeLike(value) {
 
 module.exports = {
     cleanText,
+    partyName,
     listName,
     itemName,
     description,

@@ -13,6 +13,7 @@ import importRouter from './routes/import.js';
 import templatesRouter from './routes/templates.js';
 import { listsRouter, itemsRouter } from './routes/tasks.js';
 import { listSharingRouter, invitesRouter } from './routes/sharing.js';
+import partiesRouter from './routes/parties.js';
 import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } from './routes/progression.js';
 import gamesRouter from './routes/games.js';
 import questsRouter from './routes/quests.js';
@@ -78,6 +79,7 @@ export function createApp() {
     app.use('/api/lists', requireAuth, listsRouter);
     app.use('/api/lists', requireAuth, listSharingRouter);
     app.use('/api/invites', requireAuth, invitesRouter);
+    app.use('/api/parties', requireAuth, partiesRouter);
     app.use('/api/items', requireAuth, itemsRouter);
     app.use('/api/classes', requireAuth, classesRouter);
     app.use('/api/skills', requireAuth, skillsRouter);

@@ -876,6 +876,80 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         }
     });
 
+
+    await t.test('parties over the API: create, invite by name, accept, status, claim, leave and disband', async () => {
+        const ids = { own: '200000000000000801', mem: '200000000000000802', out: '200000000000000803' };
+        const cookies = {};
+        for (const [k, id] of Object.entries(ids)) {
+            cookies[k] = await login(db, id);
+            await db.users.ensureUser(id, { username: `api_party_${k}`, avatar: null });
+        }
+        const J = async (method, path, who, body) => {
+            const res = await call(method, path, { cookie: cookies[who], body });
+            const text = await res.text();
+            return { status: res.status, text, body: text ? JSON.parse(text) : null };
+        };
+        assert.equal((await call('GET', '/api/parties')).status, 401);
+        assert.deepEqual((await J('GET', '/api/parties', 'own')).body, { party: null, invites: [] });
+        assert.equal((await J('POST', '/api/parties', 'own', { name: '' })).status, 400);
+        assert.equal((await J('POST', '/api/parties', 'own', { name: 'Crew', extra: 1 })).status, 400);
+        const made = await J('POST', '/api/parties', 'own', { name: 'Crew' });
+        assert.equal(made.status, 201);
+        assert.equal(made.body.party.name, 'Crew');
+        assert.equal(made.body.party.isOwner, true);
+        assert.equal((await J('POST', '/api/parties', 'own', { name: 'Again' })).status, 409);
+
+        assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem', discordId: ids.mem })).status, 400, 'no Discord IDs from the client');
+        assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'nobody_xyz' })).status, 404);
+        assert.equal((await J('POST', '/api/parties/invites', 'out', { username: 'api_party_mem' })).status, 404, 'not in a party');
+        const inv = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
+        assert.equal(inv.status, 201);
+        assert.equal(inv.text.includes(ids.mem), false);
+        assert.equal((await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' })).status, 409);
+        const mine = await J('GET', '/api/parties', 'mem');
+        assert.equal(mine.body.party, null);
+        assert.equal(mine.body.invites[0].partyName, 'Crew');
+        assert.equal((await J('POST', `/api/parties/invites/${inv.body.id}/accept`, 'out')).status, 404);
+        assert.equal((await J('POST', `/api/parties/invites/${inv.body.id}/accept`, 'mem')).status, 200);
+        assert.equal((await J('POST', `/api/parties/invites/${inv.body.id}/accept`, 'mem')).status, 409);
+
+        const view = await J('GET', '/api/parties', 'mem');
+        assert.deepEqual(view.body.party.members.map((m) => [m.name, m.count]), [['api_party_own', 0], ['api_party_mem', 0]]);
+        for (const id of Object.values(ids)) assert.equal(view.text.includes(id), false, 'no Discord ID in the party');
+        assert.equal(view.body.party.target, 24);
+        assert.equal(view.body.party.claimable, false);
+        assert.equal((await J('POST', '/api/parties/claim', 'mem')).status, 400, 'not finished');
+        assert.equal((await J('POST', '/api/parties/claim', 'out')).status, 404);
+        assert.equal((await J('POST', '/api/parties/invites', 'mem', { username: 'api_party_out' })).status, 403, 'only the owner invites');
+        assert.equal((await J('DELETE', '/api/parties', 'mem')).status, 403, 'only the owner disbands');
+        assert.equal((await J('POST', '/api/parties/leave', 'own')).status, 403);
+
+        // Finish the quest (the service tests cover the counting) and claim.
+        for (const who of ['own', 'mem']) {
+            const { list } = await db.tasks.createList(ids[who], { name: `Party grind ${who}` });
+            for (let n = 0; n < 12; n++) await db.tasks.setItemCompleted(ids[who], (await db.tasks.addItem(ids[who], list.id, { name: `t${n}` })).item.id);
+        }
+        const done = await J('GET', '/api/parties', 'own');
+        assert.equal(done.body.party.reached, true);
+        assert.equal(done.body.party.claimable, true);
+        const claim = await J('POST', '/api/parties/claim', 'own');
+        assert.equal(claim.status, 200);
+        assert.equal(claim.body.xp, 60);
+        assert.equal((await J('POST', '/api/parties/claim', 'own')).status, 409);
+        assert.equal((await J('GET', '/api/parties', 'own')).body.party.claimed, true);
+
+        // Leaving, then disbanding.
+        assert.equal((await J('POST', '/api/parties/leave', 'mem')).status, 200);
+        assert.equal((await J('POST', '/api/parties/leave', 'mem')).status, 404);
+        const again = await J('POST', '/api/parties/invites', 'own', { username: 'api_party_mem' });
+        assert.equal((await J('GET', '/api/parties', 'own')).body.party.invites.length, 1);
+        assert.equal((await J('DELETE', `/api/parties/invites/${again.body.id}`, 'mem')).status, 404);
+        assert.equal((await J('DELETE', `/api/parties/invites/${again.body.id}`, 'own')).status, 200);
+        assert.equal((await J('POST', `/api/parties/invites/${again.body.id}/decline`, 'mem')).status, 409);
+        assert.equal((await J('DELETE', '/api/parties', 'own')).status, 200);
+        assert.deepEqual((await J('GET', '/api/parties', 'own')).body, { party: null, invites: [] });
+    });
+
     server.close();
     await db.closePool();
 });

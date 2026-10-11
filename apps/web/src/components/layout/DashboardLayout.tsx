@@ -56,7 +56,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
     <div className="flex h-full flex-col">
       <div className="p-4 sm:p-6 border-b border-sidebar-border">
         <Link to="/dashboard" className="flex items-center gap-3 rounded-lg" onClick={onNavigate}>
-          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-primary flex items-center justify-center shrink-0">
             <Sword className="h-5 w-5 sm:h-6 sm:w-6 text-primary-foreground" />
           </div>
           <div className="min-w-0">
@@ -68,7 +68,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
 
       <div className="p-3 sm:p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2 sm:gap-3">
-          <img src={avatarUrl} alt="" className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-2 border-primary flex-shrink-0" />
+          <img src={avatarUrl} alt="" className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-2 border-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold truncate text-sm sm:text-base">{username}</p>
             <ClassBadge playerClass={playerClass} size="sm" />
@@ -113,7 +113,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
                 isActive ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "text-foreground-muted hover:text-foreground hover:bg-sidebar-accent"
               )}
             >
-              <item.icon className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" aria-hidden />
+              <item.icon className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" aria-hidden />
               <span className="truncate">{item.label}</span>
             </Link>
           );
@@ -127,7 +127,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
           onClick={onNavigate}
           className="flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-foreground-muted hover:text-foreground hover:bg-sidebar-accent transition-colors text-sm sm:text-base"
         >
-          <Settings className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" aria-hidden />
+          <Settings className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" aria-hidden />
           <span>Settings</span>
         </Link>
         <button
@@ -135,7 +135,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
           onClick={() => void logout()}
           className="w-full flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-destructive-text hover:bg-destructive/10 transition-colors text-sm sm:text-base"
         >
-          <LogOut className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" aria-hidden />
+          <LogOut className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" aria-hidden />
           <span>Logout</span>
         </button>
       </div>
@@ -151,14 +151,14 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-60 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground">
         Skip to content
       </a>
 
       {/* Mobile drawer: Radix Sheet gives focus trapping, Escape to close and focus restore to the button. */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         {/* A real header, so the menu button never covers page titles. */}
-        <header className="lg:hidden fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/90 px-3 backdrop-blur">
+        <header className="lg:hidden fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/90 px-3 backdrop-blur-sm">
           <SheetTrigger asChild>
             <button type="button" className="rounded-lg border border-border bg-card p-2" aria-label="Open menu">
               <Menu className="h-5 w-5" />
@@ -187,8 +187,8 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       <CommandPalette aiEnabled={Boolean(user?.features?.ai)} />
       <OnboardingTour />
 
-      <main id="main" tabIndex={-1} className="flex-1 min-h-screen w-full min-w-0 focus:outline-none">
-        <div className="pt-[4.5rem] lg:pt-4 pb-4 px-4 lg:px-8">{children}</div>
+      <main id="main" tabIndex={-1} className="flex-1 min-h-screen w-full min-w-0 focus:outline-hidden">
+        <div className="pt-18 lg:pt-4 pb-4 px-4 lg:px-8">{children}</div>
       </main>
     </div>
   );

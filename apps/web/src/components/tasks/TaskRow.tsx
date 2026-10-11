@@ -35,7 +35,7 @@ interface Props {
   drag?: DragProps;
 }
 
-const iconButton = "p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
+const iconButton = "p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
 export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag }: Props) => {
@@ -60,7 +60,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       )}
     >
       {isSubtask ? (
-        <CornerDownRight className="h-4 w-4 mt-1 flex-shrink-0 text-foreground-muted/60" aria-hidden />
+        <CornerDownRight className="h-4 w-4 mt-1 shrink-0 text-foreground-muted/60" aria-hidden />
       ) : (
         drag?.draggable && (
           // Only the handle drags, so the task text stays selectable. Keyboard and touch users reorder with the arrow buttons.
@@ -68,7 +68,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
             draggable
             onDragStart={(e) => drag.onDragStart(e, item.id)}
             onDragEnd={drag.onDragEnd}
-            className="mt-0.5 flex-shrink-0 cursor-grab touch-none rounded p-0.5 text-foreground-muted hover:bg-background-secondary hover:text-foreground active:cursor-grabbing"
+            className="mt-0.5 shrink-0 cursor-grab touch-none rounded p-0.5 text-foreground-muted hover:bg-background-secondary hover:text-foreground active:cursor-grabbing"
             title="Drag to reorder"
             aria-hidden
           >
@@ -84,7 +84,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           onChange={() => undefined}
           onClick={(e) => onSelect(item.id, e.shiftKey)}
           aria-label={`Select ${item.name}`}
-          className="mt-1 h-4 w-4 flex-shrink-0 accent-[hsl(var(--primary))]"
+          className="mt-1 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]"
         />
       )}
 
@@ -94,7 +94,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         aria-pressed={completed}
         aria-label={completed ? `Mark "${item.name}" as not done` : `Mark "${item.name}" as done`}
         className={cn(
-          "flex-shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
           completed ? "bg-success border-success" : "border-border hover:border-primary"
         )}
       >
@@ -102,7 +102,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       </button>
 
       <div className="flex-1 min-w-0">
-        <p className={cn("font-medium text-sm sm:text-base break-words", completed && "line-through text-foreground-muted")}>
+        <p className={cn("font-medium text-sm sm:text-base wrap-break-word", completed && "line-through text-foreground-muted")}>
           {priority && (
             <>
               <span className={cn("inline-block h-2 w-2 rounded-full mr-2 align-middle", DOT[priority], completed && "opacity-40")} aria-hidden />
@@ -132,7 +132,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         )}
       </div>
 
-      <div className="flex-shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <div className="shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (
           <>
             <button type="button" aria-label={`Move "${item.name}" up`} disabled={!canMoveUp} onClick={() => onMove(item.id, -1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>

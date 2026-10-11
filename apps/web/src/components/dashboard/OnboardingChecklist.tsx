@@ -72,12 +72,12 @@ export const OnboardingChecklist = ({ hasQuest, hasTask, claimedDaily, onClaimDa
       <ol className="space-y-3">
         {steps.map((step) => (
           <li key={step.label} className="flex items-center gap-3">
-            {step.done ? <Check className="h-5 w-5 flex-shrink-0 text-success" aria-label="Done" /> : <Circle className="h-5 w-5 flex-shrink-0 text-foreground-muted" aria-label="Not done yet" />}
+            {step.done ? <Check className="h-5 w-5 shrink-0 text-success" aria-label="Done" /> : <Circle className="h-5 w-5 shrink-0 text-foreground-muted" aria-label="Not done yet" />}
             <div className="min-w-0 flex-1">
               <p className={cn("text-sm font-medium", step.done && "text-foreground-muted line-through")}>{step.label}</p>
               {!step.done && <p className="text-xs text-foreground-muted">{step.hint}</p>}
             </div>
-            {!step.done && <div className="flex-shrink-0 text-sm">{step.action}</div>}
+            {!step.done && <div className="shrink-0 text-sm">{step.action}</div>}
           </li>
         ))}
       </ol>

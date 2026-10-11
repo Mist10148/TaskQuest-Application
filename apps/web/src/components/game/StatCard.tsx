@@ -76,11 +76,11 @@ export const StatCard = ({
       {/* Top neon line */}
       <div className={cn(
         "absolute top-0 left-0 right-0 h-px opacity-0 transition-opacity",
-        colorScheme === 'xp' ? 'bg-gradient-to-r from-transparent via-xp/50 to-transparent' :
-        colorScheme === 'success' ? 'bg-gradient-to-r from-transparent via-success/50 to-transparent' :
-        colorScheme === 'primary' ? 'bg-gradient-to-r from-transparent via-primary/50 to-transparent' :
-        colorScheme === 'destructive' ? 'bg-gradient-to-r from-transparent via-destructive/50 to-transparent' :
-        'bg-gradient-to-r from-transparent via-foreground-muted/30 to-transparent'
+        colorScheme === 'xp' ? 'bg-linear-to-r from-transparent via-xp/50 to-transparent' :
+        colorScheme === 'success' ? 'bg-linear-to-r from-transparent via-success/50 to-transparent' :
+        colorScheme === 'primary' ? 'bg-linear-to-r from-transparent via-primary/50 to-transparent' :
+        colorScheme === 'destructive' ? 'bg-linear-to-r from-transparent via-destructive/50 to-transparent' :
+        'bg-linear-to-r from-transparent via-foreground-muted/30 to-transparent'
       )} style={{ opacity: 0.5 }} />
       
       <div className="relative flex items-start justify-between gap-2">
@@ -103,7 +103,7 @@ export const StatCard = ({
           )}
         </div>
         <div className={cn(
-          "rounded-lg p-2 sm:p-3 flex-shrink-0 transition-all",
+          "rounded-lg p-2 sm:p-3 shrink-0 transition-all",
           colors.iconBg
         )}>
           <span className={cn("text-base sm:text-xl", colors.iconColor)}>

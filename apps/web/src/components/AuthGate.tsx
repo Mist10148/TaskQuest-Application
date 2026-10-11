@@ -33,7 +33,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-[0_0_40px_rgba(99,102,241,0.15)]">
         <img src="/taskquest-icon.svg" alt="" className="mx-auto mb-4 h-16 w-16" />
-        <h1 className="text-3xl font-heading font-bold mb-2 bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">TaskQuest</h1>
+        <h1 className="text-3xl font-heading font-bold mb-2 bg-linear-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">TaskQuest</h1>
         <p className="text-foreground-muted mb-6">Level up your productivity. Your lists, XP, classes and games sync with the TaskQuest Discord bot.</p>
 
         {error ? (

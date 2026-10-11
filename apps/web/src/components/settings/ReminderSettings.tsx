@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { SettingRow, SwitchRow } from "./SettingsSection";
 
 const selectClass =
-  "h-9 w-full sm:w-64 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-9 w-full sm:w-64 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 type Supported = { supportedValuesOf?: (key: string) => string[] };
 

@@ -30,7 +30,7 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
           onClick={() => filters.setActiveTab(value)}
           className={cn(
             "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-            filters.activeTab === value ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground hover:bg-card/50"
+            filters.activeTab === value ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground hover:bg-card/50"
           )}
         >
           <Icon className="h-4 w-4" />

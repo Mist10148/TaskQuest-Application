@@ -23,7 +23,7 @@ export const StreakFreezeCard = ({ freezes, cost: COST, max: MAX, balance, gamif
     <section className="mb-6 rounded-xl border border-border bg-card p-4 sm:mb-8 sm:p-5" aria-labelledby="freeze-heading">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-cyan-500/20 sm:h-12 sm:w-12">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/20 sm:h-12 sm:w-12">
             <Snowflake className="h-5 w-5 text-cyan-700 dark:text-cyan-400 sm:h-6 sm:w-6" aria-hidden />
           </div>
           <div>

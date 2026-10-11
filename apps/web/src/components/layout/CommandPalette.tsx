@@ -70,7 +70,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
         <DialogTitle className="sr-only">Command palette</DialogTitle>
         <DialogDescription className="sr-only">Type to search pages and actions, use the arrow keys and Enter to choose.</DialogDescription>
         <div className="flex items-center gap-2 border-b border-border px-4">
-          <Search className="h-4 w-4 flex-shrink-0 text-foreground-muted" aria-hidden />
+          <Search className="h-4 w-4 shrink-0 text-foreground-muted" aria-hidden />
           <input
             autoFocus
             value={query}
@@ -81,7 +81,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
             aria-controls="palette-list"
             aria-activedescendant={results[activeIndex] ? `palette-${results[activeIndex].id}` : undefined}
             aria-label="Search commands"
-            className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-foreground-muted"
+            className="h-12 w-full bg-transparent text-sm outline-hidden placeholder:text-foreground-muted"
           />
         </div>
         <ul id="palette-list" role="listbox" aria-label="Commands" className="max-h-80 overflow-y-auto p-2">
@@ -100,7 +100,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
                   onClick={() => choose(r)}
                   className={cn("flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm", i === activeIndex ? "bg-primary text-primary-foreground" : "hover:bg-background-secondary")}
                 >
-                  <Icon className="h-4 w-4 flex-shrink-0" aria-hidden />
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="flex-1 truncate">{r.label}</span>
                   {i === activeIndex && <CornerDownLeft className="h-3.5 w-3.5 opacity-80" aria-hidden />}
                 </div>

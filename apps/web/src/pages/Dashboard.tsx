@@ -80,7 +80,7 @@ const Dashboard = () => {
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-heading font-bold flex items-center gap-2">
-              Welcome back, <span className="bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">{discord.globalName || discord.username}</span>
+              Welcome back, <span className="bg-linear-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent">{discord.globalName || discord.username}</span>
               <motion.div animate={{ rotate: [0, 15, -15, 0] }} transition={{ repeat: Infinity, duration: 2, repeatDelay: 3 }}>
                 <Zap className="h-6 w-6 text-xp drop-shadow-[0_0_8px_rgba(234,179,8,0.6)]" />
               </motion.div>
@@ -103,12 +103,12 @@ const Dashboard = () => {
 
         {/* XP Progress with neon effects */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="rounded-2xl bg-card border border-border p-4 sm:p-6 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-xp/50 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-br from-xp/5 via-transparent to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-xp/50 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-br from-xp/5 via-transparent to-transparent" />
           <div className="relative">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-xp/20 flex items-center justify-center flex-shrink-0 shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-xp/20 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(234,179,8,0.3)]">
                   <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-xp drop-shadow-[0_0_5px_rgba(234,179,8,0.8)]" />
                 </div>
                 <div>

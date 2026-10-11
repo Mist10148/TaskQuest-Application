@@ -109,7 +109,7 @@ const Skills = () => {
               tabIndex={selectedTreeKey === tree.classKey ? 0 : -1}
               onClick={() => setPickedTreeKey(tree.classKey)}
               className={cn(
-                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap text-xs sm:text-sm flex-shrink-0 relative",
+                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap text-xs sm:text-sm shrink-0 relative",
                 selectedTreeKey === tree.classKey ? "bg-primary text-primary-foreground shadow-lg" : "bg-card border border-border hover:border-primary/50",
                 !owned && "opacity-60"
               )}
@@ -129,7 +129,7 @@ const Skills = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center gap-3"
         >
-          <ShieldX className="h-5 w-5 text-destructive-text flex-shrink-0" />
+          <ShieldX className="h-5 w-5 text-destructive-text shrink-0" />
           <div>
             <p className="font-medium text-destructive-text">Class Not Owned</p>
             <p className="text-sm text-foreground-muted">

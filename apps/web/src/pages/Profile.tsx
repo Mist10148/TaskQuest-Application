@@ -93,7 +93,7 @@ const Profile = () => {
             className="h-24 sm:h-32 relative"
             style={{ background: `linear-gradient(135deg, ${classColor(classKey, 0.25)}, ${classColor(classKey, 0.12)})` }}
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-card" />
+            <div className="absolute inset-0 bg-linear-to-b from-transparent to-card" />
           </div>
 
           <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-10 sm:-mt-12 relative">
@@ -178,7 +178,7 @@ const Profile = () => {
               className="rounded-xl bg-card border border-border p-3 sm:p-4"
             >
               <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-                <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg ${STAT_TONES[stat.color].bg} flex items-center justify-center flex-shrink-0`}>
+                <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg ${STAT_TONES[stat.color].bg} flex items-center justify-center shrink-0`}>
                   <stat.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${STAT_TONES[stat.color].icon}`} aria-hidden />
                 </div>
                 <div className="min-w-0">

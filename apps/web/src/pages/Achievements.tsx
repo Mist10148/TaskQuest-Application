@@ -80,8 +80,8 @@ const Achievements = () => {
       </div>
 
       {/* Progress Card */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6 sm:mb-8 p-4 sm:p-6 rounded-xl bg-gradient-to-br from-card to-card/50 border border-border relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-xp/5 via-transparent to-transparent" />
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6 sm:mb-8 p-4 sm:p-6 rounded-xl bg-linear-to-br from-card to-card/50 border border-border relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-xp/5 via-transparent to-transparent" />
         <div className="relative">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -103,9 +103,9 @@ const Achievements = () => {
               initial={{ width: 0 }} 
               animate={{ width: `${progressPercent}%` }} 
               transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }} 
-              className="h-full rounded-full bg-gradient-to-r from-xp via-yellow-400 to-xp relative"
+              className="h-full rounded-full bg-linear-to-r from-xp via-yellow-400 to-xp relative"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+              <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
             </motion.div>
           </div>
           {progressPercent === 100 && (
@@ -123,7 +123,7 @@ const Achievements = () => {
             type="button"
             aria-pressed={filter === f.value}
             onClick={() => setFilter(f.value)}
-            className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", filter === f.value ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground")}
+            className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", filter === f.value ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground")}
           >
             {f.label}
           </button>
@@ -170,18 +170,18 @@ const Achievements = () => {
                       className={cn(
                         "relative rounded-xl border p-3 sm:p-4 transition-all overflow-hidden group",
                         ach.unlocked 
-                          ? "border-xp/50 bg-gradient-to-br " + categoryInfo.color 
+                          ? "border-xp/50 bg-linear-to-br " + categoryInfo.color 
                           : "border-border bg-card/30"
                       )}
                     >
                       {/* Glow effect for unlocked */}
                       {ach.unlocked && (
-                        <div className="absolute inset-0 bg-gradient-to-br from-xp/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-linear-to-br from-xp/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       )}
                       
                       <div className="relative flex items-start gap-2 sm:gap-3">
                         <div className={cn(
-                          "h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl flex-shrink-0 transition-transform",
+                          "h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl shrink-0 transition-transform",
                           ach.unlocked ? "bg-xp/20 group-hover:scale-110" : "bg-background-secondary opacity-70"
                         )}>
                           {ach.unlocked ? ach.emoji : <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-foreground-muted" />}
@@ -216,7 +216,7 @@ const Achievements = () => {
                             initial={{ scale: 0, rotate: -180 }}
                             animate={{ scale: 1, rotate: 0 }}
                             transition={{ type: "spring", stiffness: 200 }}
-                            className="h-6 w-6 sm:h-7 sm:w-7 rounded-full bg-gradient-to-br from-xp to-yellow-400 flex items-center justify-center shadow-lg shadow-xp/30"
+                            className="h-6 w-6 sm:h-7 sm:w-7 rounded-full bg-linear-to-br from-xp to-yellow-400 flex items-center justify-center shadow-lg shadow-xp/30"
                           >
                             <Trophy className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                           </motion.div>

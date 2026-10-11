@@ -44,7 +44,7 @@ const PlayerAvatar = ({ avatarUrl, username, size = 'md', rank }: {
     return (
       <div className={cn(
         sizeClasses[size], 
-        `bg-gradient-to-br ${gradients[gradientIndex]}`,
+        `bg-linear-to-br ${gradients[gradientIndex]}`,
         "rounded-full flex items-center justify-center text-white font-bold ring-2",
         ringColor
       )}>
@@ -143,7 +143,7 @@ const Leaderboard = () => {
               aria-controls="board-tabpanel"
               tabIndex={by === b.value ? 0 : -1}
               onClick={() => setBy(b.value)}
-              className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", by === b.value ? "bg-card text-foreground shadow-sm" : "text-foreground-muted hover:text-foreground")}
+              className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", by === b.value ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground")}
             >
               {b.label}
             </button>
@@ -155,7 +155,7 @@ const Leaderboard = () => {
             id="class-filter"
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="ALL">All classes</option>
             {classOptions.map((c) => (
@@ -185,8 +185,8 @@ const Leaderboard = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="hidden sm:grid grid-cols-3 gap-4 mb-8">
           {/* 2nd Place */}
           <div className="mt-8">
-            <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-gradient-to-b from-gray-400/20 to-gray-400/5 border border-gray-400/30 p-5 text-center relative overflow-hidden group">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-gray-400/10 via-transparent to-transparent" />
+            <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-linear-to-b from-gray-400/20 to-gray-400/5 border border-gray-400/30 p-5 text-center relative overflow-hidden group">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,var(--tw-gradient-stops))] from-gray-400/10 via-transparent to-transparent" />
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-gray-400 mb-2" />
                 <div className="flex justify-center mb-2">
@@ -201,9 +201,9 @@ const Leaderboard = () => {
           
           {/* 1st Place */}
           <div>
-            <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-gradient-to-b from-yellow-500/20 to-yellow-500/5 border border-yellow-500/30 p-6 text-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-yellow-500/20 via-transparent to-transparent" />
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-500" />
+            <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-linear-to-b from-yellow-500/20 to-yellow-500/5 border border-yellow-500/30 p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,var(--tw-gradient-stops))] from-yellow-500/20 via-transparent to-transparent" />
+              <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-yellow-500 via-amber-400 to-yellow-500" />
               <div className="relative">
                 <Crown className="h-10 w-10 mx-auto text-yellow-500 mb-2" />
                 <div className="flex justify-center mb-2">
@@ -218,8 +218,8 @@ const Leaderboard = () => {
           
           {/* 3rd Place */}
           <div className="mt-12">
-            <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-gradient-to-b from-amber-600/20 to-amber-600/5 border border-amber-600/30 p-5 text-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-amber-600/10 via-transparent to-transparent" />
+            <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-linear-to-b from-amber-600/20 to-amber-600/5 border border-amber-600/30 p-5 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,var(--tw-gradient-stops))] from-amber-600/10 via-transparent to-transparent" />
               <div className="relative">
                 <Medal className="h-8 w-8 mx-auto text-amber-600 mb-2" />
                 <div className="flex justify-center mb-2">
@@ -236,7 +236,7 @@ const Leaderboard = () => {
 
       {/* Full Leaderboard */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="hidden sm:grid grid-cols-12 gap-4 p-4 border-b border-border text-sm font-medium text-foreground-muted bg-gradient-to-r from-background-secondary/50 to-transparent">
+        <div className="hidden sm:grid grid-cols-12 gap-4 p-4 border-b border-border text-sm font-medium text-foreground-muted bg-linear-to-r from-background-secondary/50 to-transparent">
           <div className="col-span-1">Rank</div>
           <div className="col-span-4">Player</div>
           <div className="col-span-2 text-center">Level</div>

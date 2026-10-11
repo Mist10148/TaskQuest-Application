@@ -37,7 +37,7 @@ const send = (type: "keydown" | "keyup", spec: KeySpec) =>
  */
 export const TouchPad = ({ layout, className }: { layout: Layout; className?: string }) => (
   <div
-    className={cn("mt-4 hidden w-full max-w-xs select-none grid-cols-3 gap-2 [@media(pointer:coarse)]:grid", className)}
+    className={cn("mt-4 hidden w-full max-w-xs select-none grid-cols-3 gap-2 pointer-coarse:grid", className)}
     role="group"
     aria-label="Touch controls"
     onContextMenu={(e) => e.preventDefault()}

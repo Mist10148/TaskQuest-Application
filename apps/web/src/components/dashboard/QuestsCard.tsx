@@ -14,7 +14,7 @@ const QuestRow = ({ quest, onClaim, claiming }: { quest: Quest; onClaim: (key: s
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <p className={cn("truncate text-sm font-medium", quest.claimed && "text-foreground-muted line-through")}>{quest.name}</p>
-          <span className="flex-shrink-0 text-xs font-medium text-xp">+{quest.reward} XP</span>
+          <span className="shrink-0 text-xs font-medium text-xp">+{quest.reward} XP</span>
         </div>
         <p className="truncate text-xs text-foreground-muted">{quest.description}</p>
         <div
@@ -28,7 +28,7 @@ const QuestRow = ({ quest, onClaim, claiming }: { quest: Quest; onClaim: (key: s
           <div className={cn("h-full rounded-full transition-all", quest.claimed ? "bg-success" : "bg-primary")} style={{ width: `${percent}%` }} />
         </div>
       </div>
-      <div className="w-20 flex-shrink-0 text-right">
+      <div className="w-20 shrink-0 text-right">
         {quest.claimed ? (
           <span className="text-xs font-medium text-success">Claimed</span>
         ) : quest.claimable ? (

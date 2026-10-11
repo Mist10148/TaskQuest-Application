@@ -179,8 +179,8 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         </div>
       </div>
 
-      <div className="mb-6 p-4 rounded-xl bg-gradient-to-br from-card to-card/50 border border-border relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent" />
+      <div className="mb-6 p-4 rounded-xl bg-linear-to-br from-card to-card/50 border border-border relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent" />
         <div className="relative">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-foreground-muted">Quest Progress</span>
@@ -191,7 +191,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.5, ease: "easeOut" }}
-              className={cn("h-full rounded-full", progress === 100 ? "bg-gradient-to-r from-success to-emerald-400" : "bg-gradient-to-r from-primary to-violet-500")}
+              className={cn("h-full rounded-full", progress === 100 ? "bg-linear-to-r from-success to-emerald-400" : "bg-linear-to-r from-primary to-violet-500")}
             />
           </div>
           {progress === 100 && <p className="text-xs text-success mt-2 font-medium">🎉 Quest Complete!</p>}
@@ -221,7 +221,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       )}
 
       {selectMode && (
-        <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur" role="toolbar" aria-label="Bulk actions">
+        <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
           <span className="text-sm font-medium mr-auto" aria-live="polite">{selectedIds.length} selected</span>
           <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === items.length} onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
             Select all

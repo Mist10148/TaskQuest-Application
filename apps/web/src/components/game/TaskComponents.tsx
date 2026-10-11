@@ -50,7 +50,7 @@ export const TaskListCard = ({ name, description, category, priority, deadline, 
             },
           }
         : {})}
-      className={cn("relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-300 hover:border-primary/30 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", onClick && "cursor-pointer", priorityStyles?.border, className)}
+      className={cn("relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-300 hover:border-primary/30 hover:shadow-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring", onClick && "cursor-pointer", priorityStyles?.border, className)}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">

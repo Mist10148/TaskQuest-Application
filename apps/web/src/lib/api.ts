@@ -157,6 +157,76 @@ export const sharingApi = {
     revoke: (id: number) => del<{ success: boolean }>(`/api/invites/${id}`),
 };
 
+// ─── Parties: a small group with a shared weekly quest ───────────────────────
+
+export interface PartyMember {
+    name: string | null;
+    /** First completions this member contributed in the current UTC week. */
+    count: number;
+    isYou: boolean;
+    isOwner: boolean;
+}
+
+export interface PartyInvite {
+    id: number;
+    inviteeName: string | null;
+    createdAt: string;
+    expiresAt: string;
+}
+
+export interface PartyStatus {
+    party: { id: number; name: string; isOwner: boolean };
+    weekStart: string;
+    resetsAt: string;
+    perMember: number;
+    target: number;
+    progress: number;
+    reward: number;
+    members: PartyMember[];
+    /** Pending invitations (owner only, otherwise absent or empty). */
+    invites?: PartyInvite[];
+    /** Most people in the party, owner included. */
+    limit: number;
+    reached: boolean;
+    claimed: boolean;
+    claimable: boolean;
+}
+
+export interface MyPartyInvite {
+    id: number;
+    partyName: string;
+    ownerName: string | null;
+    createdAt: string;
+    expiresAt: string;
+}
+
+export interface PartyOverview {
+    party: PartyStatus | null;
+    invites: MyPartyInvite[];
+}
+
+export interface PartyClaimResult {
+    success: boolean;
+    weekStart: string;
+    xp: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
+}
+
+export const partyApi = {
+    get: () => apiFetch<PartyOverview>('/api/parties'),
+    create: (name: string) => post<PartyStatus>('/api/parties', { name }),
+    invite: (username: string) => post<{ id: number; inviteeName: string | null; expiresAt: string }>('/api/parties/invites', { username }),
+    revoke: (id: number) => del<{ success: boolean }>(`/api/parties/invites/${id}`),
+    accept: (id: number) => post<{ accepted: boolean; party?: { id: number; name: string } }>(`/api/parties/invites/${id}/accept`),
+    decline: (id: number) => post<{ accepted: boolean }>(`/api/parties/invites/${id}/decline`),
+    leave: () => post<{ success: boolean }>('/api/parties/leave'),
+    disband: () => del<{ success: boolean }>('/api/parties'),
+    claim: () => post<PartyClaimResult>('/api/parties/claim'),
+};
+
 export const questsApi = {
     getAll: () => apiFetch<{ quests: Quest[] }>('/api/quests'),
     claim: (key: string) => post<QuestClaimResult>(`/api/quests/${key}/claim`),

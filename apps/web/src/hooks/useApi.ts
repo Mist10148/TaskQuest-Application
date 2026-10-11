@@ -30,6 +30,7 @@ import {
     statsApi,
     focusApi,
     reviewApi,
+    partyApi,
     aiApi,
     type AchievementUnlock,
     type CosmeticKind,
@@ -545,6 +546,83 @@ export function useClaimReview() {
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,
+    });
+}
+
+// ─── Parties ─────────────────────────────────────────────────────────────────
+
+export function useParty() {
+    return useQuery({ queryKey: ['parties'], queryFn: partyApi.get, retry: false });
+}
+
+export function useCreateParty() {
+    const qc = useQueryClient();
+    // No error toast: the form shows the server's message beside the field.
+    return useMutation({
+        mutationFn: (name: string) => partyApi.create(name),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
+    });
+}
+
+export function useInviteToParty() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (username: string) => partyApi.invite(username),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
+    });
+}
+
+export function useRevokePartyInvite() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => partyApi.revoke(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
+    });
+}
+
+export function useRespondToPartyInvite() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, accept }: { id: number; accept: boolean }) => (accept ? partyApi.accept(id) : partyApi.decline(id)),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
+        // An expired or withdrawn invitation answers 404: show why and drop it from the list.
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
+    });
+}
+
+export function useLeaveParty() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: partyApi.leave,
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
+    });
+}
+
+export function useDisbandParty() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: partyApi.disband,
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parties'] }),
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
+    });
+}
+
+export function useClaimParty() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: partyApi.claim,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            void qc.invalidateQueries({ queryKey: ['parties'] });
+            celebrate(result.leveledUp ? 'level' : 'quest');
+            toast.success(`🛡️ Party quest claimed +${result.xp} XP!`, {
+                description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
+            });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
     });
 }
 

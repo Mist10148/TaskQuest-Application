@@ -446,6 +446,56 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('GET', `/api/lists/${list.id}`, { cookie: S })).status, 200, '/search does not shadow /:id');
     });
 
+    await t.test('templates endpoints: auth, validation, ownership, apply and save-as-template', async () => {
+        const A = await login(db, '200000000000000040');
+        const B = await login(db, '200000000000000041');
+        const body = { name: 'Morning', description: 'start the day', items: [{ name: 'Stretch', priority: 'LOW' }, { name: 'Read', tags: ['learn'] }] };
+
+        assert.equal((await call('GET', '/api/templates')).status, 401);
+        assert.equal((await call('POST', '/api/templates', { body })).status, 401);
+        assert.equal((await call('POST', '/api/templates', { cookie: A, body, origin: 'https://evil.example' })).status, 403);
+        assert.equal((await call('POST', '/api/templates', { cookie: A, body: { name: 'x', items: [] } })).status, 400);
+        assert.equal((await call('POST', '/api/templates', { cookie: A, body: { name: 'x', items: [{ name: 'a', bogus: 1 }] } })).status, 400);
+        assert.equal((await call('POST', '/api/templates', { cookie: A, body: { name: 'x', items: Array.from({ length: 31 }, (_, i) => ({ name: `t${i}` })) } })).status, 400);
+        assert.equal((await call('POST', '/api/templates', { cookie: A, body: { name: 'x', items: [{ name: 'a', priority: 'URGENT' }] } })).status, 400);
+
+        const created = await call('POST', '/api/templates', { cookie: A, body });
+        assert.equal(created.status, 201);
+        const tpl = await created.json();
+        assert.deepEqual([tpl.name, tpl.itemCount, tpl.items[0].priority, tpl.items[1].tags], ['Morning', 2, 'LOW', 'learn']);
+        assert.equal((await call('POST', '/api/templates', { cookie: A, body })).status, 409);
+        assert.deepEqual((await (await call('GET', '/api/templates', { cookie: A })).json()).map((x) => x.name), ['Morning']);
+        assert.deepEqual(await (await call('GET', '/api/templates', { cookie: B })).json(), []);
+
+        // Someone else's template is invisible to apply and delete.
+        assert.equal((await call('POST', `/api/templates/${tpl.id}/apply`, { cookie: B, body: {} })).status, 404);
+        assert.equal((await call('DELETE', `/api/templates/${tpl.id}`, { cookie: B })).status, 404);
+
+        const applied = await call('POST', `/api/templates/${tpl.id}/apply`, { cookie: A, body: {} });
+        assert.equal(applied.status, 201);
+        const a = await applied.json();
+        assert.deepEqual([a.created, a.list.name, a.items.length], [true, 'Morning', 2]);
+        assert.ok(a.xpResult.finalXP > 0);
+        const second = await (await call('POST', `/api/templates/${tpl.id}/apply`, { cookie: A })).json();
+        assert.match(second.list.name, /^Morning \(\d{4}-\d{2}-\d{2}\)$/, 'a taken name gets the date');
+        assert.equal((await call('POST', `/api/templates/${tpl.id}/apply`, { cookie: A, body: { listName: 'Morning' } })).status, 409);
+        assert.equal((await call('POST', `/api/templates/${tpl.id}/apply`, { cookie: A, body: { listName: '' } })).status, 400);
+        assert.equal((await call('POST', `/api/templates/${tpl.id}/apply`, { cookie: A, body: { listId: a.list.id } })).status, 201);
+        assert.equal((await (await call('GET', `/api/lists/${a.list.id}`, { cookie: A })).json()).items.length, 4);
+        assert.equal((await call('POST', `/api/templates/${tpl.id}/apply`, { cookie: A, body: { listId: 999999 } })).status, 404);
+
+        // Save a quest as a template (own quests only).
+        const saved = await call('POST', `/api/lists/${a.list.id}/save-as-template`, { cookie: A, body: { name: 'Copy of morning' } });
+        assert.equal(saved.status, 201);
+        assert.equal((await saved.json()).itemCount, 4);
+        assert.equal((await call('POST', `/api/lists/${a.list.id}/save-as-template`, { cookie: A, body: { name: 'Copy of morning' } })).status, 409);
+        assert.equal((await call('POST', `/api/lists/${a.list.id}/save-as-template`, { cookie: B, body: {} })).status, 404);
+        assert.equal((await call('POST', `/api/lists/${a.list.id}/save-as-template`, { cookie: A, body: { nope: 1 } })).status, 400);
+
+        assert.equal((await call('DELETE', `/api/templates/${tpl.id}`, { cookie: A })).status, 200);
+        assert.equal((await call('DELETE', `/api/templates/${tpl.id}`, { cookie: A })).status, 404);
+    });
+
     await t.test('logout destroys the session', async () => {
         const res = await call('POST', '/api/auth/logout', { cookie: mallory });
         assert.equal(res.status, 200);

@@ -14,6 +14,7 @@ import { achievementDescription, rewardDescription } from '@/lib/bonuses';
 import {
     userApi,
     importApi,
+    templatesApi,
     listsApi,
     itemsApi,
     classesApi,
@@ -199,6 +200,49 @@ export function useCreateList() {
             showXPNotification(result, 'Quest created!', '🎉');
             showAchievementNotifications(result.newAchievements, qc);
         },
+        onError: showError,
+    });
+}
+
+export function useTemplates() {
+    return useQuery({ queryKey: ['templates'], queryFn: templatesApi.getAll });
+}
+
+export function useApplyTemplate() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, listName }: { id: number; listName?: string }) => templatesApi.apply(id, listName ? { listName } : {}),
+        onSuccess: (result) => {
+            qc.invalidateQueries({ queryKey: ['lists'] });
+            invalidateProgress(qc);
+            showXPNotification(result, `Quest "${result.list.name}" created from a template`, '📋');
+            // A capped or XP-free run pays nothing, so say what happened anyway.
+            if (!result.xpResult || result.xpResult.finalXP <= 0) {
+                toast.success(`📋 Quest "${result.list.name}" created from a template`, { description: 'No XP this time (a daily limit was reached, or XP is off).' });
+            }
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
+export function useSaveAsTemplate() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ listId, name }: { listId: number; name?: string }) => templatesApi.saveList(listId, name),
+        onSuccess: (template) => {
+            qc.invalidateQueries({ queryKey: ['templates'] });
+            toast.success(`📋 Saved as template "${template.name}"`);
+        },
+        onError: showError,
+    });
+}
+
+export function useDeleteTemplate() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => templatesApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['templates'] }),
         onError: showError,
     });
 }

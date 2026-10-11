@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Keyboard, Pencil, Plus, Scroll, Trash2, X } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCheck, CheckSquare, FilePlus, Keyboard, Pencil, Plus, Scroll, Trash2, X } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ interface Props {
   onAddItem: (parentId?: number) => void;
   onQuickAdd: (parsed: QuickAddResult) => Promise<void>;
   onEditList: () => void;
+  onSaveTemplate: () => void;
   onDeleteList: () => void;
   onToggleItem: (itemId: number) => void;
   onEditItem: (itemId: number) => void;
@@ -42,7 +43,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onAddItem, onQuickAdd, onEditList, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onReorder }: Props) => {
+export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onReorder }: Props) => {
   const items = useMemo(
     () => (list.items || []).filter((i: Item) => !hiddenIds.has(i.id) && !(i.parent_id && hiddenIds.has(i.parent_id))),
     [list.items, hiddenIds]
@@ -168,6 +169,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
             </Button>
             <Button variant={selectMode ? "default" : "outline"} size="sm" onClick={() => (selectMode ? leaveSelectMode() : setSelectMode(true))} className="gap-1" aria-pressed={selectMode} title="Select tasks (s)">
               <CheckSquare className="h-4 w-4" /><span className="hidden sm:inline">Select</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={onSaveTemplate} className="gap-1" title="Save this quest's tasks as a template">
+              <FilePlus className="h-4 w-4" /><span className="hidden sm:inline">Template</span>
             </Button>
             <Button variant="outline" size="sm" onClick={onEditList} className="gap-1">
               <Pencil className="h-4 w-4" /><span className="hidden sm:inline">Edit</span>

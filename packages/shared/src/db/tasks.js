@@ -93,7 +93,8 @@ async function createList(discordId, input) {
  */
 async function createListWithItems(discordId, input, names = []) {
     const fields = parseListInput(input);
-    const parsed = names.map((name) => parseItemInput(0, { name }));
+    // Each entry is a task name, or { name, description?, priority?, tags?, recurrence? } (templates).
+    const parsed = names.map((entry) => parseItemInput(0, typeof entry === 'string' ? { name: entry } : entry));
     return withTransaction(async (conn) => {
         const created = await createListIn(conn, discordId, fields);
         const items = [];
@@ -295,6 +296,19 @@ async function addSubtasks(discordId, parentId, names) {
         const items = [];
         for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid }));
         return { parent, items };
+    });
+}
+
+/**
+ * Add several tasks to an owned list in ONE transaction (all or nothing), each one rewarded like a normal addItem.
+ * @returns {Promise<Array<{ item: object, xp: object|null, achievements: object[] }>>}
+ */
+async function addItems(discordId, listId, inputs) {
+    const parsed = inputs.map((input) => parseItemInput(listId, input));
+    return withTransaction(async (conn) => {
+        const out = [];
+        for (const p of parsed) out.push(await addItemIn(conn, discordId, p));
+        return out;
     });
 }
 
@@ -761,6 +775,7 @@ module.exports = {
     getItems,
     getItem,
     addItem,
+    addItems,
     addSubtasks,
     updateItem,
     deleteItem,

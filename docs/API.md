@@ -62,7 +62,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | PATCH 🔒 | `/api/user` | `{gamification_enabled?, automation_enabled?, auto_delete_old_lists?, ai_enabled?, weekly_digest?}` (booleans), `{timezone?: IANA name\|null, reminder_hour?: 0–23}`; ≥1 field. An unknown zone is `400`. | Updated `users` row |
 | POST 🔒 | `/api/user/daily` | — | See below |
 | GET 🔒 | `/api/user/xp-history` (alias `/api/xp/history`) | — | Last 50 `xp_transactions` |
-| POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, achievements, skills, games and XP history, and resets stats (including `xp_spent` and streak freezes). Also asks the AI service to forget the user's vectors, chat threads and cached summaries. `{success, message}` |
+| POST 🔒 | `/api/user/reset` | `{"confirm":"RESET"}` | Deletes lists, task templates, achievements, skills, games and XP history, and resets stats (including `xp_spent` and streak freezes). Also asks the AI service to forget the user's vectors, chat threads and cached summaries. `{success, message}` |
 | GET 🔒 | `/api/user/prestige` | — | `{prestige, title, nextTitle, bonusPercent, nextBonusPercent, level, minLevel, max, eligible}` |
 | POST 🔒 | `/api/user/prestige` | `{"confirm":"PRESTIGE"}` | Resets balance, level, class, class ownership, skills, class counters and freezes; keeps achievements, quest claims, tasks and the daily streak. `{success, prestige, title, bonusPercent, levelBefore, balanceLost, balance, level, newAchievements}`. `400` below level 30 or without the confirmation, `409` after 10 prestiges, `403` when XP is off. `/api/user` also reports `user.prestige`, `user.prestige_title` and `user.lifetime_xp_total` (the never-reset total; `lifetime_xp` restarts with each prestige). |
 | POST 🔒 | `/api/user/streak-freeze` | — | Buys one streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill). `{success, freezes, cost, max, newBalance, newAchievements}`. `409` at the cap, `400 INSUFFICIENT_XP`. |
@@ -99,6 +99,7 @@ All routes are 🔒 and owner-scoped. Another user's IDs return `404`.
 | GET | `/api/lists/:id` | — | `{...list, items:[...]}` (items by position) |
 | PATCH | `/api/lists/:id` | Any subset of the create fields (≥1). Changing `deadline` re-arms the reminder. | Updated list |
 | DELETE | `/api/lists/:id` | — | `{success:true}` (items cascade) |
+| POST | `/api/lists/:id/save-as-template` | `{name?}` (default: the quest's name) | `201` template (see [Templates](#templates)). Saves the quest's tasks, in order, as a flat list: subtasks become plain tasks, and completion state and due dates are dropped. `409` when the name is taken, `400` for a quest with no tasks or more than 30. |
 | PATCH | `/api/lists/:id/reorder` | `{itemIds: [int]}`: every task id of the list, exactly once, in the new order | The list's items in the new order. Positions become 0..n-1. `400` if the ids are not exactly the list's tasks. |
 | POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000), due_date?: "YYYY-MM-DD"\|null, priority?, tags?: string\|string[], recurrence?: "daily"\|"weekly"\|"monthly"\|null, parent_id?: int\|null}` | `201 {...item, xpResult, newAchievements}` |
 | PATCH | `/api/items/:id` | Any subset of the create fields, plus `position? (int ≥0)`; ≥1. A position moves the task there and closes the gaps. | Updated item (with `list_name`, `list_priority`) |
@@ -110,6 +111,17 @@ Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadline
 **Task details.** A task can have its own `due_date`, `priority` (used for class and skill effects instead of the list's) and up to 5 `tags` (letters, numbers, `-` and `_`, ≤ 20 characters, stored lower-case as `"work,home"`). `recurrence` repeats it: completing a repeating task for the first time creates the next copy in the same transaction (monthly repeats clamp to short months, and a late completion never creates an already-overdue copy). A repeat grants no creation XP and is not counted as an added task. `parent_id` makes a task a **subtask**: the parent must be a top-level task of the same list, nesting is one level deep, and a task that has subtasks cannot become a subtask. Deleting a parent deletes its subtasks.
 
 Completing tasks pays XP for the first **50 completions per UTC day** (like list and task creation, so an add / complete / delete loop cannot farm XP). A capped completion is still recorded and cannot be re-earned by un-checking and re-checking.
+
+## Templates
+
+All routes are 🔒 and owner-scoped (another user's template ID is `404`). A template is a name, an optional description and 1–30 tasks; each task keeps `name`, `description`, `priority`, `tags` and `recurrence` (never due dates). You can keep 20 templates; names are unique per user.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/templates` | — | `[{id, name, description, items:[{name, description?, priority?, tags?, recurrence?}], itemCount, created_at}]`, by name |
+| POST | `/api/templates` | `{name (1–100), description? (≤1000), items: [1–30 × {name (1–200), description?, priority?, tags?, recurrence?}]}` | `201` template. `409` duplicate name, `400` invalid input or 20 templates already. |
+| DELETE | `/api/templates/:id` | — | `{success:true}` |
+| POST | `/api/templates/:id/apply` | `{listName?: string, listId?: int}` (not both) | `201 {list, items, created, xpResult, newAchievements}`. Without `listId` it creates a new quest named `listName` (a taken name is `409`) or, when omitted, the template's name, with today's date in your time zone added if that name is taken (`Name (2030-01-05)`). With `listId` the tasks are appended to that quest of yours (`created: false`). The quest and every task are rewarded like hand-made ones, so the daily list and task creation caps apply; `xpResult` is the total. Account limits (200 quests, 5000 tasks) apply: `400`. |
 
 ## Classes, skills, achievements, leaderboard
 

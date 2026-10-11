@@ -49,7 +49,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('migrations 007-013 are idempotent and add the new columns', async () => {
         await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
         const again = await db.runMigrations({ log: () => {} });
-        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources', '013_task_reminders']);
+        assert.deepEqual(again.filter((id) => id >= '007'), ['007_item_fields', '008_user_prefs', '009_quest_claims', '010_quest_integrity', '011_class_rework', '012_xp_sources', '013_task_reminders', '014_templates']);
         const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
@@ -1706,6 +1706,95 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { list: big } = await db.tasks.createList(B, { name: 'Big' });
         await db.query('INSERT INTO items (list_id, name, position) SELECT ?, CONCAT(\'needle \', seq), seq FROM (SELECT @n := @n + 1 AS seq FROM information_schema.columns, (SELECT @n := 0) z LIMIT 80) q', [big.id]);
         assert.equal((await db.tasks.search(B, 'needle', { scope: 'tasks' })).tasks.length, db.tasks.SEARCH_LIMIT, 'results are bounded');
+    });
+
+    await t.test('templates: create, limits, ownership, apply (new quest, name clash, existing quest) and the XP caps', async () => {
+        const { LIMITS: L } = require('../src/constants');
+        const U = '100000000000000321';
+        const V = '100000000000000322';
+        await db.users.ensureUser(U);
+        await db.users.ensureUser(V);
+
+        const tpl = await db.templates.createTemplate(U, {
+            name: 'Weekly reset',
+            description: 'Sunday routine',
+            items: [{ name: 'Laundry', priority: 'high', tags: '#home, chores', recurrence: 'weekly' }, { name: 'Plan meals', description: 'for the week' }, { name: 'Water plants' }]
+        });
+        assert.deepEqual([tpl.name, tpl.itemCount, tpl.items[0].priority, tpl.items[0].tags], ['Weekly reset', 3, 'HIGH', 'home,chores']);
+        assert.deepEqual(Object.keys(tpl.items[2]), ['name'], 'empty fields are not stored');
+        await assert.rejects(db.templates.createTemplate(U, { name: 'Weekly reset', items: [{ name: 'x' }] }), { code: 'CONFLICT' });
+        await assert.rejects(db.templates.createTemplate(U, { name: 'Empty', items: [] }), { code: 'VALIDATION' });
+        await assert.rejects(db.templates.createTemplate(U, { name: 'Big', items: Array.from({ length: L.MAX_TEMPLATE_ITEMS + 1 }, (_, i) => ({ name: `t${i}` })) }), { code: 'VALIDATION' });
+        await assert.rejects(db.templates.createTemplate(U, { name: 'Bad', items: [{ name: 'ok' }, { name: 'x', priority: 'URGENT' }] }), { code: 'VALIDATION' });
+        await assert.rejects(db.templates.createTemplate(U, { name: 'Bad', items: ['nope'] }), { code: 'VALIDATION' });
+        const max = await db.templates.createTemplate(V, { name: 'Max', items: Array.from({ length: L.MAX_TEMPLATE_ITEMS }, (_, i) => ({ name: `t${i}` })) });
+        assert.equal(max.itemCount, L.MAX_TEMPLATE_ITEMS);
+
+        // Ownership: V cannot see, apply or delete U's template.
+        assert.deepEqual((await db.templates.listTemplates(V)).map((x) => x.name), ['Max']);
+        await assert.rejects(db.templates.getTemplate(V, tpl.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.templates.applyTemplate(V, tpl.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.templates.deleteTemplate(V, tpl.id), { code: 'NOT_FOUND' });
+        assert.equal((await db.templates.listTemplates(U)).length, 1, 'still there');
+
+        // Apply: a new quest with the tasks, rewarded like hand-made ones.
+        const before = await db.users.getUser(U);
+        const a = await db.templates.applyTemplate(U, tpl.id);
+        assert.equal(a.created, true);
+        assert.deepEqual([a.list.name, a.list.description], ['Weekly reset', 'Sunday routine']);
+        assert.equal(a.items.length, 3);
+        assert.deepEqual([a.items[0].name, a.items[0].priority, a.items[0].tags, a.items[0].recurrence, a.items[0].position], ['Laundry', 'HIGH', 'home,chores', 'weekly', 0]);
+        assert.ok(a.xp.finalXP > 0, 'the quest and its tasks pay XP');
+        const after = await db.users.getUser(U);
+        assert.equal(Number(after.total_items_added), Number(before.total_items_added) + 3);
+        assert.equal(Number(after.total_lists_created), Number(before.total_lists_created) + 1);
+
+        // The name is taken, so the second quest gets the date; an explicit name that clashes is a conflict.
+        const b = await db.templates.applyTemplate(U, tpl.id);
+        assert.match(b.list.name, /^Weekly reset \(\d{4}-\d{2}-\d{2}\)$/);
+        const c = await db.templates.applyTemplate(U, tpl.id);
+        assert.match(c.list.name, /^Weekly reset \(\d{4}-\d{2}-\d{2} 2\)$/);
+        await assert.rejects(db.templates.applyTemplate(U, tpl.id, { listName: 'Weekly reset' }), { code: 'CONFLICT' });
+        const named = await db.templates.applyTemplate(U, tpl.id, { listName: 'Sunday' });
+        assert.equal(named.list.name, 'Sunday');
+        await assert.rejects(db.templates.applyTemplate(U, tpl.id, { listName: 'a', listId: named.list.id }), { code: 'VALIDATION' });
+
+        // Into an existing quest, and only the caller's own.
+        const into = await db.templates.applyTemplate(U, tpl.id, { listId: named.list.id });
+        assert.deepEqual([into.created, into.list.id, (await db.tasks.getItems(U, named.list.id)).length], [false, named.list.id, 6]);
+        assert.deepEqual((await db.tasks.getItems(U, named.list.id)).map((i) => i.position), [0, 1, 2, 3, 4, 5]);
+        await assert.rejects(db.templates.applyTemplate(V, max.id, { listId: named.list.id }), { code: 'NOT_FOUND' });
+        const lists = (await db.tasks.getLists(V)).length;
+        await assert.rejects(db.templates.applyTemplate(V, max.id, { listId: 999999 }), { code: 'NOT_FOUND' });
+        assert.equal((await db.tasks.getLists(V)).length, lists);
+
+        // Daily caps still apply: with the item cap nearly used up, only the remaining tasks pay.
+        const W = '100000000000000323';
+        await db.users.ensureUser(W);
+        const seed = L.ITEM_ADD_REWARDS_PER_DAY - 2;
+        await pool.query(
+            `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after)
+             SELECT ?, 1, 'item_add', 0, 0 FROM information_schema.COLUMNS LIMIT ${seed}`,
+            [W]
+        );
+        const wt = await db.templates.createTemplate(W, { name: 'Five', items: [1, 2, 3, 4, 5].map((n) => ({ name: `task ${n}` })) });
+        const applied = await db.templates.applyTemplate(W, wt.id);
+        assert.equal(applied.items.length, 5, 'every task is created');
+        const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_add' AND amount > 1", [W]);
+        assert.equal(Number(n), 2, 'but only the two inside the cap paid');
+
+        // Saving a quest as a template, then deleting; the 20 template cap; reset clears them.
+        const saved = await db.templates.saveFromList(U, named.list.id, { name: 'From quest' });
+        assert.equal(saved.itemCount, 6);
+        await assert.rejects(db.templates.saveFromList(U, named.list.id, { name: 'From quest' }), { code: 'CONFLICT' });
+        await assert.rejects(db.templates.saveFromList(V, named.list.id), { code: 'NOT_FOUND' });
+        const { list: bare } = await db.tasks.createList(U, { name: 'No tasks' });
+        await assert.rejects(db.templates.saveFromList(U, bare.id), { code: 'VALIDATION' });
+        assert.equal(await db.templates.deleteTemplate(U, saved.id), true);
+        for (let i = 0; i < L.MAX_TEMPLATES_PER_USER - 1; i++) await db.templates.createTemplate(U, { name: `fill ${i}`, items: [{ name: 'x' }] });
+        await assert.rejects(db.templates.createTemplate(U, { name: 'one too many', items: [{ name: 'x' }] }), { code: 'VALIDATION' });
+        await db.users.resetProgress(U);
+        assert.equal((await db.templates.listTemplates(U)).length, 0, 'a progress reset removes templates with the quests');
     });
 
     await db.closePool();

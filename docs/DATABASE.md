@@ -42,6 +42,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `011_class_rework` | Class rebalance and five new classes: `users.assassin_last_at` (Assassin decay), `gambler_streak` (Hot Hand), `assassin_bleed` (Bleed), `owns_monk` / `owns_artisan` / `owns_ranger` / `owns_necromancer` / `owns_paladin`, counters `monk_rhythm`, `monk_day`, `artisan_progress`, `necro_souls`, and `player_class` extended with MONK, ARTISAN, RANGER, NECROMANCER, PALADIN |
 | `012_xp_sources` | New XP sources: `lists.cleared_at` (a list pays the list-cleared bonus once), `users.last_chest_streak` (streak chests pay once per run), `items.habit_streak` (habit streaks), `items.first_completed_early` / `first_completed_overdue` (quest facts recorded at the first completion), `users.prestige` and `users.lifetime_xp_total` (backfilled from `lifetime_xp`), and the `focus_sessions` table |
 | `013_task_reminders` | `items.reminded_at` (the task's due-day DM went out) and `items.remind_at` (snooze); a new due date clears both |
+| `014_templates` | The `task_templates` table |
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -155,6 +156,10 @@ The weekly review claim is stored here too, under `quest_key = 'WEEKLY_REVIEW'` 
 ### `focus_sessions`
 
 `id` · `discord_id` FK · `started_at` DATETIME · `minutes_planned` INT · `state` VARCHAR(12) (`active`, `finished`, `cancelled`, `expired`) · `finished_at` DATETIME · `minutes_credited` INT (what the server measured and credited) · `xp` INT (what was paid). Indexes `(discord_id, state)` and `(discord_id, finished_at)`. At most one row per user is `active`.
+
+### `task_templates`
+
+`id` · `discord_id` FK (cascade) · `name` VARCHAR(100) · `description` TEXT · `items` JSON (array of `{name, description?, priority?, tags?, recurrence?}`, at most 30; MariaDB stores it as text) · `created_at`. Unique key `(discord_id, name)`. At most 20 per user (`LIMITS.MAX_TEMPLATES_PER_USER`), enforced by the service under the user row lock. A progress reset deletes them with the quests. Applying a template uses the normal quest and task creation, so nothing about XP is stored here.
 
 ### `web_sessions`
 

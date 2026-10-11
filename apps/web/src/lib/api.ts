@@ -68,6 +68,18 @@ export interface CsvImportCheck { ok: boolean; rows: number; lists: number; item
 
 export interface TaskSearchHit { id: number; name: string; description: string | null; completed: boolean; parent_id: number | null; due_date: string | null; list_id: number; list_name: string }
 
+export interface TemplateItem { name: string; description?: string; priority?: Priority; tags?: string; recurrence?: 'daily' | 'weekly' | 'monthly' }
+export interface TaskTemplate { id: number; name: string; description: string | null; items: TemplateItem[]; itemCount: number; created_at: string }
+
+export const templatesApi = {
+    getAll: () => apiFetch<TaskTemplate[]>('/api/templates'),
+    delete: (id: number) => del<{ success: boolean }>(`/api/templates/${id}`),
+    /** Without listId a new quest is created (named listName, else after the template). */
+    apply: (id: number, body: { listName?: string; listId?: number } = {}) =>
+        post<RewardFields & { list: List; items: Item[]; created: boolean }>(`/api/templates/${id}/apply`, body),
+    saveList: (listId: number, name?: string) => post<TaskTemplate>(`/api/lists/${listId}/save-as-template`, name ? { name } : {}),
+};
+
 export const importApi = {
     /** Validate a CSV without writing anything. */
     checkCsv: (csv: string) => post<CsvImportCheck>('/api/import/csv', { csv, dryRun: true }),

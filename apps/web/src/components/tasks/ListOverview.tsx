@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, Keyboard, Plus, Scroll } from "lucide-react";
+import { AlertCircle, FileStack, Keyboard, Plus, Scroll } from "lucide-react";
 import { motion } from "framer-motion";
 import type { ListWithCounts } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -21,10 +21,11 @@ interface Props {
   filters: ReturnType<typeof useListFilters>;
   onOpen: (listId: number) => void;
   onCreate: () => void;
+  onOpenTemplates: () => void;
 }
 
 /** The quest log: header, AI priorities, filters and the grid of quest cards. */
-export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters, onOpen, onCreate }: Props) => {
+export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters, onOpen, onCreate, onOpenTemplates }: Props) => {
   const [showHelp, setShowHelp] = useState(false);
   useHotkeys({
     n: (e) => { e.preventDefault(); onCreate(); },
@@ -41,9 +42,14 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
         </h1>
         <p className="text-foreground-muted text-sm sm:text-base">Manage your quests and track progress</p>
       </div>
-      <Button variant="glow" onClick={onCreate} className="gap-2">
-        <Plus className="h-4 w-4" /> Create Quest
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={onOpenTemplates} className="gap-2">
+          <FileStack className="h-4 w-4" /> Templates
+        </Button>
+        <Button variant="glow" onClick={onCreate} className="gap-2">
+          <Plus className="h-4 w-4" /> Create Quest
+        </Button>
+      </div>
     </div>
 
     <PriorityPanel onOpen={onOpen} />

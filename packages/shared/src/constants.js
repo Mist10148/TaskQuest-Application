@@ -483,7 +483,10 @@ const LIMITS = {
     GAME_SESSION_TTL_MINUTES: 30,
     /** Per-user storage quota enforced on import (lists/tasks already owned count). */
     MAX_LISTS_PER_USER: 200,
-    MAX_ITEMS_PER_USER: 5000
+    MAX_ITEMS_PER_USER: 5000,
+    /** Task templates: how many a user can keep, and how many tasks one template can hold. */
+    MAX_TEMPLATES_PER_USER: 20,
+    MAX_TEMPLATE_ITEMS: 30
 };
 
 const DAILY = {

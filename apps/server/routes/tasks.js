@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, uid, xpResult } from '../lib/http.js';
-import { idParam, listIdParam, searchQuery, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody } from '../lib/schemas.js';
+import { idParam, listIdParam, searchQuery, saveTemplateBody, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody } from '../lib/schemas.js';
 
 export const listsRouter = Router();
 export const itemsRouter = Router();
@@ -68,6 +68,16 @@ listsRouter.delete(
         await db.tasks.deleteList(uid(req), id);
         aiClient.forget(uid(req), id);
         res.json({ success: true });
+    })
+);
+
+// Saves the quest's tasks (flattened; no due dates or progress) as a reusable template.
+listsRouter.post(
+    '/:id/save-as-template',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const body = parse(saveTemplateBody, req.body ?? {});
+        res.status(201).json(await db.templates.saveFromList(uid(req), id, body));
     })
 );
 

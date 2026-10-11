@@ -331,7 +331,7 @@ async function resetProgress(discordId) {
     const id = String(discordId);
     return withTransaction(async (conn) => {
         await lockUser(conn, id);
-        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions']) {
+        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates']) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }
         await conn.query(

@@ -93,6 +93,27 @@ export const reorderBody = z.object({ itemIds: z.array(z.number().int().positive
 
 export const toggleItemBody = z.object({ completed: z.boolean().optional() }).strict().optional();
 
+const templateItem = z
+    .object({
+        name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
+        description: optionalText(TEXT_LIMITS.DESCRIPTION),
+        priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),
+        tags: tagsField,
+        recurrence: nullableEmpty(z.enum(['daily', 'weekly', 'monthly']).nullable().optional())
+    })
+    .strict();
+export const createTemplateBody = z
+    .object({
+        name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME),
+        description: optionalText(TEXT_LIMITS.DESCRIPTION),
+        items: z.array(templateItem).min(1).max(shared.LIMITS.MAX_TEMPLATE_ITEMS)
+    })
+    .strict();
+export const applyTemplateBody = z
+    .object({ listName: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional(), listId: z.number().int().positive().optional() })
+    .strict();
+export const saveTemplateBody = z.object({ name: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional() }).strict();
+
 export const blackjackStartBody = z.object({ bet: z.number().int().positive().max(1_000_000) }).strict();
 export const blackjackActionBody = z.object({ action: z.enum(['hit', 'stand', 'double']) }).strict();
 export const rpsBody = z.object({ choice: z.enum(['rock', 'paper', 'scissors']) }).strict();

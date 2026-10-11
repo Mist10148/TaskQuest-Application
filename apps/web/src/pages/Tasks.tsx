@@ -20,6 +20,9 @@ import { ItemFormDialog } from "@/components/tasks/ItemFormDialog";
 import { EMPTY_ITEM_FORM, EMPTY_LIST_FORM, itemPayload, listPayload, type ItemFormValues, type ListFormValues } from "@/components/tasks/forms";
 import { ConfirmDeleteDialog } from "@/components/tasks/ConfirmDeleteDialog";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
+import { TemplatesDialog } from "@/components/tasks/TemplatesDialog";
+import { SaveTemplateDialog } from "@/components/tasks/SaveTemplateDialog";
+import { saveTemplateProblem } from "@/lib/templates";
 
 const Tasks = () => {
   const listsQuery = useLists();
@@ -43,6 +46,8 @@ const Tasks = () => {
   const [itemDialog, setItemDialog] = useState<{ mode: "create"; parentId?: number } | { mode: "edit"; item: Item } | null>(null);
   const { user } = useAuth();
   const [listToDelete, setListToDelete] = useState<number | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const itemDeletes = useUndoableDelete(async (id) => {
     await deleteItem.mutateAsync(id);
     refetchList();
@@ -194,6 +199,11 @@ const Tasks = () => {
           onAddItem={(parentId) => setItemDialog({ mode: "create", parentId })}
           onQuickAdd={handleQuickAdd}
           onEditList={() => setListDialog("edit")}
+          onSaveTemplate={() => {
+            const problem = saveTemplateProblem(detail.items.length);
+            if (problem) toast.error(problem);
+            else setSaveTemplateOpen(true);
+          }}
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
           onEditItem={openItemEditor}
@@ -217,7 +227,7 @@ const Tasks = () => {
           </div>
         )
       ) : (
-        <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={setSelectedListId} onCreate={() => setListDialog("create")} />
+        <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={setSelectedListId} onCreate={() => setListDialog("create")} onOpenTemplates={() => setTemplatesOpen(true)} />
       )}
 
       <ListFormDialog
@@ -238,6 +248,8 @@ const Tasks = () => {
         pending={createItem.isPending || updateItem.isPending}
         onSubmit={handleSaveItem}
       />
+      <TemplatesDialog open={templatesOpen} onOpenChange={setTemplatesOpen} onApplied={setSelectedListId} />
+      {detail && <SaveTemplateDialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen} listId={detail.id} listName={detail.name} />}
       <ConfirmDeleteDialog
         open={listToDelete !== null}
         onOpenChange={(open) => !open && setListToDelete(null)}

@@ -17,6 +17,7 @@ const quests = require('./quests');
 const transfer = require('./transfer');
 const focus = require('./focus');
 const review = require('./review');
+const templates = require('./templates');
 const stats = require('./stats');
 
-module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats };
+module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates };

@@ -10,6 +10,7 @@ import { asyncRoute, requireAuth, uid, notFound, errorHandler } from './lib/http
 import authRouter from './routes/auth.js';
 import userRouter from './routes/user.js';
 import importRouter from './routes/import.js';
+import templatesRouter from './routes/templates.js';
 import { listsRouter, itemsRouter } from './routes/tasks.js';
 import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } from './routes/progression.js';
 import gamesRouter from './routes/games.js';
@@ -66,6 +67,7 @@ export function createApp() {
     // ── Authenticated endpoints ──────────────────────────────────────────────
     app.use('/api/user', requireAuth, userRouter);
     app.use('/api/import', requireAuth, importRouter);
+    app.use('/api/templates', requireAuth, templatesRouter);
     app.use('/api/lists', requireAuth, listsRouter);
     app.use('/api/items', requireAuth, itemsRouter);
     app.use('/api/classes', requireAuth, classesRouter);

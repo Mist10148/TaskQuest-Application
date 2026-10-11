@@ -551,6 +551,46 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         }
     });
 
+    await t.test('cosmetics shop: list, buy, equip, leaderboard and profile show them', async () => {
+        const carolId = '200000000000000021';
+        const carol = await login(db, carolId);
+        await db.query("UPDATE users SET player_xp = 700, discord_username = 'carol' WHERE discord_id = ?", [carolId]);
+        assert.equal((await call('GET', '/api/cosmetics')).status, 401);
+        const shop = await (await call('GET', '/api/cosmetics', { cookie: carol })).json();
+        assert.equal(shop.balance, 700);
+        assert.ok(shop.items.length >= 20 && shop.items.every((i) => ['title', 'frame', 'accent'].includes(i.kind)));
+        assert.equal(shop.items.find((i) => i.id === 'title_reborn').locked, true);
+
+        assert.equal((await call('POST', '/api/cosmetics/title_diligent/buy', { cookie: carol, origin: 'http://evil.example' })).status, 403, 'CSRF');
+        assert.equal((await call('POST', '/api/cosmetics/nope/buy', { cookie: carol })).status, 404);
+        assert.equal((await call('POST', '/api/cosmetics/TITLE-1/buy', { cookie: carol })).status, 400);
+        assert.equal((await call('POST', '/api/cosmetics/title_reborn/buy', { cookie: carol })).status, 403);
+        const bought = await call('POST', '/api/cosmetics/title_diligent/buy', { cookie: carol });
+        assert.equal(bought.status, 200);
+        const paid = await bought.json();
+        assert.ok(paid.balance >= 400 && paid.balance <= 450, 'charged 300 (plus an achievement reward at most)');
+        assert.equal((await call('POST', '/api/cosmetics/title_diligent/buy', { cookie: carol })).status, 409, 'a second click is a conflict, not a second charge');
+        await db.query('UPDATE users SET player_xp = 10 WHERE discord_id = ?', [carolId]);
+        assert.equal((await call('POST', '/api/cosmetics/frame_bronze/buy', { cookie: carol })).status, 400, 'too poor');
+
+        const equip = (body, cookie = carol) => call('POST', '/api/cosmetics/equip', { cookie, body });
+        assert.equal((await equip({ kind: 'title', id: 'title_night_owl' })).status, 403, 'not owned');
+        assert.equal((await equip({ kind: 'frame', id: 'title_diligent' })).status, 404, 'wrong kind');
+        assert.equal((await equip({ kind: 'hat', id: null })).status, 400);
+        assert.equal((await equip({ kind: 'title', id: 'x', extra: 1 })).status, 400);
+        assert.equal((await equip({ kind: 'title', id: 'title_diligent' })).status, 200);
+        assert.equal((await equip({ kind: 'title', id: 'title_diligent' }, await login(db, '200000000000000022'))).status, 403, 'ownership is per user');
+
+        const board = await (await call('GET', '/api/leaderboard')).json();
+        const row = board.find((r) => r.username === 'carol');
+        assert.equal(row.cosmetics.title, 'the Diligent');
+        assert.ok(!JSON.stringify(board).includes(carolId), 'no Discord ID in the leaderboard');
+        const me = await (await call('GET', '/api/user', { cookie: carol })).json();
+        assert.equal(me.user.cosmetics.title, 'the Diligent');
+        assert.equal((await equip({ kind: 'title', id: null })).status, 200);
+        assert.equal((await (await call('GET', '/api/user', { cookie: carol })).json()).user.cosmetics.title, null);
+    });
+
     server.close();
     await db.closePool();
 });

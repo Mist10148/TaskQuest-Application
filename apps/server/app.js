@@ -15,6 +15,7 @@ import { listsRouter, itemsRouter } from './routes/tasks.js';
 import { classesRouter, skillsRouter, achievementsRouter, leaderboardRouter } from './routes/progression.js';
 import gamesRouter from './routes/games.js';
 import questsRouter from './routes/quests.js';
+import cosmeticsRouter from './routes/cosmetics.js';
 import focusRouter from './routes/focus.js';
 import reviewRouter from './routes/review.js';
 import statsRouter from './routes/stats.js';
@@ -75,6 +76,7 @@ export function createApp() {
     app.use('/api/achievements', requireAuth, achievementsRouter);
     app.use('/api/games', requireAuth, gamesRouter);
     app.use('/api/quests', requireAuth, questsRouter);
+    app.use('/api/cosmetics', requireAuth, cosmeticsRouter);
     app.use('/api/focus', requireAuth, focusRouter);
     app.use('/api/review', requireAuth, reviewRouter);
     app.use('/api/stats', requireAuth, statsRouter);

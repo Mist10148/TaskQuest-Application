@@ -110,6 +110,7 @@ leaderboardRouter.get(
                 score: r.score,
                 level: Number(r.player_level),
                 playerClass: r.player_class,
+                cosmetics: shared.describeEquipped(r),
                 streak: Number(r.streak_count),
                 gamesPlayed: r.games_played,
                 tasksCompleted: Number(r.total_items_completed),

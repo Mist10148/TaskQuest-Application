@@ -19,6 +19,8 @@ export const leaderboardQuery = z
     })
     .strip();
 export const questParam = z.object({ key: z.string().regex(/^[A-Za-z0-9_]{1,40}$/) });
+export const cosmeticParam = z.object({ id: z.string().regex(/^[a-z_]{1,40}$/) });
+export const equipCosmeticBody = z.object({ kind: z.enum(shared.COSMETIC_KINDS), id: z.string().regex(/^[a-z_]{1,40}$/).nullable() }).strict();
 export const skillParam = z.object({ skillId: z.string().regex(/^[a-z_]{1,50}$/) });
 
 const optionalText = (max) => z.string().max(max).nullable().optional();

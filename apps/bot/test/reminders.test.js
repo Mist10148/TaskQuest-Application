@@ -169,3 +169,72 @@ test('a snooze that fires after the deadline also marks the deadline as notified
     await sendDeadlineReminders({ ...today, now: NOW });
     assert.deepEqual(t, [{ late: false, pastDeadline: true }], 'due today: counts as the due notice only');
 });
+
+// ─── Per-task reminders ──────────────────────────────────────────────────────
+
+const { sendTaskReminders, decideTaskReminder, taskReminderMessage } = require('../utils/reminders');
+
+const task = (over = {}) => ({
+    id: 5,
+    discord_id: '42',
+    name: 'Pay rent',
+    list_name: 'Home',
+    due_date: '2030-03-10',
+    timezone: null,
+    reminder_hour: 9,
+    remind_at: null,
+    reminded_at: null,
+    ...over
+});
+
+test('a task due today is reminded at the reminder hour in the owner\'s zone, once', () => {
+    const t = task({ timezone: 'Asia/Manila' });
+    assert.equal(decideTaskReminder(t, at('2030-03-10T00:30:00Z')), null, '08:30 in Manila');
+    assert.equal(decideTaskReminder(t, at('2030-03-10T01:00:00Z')), 'due');
+    assert.equal(decideTaskReminder(task({ due_date: '2030-03-11' }), NOW), null, 'not due yet');
+    assert.equal(decideTaskReminder(task({ reminded_at: '2030-03-10T09:00:00Z' }), NOW), null, 'already sent');
+});
+
+test('a missed task reminder is still sent for 3 days, then dropped', () => {
+    assert.equal(decideTaskReminder(task({ due_date: '2030-03-07' }), NOW), 'due');
+    assert.equal(decideTaskReminder(task({ due_date: '2030-03-06' }), NOW), null);
+});
+
+test('a task snooze fires once it has ended, regardless of the hour', () => {
+    const t = task({ reminded_at: '2030-03-10T09:00:00Z', remind_at: '2030-03-11T03:00:00Z' });
+    assert.equal(decideTaskReminder(t, at('2030-03-11T02:59:00Z')), null);
+    assert.equal(decideTaskReminder(t, at('2030-03-11T03:00:00Z')), 'snooze');
+});
+
+test('task reminders DM with task_remind_snooze_<id> and the shared stop button, then mark the task', async () => {
+    const marked = [];
+    const sent = [];
+    const db = { tasks: { getTaskReminderCandidates: async () => [task(), task({ id: 6, due_date: '2030-03-12' })], markTaskReminderSent: async (id) => marked.push(id) } };
+    const client = { users: { fetch: async () => ({ send: async (m) => sent.push(m) }) } };
+    const res = await sendTaskReminders({ db, client, log: () => {}, now: NOW });
+    assert.deepEqual(res, { sent: 1, skipped: 0, retry: 0 });
+    assert.deepEqual(marked, [5]);
+    assert.match(sent[0].embeds[0].description, /Pay rent/);
+    assert.deepEqual(sent[0].components[0].toJSON().components.map((c) => c.custom_id), ['task_remind_snooze_5', 'remind_off']);
+});
+
+test('task reminders: closed DMs are marked, temporary errors are retried', async () => {
+    const run = async (code) => {
+        const marked = [];
+        const db = { tasks: { getTaskReminderCandidates: async () => [task()], markTaskReminderSent: async (id) => marked.push(id) } };
+        const client = { users: { fetch: async () => ({ send: async () => { throw Object.assign(new Error('x'), { code }); } }) } };
+        return [await sendTaskReminders({ db, client, log: () => {}, now: NOW }), marked];
+    };
+    assert.deepEqual(await run(50007), [{ sent: 0, skipped: 1, retry: 0 }, [5]]);
+    assert.deepEqual(await run(0), [{ sent: 0, skipped: 0, retry: 1 }, []]);
+});
+
+test('an overdue task reminder says so; the snooze button snoozes the task, not a list', async () => {
+    assert.match(taskReminderMessage(task({ due_date: '2030-03-08' }), 'due', NOW).embeds[0].title, /overdue/);
+    const calls = [];
+    const db = { tasks: { snoozeTask: async (u, id, until) => calls.push([u, id, until.getTime()]), snoozeList: async () => calls.push('list') } };
+    const replies = [];
+    await handleButton({ customId: 'task_remind_snooze_5', user: { id: '42' }, update: async (r) => replies.push(r) }, { db, now: NOW });
+    assert.deepEqual(calls, [['42', '5', NOW.getTime() + SNOOZE_MS]]);
+    assert.match(replies[0].content, /Snoozed/);
+});

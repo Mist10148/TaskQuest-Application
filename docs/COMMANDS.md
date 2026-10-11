@@ -107,6 +107,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 ## Background behaviour
 
 - **Deadline DMs:** checked hourly. You get one DM per list on its deadline day, at your reminder hour in your time zone (`/timezone`; UTC and 09:00 until you set them), if `/automation` is on. If tasks are still open the day after the deadline you get one overdue notice. Every reminder has **Snooze 1 day** and **Stop reminders** buttons. If the bot was offline that day, the reminder is sent late (up to 3 days), and temporary Discord errors are retried on the next run.
+- **Task DMs:** a task with its own due date gets the same treatment: one DM on its due day (up to 3 days late) at your reminder hour, with **Snooze 1 day** and **Stop reminders**. Completed tasks are skipped, and a task due on the same day as its list's deadline is covered by the list reminder (no double DM). Changing a task's due date re-arms its reminder. `/automation` turns both kinds off.
 - **Old-list clean-up:** daily. It deletes lists whose tasks have all been completed for 5+ days, if auto-delete is on (web Settings). Unfinished lists are never deleted, even when overdue.
 - **Abandoned games:** expired every 5 minutes, with Blackjack bets refunded.
 - **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out).
@@ -116,7 +117,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 | Prefix | Handler |
 |---|---|
 | `quest_claim_<KEY>` | `commands/quests.js` buttons |
-| `remind_snooze_<listId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
+| `remind_snooze_<listId>`, `task_remind_snooze_<itemId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
 | `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_`, `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
 | `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
 | `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_search` | `commands/list.js` modals |

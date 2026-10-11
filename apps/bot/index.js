@@ -58,7 +58,10 @@ const client = new Client({ intents, partials: [Partials.Channel] });
 /** Run a job, logging (not crashing on) failures, never overlapping itself. */
 const job = (name, fn) => runJob(name, fn, log);
 
-const checkDeadlines = job('DEADLINE', () => reminders.sendDeadlineReminders({ db, client, log }));
+const checkDeadlines = job('DEADLINE', async () => {
+    await reminders.sendDeadlineReminders({ db, client, log });
+    await reminders.sendTaskReminders({ db, client, log });
+});
 
 const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));
 
@@ -142,7 +145,7 @@ async function route(interaction) {
         const id = interaction.customId;
         if (id.startsWith('ai_')) return aiCommands.handleButton(interaction);
         if (id.startsWith('quest_claim_')) return questCommands.handleButton(interaction);
-        if (id === 'remind_off' || id.startsWith('remind_snooze_')) return reminders.handleButton(interaction);
+        if (id === 'remind_off' || id.startsWith('remind_snooze_') || id.startsWith('task_remind_snooze_')) return reminders.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
         if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
             return gamification.handleClassButton(interaction);

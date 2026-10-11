@@ -10,6 +10,10 @@
  *
  * A list is marked as handled only when the DM went out or can never go out
  * (DMs closed, user gone); any other error leaves it for the next hourly run.
+ *
+ * Tasks with their own due date follow the same rules (sendTaskReminders): one DM on the
+ * due day (up to 3 days late) at the owner's reminder hour, plus the snooze button. A
+ * task due on its list's deadline day is covered by the list reminder instead.
  */
 
 'use strict';
@@ -47,6 +51,74 @@ function decideReminder(list, now = new Date()) {
     const unfinished = Number(list.items_total) > Number(list.items_done);
     if (list.deadline_notified && !list.overdue_notified && list.deadline < today && unfinished) return 'overdue';
     return null;
+}
+
+/**
+ * What (if anything) to send for a candidate task right now.
+ * @returns {'snooze'|'due'|null}
+ */
+function decideTaskReminder(task, now = new Date()) {
+    if (task.remind_at && new Date(task.remind_at).getTime() <= now.getTime()) return 'snooze';
+    if (task.reminded_at || task.remind_at || !task.due_date) return null;
+    const hour = Number.isInteger(Number(task.reminder_hour)) ? Number(task.reminder_hour) : 9;
+    if (hourInZone(task.timezone, now) < hour) return null;
+    const today = todayInZone(task.timezone, now);
+    const due = String(task.due_date).slice(0, 10);
+    if (due > today || dayNumber(today) - dayNumber(due) > MAX_LATE_DAYS) return null;
+    return 'due';
+}
+
+function taskReminderMessage(task, kind, now = new Date()) {
+    const today = todayInZone(task.timezone, now);
+    const due = String(task.due_date).slice(0, 10);
+    const late = isPastDeadline(due, today);
+    const title = kind === 'snooze' ? '⏰ Task reminder' : late ? '⏰ Task overdue' : '⏰ Task due today';
+    const when = late ? `was due on ${formatDeadline(due, today)}` : due === today ? 'is due today' : `is due ${formatDeadline(due, today)}`;
+    return {
+        embeds: [
+            {
+                color: 0xff6b6b,
+                title,
+                description: `Your task **${String(task.name).slice(0, 200)}** ${when}.`,
+                fields: [{ name: '📁 List', value: String(task.list_name || 'None').slice(0, 100), inline: true }],
+                footer: { text: 'TaskQuest • /timezone sets when reminders arrive' }
+            }
+        ],
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`task_remind_snooze_${task.id}`).setLabel('Snooze 1 day').setEmoji('😴').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('remind_off').setLabel('Stop reminders').setStyle(ButtonStyle.Secondary)
+            )
+        ]
+    };
+}
+
+/**
+ * DM the owners of tasks that are due. Same retry rules as the list reminders.
+ * @returns {Promise<{ sent: number, skipped: number, retry: number }>}
+ */
+async function sendTaskReminders({ db, client, log, now = new Date() }) {
+    const result = { sent: 0, skipped: 0, retry: 0 };
+    for (const task of await db.tasks.getTaskReminderCandidates(now)) {
+        const kind = decideTaskReminder(task, now);
+        if (!kind) continue;
+        try {
+            const user = await client.users.fetch(task.discord_id);
+            await user.send(taskReminderMessage(task, kind, now));
+            result.sent++;
+            log('📬', 'DEADLINE', `Sent a ${kind} reminder to ${task.discord_id} for task ${task.id}`);
+        } catch (err) {
+            if (PERMANENT_DM_ERRORS.has(err.code)) {
+                result.skipped++;
+            } else {
+                result.retry++;
+                log('⚠️', 'DEADLINE', `task ${task.id}: ${err.message} (will retry)`);
+                continue;
+            }
+        }
+        await db.tasks.markTaskReminderSent(task.id, now);
+    }
+    return result;
 }
 
 function reminderMessage(list, kind, now = new Date()) {
@@ -127,7 +199,7 @@ async function sendDeadlineReminders({ db, client, log, now = new Date() }) {
     return result;
 }
 
-/** Buttons on a reminder DM: remind_snooze_<listId> and remind_off. */
+/** Buttons on a reminder DM: remind_snooze_<listId>, task_remind_snooze_<itemId> and remind_off. */
 async function handleButton(interaction, { db, now = new Date() } = {}) {
     const database = db || require('@taskquest/shared/db');
     const userId = interaction.user.id;
@@ -135,13 +207,16 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
         await database.users.updateSettings(userId, { automation_enabled: false });
         return interaction.update({ components: [], content: '🔕 Reminders are off. Turn them back on with `/automation`.' });
     }
-    const listId = interaction.customId.slice('remind_snooze_'.length);
+    const isTask = interaction.customId.startsWith('task_remind_snooze_');
+    const targetId = interaction.customId.slice((isTask ? 'task_remind_snooze_' : 'remind_snooze_').length);
     try {
-        await database.tasks.snoozeList(userId, listId, new Date(now.getTime() + SNOOZE_MS));
+        const until = new Date(now.getTime() + SNOOZE_MS);
+        if (isTask) await database.tasks.snoozeTask(userId, targetId, until);
+        else await database.tasks.snoozeList(userId, targetId, until);
     } catch {
-        return interaction.update({ components: [], content: 'That list no longer exists.' });
+        return interaction.update({ components: [], content: `That ${isTask ? 'task' : 'list'} no longer exists.` });
     }
     return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.', flags: MessageFlags.SuppressNotifications });
 }
 
-module.exports = { sendDeadlineReminders, decideReminder, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };
+module.exports = { sendDeadlineReminders, sendTaskReminders, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };

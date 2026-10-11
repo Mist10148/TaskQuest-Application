@@ -288,7 +288,9 @@ async function updateItem(discordId, itemId, input) {
             if (!item) throw errors.notFound('Task not found.');
             if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
             // A new due date or rule starts a new monthly anchor.
-            const cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
+            // A new due date also re-arms the task's reminder (due-day DM and any snooze).
+            let cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
+            if (keys.includes('due_date')) cols = [...cols, 'reminded_at', 'remind_at'];
             await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
         });
     }
@@ -606,6 +608,45 @@ async function snoozeList(discordId, listId, until) {
     return true;
 }
 
+/**
+ * Open tasks with their own due date that might need a reminder right now, with the
+ * owner's time zone and reminder hour (a wide net; the bot decides in local time).
+ * A task due on the same day as its list's deadline is left to the list reminder.
+ *   - snoozed tasks whose snooze has ended
+ *   - tasks due in the next day or the last 14 days that have not been reminded yet
+ */
+async function getTaskReminderCandidates(now = new Date()) {
+    const day = (offset) => new Date(now.getTime() + offset * 86400e3).toISOString().slice(0, 10);
+    return run(
+        `SELECT i.id, i.name, i.list_id, i.due_date, i.priority, i.remind_at, i.reminded_at, i.parent_id,
+                l.name AS list_name, l.discord_id, u.timezone, u.reminder_hour
+         FROM items i JOIN lists l ON l.id = i.list_id JOIN users u ON u.discord_id = l.discord_id
+         WHERE u.automation_enabled = TRUE AND i.completed = FALSE AND i.due_date IS NOT NULL AND (
+             (i.remind_at IS NOT NULL AND i.remind_at <= ?)
+             OR (i.reminded_at IS NULL AND i.remind_at IS NULL AND i.due_date >= ? AND i.due_date <= ?
+                 AND (l.deadline IS NULL OR l.deadline <> i.due_date))
+         )`,
+        [now, day(-14), day(1)]
+    );
+}
+
+/** Record that a task's reminder went out (also ends a snooze). */
+async function markTaskReminderSent(itemId, now = new Date()) {
+    await run('UPDATE items SET reminded_at = ?, remind_at = NULL WHERE id = ?', [now, itemId]);
+}
+
+/** Remind the owner about a task again at `until`. */
+async function snoozeTask(discordId, itemId, until) {
+    const id = unwrap(v.id(itemId));
+    const [res] = await getPool().query('UPDATE items i JOIN lists l ON l.id = i.list_id SET i.remind_at = ? WHERE i.id = ? AND l.discord_id = ?', [
+        until,
+        id,
+        String(discordId)
+    ]);
+    if (!res.affectedRows) throw errors.notFound('Task not found.');
+    return true;
+}
+
 async function markDeadlineNotified(listId) {
     // Keep updated_at: a reminder being sent is not an edit of the list.
     await run('UPDATE lists SET deadline_notified = TRUE, updated_at = updated_at WHERE id = ?', [listId]);
@@ -667,6 +708,9 @@ module.exports = {
     getReminderCandidates,
     markReminderSent,
     snoozeList,
+    getTaskReminderCandidates,
+    markTaskReminderSent,
+    snoozeTask,
     markDeadlineNotified,
     cleanupOldLists
 };

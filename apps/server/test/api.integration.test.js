@@ -955,6 +955,22 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.deepEqual((await J('GET', '/api/parties', 'own')).body, { party: null, invites: [] });
     });
 
+    await t.test('large bodies: refused before they are read unless the caller is signed in; limits still apply', async () => {
+        const fat = (bytes) => ({ lists: [{ name: 'Big', description: 'x'.repeat(bytes) }] });
+        // A stranger is turned away with 401 whatever the size: the 1 MB / 2 MB parsers are behind the session and requireAuth.
+        for (const [path, bytes] of [['/api/user/import', 3_000_000], ['/api/import', 3_000_000], ['/api/games/arcade/finish', 300_000], ['/api/User/Import/', 3_000_000]]) {
+            assert.equal((await call('POST', path, { body: fat(bytes) })).status, 401, path);
+        }
+        // Signed in: over the route's own limit is 413; under it the route runs.
+        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: fat(1_200_000) })).status, 413);
+        assert.equal((await call('POST', '/api/import', { cookie: alice, body: { csv: 'x'.repeat(2_200_000) } })).status, 413);
+        assert.notEqual((await call('POST', '/api/import', { cookie: alice, body: { csv: 'x'.repeat(1_500_000) } })).status, 413, 'a CSV up to 2 MB of JSON is allowed');
+        assert.equal((await call('POST', '/api/games/arcade/finish', { cookie: alice, body: fat(200_000) })).status, 413);
+        // Every other route keeps the small 16 KB default, signed in or not.
+        assert.equal((await call('POST', '/api/lists', { cookie: alice, body: { name: 'x', description: 'y'.repeat(20_000) } })).status, 413);
+        assert.equal((await call('POST', '/api/lists', { body: { name: 'x', description: 'y'.repeat(20_000) } })).status, 413);
+    });
+
     server.close();
     await db.closePool();
 });

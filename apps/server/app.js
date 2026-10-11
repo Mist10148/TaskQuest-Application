@@ -31,6 +31,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.resolve(__dirname, '../web/dist');
 const SESSION_COOKIE = 'tq.sid';
 
+/**
+ * Routes that carry more than the default 16 KB of JSON, and how much. Their bigger parser is mounted per route, after the
+ * session, the rate limiter and requireAuth, so a stranger or a flood is refused before a large body is read or parsed.
+ * Imports carry whole lists (the shared service caps their size); a CSV of up to 1 MB of text grows a little once its line
+ * breaks and quotes are escaped as JSON; an arcade run carries its recorded input timeline (up to ~12k small integers).
+ */
+const LARGE_BODIES = [
+    { prefix: '/api/user/import', limit: '1mb' },
+    { prefix: '/api/import', limit: '2mb' },
+    { prefix: '/api/games/arcade', limit: '128kb' }
+];
+
+/** Whether the request path is under one of the routes above (compared the way Express routes: ignoring case and a trailing slash). */
+const hasLargeBody = (req) => {
+    const path = req.path.toLowerCase().replace(/\/+$/, '');
+    return LARGE_BODIES.some(({ prefix }) => path === prefix || path.startsWith(`${prefix}/`));
+};
+
 export function createApp() {
     const app = express();
     app.disable('x-powered-by');
@@ -41,17 +59,14 @@ export function createApp() {
     // Service-to-service (AI chat write tools): token-protected, no session or CSRF.
     app.use('/internal/push', express.json({ limit: '4kb' }), requirePushToken, internalPushRouter); // the bot asks for a web push (own token check)
     app.use('/internal', express.json({ limit: '16kb' }), requireInternalToken, internalRouter);
-    // Imports carry whole lists, so that one route gets a bigger body limit (the shared service caps its size).
-    app.use('/api/user/import', express.json({ limit: '1mb' }));
-    // A CSV of up to 1 MB of text grows a little once its line breaks and quotes are escaped as JSON.
-    app.use('/api/import', express.json({ limit: '2mb' }));
-    // An arcade run carries its recorded input timeline (up to ~12k small integers).
-    app.use('/api/games/arcade', express.json({ limit: '128kb' }));
-    app.use(express.json({ limit: '16kb' }));
+    // Everything gets the small default parser, except the few routes that mount their own bigger one further down (LARGE_BODIES).
+    const smallJson = express.json({ limit: '16kb' });
+    app.use((req, res, next) => (hasLargeBody(req) ? next() : smallJson(req, res, next)));
     app.use(sessionMiddleware(SESSION_COOKIE));
     app.use('/api', apiLimiter, csrfProtection);
     app.use(['/api/auth/discord', '/api/auth/callback'], authLimiter);
     app.use('/api/games', gameLimiter);
+    for (const { prefix, limit } of LARGE_BODIES) app.use(prefix, requireAuth, express.json({ limit }));
 
     // ── Public endpoints ─────────────────────────────────────────────────────
     app.get('/api/health', async (req, res) => {

@@ -264,7 +264,7 @@ async function profile(interaction) {
     //  HEADER: Level & Class
     // ─────────────────────────────────────────────────────────────────
     embed.setDescription([
-        `### ${classInfo.emoji} ${classInfo.name} · Level ${user.player_level}`,
+        `### ${classInfo.emoji} ${classInfo.name} · Level ${user.player_level}${ui.prestigeTitle(user) ? ` · ${ui.prestigeTitle(user)} ✦${user.prestige}` : ''}`,
         `-# ${classInfo.desc}`,
         ...(counterLine ? [counterLine] : []),
         ``
@@ -276,7 +276,7 @@ async function profile(interaction) {
     embed.addFields({
         name: '⚡ Experience',
         value: [
-            `**Balance:** ${Number(user.player_xp).toLocaleString()} XP · **Lifetime:** ${Number(user.lifetime_xp).toLocaleString()} XP`,
+            `**Balance:** ${Number(user.player_xp).toLocaleString()} XP · **Lifetime:** ${Math.max(Number(user.lifetime_xp_total) || 0, Number(user.lifetime_xp) || 0).toLocaleString()} XP`,
             `\`${xpProgress.bar}\` ${xpProgress.percent}%`,
             `-# ${100 - xpInLevel} XP to Level ${Number(user.player_level) + 1}`
         ].join('\n'),

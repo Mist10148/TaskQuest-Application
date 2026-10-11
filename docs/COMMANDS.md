@@ -11,7 +11,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. The reply also shows the Daily Surprise and any milestone chest. |
 | `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill) |
 | `/quests` | — | Ephemeral | 📜 Daily and weekly quests with progress bars and Claim buttons |
-| `/profile` | `user` (optional) | Ephemeral | Level, balance and lifetime XP, focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet". |
+| `/profile` | `user` (optional) | Ephemeral | Level (with your prestige title), balance and lifetime XP (all-time, across prestiges), focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet". |
 | `/achievements` | — | Ephemeral | Paginated achievement list |
 | `/class` | — | Ephemeral | Class browser: buy, equip, view and unlock skills |
 | `/leaderboard` | `by` (lifetime XP / earned this week / daily streak / current balance) | Public | Top 10. Defaults to lifetime XP, so spending XP doesn't lower your rank. |
@@ -46,11 +46,14 @@ Overview ──select list──▶ View (read-only) ──Edit──▶ Edit (a
 | Add | Modal: task name (≤200), description (≤1000) |
 | Edit | Pick a task, then a modal to rename it |
 | Description | Pick a task, then a modal to edit its description |
+| Details | Pick a task, then a modal with its due date (`YYYY-MM-DD`), priority (low / med / high), tags (comma separated, at most 5) and repeat (none / daily / weekly / monthly). An empty field clears it; the same validation as the web app applies. |
 | Done | Pick a task to toggle completion. XP is granted only the first time a task is completed. |
 | Reorder | Pick two tasks to swap their positions |
 | Delete task | Pick a task |
 | List info | Category and priority menus, plus a modal for name, description and deadline (`YYYY-MM-DD`, must be a real date) |
 | Delete list | Confirmation, then deletes the list and all its tasks |
+
+Both views show each task's priority dot, due date (⚠️ when an open task is overdue), repeat (🔁) and tags, with subtasks indented under their parent (↳). A completed task also lists the bonuses it paid (first task of the day, finished early, and so on). When a list is too long for one embed (4096 characters) the view ends with "… and N more tasks".
 
 **Rules:**
 

@@ -169,6 +169,7 @@ async function routeButton(interaction) {
         item_del_: ['sel_del_', 'Delete Item', 1],
         item_done_: ['sel_done_', 'Toggle Status', 1],
         item_desc_: ['sel_desc_', 'Edit Description', 1],
+        item_details_: ['sel_details_', 'Edit Details (due date, priority, tags, repeat)', 1],
         item_swap_: ['sel_swap1_', 'Reorder — select the FIRST item', 2]
     };
     for (const [prefix, [selectId, title, min]] of Object.entries(pickers)) {
@@ -267,10 +268,11 @@ async function routeSelect(interaction) {
         });
     }
 
-    if (id.startsWith('sel_edit_') || id.startsWith('sel_desc_')) {
+    if (id.startsWith('sel_edit_') || id.startsWith('sel_desc_') || id.startsWith('sel_details_')) {
         const item = await tasks.getItem(userId, val);
         if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
-        return interaction.showModal(id.startsWith('sel_edit_') ? ui.editItemModal(item) : ui.descModal(item));
+        const modal = id.startsWith('sel_edit_') ? ui.editItemModal(item) : id.startsWith('sel_desc_') ? ui.descModal(item) : ui.detailsModal(item);
+        return interaction.showModal(modal);
     }
 
     if (id.startsWith('sel_del_')) {
@@ -286,8 +288,9 @@ async function routeSelect(interaction) {
         const result = await tasks.setItemCompleted(userId, val);
         aiSync.reindex(userId, result.item?.list_id);
         const note = result.completed && !result.firstCompletion ? '\n-# XP is only awarded the first time a task is completed.' : '';
+        const bonuses = result.completed ? ui.bonusLines(result.bonuses) : '';
         await interaction.editReply({
-            embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${result.item.name}**${note}`)],
+            embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${result.item.name}**${bonuses}${note}`)],
             components: []
         });
         return sendRewards(interaction, result);
@@ -322,7 +325,7 @@ async function pageSelect(interaction, id, page) {
         const lists = await tasks.getLists(userId);
         return interaction.update({ embeds: [ui.listsOverviewEmbed(lists)], components: overviewComponents(lists, { page }) });
     }
-    const m = /^(sel_(?:edit|del|done|desc|swap1|swap2))_(d+)$/.exec(id);
+    const m = /^(sel_(?:edit|del|done|desc|details|swap1|swap2))_(\d+)$/.exec(id);
     if (!m) return interaction.deferUpdate();
     const listId = Number(m[2]);
     let items = await tasks.getItems(userId, listId);
@@ -339,6 +342,25 @@ async function handleModal(interaction) {
     } catch (err) {
         return handleError(interaction, err);
     }
+}
+
+/** Words people type for a priority, mapped to what the shared validation accepts ('' clears it). */
+const PRIORITY_WORDS = { l: 'LOW', low: 'LOW', m: 'MEDIUM', med: 'MEDIUM', medium: 'MEDIUM', h: 'HIGH', high: 'HIGH', none: null, '-': null };
+
+/**
+ * The Details modal's four inputs as updateItem fields. Empty (or none) clears a field; anything else
+ * unrecognised is passed through so the shared validation rejects it with its own message.
+ */
+function parseDetails(get) {
+    const text = (name) => String(get(name) ?? '').trim();
+    const pri = text('priority').toLowerCase();
+    const repeat = text('repeat').toLowerCase();
+    return {
+        due_date: text('due') || null,
+        priority: pri in PRIORITY_WORDS ? PRIORITY_WORDS[pri] : pri,
+        tags: text('tags') || null,
+        recurrence: repeat === 'none' || repeat === '-' ? null : repeat || null
+    };
 }
 
 const field = (interaction, name) => {
@@ -392,6 +414,12 @@ async function routeModal(interaction) {
         return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**`)], ...EPHEMERAL });
     }
 
+    if (id.startsWith('m_details_')) {
+        const item = await tasks.updateItem(userId, idFrom(id, 'm_details_'), parseDetails((name) => field(interaction, name)));
+        aiSync.reindex(userId, item?.list_id);
+        return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**\n${ui.itemMeta(item) || 'No details set.'}`)], ...EPHEMERAL });
+    }
+
     if (id.startsWith('m_desc_')) {
         const desc = field(interaction, 'desc');
         const item = await tasks.updateItem(userId, idFrom(id, 'm_desc_'), { description: desc || null });
@@ -408,4 +436,4 @@ async function routeModal(interaction) {
     }
 }
 
-module.exports = { data, execute, autocomplete, handleButton, handleSelectMenu, handleModal };
+module.exports = { data, execute, autocomplete, handleButton, handleSelectMenu, handleModal, parseDetails };

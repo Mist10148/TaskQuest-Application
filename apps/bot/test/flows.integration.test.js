@@ -145,6 +145,66 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.equal(owner.calls[0].type, 'update');
     });
 
+    await t.test('/list Details: picker, modal, validation, ownership and completion bonuses', async () => {
+        const DET = '300000000000000004';
+        await db.users.ensureUser(DET);
+        const created = (await db.tasks.createList(DET, { name: 'Details' })).list;
+        const parent = (await db.tasks.addItem(DET, created.id, { name: 'Parent' })).item;
+        const child = (await db.tasks.addItem(DET, created.id, { name: 'Child', parent_id: parent.id })).item;
+
+        const picker = fake({ userId: DET, customId: `item_details_${created.id}` });
+        await list.handleButton(picker);
+        assert.equal(picker.calls[0].type, 'reply');
+        assert.equal(picker.calls[0].payload.components[0].toJSON().components[0].custom_id, `sel_details_${created.id}`);
+
+        const pick = fake({ userId: DET, customId: `sel_details_${created.id}`, values: [String(child.id)] });
+        await list.handleSelectMenu(pick);
+        assert.equal(pick.calls[0].type, 'showModal');
+
+        const stranger = fake({ userId: OTHER, customId: `sel_details_${created.id}`, values: [String(child.id)] });
+        await list.handleSelectMenu(stranger);
+        assert.notEqual(stranger.calls[0].type, 'showModal', 'another user cannot open the modal');
+
+        const save = fake({ userId: DET, customId: `m_details_${child.id}`, fields: { due: '2031-04-02', priority: 'high', tags: '#home, Bills', repeat: 'weekly' } });
+        await list.handleModal(save);
+        assert.deepEqual(errors(save), []);
+        const stored = await db.tasks.getItem(DET, child.id);
+        assert.equal(String(stored.due_date).slice(0, 10), '2031-04-02');
+        assert.equal(stored.priority, 'HIGH');
+        assert.equal(stored.tags, 'home,bills');
+        assert.equal(stored.recurrence, 'weekly');
+
+        const view = fake({ userId: DET, customId: `edit_${created.id}` });
+        await list.handleButton(view);
+        const desc = view.calls[0].payload.embeds[0].toJSON().description;
+        assert.match(desc, /↳ ⬜ Child/);
+        assert.match(desc, /Apr 2, 2031/);
+        assert.match(desc, /#home #bills/);
+
+        const bad = fake({ userId: DET, customId: `m_details_${child.id}`, fields: { due: '2031-02-30', priority: '', tags: '', repeat: '' } });
+        await list.handleModal(bad);
+        assert.match(text(bad.calls[0]), /real calendar date/);
+        const badTags = fake({ userId: DET, customId: `m_details_${child.id}`, fields: { due: '', priority: '', tags: 'a b c d e f', repeat: '' } });
+        await list.handleModal(badTags);
+        assert.match(text(badTags.calls[0]), /at most 5 tags/);
+        assert.equal((await db.tasks.getItem(DET, child.id)).priority, 'HIGH', 'a rejected save changes nothing');
+
+        const theft = fake({ userId: OTHER, customId: `m_details_${child.id}`, fields: { due: '2031-05-05', priority: 'low', tags: '', repeat: '' } });
+        await list.handleModal(theft);
+        assert.match(text(theft.calls[0]), /Not found/i);
+        assert.equal(String((await db.tasks.getItem(DET, child.id)).due_date).slice(0, 10), '2031-04-02');
+
+        const clear = fake({ userId: DET, customId: `m_details_${child.id}`, fields: { due: '', priority: '', tags: '', repeat: 'none' } });
+        await list.handleModal(clear);
+        const cleared = await db.tasks.getItem(DET, child.id);
+        assert.deepEqual([cleared.due_date, cleared.priority, cleared.tags, cleared.recurrence], [null, null, null, null]);
+
+        const done = fake({ userId: DET, customId: `sel_done_${created.id}`, values: [String(parent.id)] });
+        await list.handleSelectMenu(done);
+        assert.deepEqual(errors(done), []);
+        assert.match(text(done.calls.find((c) => c.type === 'editReply')), /Completed/);
+    });
+
     await t.test('/list menus page past 25 lists', async () => {
         const PAGER = '300000000000000003';
         await db.users.ensureUser(PAGER);

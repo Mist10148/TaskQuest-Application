@@ -8,7 +8,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
-const { TEXT_LIMITS, CLASSES, CLASS_RULES, validation, levelProgress, isPastDeadline, formatDeadline } = require('@taskquest/shared');
+const { TEXT_LIMITS, CLASSES, CLASS_RULES, PRESTIGE_TITLES, validation, levelProgress, isPastDeadline, formatDeadline } = require('@taskquest/shared');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🎨 COLOR SYSTEM
@@ -130,6 +130,55 @@ function xpBar(current, max, length = 15) {
 //  📋 LIST EMBEDS (Clean & Professional)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** Embed descriptions hold 4096 characters; leave room for the "and N more" note. */
+const DESCRIPTION_BUDGET = 3900;
+
+/**
+ * Top-level tasks in order, each followed by its subtasks (one level). A subtask whose
+ * parent is not in `items` is shown as a top-level task.
+ * @returns {Array<{ item: object, nested: boolean }>}
+ */
+function orderItems(items) {
+    const ids = new Set(items.map((i) => i.id));
+    const children = new Map();
+    for (const it of items) {
+        if (it.parent_id && ids.has(it.parent_id)) {
+            if (!children.has(it.parent_id)) children.set(it.parent_id, []);
+            children.get(it.parent_id).push(it);
+        }
+    }
+    const out = [];
+    for (const it of items) {
+        if (it.parent_id && ids.has(it.parent_id)) continue;
+        out.push({ item: it, nested: false });
+        for (const c of children.get(it.id) || []) out.push({ item: c, nested: true });
+    }
+    return out;
+}
+
+/** "🔴 · 📅 Mar 10 · 🔁 weekly · #home #bills" for a task's own fields ('' when it has none). */
+function itemMeta(it, today = undefined) {
+    const parts = [];
+    if (it.priority) parts.push(PRIORITY_DOT[it.priority] || '');
+    const due = validation.formatDate(it.due_date);
+    if (due) parts.push(!it.completed && isPastDeadline(due, today) ? `⚠️ ${formatDeadline(due, today)}` : `📅 ${formatDeadline(due, today)}`);
+    if (it.recurrence) parts.push(`🔁 ${it.recurrence}`);
+    const tags = String(it.tags || '').split(',').filter(Boolean);
+    if (tags.length) parts.push(tags.map((t) => `#${t}`).join(' '));
+    return parts.filter(Boolean).join(' · ');
+}
+
+/** The lines for one task: name (indented when a subtask), details, description. */
+function itemLines(it, nested, today) {
+    const pad = nested ? '　' : '';
+    const name = it.completed ? `~~${it.name}~~` : it.name;
+    let out = `${pad}${nested ? '↳ ' : ''}${it.completed ? '✅' : '⬜'} ${name}\n`;
+    const meta = itemMeta(it, today);
+    if (meta) out += `${pad}-# └─ ${meta}\n`;
+    if (it.description) out += `${pad}-# └─ ${it.description.substring(0, 50)}${it.description.length > 50 ? '...' : ''}\n`;
+    return out;
+}
+
 function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     const done = items.filter(i => i.completed).length;
     const total = items.length;
@@ -173,14 +222,15 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     if (!items.length) {
         desc += '*No tasks yet — add some!*';
     } else {
-        items.forEach((it, i) => {
-            const checkbox = it.completed ? '✅' : '⬜';
-            const name = it.completed ? `~~${it.name}~~` : it.name;
-            desc += `${checkbox} ${name}\n`;
-            if (it.description) {
-                desc += `-# └─ ${it.description.substring(0, 50)}${it.description.length > 50 ? '...' : ''}\n`;
-            }
-        });
+        const ordered = orderItems(items);
+        let shown = 0;
+        for (const { item, nested } of ordered) {
+            const lines = itemLines(item, nested);
+            if (desc.length + lines.length > DESCRIPTION_BUDGET) break;
+            desc += lines;
+            shown++;
+        }
+        if (shown < ordered.length) desc += `-# … and ${ordered.length - shown} more tasks (open the web app to see them all)\n`;
     }
     
     embed.setDescription(desc);
@@ -260,7 +310,7 @@ function profileEmbed(user, stats, member) {
     
     return new EmbedBuilder()
         .setColor(COLORS[user.player_class])
-        .setTitle(`${classEmoji(user.player_class)} ${member?.displayName || 'Player'}`)
+        .setTitle(`${classEmoji(user.player_class)} ${member?.displayName || 'Player'}${prestigeTitle(user) ? ` · ${prestigeTitle(user)}` : ''}`)
         .setThumbnail(member?.user?.displayAvatarURL?.() || null)
         .setDescription(`**Level ${user.player_level}** ${user.player_class}`)
         .addFields(
@@ -289,7 +339,17 @@ function achievementsEmbed(userAchs, allAchs, page = 0) {
 }
 
 function achievementUnlockEmbed(ach) {
-    return new EmbedBuilder().setColor(0xF1C40F).setTitle('🏆 Achievement Unlocked!').setDescription(`**${ach.name}**\n${ach.description}`);
+    const reward = Number(ach.xp) > 0 ? `\n**+${Number(ach.xp)} XP**` : '';
+    return new EmbedBuilder().setColor(0xF1C40F).setTitle('🏆 Achievement Unlocked!').setDescription(`**${ach.name}**\n${ach.description}${reward}`);
+}
+
+/** The prestige title for a player ('' before the first prestige). */
+const prestigeTitle = (user) => PRESTIGE_TITLES[Math.min(Number(user?.prestige) || 0, PRESTIGE_TITLES.length - 1)] || '';
+
+/** The task-completion bonuses ([{ key, label, xp }]) as lines under the completion message ('' when none). */
+function bonusLines(bonuses) {
+    const rows = (bonuses || []).filter((b) => b && Number(b.xp) > 0);
+    return rows.length ? `\n${rows.map((b) => `-# ✨ ${b.label}: +${Number(b.xp)} XP`).join('\n')}` : '';
 }
 
 function classShopEmbed(user, classes) {
@@ -395,7 +455,8 @@ function editButtons(listId) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`item_done_${listId}`).setLabel('Mark Done').setEmoji('✅').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(`item_swap_${listId}`).setLabel('Reorder').setEmoji('🔀').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId(`item_desc_${listId}`).setLabel('Description').setEmoji('📝').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`item_desc_${listId}`).setLabel('Description').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`item_details_${listId}`).setLabel('Details').setEmoji('🗓️').setStyle(ButtonStyle.Secondary)
         ),
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`list_meta_${listId}`).setLabel('List Info').setEmoji('📋').setStyle(ButtonStyle.Primary),
@@ -630,6 +691,25 @@ function descModal(item) {
     const d = new TextInputBuilder().setCustomId('desc').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(TEXT_LIMITS.DESCRIPTION);
     if (item.description) d.setValue(String(item.description).slice(0, TEXT_LIMITS.DESCRIPTION));
     return new ModalBuilder().setCustomId(`m_desc_${item.id}`).setTitle(`Description: ${item.name.substring(0, 30)}`).addComponents(new ActionRowBuilder().addComponents(d));
+}
+
+/**
+ * Modal for a task's own fields: due date, priority, tags and repeat. Empty clears a field.
+ * Four inputs (Discord allows five per modal).
+ */
+function detailsModal(item) {
+    const input = (id, label, placeholder, max, value) => {
+        const t = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(max).setPlaceholder(placeholder);
+        if (value) t.setValue(String(value).slice(0, max));
+        return new ActionRowBuilder().addComponents(t);
+    };
+    const tags = String(item.tags || '').split(',').filter(Boolean).join(', ');
+    return new ModalBuilder().setCustomId(`m_details_${item.id}`).setTitle(`Details: ${item.name.substring(0, 30)}`).addComponents(
+        input('due', 'Due date YYYY-MM-DD (empty clears)', '2030-12-31', 10, validation.formatDate(item.due_date)),
+        input('priority', 'Priority: low, med or high (empty clears)', 'med', 6, item.priority && (item.priority === 'MEDIUM' ? 'med' : item.priority.toLowerCase())),
+        input('tags', 'Tags, comma separated, max 5', 'home, bills', 100, tags),
+        input('repeat', 'Repeat: none, daily, weekly or monthly', 'none', 7, item.recurrence)
+    );
 }
 
 function searchModal() {
@@ -1061,5 +1141,7 @@ module.exports = {
     // Selects
     listSelect, itemSelect, pageFromValue, SELECT_MAX, catSelect, priSelect, classSelectMenu, skillSelectMenu, categoryFilterSelect,
     // Modals
-    listModal, itemModal, editItemModal, descModal, searchModal
+    listModal, itemModal, editItemModal, descModal, detailsModal, searchModal,
+    // Task details
+    orderItems, itemMeta, itemLines, prestigeTitle, bonusLines
 };

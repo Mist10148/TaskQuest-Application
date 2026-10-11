@@ -20,6 +20,24 @@ async function main() {
         console.log(`   Public URL: ${config.publicUrl}`);
     });
 
+    // Abandoned game sessions are settled (bets refunded) here as well as in the bot, so the web
+    // app is correct on its own. The job is idempotent (row locks), so running in both is safe.
+    let expiring = false;
+    const expireGames = async () => {
+        if (expiring) return;
+        expiring = true;
+        try {
+            const expired = await db.games.expireStaleSessions();
+            if (expired > 0) console.log(`Expired ${expired} abandoned game sessions (bets refunded)`);
+        } catch (err) {
+            console.error('Game session expiry failed:', err.message);
+        } finally {
+            expiring = false;
+        }
+    };
+    void expireGames();
+    setInterval(expireGames, 5 * 60 * 1000).unref();
+
     let closing = false;
     const shutdown = (signal) => {
         if (closing) return;

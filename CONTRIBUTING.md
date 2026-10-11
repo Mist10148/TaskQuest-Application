@@ -51,7 +51,7 @@ npm run typecheck
 npm run build
 ```
 
-The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). There are no component or browser tests yet ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)); see "Trying the web app locally" below for a manual check.
+The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). There are no component tests; browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
 
 ### Integration tests
 
@@ -65,6 +65,19 @@ TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=3306 TEST_DB_USER=root TEST_DB_PASSWORD= TES
 With XAMPP's MariaDB you can also start a disposable server with its own data directory on another port. CI runs the same suite against MySQL 8.
 
 When fixing a bug, add a test that fails without the fix. Use the existing helpers: the injectable `rng` for rules, and `fake()` interactions for bot flows.
+
+### Browser tests
+
+`apps/web/e2e` holds a small Playwright suite (Chromium) that drives the built app against a real API and database. It is separate from `npm test` and runs in its own CI job. The seed script **wipes** its database (default `taskquest_e2e`, override with `E2E_DB_HOST`, `E2E_DB_PORT`, `E2E_DB_USER`, `E2E_DB_PASSWORD`, `E2E_DB_NAME`):
+
+```bash
+mysql -uroot -e "CREATE DATABASE taskquest_e2e"
+(cd apps/web && npx playwright install chromium)   # once
+npm run build
+npm run test:e2e
+```
+
+`seed.mjs` resets the schema, creates a player with a few quests and writes a session row directly into `web_sessions`; the tests present the matching signed cookie, so there is no Discord login and no test-only route in the server. Specs are named `*.e2e.ts` (so Vitest ignores them), use role and label selectors and web-first assertions, and must not sleep. On failure a trace and screenshot land in `apps/web/test-results` (git-ignored).
 
 ### The AI service (Python)
 

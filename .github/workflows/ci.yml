@@ -57,6 +57,47 @@ jobs:
       - run: npm run check
       - run: npm test
 
+  e2e:
+    name: Browser tests (Playwright, MySQL 8)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: taskquest_e2e
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      E2E_DB_HOST: 127.0.0.1
+      E2E_DB_PORT: 3306
+      E2E_DB_USER: root
+      E2E_DB_PASSWORD: ci-root-password
+      E2E_DB_NAME: taskquest_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      # Migrates, wipes and seeds the database, starts the API serving apps/web/dist, then runs the tests.
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7
+
   ai:
     name: AI service (ruff, mypy, pytest)
     runs-on: ubuntu-latest

@@ -81,6 +81,11 @@ export default {
           wizard: "hsl(var(--class-wizard))",
           archer: "hsl(var(--class-archer))",
           tank: "hsl(var(--class-tank))",
+          monk: "hsl(var(--class-monk))",
+          artisan: "hsl(var(--class-artisan))",
+          ranger: "hsl(var(--class-ranger))",
+          necromancer: "hsl(var(--class-necromancer))",
+          paladin: "hsl(var(--class-paladin))",
         },
         // Priority Colors
         priority: {

@@ -19,6 +19,7 @@ import { BriefingCard } from "@/components/ai/BriefingCard";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { QuestsCard } from "@/components/dashboard/QuestsCard";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
+import { dailyDescription } from "@/lib/classInfo";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -55,14 +56,7 @@ const Dashboard = () => {
     try {
       const result = await claimDaily.mutateAsync();
       if (result.success) {
-        // Build description with bonus breakdown
-        let description = '';
-        const bonusParts = [];
-        if ((result.classBonus ?? 0) > 0) bonusParts.push(`+${result.classBonus} class`);
-        if ((result.streakBonus ?? 0) > 0) bonusParts.push(`+${result.streakBonus} streak (${result.streak} days)`);
-        if ((result.skillDailyBonus ?? 0) > 0) bonusParts.push(`+${result.skillDailyBonus} skill`);
-        if (bonusParts.length > 0) description = bonusParts.join(', ');
-        if (result.bonusInfo?.details) description = result.bonusInfo.details;
+        const description = dailyDescription(result);
         
         toast.success(`🎁 Daily reward claimed! +${result.totalXP} XP`, {
           description: description || undefined,

@@ -71,6 +71,11 @@
     --class-wizard: 205 85% 60%;
     --class-archer: 145 55% 42%;
     --class-tank: 5 85% 66%;
+    --class-monk: 172 55% 50%;
+    --class-artisan: 25 85% 58%;
+    --class-ranger: 32 50% 58%;
+    --class-necromancer: 320 55% 68%;
+    --class-paladin: 195 30% 82%;
 
     /* Priority Colors */
     --priority-high: 0 84% 60%;
@@ -153,6 +158,11 @@
     --class-wizard: 205 90% 30%;
     --class-archer: 145 65% 23%;
     --class-tank: 5 70% 38%;
+    --class-monk: 172 80% 22%;
+    --class-artisan: 22 85% 32%;
+    --class-ranger: 30 55% 28%;
+    --class-necromancer: 320 60% 33%;
+    --class-paladin: 200 30% 30%;
 
     --priority-none: 218 15% 40%;
 

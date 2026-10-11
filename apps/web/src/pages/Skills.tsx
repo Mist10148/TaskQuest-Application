@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Lock, Check, Sparkles, Loader2, ShieldX } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSkills, useUnlockSkill } from "@/hooks/useApi";
 import { toast } from "sonner";
@@ -62,6 +62,11 @@ const Skills = () => {
   };
 
   const color = classColor(selectedTreeKey);
+
+  // With 12 trees the tab list scrolls; keep the selected tab in view.
+  useEffect(() => {
+    document.getElementById(`skill-tab-${selectedTreeKey}`)?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+  }, [selectedTreeKey, skillTrees.length]);
 
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const keys: string[] = skillTrees.map((t: SkillTree) => t.classKey);

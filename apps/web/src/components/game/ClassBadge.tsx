@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Sword, Dices, Skull, Wand2, Target, Shield, User } from "lucide-react";
+import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun } from "lucide-react";
 
 export type PlayerClass = 
   | "DEFAULT" 
@@ -8,7 +8,12 @@ export type PlayerClass =
   | "ASSASSIN" 
   | "WIZARD" 
   | "ARCHER" 
-  | "TANK";
+  | "TANK"
+  | "MONK"
+  | "ARTISAN"
+  | "RANGER"
+  | "NECROMANCER"
+  | "PALADIN";
 
 interface ClassBadgeProps {
   playerClass: PlayerClass;
@@ -43,7 +48,7 @@ const classConfig: Record<PlayerClass, {
     colorClass: "text-class-hero",
     bgClass: "bg-class-hero/10",
     borderClass: "border-class-hero",
-    description: "+20% XP on all tasks",
+    description: "Flat bonus on every action",
   },
   GAMBLER: {
     name: "Gambler",
@@ -52,7 +57,7 @@ const classConfig: Record<PlayerClass, {
     colorClass: "text-class-gambler",
     bgClass: "bg-class-gambler/10",
     borderClass: "border-class-gambler",
-    description: "Variable XP 0.5x-2x",
+    description: "Random bonus, some bad luck",
   },
   ASSASSIN: {
     name: "Assassin",
@@ -70,7 +75,7 @@ const classConfig: Record<PlayerClass, {
     colorClass: "text-class-wizard",
     bgClass: "bg-class-wizard/10",
     borderClass: "border-class-wizard",
-    description: "Every 3rd task = 2x XP",
+    description: "Combo and Burst bonuses",
   },
   ARCHER: {
     name: "Archer",
@@ -89,6 +94,51 @@ const classConfig: Record<PlayerClass, {
     bgClass: "bg-class-tank/10",
     borderClass: "border-class-tank",
     description: "Steady XP stacking",
+  },
+  MONK: {
+    name: "Monk",
+    icon: Flower2,
+    emoji: "🧘",
+    colorClass: "text-class-monk",
+    bgClass: "bg-class-monk/10",
+    borderClass: "border-class-monk",
+    description: "Rhythm of daily activity",
+  },
+  ARTISAN: {
+    name: "Artisan",
+    icon: Hammer,
+    emoji: "🛠️",
+    colorClass: "text-class-artisan",
+    bgClass: "bg-class-artisan/10",
+    borderClass: "border-class-artisan",
+    description: "Projects and finished lists",
+  },
+  RANGER: {
+    name: "Ranger",
+    icon: Compass,
+    emoji: "🧭",
+    colorClass: "text-class-ranger",
+    bgClass: "bg-class-ranger/10",
+    borderClass: "border-class-ranger",
+    description: "Rewards finishing early",
+  },
+  NECROMANCER: {
+    name: "Necromancer",
+    icon: Ghost,
+    emoji: "💀",
+    colorClass: "text-class-necromancer",
+    bgClass: "bg-class-necromancer/10",
+    borderClass: "border-class-necromancer",
+    description: "Revives overdue tasks",
+  },
+  PALADIN: {
+    name: "Paladin",
+    icon: Sun,
+    emoji: "⚜️",
+    colorClass: "text-class-paladin",
+    bgClass: "bg-class-paladin/10",
+    borderClass: "border-class-paladin",
+    description: "Rewards HIGH priority work",
   },
 };
 

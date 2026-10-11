@@ -66,7 +66,7 @@ const Classes = () => {
           <ErrorCard what="the class shop" error={error} onRetry={() => void refetch()} retrying={isFetching} />
         ) : isLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            {[...Array(7)].map((_, i) => <div key={i} className="h-64 sm:h-72 rounded-2xl bg-card/50 animate-pulse" />)}
+            {[...Array(12)].map((_, i) => <div key={i} className="h-64 sm:h-72 rounded-2xl bg-card/50 animate-pulse" />)}
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
@@ -82,7 +82,7 @@ const Classes = () => {
                   transition={{ delay: 0.1 + index * 0.05 }}
                   whileHover={{ scale: 1.02 }}
                   className={cn(
-                    "relative rounded-2xl border-2 p-4 sm:p-6 transition-all duration-300",
+                    "relative flex flex-col rounded-2xl border-2 p-4 sm:p-6 transition-all duration-300",
                     classInfo.equipped 
                       ? "border-primary bg-primary/5 shadow-lg shadow-primary/20"
                       : classInfo.owned
@@ -116,7 +116,7 @@ const Classes = () => {
 
                   <div className="text-center mb-4 sm:mb-6">
                     <p className="text-xs sm:text-sm text-foreground-muted mb-1 sm:mb-2 line-clamp-2">{classInfo.playstyle}</p>
-                    <p className="text-xs sm:text-sm font-medium line-clamp-2" style={{ color }}>{classInfo.description}</p>
+                    <p className="text-xs sm:text-sm font-medium" style={{ color }}>{classInfo.description}</p>
                   </div>
 
                   <div className="mt-auto">

@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
 import { applyItemOrder } from '@/lib/reorder';
 import { celebrate } from '@/lib/celebrate';
+import { describeChest } from '@/lib/classInfo';
 import {
     userApi,
     listsApi,
@@ -78,6 +79,8 @@ export function useClaimDaily() {
         onSuccess: (result) => {
             invalidateProgress(qc);
             if (result.leveledUp) celebrate('level');
+            const chest = describeChest(result.chest);
+            if (chest) toast.success('🎁 Milestone chest!', { description: chest });
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,
@@ -141,7 +144,7 @@ export function useBuyStreakFreeze() {
         mutationFn: userApi.buyStreakFreeze,
         onSuccess: (result) => {
             invalidateProgress(qc);
-            toast.success(`🧊 Streak freeze bought (${result.freezes}/3)`, { description: 'It saves your streak automatically if you miss a day.' });
+            toast.success(`🧊 Streak freeze bought (${result.freezes}/${result.max ?? 3})`, { description: 'It saves your streak automatically if you miss a day.' });
             showAchievementNotifications(result.newAchievements, qc);
         },
         onError: showError,

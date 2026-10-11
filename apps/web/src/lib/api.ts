@@ -58,7 +58,7 @@ export const userApi = {
     createCalendarToken: () => post<{ token: string }>('/api/user/calendar-token'),
     revokeCalendarToken: () => del<{ success: boolean }>('/api/user/calendar-token'),
     importData: (data: unknown) => post<{ success: boolean; lists: number; items: number }>('/api/user/import', data),
-    buyStreakFreeze: () => post<{ success: boolean; freezes: number; cost: number; newBalance: number; newAchievements: AchievementUnlock[] }>('/api/user/streak-freeze'),
+    buyStreakFreeze: () => post<{ success: boolean; freezes: number; cost: number; max?: number; newBalance: number; newAchievements: AchievementUnlock[] }>('/api/user/streak-freeze'),
 };
 
 // ─── Lists & items ───────────────────────────────────────────────────────────
@@ -202,7 +202,9 @@ export const xpApi = {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type PlayerClass = 'DEFAULT' | 'HERO' | 'GAMBLER' | 'ASSASSIN' | 'WIZARD' | 'ARCHER' | 'TANK';
+export type PlayerClass =
+    | 'DEFAULT' | 'HERO' | 'GAMBLER' | 'ASSASSIN' | 'WIZARD' | 'ARCHER' | 'TANK'
+    | 'MONK' | 'ARTISAN' | 'RANGER' | 'NECROMANCER' | 'PALADIN';
 
 export interface User {
     discord_id: string;
@@ -225,6 +227,16 @@ export interface User {
     owns_wizard: boolean | number;
     owns_archer: boolean | number;
     owns_tank: boolean | number;
+    owns_monk?: boolean | number;
+    owns_artisan?: boolean | number;
+    owns_ranger?: boolean | number;
+    owns_necromancer?: boolean | number;
+    owns_paladin?: boolean | number;
+    /** Class counters: Monk rhythm (and its last UTC day), Artisan project progress, Necromancer souls. */
+    monk_rhythm?: number;
+    monk_day?: string | null;
+    artisan_progress?: number;
+    necro_souls?: number;
     total_items_added: number;
     total_items_completed: number;
     total_lists_created: number;
@@ -257,6 +269,13 @@ export interface UserStats {
     achievements: number;
     games: GameStats;
     skills: UserSkill[];
+    /** Streak freeze price and cap for this player (the Freeze Cache skill changes both). */
+    freezeLimits?: FreezeLimits;
+}
+
+export interface FreezeLimits {
+    COST: number;
+    MAX: number;
 }
 
 export interface UserData extends UserStats {
@@ -552,6 +571,15 @@ export interface XPTransaction {
     created_at: string;
 }
 
+export interface DailyChest {
+    xp?: number;
+    bonusXP?: number;
+    amount?: number;
+    label?: string;
+    name?: string;
+    streak?: number;
+}
+
 export interface DailyClaimResult {
     success: boolean;
     error?: string;
@@ -561,6 +589,10 @@ export interface DailyClaimResult {
     classBonus?: number;
     streakBonus?: number;
     skillDailyBonus?: number;
+    /** Daily Surprise skill: bonus XP when it triggered. */
+    surpriseBonus?: number;
+    /** Milestone chest, when this claim hit one. */
+    chest?: DailyChest | number | string | null;
     totalXP?: number;
     bonusInfo?: BonusInfo;
     streakBroken?: boolean;

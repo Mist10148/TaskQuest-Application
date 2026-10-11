@@ -11,6 +11,7 @@ import { StreakFreezeCard } from "@/components/game/StreakFreezeCard";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { Button } from "@/components/ui/button";
 import { useClasses } from "@/hooks/useApi";
+import { classCounter, freezeLimits } from "@/lib/classInfo";
 
 const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   DEFAULT: { name: 'Default', emoji: '⚪' },
@@ -20,6 +21,11 @@ const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   WIZARD: { name: 'Wizard', emoji: '🔮' },
   ARCHER: { name: 'Archer', emoji: '🏹' },
   TANK: { name: 'Tank', emoji: '🛡️' },
+  MONK: { name: 'Monk', emoji: '🧘' },
+  ARTISAN: { name: 'Artisan', emoji: '🛠️' },
+  RANGER: { name: 'Ranger', emoji: '🧭' },
+  NECROMANCER: { name: 'Necromancer', emoji: '💀' },
+  PALADIN: { name: 'Paladin', emoji: '⚜️' },
 };
 
 // Full class names, so Tailwind's scanner keeps them (it cannot see `bg-${color}-500/20`).
@@ -45,6 +51,8 @@ const Profile = () => {
   const classKey: string = dbUser.player_class || 'DEFAULT';
   const apiClass = classesQuery.data?.classes.find((c) => c.key === classKey);
   const playerClass = CLASS_INFO[classKey] ?? (apiClass ? { name: apiClass.name, emoji: apiClass.emoji } : { name: classKey.charAt(0) + classKey.slice(1).toLowerCase(), emoji: '⚪' });
+  const counter = classCounter(dbUser, user?.skills ?? []);
+  const freeze = freezeLimits(user?.freezeLimits);
   const level = dbUser.player_level || 1;
   const totalXP = Number(dbUser.player_xp) || 0;
   const lifetimeXP = Number(dbUser.lifetime_xp ?? totalXP) || 0;
@@ -117,6 +125,13 @@ const Profile = () => {
                   </span>
                   <span className="text-xs text-foreground-muted">Level {level}</span>
                 </div>
+                {counter && (
+                  <p className="mt-1.5 text-xs text-foreground-muted" data-testid="class-counter">
+                    <span aria-hidden>{counter.emoji} </span>
+                    {counter.label}: <span className="font-semibold text-foreground">{counter.value}/{counter.max}</span>
+                    {counter.note && <span> · {counter.note}</span>}
+                  </p>
+                )}
               </div>
 
               {/* XP Display */}
@@ -143,7 +158,7 @@ const Profile = () => {
           <Button asChild variant="outline" size="sm"><Link to="/skills">Skill trees</Link></Button>
         </div>
 
-        <StreakFreezeCard freezes={Number(dbUser.streak_freezes) || 0} balance={totalXP} gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
+        <StreakFreezeCard freezes={Number(dbUser.streak_freezes) || 0} cost={freeze.cost} max={freeze.max} balance={totalXP} gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">

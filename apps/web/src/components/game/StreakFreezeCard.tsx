@@ -2,18 +2,17 @@ import { Loader2, Snowflake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBuyStreakFreeze } from "@/hooks/useApi";
 
-// Mirrors @taskquest/shared STREAK_FREEZE; the server enforces it.
-const COST = 150;
-const MAX = 3;
-
 interface Props {
   freezes: number;
+  /** Price and cap for this player (Freeze Cache changes both); the server enforces them. */
+  cost: number;
+  max: number;
   balance: number;
   gamificationOn: boolean;
 }
 
 /** Buy streak freezes: each one saves the daily streak once if you miss a day. */
-export const StreakFreezeCard = ({ freezes, balance, gamificationOn }: Props) => {
+export const StreakFreezeCard = ({ freezes, cost: COST, max: MAX, balance, gamificationOn }: Props) => {
   const buy = useBuyStreakFreeze();
   const full = freezes >= MAX;
   const poor = balance < COST;

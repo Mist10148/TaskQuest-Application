@@ -17,7 +17,7 @@ function tokens(selector: string): Record<string, string> {
 const dark = tokens(":root");
 const light = { ...dark, ...tokens(".light") };
 
-const CLASSES = ["default", "hero", "gambler", "assassin", "wizard", "archer", "tank"];
+const CLASSES = ["default", "hero", "gambler", "assassin", "wizard", "archer", "tank", "monk", "artisan", "ranger", "necromancer", "paladin"];
 
 /**
  * Text-on-surface pairs the UI actually renders, with the minimum contrast each needs.

@@ -107,8 +107,9 @@ function parseImport(data) {
                 const field = (result) => (result.ok ? result.value : at(result.error));
                 if (!it || typeof it !== 'object') at('must be an object.');
                 return {
-                    ref: it.id,
-                    parentRef: it.parent_id ?? null,
+                    // Compared as strings so a numeric id and a "1" parent_id still match.
+                    ref: it.id === undefined || it.id === null ? null : String(it.id),
+                    parentRef: it.parent_id === undefined || it.parent_id === null ? null : String(it.parent_id),
                     name: field(v.itemName(it.name)),
                     description: field(v.description(it.description)),
                     completed: Boolean(it.completed),
@@ -160,6 +161,7 @@ async function importAll(discordId, data) {
         }
 
         let itemCount = 0;
+        let orphaned = 0;
         for (const l of lists) {
             // The database compares names with its own collation (Cafe = Café), which a lower-cased set does not see:
             // when the insert is refused as a duplicate, mark that name taken and pick the next suffix.
@@ -183,6 +185,7 @@ async function importAll(discordId, data) {
             const ordered = [...l.items.filter((i) => i.parentRef === null), ...l.items.filter((i) => i.parentRef !== null)];
             let position = 0;
             for (const it of ordered) {
+                if (it.parentRef !== null && !idByRef.has(it.parentRef)) orphaned++; // stored as a top-level task
                 const parentId = it.parentRef !== null && idByRef.has(it.parentRef) ? idByRef.get(it.parentRef) : null;
                 // Subtasks are one level deep (the same rule assertValidParent enforces elsewhere).
                 if (parentId !== null && subtaskRefs.has(it.parentRef)) throw errors.validation('Subtasks can only be one level deep.');
@@ -191,14 +194,15 @@ async function importAll(discordId, data) {
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
                     [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, it.completed ? user.discord_id : null, position++, it.due_date, it.due_date ? new Date() : null, it.priority, it.tags, it.recurrence, parentId, user.discord_id]
                 );
-                if (it.ref !== undefined && it.ref !== null) {
+                if (it.ref !== null) {
                     idByRef.set(it.ref, ir.insertId);
                     if (parentId !== null) subtaskRefs.add(it.ref);
                 }
                 itemCount++;
             }
         }
-        return { lists: lists.length, items: itemCount };
+        // orphanedSubtasks is only present when some parent_id pointed at nothing, so callers can tell the user.
+        return { lists: lists.length, items: itemCount, ...(orphaned ? { orphanedSubtasks: orphaned } : {}) };
     });
 }
 

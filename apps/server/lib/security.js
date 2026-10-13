@@ -105,7 +105,7 @@ export function sessionMiddleware(cookieName) {
         resave: false,
         saveUninitialized: false,
         rolling: true,
-        proxy: config.trustProxy > 0,
+        proxy: Boolean(config.trustProxy),
         cookie: {
             httpOnly: true,
             secure: config.isProduction,

@@ -83,6 +83,10 @@ async function counts(conn, partyId) {
 async function invite(actorId, input = {}) {
     return withTransaction(async (conn) => {
         const party = await lockMyParty(conn, actorId, { ownerOnly: true });
+        // Checked before the lookup: a limit that only fires for real, invitable people would reveal who exists.
+        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)', [String(actorId)]);
+        if (Number(sent.n) >= LIMITS.INVITES_PER_DAY) throw new TaskQuestError('RATE_LIMITED', 'You have sent a lot of invitations today. Try again tomorrow.', 429);
+
         const invitee = await findInvitee(conn, input);
         if (!invitee) return notSent(input);
         const inviteeId = String(invitee.discord_id);
@@ -95,9 +99,6 @@ async function invite(actorId, input = {}) {
             [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
         );
         if (declined) return notSent(input);
-
-        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)', [String(actorId)]);
-        if (Number(sent.n) >= LIMITS.INVITES_PER_DAY) throw new TaskQuestError('RATE_LIMITED', 'You have sent a lot of invitations today. Try again tomorrow.', 429);
 
         await conn.query("UPDATE party_invites SET status = 'revoked' WHERE party_id = ? AND invitee_discord_id = ? AND status = 'pending' AND expires_at <= UTC_TIMESTAMP()", [party.id, inviteeId]);
         const [[pending]] = await conn.query(`SELECT 1 AS x FROM party_invites WHERE party_id = ? AND invitee_discord_id = ? AND ${LIVE}`, [party.id, inviteeId]);

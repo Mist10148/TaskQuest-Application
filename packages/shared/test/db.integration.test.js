@@ -2665,6 +2665,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const X = '200000000000000754';
         await db.users.ensureUser(X, { username: 'lim_extra', handle: 'lim_extra', avatar: null });
         await assert.rejects(S.invite(O, list.id, { discordId: X }), { code: 'RATE_LIMITED', status: 429 });
+        // The limit does not depend on who is invited, so it can't be used to find out which usernames exist.
+        await assert.rejects(S.invite(O, list.id, { username: 'nobody_has_this_name' }), { code: 'RATE_LIMITED', status: 429 });
     });
 
     await t.test('invite identity: the exact Discord username only, never the display name; a dry run shows who it resolved to', async () => {

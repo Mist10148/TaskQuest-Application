@@ -384,3 +384,16 @@ test('names written by other people cannot add links, formatting or pings to a r
     }
     assert.match(l.embeds[0].description, /\\\*\\\*boom\\\*\\\*/);
 });
+
+test('a failed mark on one list does not stop the reminders after it', async () => {
+    const ctx = setup({ lists: [list(), list({ id: 2 })] });
+    const mark = ctx.db.tasks.markReminderSent;
+    ctx.db.tasks.markReminderSent = async (id, ...rest) => {
+        if (id === 1) throw new Error('deadlock');
+        return mark(id, ...rest);
+    };
+    const res = await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.equal(ctx.sent.length, 2, 'both lists got their DM');
+    assert.deepEqual(ctx.marked, [[2, 'due', false]]);
+    assert.equal(res.retry, 1);
+});

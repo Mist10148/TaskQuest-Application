@@ -200,28 +200,34 @@ async function sendTaskReminders({ db, client, log, push, now = new Date(), budg
     const result = { sent: 0, skipped: 0, retry: 0 };
     const budget = shared || createBudget();
     for (const task of await db.tasks.getTaskReminderCandidates(now)) {
-        const kind = decideTaskReminder(task, now);
-        if (!kind) continue;
-        if (!budget.take(task.discord_id)) {
-            budget.defer(task.discord_id, () => db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : [])));
-            continue;
-        }
         try {
-            const user = await client.users.fetch(task.discord_id);
-            await user.send(taskReminderMessage(task, kind, now));
-            result.sent++;
-            log('📬', 'DEADLINE', `Sent a ${kind} reminder to ${task.discord_id} for task ${task.id}`);
-        } catch (err) {
-            if (PERMANENT_DM_ERRORS.has(err.code)) {
-                result.skipped++;
-            } else {
-                result.retry++;
-                log('⚠️', 'DEADLINE', `task ${task.id}: ${err.message} (will retry)`);
+            const kind = decideTaskReminder(task, now);
+            if (!kind) continue;
+            if (!budget.take(task.discord_id)) {
+                budget.defer(task.discord_id, () => db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : [])));
                 continue;
             }
+            try {
+                const user = await client.users.fetch(task.discord_id);
+                await user.send(taskReminderMessage(task, kind, now));
+                result.sent++;
+                log('📬', 'DEADLINE', `Sent a ${kind} reminder to ${task.discord_id} for task ${task.id}`);
+            } catch (err) {
+                if (PERMANENT_DM_ERRORS.has(err.code)) {
+                    result.skipped++;
+                } else {
+                    result.retry++;
+                    log('⚠️', 'DEADLINE', `task ${task.id}: ${err.message} (will retry)`);
+                    continue;
+                }
+            }
+            await pushReminder(push, task.discord_id, pushForTask(task, kind, now));
+            await db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : []));
+        } catch (err) {
+            // One bad row (a lost DB connection while marking, say) must not stop everyone after it.
+            result.retry++;
+            log('⚠️', 'DEADLINE', `task ${task.id}: ${err.message} (will retry)`);
         }
-        await pushReminder(push, task.discord_id, pushForTask(task, kind, now));
-        await db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : []));
     }
     if (!shared) await flushOverflow({ client, log, budget });
     return result;
@@ -278,37 +284,43 @@ async function sendDeadlineReminders({ db, client, log, push, now = new Date(), 
     const result = { sent: 0, skipped: 0, retry: 0 };
     const budget = shared || createBudget();
     for (const list of await db.tasks.getReminderCandidates(now)) {
-        const kind = decideReminder(list, now);
-        if (!kind) continue;
-        const today = todayInZone(list.timezone, now);
-        const late = (kind === 'due' || kind === 'due_done' || kind === 'snooze') && isPastDeadline(list.deadline, today);
-        const pastDeadline = Boolean(list.deadline) && String(list.deadline).slice(0, 10) <= today;
-        if (kind.endsWith('_done')) {
-            // Everything is finished: no DM, but stop the list from being picked up again.
-            await db.tasks.markReminderSent(list.id, kind === 'due_done' ? 'due' : 'snooze', { late, pastDeadline, ...forMember(list) });
-            result.skipped++;
-            continue;
-        }
-        if (!budget.take(list.discord_id)) {
-            budget.defer(list.discord_id, () => db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) }));
-            continue;
-        }
         try {
-            const user = await client.users.fetch(list.discord_id);
-            await user.send(reminderMessage(list, kind, now));
-            result.sent++;
-            log('📬', 'DEADLINE', `Sent a ${kind} reminder to ${list.discord_id} for list ${list.id}`);
-        } catch (err) {
-            if (PERMANENT_DM_ERRORS.has(err.code)) {
-                result.skipped++; // never going to work: stop trying
-            } else {
-                result.retry++;
-                log('⚠️', 'DEADLINE', `list ${list.id}: ${err.message} (will retry)`);
-                continue; // leave it unmarked
+            const kind = decideReminder(list, now);
+            if (!kind) continue;
+            const today = todayInZone(list.timezone, now);
+            const late = (kind === 'due' || kind === 'due_done' || kind === 'snooze') && isPastDeadline(list.deadline, today);
+            const pastDeadline = Boolean(list.deadline) && String(list.deadline).slice(0, 10) <= today;
+            if (kind.endsWith('_done')) {
+                // Everything is finished: no DM, but stop the list from being picked up again.
+                await db.tasks.markReminderSent(list.id, kind === 'due_done' ? 'due' : 'snooze', { late, pastDeadline, ...forMember(list) });
+                result.skipped++;
+                continue;
             }
+            if (!budget.take(list.discord_id)) {
+                budget.defer(list.discord_id, () => db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) }));
+                continue;
+            }
+            try {
+                const user = await client.users.fetch(list.discord_id);
+                await user.send(reminderMessage(list, kind, now));
+                result.sent++;
+                log('📬', 'DEADLINE', `Sent a ${kind} reminder to ${list.discord_id} for list ${list.id}`);
+            } catch (err) {
+                if (PERMANENT_DM_ERRORS.has(err.code)) {
+                    result.skipped++; // never going to work: stop trying
+                } else {
+                    result.retry++;
+                    log('⚠️', 'DEADLINE', `list ${list.id}: ${err.message} (will retry)`);
+                    continue; // leave it unmarked
+                }
+            }
+            await pushReminder(push, list.discord_id, pushForList(list, kind, now));
+            await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) });
+        } catch (err) {
+            // One bad row (a lost DB connection while marking, say) must not stop everyone after it.
+            result.retry++;
+            log('⚠️', 'DEADLINE', `list ${list.id}: ${err.message} (will retry)`);
         }
-        await pushReminder(push, list.discord_id, pushForList(list, kind, now));
-        await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) });
     }
     if (!shared) await flushOverflow({ client, log, budget });
     return result;

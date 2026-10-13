@@ -73,7 +73,7 @@ In production, set the variables in your host's dashboard instead. Because the b
 | `DISCORD_CLIENT_ID` | ✓ | — | Application ID |
 | `DISCORD_CLIENT_SECRET` | ✓ | — | OAuth2 client secret |
 | `DISCORD_REDIRECT_URI` | | `${PUBLIC_URL}/api/auth/callback` | Override only if it differs |
-| `TRUST_PROXY` | | `1` in prod, `0` in dev | Number of proxies in front of the server (affects secure cookies and rate-limit IPs) |
+| `TRUST_PROXY` | | `1` in prod, `0` in dev | Proxies in front of the server: a hop count (`1`), `true`, `false` or a comma-separated subnet list. Anything else stops startup. Affects secure cookies and rate-limit IPs |
 | `SERVE_FRONTEND` | | `true` in prod | Serve `apps/web/dist` |
 | `MIGRATE_ON_START` | | `true` | Set `false` to only verify the schema |
 | `DB_*` | ✓ | — | See below |

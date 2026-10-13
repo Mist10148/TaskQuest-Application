@@ -88,7 +88,7 @@ Opt-in per list. Shared lists are excluded from a member's embeddings by default
 | XP farming through two cooperating accounts on a shared list | XP and caps are per actor; completion caps already bound it to 50 a day each |
 | Members see each other's names | Show only the stored display name, as the leaderboard does; never a Discord ID |
 | Removing a member while they have the list open | Every request re-checks access; the next call returns 404 |
-| Orphaned lists when the owner leaves | The owner cannot leave without transferring or deleting |
+| Orphaned lists when the owner leaves | The owner cannot leave: they delete the list (ownership transfer is out of scope, [KNOWN_ISSUES #34](../KNOWN_ISSUES.md)) |
 
 ## Open questions for the product owner
 
@@ -130,7 +130,7 @@ Built on the same invitation rules: `parties`, `party_members` (UNIQUE per user:
 
 ### Still open for a human
 
-- Whether members should be able to **opt out of invitations** (today anyone who has used TaskQuest can be invited by exact name, and must accept).
+- ~~Opt out of invitations~~: built (`users.accept_invites`, a neutral answer to the inviter).
 - Whether a manager should be able to delete the list, or ownership transfer is wanted.
-- Whether the party owner needs a way to **remove** a member (today members leave on their own, or the owner disbands).
+- ~~Party owner removes a member~~: built (`/party kick`).
 - Whether a viewer should keep seeing a shared list's task descriptions in Discord's public `/list` messages (the same caveat as any `/list` message: it is public in a channel).

@@ -43,7 +43,7 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 | **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create, update, break down or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
 | **Leaderboard** | Boards for lifetime XP, XP earned this week, streaks and balance, filterable by class. Discord IDs are never exposed. |
 
-> **TODO:** the README has no screenshots yet. They need a signed-in session; capture them from a real deployment.
+> Screenshots are tracked in [KNOWN_ISSUES #26](docs/KNOWN_ISSUES.md): they need a signed-in session on a real deployment.
 
 ## Architecture
 

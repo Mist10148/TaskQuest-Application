@@ -76,3 +76,13 @@ test('week and month boundaries in the local calendar', () => {
     assert.equal(tz.periodKey('Asia/Kolkata', 'daily', at('2030-05-31T19:00:00Z')), '2030-06-01');
     assert.equal(iso(tz.nextMonthStart('UTC', at('2030-12-15T00:00:00Z'))), '2031-01-01T00:00:00.000Z');
 });
+
+test('a midnight that happens twice (Havana, clocks go back at 01:00) starts the day at the earlier one', () => {
+    const noon = Date.UTC(2030, 10, 3, 12, 0, 0);
+    assert.equal(tz.dayStart('America/Havana', noon).toISOString(), '2030-11-03T04:00:00.000Z');
+    assert.equal(tz.nextDayStart('America/Havana', noon).toISOString(), '2030-11-04T05:00:00.000Z', 'that day lasted 25 hours');
+});
+
+test('an invalid instant is rejected instead of producing a wrong day', () => {
+    assert.throws(() => tz.dayStart('Asia/Manila', NaN), RangeError);
+});

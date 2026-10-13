@@ -369,7 +369,7 @@ async function buyStreakFreeze(discordId) {
         const owned = Number(user.streak_freezes) || 0;
         if (owned >= limits.MAX) throw errors.conflict(`You can hold at most ${limits.MAX} streak freezes.`);
         if (Number(user.player_xp) < limits.COST) throw errors.insufficientXP(limits.COST, Number(user.player_xp));
-        const tx = await applyXP(conn, user, -limits.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
+        await applyXP(conn, user, -limits.COST, 'streak_freeze', { userUpdates: { streak_freezes: owned + 1 } });
         const achievements = await unlockAchievements(conn, user);
         return { freezes: owned + 1, max: limits.MAX, cost: limits.COST, balance: Number(user.player_xp), achievements };
     });
@@ -398,7 +398,7 @@ async function buyClass(discordId, rawKey) {
         if (ownsClass(user, classKey)) throw errors.conflict(`You already own ${CLASSES[classKey].name}.`);
         if (Number(user.player_xp) < cost) throw errors.insufficientXP(cost, Number(user.player_xp));
 
-        const tx = await applyXP(conn, user, -cost, 'class_purchase', {
+        await applyXP(conn, user, -cost, 'class_purchase', {
             userUpdates: { [classOwnershipColumn(classKey)]: 1, player_class: classKey, ...CLASS_COUNTER_RESET }
         });
         const achievements = await unlockAchievements(conn, user);

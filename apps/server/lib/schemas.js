@@ -216,4 +216,3 @@ export const internalUpdateItemBody = z
 export const internalSubtasksBody = z
     .object({ ...internalBase, names: z.array(z.string().min(1).max(TEXT_LIMITS.ITEM_NAME)).min(2).max(8) })
     .strict();
-export const internalIndexBody = z.object({ discordId: internalBase.discordId, listId: z.number().int().positive().optional() }).strict();

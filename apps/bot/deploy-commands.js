@@ -68,8 +68,9 @@ function argValue(name) {
 }
 
 async function main() {
-    const { DISCORD_TOKEN, CLIENT_ID } = process.env;
-    if (!DISCORD_TOKEN || !CLIENT_ID) throw new Error('DISCORD_TOKEN and CLIENT_ID must be set');
+    const { DISCORD_TOKEN } = process.env;
+    const CLIENT_ID = process.env.CLIENT_ID || process.env.DISCORD_CLIENT_ID; // the web server calls it DISCORD_CLIENT_ID
+    if (!DISCORD_TOKEN || !CLIENT_ID) throw new Error('DISCORD_TOKEN and CLIENT_ID (or DISCORD_CLIENT_ID) must be set');
 
     const guildId = argValue('guild') || process.env.GUILD_ID || undefined;
     if (guildId && !/^\d{5,25}$/.test(guildId)) throw new Error(`Invalid guild id: ${guildId}`);

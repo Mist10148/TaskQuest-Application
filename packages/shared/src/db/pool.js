@@ -41,9 +41,12 @@ function buildConfig(env = process.env) {
         config.user = env.DB_USER || 'root';
         config.password = env.DB_PASSWORD || '';
         config.database = env.DB_NAME || 'taskquest';
+        if (env.NODE_ENV === 'production' && !env.DB_USER && !env.DB_PASSWORD) {
+            console.warn('⚠️  No DB_URL, DB_USER or DB_PASSWORD set in production: connecting as root with an empty password.');
+        }
     }
 
-    if (env.DB_SSL === 'true') {
+    if (/^(true|1|yes)$/i.test(String(env.DB_SSL || '').trim())) {
         config.ssl = { rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' };
         if (env.DB_SSL_CA) config.ssl.ca = env.DB_SSL_CA;
         if (config.ssl.rejectUnauthorized === false) {
@@ -59,7 +62,10 @@ function getPool() {
     if (!pool) {
         pool = mysql.createPool(buildConfig());
         pool.pool.on('connection', (conn) => {
-            conn.query("SET time_zone = '+00:00'");
+            // Date logic assumes UTC sessions, so a failure here must be visible rather than silently skewing dates.
+            conn.query("SET time_zone = '+00:00'", (err) => {
+                if (err) console.error('Could not set the session time zone to UTC:', err.message);
+            });
         });
     }
     return pool;

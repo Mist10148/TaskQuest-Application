@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="TaskQuest AI", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="TaskQuest AI", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     add_request_logging(app)
 

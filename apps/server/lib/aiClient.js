@@ -93,7 +93,13 @@ export const aiClient = {
         try {
             for await (const chunk of upstream.body) res.write(chunk);
         } catch {
-            /* client went away or upstream dropped; nothing more to send */
+            // The browser leaving is fine. An upstream drop mid-stream would otherwise look like a clean, truncated answer.
+            if (!controller.signal.aborted && !res.writableEnded) {
+                res.write(`event: error
+data: ${JSON.stringify({ message: 'The AI connection was interrupted. Please try again.' })}
+
+`);
+            }
         }
         res.end();
     },

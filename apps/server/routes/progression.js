@@ -5,6 +5,7 @@ import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, requireAuth, uid, avatarUrl } from '../lib/http.js';
 import { keyParam, skillParam, leaderboardQuery } from '../lib/schemas.js';
+import { sealId, openId } from '../lib/avatarProxy.js';
 
 const { CLASSES, SKILL_TREES, ACHIEVEMENTS, classOwnershipColumn } = shared;
 
@@ -91,18 +92,31 @@ achievementsRouter.get(
     })
 );
 
-// Public, but only exposes display data (no Discord IDs).
+const BOARD_TTL_MS = 30_000;
+const boardCache = new Map(); // `${by}:${class}` -> { at, rows }
+
+/** The ranking queries are heavy and the route is anonymous, so share one result per board for a short while. */
+async function cachedBoard(by, playerClass) {
+    const cacheKey = `${by}:${playerClass || ''}`;
+    const hit = boardCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < BOARD_TTL_MS) return hit.rows;
+    const rows = await db.users.getLeaderboard(10, { by, playerClass });
+    boardCache.set(cacheKey, { at: Date.now(), rows });
+    return rows;
+}
+
+// Public, but only exposes display data. No Discord IDs: avatars go through an opaque token.
 leaderboardRouter.get(
     '/',
     asyncRoute(async (req, res) => {
         const { by, class: playerClass } = parse(leaderboardQuery, req.query);
-        const rows = await db.users.getLeaderboard(10, { by, playerClass });
+        const rows = await cachedBoard(by, playerClass);
         const me = req.session?.user?.discordId;
         res.json(
             rows.map((r) => ({
                 rank: r.rank,
                 username: r.discord_username || 'Adventurer',
-                avatarUrl: avatarUrl(r.discord_id, r.discord_avatar),
+                avatarUrl: avatarUrl(r.discord_id, r.discord_avatar) ? `/api/leaderboard/avatar/${sealId(r.discord_id)}` : null,
                 xp: Number(r.player_xp),
                 lifetimeXp: Number(r.lifetime_xp_total),
                 prestige: Number(r.prestige),
@@ -117,6 +131,27 @@ leaderboardRouter.get(
                 isYou: Boolean(me && me === r.discord_id)
             }))
         );
+    })
+);
+
+// Serves a leaderboard avatar without revealing whose Discord ID it belongs to.
+leaderboardRouter.get(
+    '/avatar/:token',
+    asyncRoute(async (req, res) => {
+        const id = openId(req.params.token);
+        const user = id ? await db.users.getUser(id) : null;
+        const url = user && avatarUrl(id, user.discord_avatar);
+        if (!url) return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
+        let upstream;
+        try {
+            upstream = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+        } catch {
+            return res.status(502).json({ error: 'Avatar unavailable', code: 'UPSTREAM' });
+        }
+        const type = upstream.headers.get('content-type') || '';
+        if (!upstream.ok || !/^image\/(png|gif|webp|jpeg)$/.test(type)) return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
+        res.set({ 'Content-Type': type, 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
+        res.send(Buffer.from(await upstream.arrayBuffer()));
     })
 );
 

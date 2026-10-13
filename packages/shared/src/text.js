@@ -21,6 +21,7 @@ const ZWSP = '\u200b'; // zero-width space: invisible, breaks mention, link and 
  */
 function escapeDiscord(value, { max = 0 } = {}) {
     let s = String(value ?? '');
+    // eslint-disable-next-line no-control-regex -- stripping control characters is the point
     s = s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ');
     s = s.replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g, '');
     s = s.trim();

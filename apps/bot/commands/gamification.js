@@ -213,7 +213,7 @@ async function profile(interaction) {
 
     // Get Discord member info
     let member = null;
-    try { member = await interaction.guild?.members.fetch(userId); } catch (e) {}
+    try { member = await interaction.guild?.members.fetch(userId); } catch (e) { /* not in this server: fall back to the stored name */ }
     const discordUser = member?.user || targetUser;
 
     // Calculate progress values

@@ -9,22 +9,37 @@
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const validZones = new Map(); // zone string -> boolean; bounded because the strings can come from user input
+const dayFormatters = new Map(); // valid zone -> Intl.DateTimeFormat
+const CACHE_LIMIT = 500;
+
 /** True when `tz` is an IANA zone name this runtime understands. */
 function isValidTimeZone(tz) {
     if (!tz || typeof tz !== 'string') return false;
+    const known = validZones.get(tz);
+    if (known !== undefined) return known;
+    let ok = true;
     try {
         new Intl.DateTimeFormat('en-US', { timeZone: tz });
-        return true;
     } catch {
-        return false;
+        ok = false;
     }
+    if (validZones.size >= CACHE_LIMIT) validZones.clear();
+    validZones.set(tz, ok);
+    return ok;
 }
 
 /** The calendar date ("YYYY-MM-DD") it is right now in `tz` (UTC when omitted or unknown). */
 function todayInZone(tz, now = new Date()) {
     if (!isValidTimeZone(tz)) return now.toISOString().slice(0, 10);
-    // The en-CA locale formats dates as YYYY-MM-DD.
-    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    let fmt = dayFormatters.get(tz);
+    if (!fmt) {
+        fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+        if (dayFormatters.size >= CACHE_LIMIT) dayFormatters.clear();
+        dayFormatters.set(tz, fmt);
+    }
+    const parts = Object.fromEntries(fmt.formatToParts(now).map((p) => [p.type, p.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 /** A deadline is past only once its whole day is over: due today is not overdue. */

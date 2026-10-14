@@ -46,7 +46,9 @@ const config = {
         enabled: env.AI_ENABLED === 'true',
         serviceUrl: stripSlash(env.AI_SERVICE_URL || 'http://localhost:8000'),
         internalToken: env.AI_INTERNAL_TOKEN,
-        timeoutMs: parseInt(env.AI_TIMEOUT_MS, 10) || 20000
+        timeoutMs: parseInt(env.AI_TIMEOUT_MS, 10) || 20000,
+        /** A chat stream that sends nothing for this long is cut (a hung model must not hold the socket). */
+        streamIdleMs: parseInt(env.AI_STREAM_IDLE_MS, 10) || 90000
     },
     /** Optional web push (docs/DEPLOYMENT.md): on only when all three VAPID values are set. */
     push: {

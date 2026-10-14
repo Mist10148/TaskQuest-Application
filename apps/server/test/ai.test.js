@@ -122,6 +122,25 @@ test('aiClient: SSE streams are piped through unchanged', async () => {
     }
 });
 
+test('aiClient: a stream that stalls is cut and the browser is told', async () => {
+    const ai = await listen((req, res) => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write('event: token\ndata: {"text":"Hi "}\n\n'); // then nothing, and the connection stays open
+    });
+    configure({ serviceUrl: ai.url, streamIdleMs: 200 });
+    const app = express();
+    app.post('/chat', (req, res, next) => aiClient.stream('/v1/chat', '42', { message: 'hi' }, res).catch(next));
+    const web = await listen((req, res) => app(req, res));
+    try {
+        const text = await (await fetch(`${web.url}/chat`, { method: 'POST' })).text();
+        assert.match(text, /event: token/);
+        assert.match(text, /event: error\ndata: .*interrupted/);
+    } finally {
+        await web.close();
+        await ai.close();
+    }
+});
+
 test('aiClient: a failing stream start surfaces as an error before any SSE headers', async () => {
     const ai = await listen((req, res) => json(res, 429, { error: 'quota' }));
     configure({ serviceUrl: ai.url });

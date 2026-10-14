@@ -669,7 +669,10 @@ async function setItemCompleted(discordId, itemId, completed) {
 
         const target = completed === undefined ? !item.completed : Boolean(completed);
         const now = new Date();
-        await conn.query('UPDATE items SET completed = ?, completed_at = ?, completed_by = ? WHERE id = ?', [target ? 1 : 0, target ? now : null, target ? user.discord_id : null, id]);
+        // Re-sending the state an item is already in changes nothing: it must not re-attribute the completion or move its time.
+        if (target !== Boolean(item.completed)) {
+            await conn.query('UPDATE items SET completed = ?, completed_at = ?, completed_by = ? WHERE id = ?', [target ? 1 : 0, target ? now : null, target ? user.discord_id : null, id]);
+        }
 
         let xp = null;
         let achievements = [];

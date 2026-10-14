@@ -172,7 +172,8 @@ async function rewardAction(conn, user, source, baseXP, opts = {}) {
     }
 
     if (finalXP <= 0) {
-        await updateUserColumns(conn, user, calc.userUpdates);
+        // A run past a daily cap (free games) pays nothing, so it must not advance class counters either.
+        if (!capped) await updateUserColumns(conn, user, calc.userUpdates);
         return { ...calc, finalXP: 0, capped: true };
     }
 

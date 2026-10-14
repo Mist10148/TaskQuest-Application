@@ -373,21 +373,26 @@ async function expireStaleSessions(ttlMinutes = LIMITS.GAME_SESSION_TTL_MINUTES)
     );
     let expired = 0;
     for (const row of stale) {
-        await withTransaction(async (conn) => {
-            const user = await lockUser(conn, row.discord_id);
-            const [[session]] = await conn.query("SELECT * FROM game_sessions WHERE id = ? AND state = 'active' FOR UPDATE", [row.id]);
-            if (!session) return;
-            const data = parseData(session.game_data);
-            if (session.game_type === 'blackjack' && data && !data.finished) {
-                const state = blackjack.act(data, 'stand');
-                await conn.query('UPDATE game_sessions SET bet_amount = ?, game_data = ? WHERE id = ?', [state.bet, JSON.stringify(state), session.id]);
-                await settleBlackjack(conn, user, session, state);
+        // One broken row (corrupt game_data, say) must not stop every later session from expiring.
+        try {
+            await withTransaction(async (conn) => {
+                const user = await lockUser(conn, row.discord_id);
+                const [[session]] = await conn.query("SELECT * FROM game_sessions WHERE id = ? AND state = 'active' FOR UPDATE", [row.id]);
+                if (!session) return;
+                const data = parseData(session.game_data);
+                if (session.game_type === 'blackjack' && data && !data.finished) {
+                    const state = blackjack.act(data, 'stand');
+                    await conn.query('UPDATE game_sessions SET bet_amount = ?, game_data = ? WHERE id = ?', [state.bet, JSON.stringify(state), session.id]);
+                    await settleBlackjack(conn, user, session, state);
+                    expired++;
+                    return;
+                }
+                await conn.query("UPDATE game_sessions SET state = 'expired', payout = 0, ended_at = CURRENT_TIMESTAMP WHERE id = ?", [session.id]);
                 expired++;
-                return;
-            }
-            await conn.query("UPDATE game_sessions SET state = 'expired', payout = 0, ended_at = CURRENT_TIMESTAMP WHERE id = ?", [session.id]);
-            expired++;
-        });
+            });
+        } catch (err) {
+            console.error(`Could not expire game session ${row.id}:`, err.message);
+        }
     }
     return expired;
 }

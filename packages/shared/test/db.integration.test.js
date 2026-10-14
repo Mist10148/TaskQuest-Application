@@ -542,6 +542,58 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number((await db.users.getUser(BOB)).player_xp), mid);
     });
 
+    await t.test('one broken stale session does not stop the others from expiring', async () => {
+        const OTHER = '100000000000000603';
+        await db.users.ensureUser(OTHER);
+        await setXP(BOB, 1000);
+        await setXP(OTHER, 1000);
+        const fresh = async (who) => {
+            let s = await db.games.startBlackjack(who, 50);
+            while (s.settlement) s = await db.games.startBlackjack(who, 50);
+            return s;
+        };
+        const broken = await fresh(BOB);
+        const good = await fresh(OTHER);
+        await pool.query("UPDATE game_sessions SET game_data = '{\"finished\":false}' WHERE id = ?", [broken.sessionId]);
+        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id IN (?, ?)', [broken.sessionId, good.sessionId]);
+        const original = console.error;
+        console.error = () => {};
+        try {
+            await db.games.expireStaleSessions();
+        } finally {
+            console.error = original;
+        }
+        const state = async (id) => (await pool.query('SELECT state FROM game_sessions WHERE id = ?', [id]))[0][0].state;
+        assert.equal(await state(broken.sessionId), 'active', 'the broken row is left alone');
+        assert.notEqual(await state(good.sessionId), 'active', 'the healthy one after it still expired');
+        await pool.query("UPDATE game_sessions SET state = 'cancelled' WHERE id = ?", [broken.sessionId]);
+    });
+
+    await t.test('a game run past the daily cap does not advance class counters', async () => {
+        const W = '100000000000000601';
+        await db.users.ensureUser(W);
+        await pool.query("UPDATE users SET player_class = 'WIZARD', owns_wizard = 1 WHERE discord_id = ?", [W]);
+        const user = await db.users.getUser(W);
+        const capped = await db.withTransaction((conn) => db.progression.rewardAction(conn, user, 'game_reward', 10, { maxXP: 0, context: { action: 'game' } }));
+        assert.equal(capped.capped, true);
+        assert.equal(Number((await db.users.getUser(W)).wizard_counter), 0);
+        const paid = await db.withTransaction((conn) => db.progression.rewardAction(conn, user, 'game_reward', 10, { maxXP: 100, context: { action: 'game' } }));
+        assert.ok(paid.finalXP > 0);
+        assert.equal(Number((await db.users.getUser(W)).wizard_counter), 1, 'a paid run still counts');
+    });
+
+    await t.test('completing an item that is already completed keeps its completion time', async () => {
+        const U = '100000000000000602';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Idempotent' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'Once' });
+        await db.tasks.setItemCompleted(U, item.id, true);
+        await db.query("UPDATE items SET completed_at = '2020-01-01 00:00:00' WHERE id = ?", [item.id]);
+        await db.tasks.setItemCompleted(U, item.id, true);
+        const [[row]] = await pool.query('SELECT completed_at FROM items WHERE id = ?', [item.id]);
+        assert.equal(new Date(row.completed_at).getUTCFullYear(), 2020, 'a repeat completion must not move the time');
+    });
+
     await t.test('games refuse to settle while XP is off', async () => {
         await setXP(BOB, 1000);
         let s = await db.games.startBlackjack(BOB, 50);

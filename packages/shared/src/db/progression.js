@@ -267,7 +267,7 @@ async function claimDaily(discordId) {
             userUpdates: {
                 ...reward.xp.userUpdates,
                 last_chest_streak: chestXP ? reward.newStreak : reward.newStreak < lastChest ? 0 : lastChest,
-                ...(reward.freezeUsed ? { streak_freezes: Number(user.streak_freezes) - 1 } : {}),
+                ...(reward.freezeUsed ? { streak_freezes: Number(user.streak_freezes) - reward.freezesUsed } : {}),
                 streak_count: reward.newStreak,
                 last_daily_claim: new Date(),
                 last_active_day: todayInZone(user.timezone)

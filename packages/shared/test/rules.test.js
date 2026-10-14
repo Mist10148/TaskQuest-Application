@@ -205,6 +205,35 @@ test('task detail validation: tags, repeat and due date', () => {
     assert.equal(v.dueDate('2030-02-28').value, '2030-02-28');
 });
 
+test('daily reward: one freeze covers one missed day, a longer gap needs one per day', () => {
+    const now = Date.parse('2030-01-10T12:00:00Z');
+    const gap = (hours, freezes) =>
+        shared.calculateDailyReward(user({ last_daily_claim: new Date(now - hours * 3600e3), streak_count: 9, streak_freezes: freezes }), [], now);
+
+    const one = gap(60, 3); // 12 h past the 48 h window: one missed day
+    assert.deepEqual([one.freezeUsed, one.freezesUsed, one.newStreak], [true, 1, 10]);
+    assert.equal(gap(72, 3).freezesUsed, 1, 'exactly 24 h past the window is still one day');
+    assert.equal(gap(73, 3).freezesUsed, 2);
+
+    const months = gap(24 * 60, 3); // two months away: three freezes cannot bridge it
+    assert.deepEqual([months.freezeUsed, months.streakBroken, months.newStreak], [false, true, 1]);
+    assert.equal(gap(100, 1).freezeUsed, false, 'one freeze is not enough for a 2-day gap');
+});
+
+test('liveStreak reads 0 once a streak has lapsed, and Momentum follows it', () => {
+    const now = Date.parse('2030-01-10T12:00:00Z');
+    const at = (hours, extra = {}) => user({ last_daily_claim: new Date(now - hours * 3600e3), streak_count: 9, ...extra });
+    assert.equal(shared.liveStreak(at(30), [], now), 9);
+    assert.equal(shared.liveStreak(at(49), [], now), 0);
+    assert.equal(shared.liveStreak(at(49, { player_class: 'PALADIN' }), [], now), 9, 'Paladins have the 72 h window');
+    assert.equal(shared.liveStreak(user({ streak_count: 0 }), [], now), 0);
+
+    const momentum = [sk('default_momentum', 3)];
+    const fresh = shared.calculateFinalXP(at(30), momentum, 100, { now, rng: () => 0.99 });
+    const lapsed = shared.calculateFinalXP(at(200), momentum, 100, { now, rng: () => 0.99 });
+    assert.ok(fresh.finalXP > lapsed.finalXP, 'a lapsed streak no longer boosts XP');
+});
+
 test('daily reward: a streak freeze saves a broken streak, after the free skill', () => {
     const now = Date.parse('2030-01-10T12:00:00Z');
     const old = new Date(now - 60 * 3600e3);
@@ -711,7 +740,9 @@ test('Paladin passive and Sanctuary: the daily streak window is 72h for free, 96
         assert.equal(r.newStreak, survives ? 10 : 1, label);
     }
     // a bought freeze still rescues a streak beyond the Paladin window
-    assert.equal(claim(100, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, true);
+    assert.equal(claim(100, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, '28 h past the window is two missed days: one freeze is not enough');
+    assert.equal(claim(100, 'PALADIN', [], { streak_freezes: 2 }).freezeUsed, true);
+    assert.equal(claim(80, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, true);
     assert.equal(claim(60, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, 'no freeze is spent while the window holds');
 });
 

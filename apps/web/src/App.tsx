@@ -2,7 +2,7 @@ import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { MotionConfig } from "framer-motion";
@@ -12,6 +12,7 @@ import { CelebrationHost } from "@/components/feedback/CelebrationHost";
 import { RouteFallback } from "@/components/RouteFallback";
 import { AuthGate } from "@/components/AuthGate";
 import { isAccessLost } from "@/lib/sharing";
+import { isSessionExpired } from "@/lib/session";
 
 // Each page is its own chunk, so the first visit downloads only what it shows.
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -31,11 +32,18 @@ const Stats = lazy(() => import("./pages/Stats"));
 const Chat = lazy(() => import("./pages/Chat"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+/** A 401 from any request means the session is gone: drop the cached user so the app returns to the sign-in screen. */
+const endSessionOn401 = (error: unknown) => {
+  if (isSessionExpired(error)) queryClient.setQueryData(["auth", "me"], null);
+};
+
 const queryClient: QueryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: endSessionOn401 }),
   // A write that comes back 403 or 404 means my access to a shared quest changed (demoted, removed, quest deleted):
   // refresh what I may see so the page falls back to read-only or to the quest list.
   mutationCache: new MutationCache({
     onError: (error) => {
+      endSessionOn401(error);
       if (isAccessLost(error)) {
         void queryClient.invalidateQueries({ queryKey: ["lists"] });
         void queryClient.invalidateQueries({ queryKey: ["list-members"] });

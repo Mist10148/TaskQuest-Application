@@ -39,7 +39,7 @@ Document the bound (done) and rely on the cap. Cheapest; acceptable while the ca
 - Remove arcade XP from the **weekly leaderboard** sources (`WEEKLY_XP_SOURCES` includes `game_reward`), so cheating cannot affect the visible competition.
 - Per-account cooldown between runs of the same game.
 
-Effort: a few days, low risk. This is the recommended next step.
+Effort: a few days, low risk. Not built: option D (input replay) shipped instead, and B is now only a hardening idea (see [KNOWN_ISSUES #39](../KNOWN_ISSUES.md)).
 
 ### C. Signed checkpoints (medium)
 The client reports progress at intervals (for example every 5 seconds: score, tick count). The server signs a chain: `checkpoint[n] = HMAC(secret, run_id || n || score || checkpoint[n-1])`, returns it, and the client must present the last checkpoint with the final score. This stops editing the final score in isolation and enforces a monotonic, time-consistent score curve, but a script can still produce a plausible curve.

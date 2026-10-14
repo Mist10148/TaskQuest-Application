@@ -21,13 +21,14 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
 from app.db import pool, repo
 from app.llm_call import structured_call
 from app.prompts import load_prompt
-from app.rag.chunking import item_label, list_label, sha256
+from app.rag.chunking import item_details, item_label, list_label, sha256
 
 log = logging.getLogger("taskquest.ai.summarize")
 
@@ -82,7 +83,7 @@ def _fmt_list(lst: dict[str, Any], items: list[dict[str, Any]] | None, today: da
     if lst.get("description"):
         lines.append(f"  description: {lst['description']}")
     for it in items or []:
-        lines.append(f"  [{item_label(it['id'])}] [{'x' if it['completed'] else ' '}] {it['name']}")
+        lines.append(f"  [{item_label(it['id'])}] [{'x' if it['completed'] else ' '}] {it['name']}{item_details(it)}")
     return "\n".join(lines)
 
 
@@ -224,20 +225,22 @@ async def get_cached(conn: AsyncConnection, discord_id: str, scope_key: str, inp
 
 async def put_cache(conn: AsyncConnection, discord_id: str, scope_key: str, input_hash: str, summary: Summary) -> None:
     params = {"uid": discord_id, "k": scope_key, "h": input_hash, "j": summary.model_dump_json()}
-    updated = await conn.execute(
-        text(
-            "UPDATE ai_summary_cache SET input_hash = :h, summary_json = :j, created_at = CURRENT_TIMESTAMP "
-            "WHERE discord_id = :uid AND scope_key = :k"
-        ),
-        params,
+    update = text(
+        "UPDATE ai_summary_cache SET input_hash = :h, summary_json = :j, created_at = CURRENT_TIMESTAMP "
+        "WHERE discord_id = :uid AND scope_key = :k"
     )
-    if updated.rowcount == 0:
-        await conn.execute(
-            text(
-                "INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) VALUES (:uid, :k, :h, :j)"
-            ),
-            params,
-        )
+    if (await conn.execute(update, params)).rowcount == 0:
+        try:
+            async with conn.begin_nested():  # a savepoint: losing a race must not poison the transaction
+                await conn.execute(
+                    text(
+                        "INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) "
+                        "VALUES (:uid, :k, :h, :j)"
+                    ),
+                    params,
+                )
+        except IntegrityError:  # a concurrent request cached it first
+            await conn.execute(update, params)
 
 
 async def summarize(

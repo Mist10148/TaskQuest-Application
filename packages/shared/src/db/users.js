@@ -206,13 +206,12 @@ function scoreSql(by, now = new Date()) {
         case 'streak': {
             // A streak only counts while it is still alive: a stale one that nobody has
             // broken yet (the reset happens on the next claim) scores 0. Streak shield
-            // (and every Paladin) gets the longer window; a bought freeze or the Unstoppable skill saves it outright.
+            // (and every Paladin) gets the longer window; the Unstoppable skill saves it outright. A freeze is only spent at the next claim, so a lapsed streak scores 0.
             const at = now.getTime();
             return {
                 sql: `(CASE
                     WHEN u.last_daily_claim IS NULL THEN 0
                     WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'tank_unstoppable') THEN u.streak_count
-                    WHEN u.streak_freezes > 0 AND u.streak_count > 1 THEN u.streak_count
                     WHEN u.player_class = 'PALADIN' AND u.last_daily_claim >= (CASE
                         WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'paladin_sanctuary') THEN ? ELSE ? END)
                         THEN u.streak_count

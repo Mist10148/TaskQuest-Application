@@ -101,14 +101,15 @@ async function invite(actorId, listId, input = {}) {
         const { list, isOwner } = await access.forList(conn, actorId, listId, 'manager', { lock: true });
         if (role === 'manager' && !isOwner) throw errors.forbidden('Only the owner can invite someone as a manager.');
 
+        // Checked before the lookup: a limit that only fires for real, invitable people would reveal who exists.
+        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)', [String(actorId)]);
+        if (Number(sent.n) >= LIMITS.INVITES_PER_DAY) throw new TaskQuestError('RATE_LIMITED', 'You have sent a lot of invitations today. Try again tomorrow.', 429);
+
         const invitee = await findInvitee(conn, input);
         if (!invitee) return notSent(input); // nobody has that name: the same answer as for someone who takes no invitations
         const inviteeId = String(invitee.discord_id);
         if (inviteeId === String(actorId)) throw errors.validation('You cannot invite yourself.');
         if (inviteeId === String(list.discord_id)) throw errors.validation('That person already owns this list.');
-
-        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)', [String(actorId)]);
-        if (Number(sent.n) >= LIMITS.INVITES_PER_DAY) throw new TaskQuestError('RATE_LIMITED', 'You have sent a lot of invitations today. Try again tomorrow.', 429);
 
         const [[already]] = await conn.query('SELECT 1 AS x FROM list_members WHERE list_id = ? AND discord_id = ?', [list.id, inviteeId]);
         if (already) throw errors.conflict('That person is already on this list.');
@@ -120,7 +121,7 @@ async function invite(actorId, listId, input = {}) {
         // Hidden from the inviter: the person takes no invitations, or declined this inviter in the last few days (on any list).
         if (!Number(invitee.accept_invites)) return notSent(input);
         const [[declined]] = await conn.query(
-            "SELECT 1 AS x FROM list_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND created_at > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
+            "SELECT 1 AS x FROM list_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND COALESCE(responded_at, created_at) > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
             [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
         );
         if (declined) return notSent(input);
@@ -190,7 +191,7 @@ async function respondIn(userId, id, accept) {
             throw errors.conflict('This invitation has expired. Ask for a new one.');
         }
         if (!accept) {
-            await conn.query("UPDATE list_invites SET status = 'declined' WHERE id = ?", [id]);
+            await conn.query("UPDATE list_invites SET status = 'declined', responded_at = UTC_TIMESTAMP() WHERE id = ?", [id]);
             return { accepted: false, list: null, role: inv.role };
         }
         const [[list]] = await conn.query('SELECT id, name, discord_id FROM lists WHERE id = ?', [inv.list_id]);

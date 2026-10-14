@@ -47,6 +47,9 @@ async function main() {
             await db.closePool().catch(() => {});
             process.exit(0);
         });
+        // Long-lived connections (an AI chat stream, keep-alive sockets) would hold server.close() open until the timeout below.
+        server.closeIdleConnections?.();
+        setTimeout(() => server.closeAllConnections?.(), 5_000).unref();
         setTimeout(() => process.exit(1), 10_000).unref();
     };
     process.on('SIGTERM', () => shutdown('SIGTERM'));

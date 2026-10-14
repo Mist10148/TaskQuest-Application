@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Check, ShieldQuestion, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AiConfirmAction } from "@/lib/api";
@@ -10,8 +11,11 @@ interface Props {
 
 /** The assistant wants to change something. Nothing happens until the user approves here. */
 export function ConfirmActionCard({ actions, busy, onRespond }: Props) {
+  const approveRef = useRef<HTMLButtonElement>(null);
+  // The message box is disabled while an action waits, so move focus to the answer instead of dropping it on the page.
+  useEffect(() => approveRef.current?.focus(), []);
   return (
-    <div role="alertdialog" aria-label="Confirm assistant action" className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-3">
+    <div role="group" aria-label="Confirm assistant action" className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-3">
       <div className="flex items-center gap-2 text-sm font-medium">
         <ShieldQuestion className="h-4 w-4 text-primary-text" />
         {actions.length > 1 ? "The assistant would like to make these changes" : "The assistant would like to make this change"}
@@ -22,7 +26,7 @@ export function ConfirmActionCard({ actions, busy, onRespond }: Props) {
         ))}
       </ul>
       <div className="flex gap-2">
-        <Button size="sm" onClick={() => onRespond(true)} disabled={busy} className="gap-1"><Check className="h-4 w-4" /> Approve</Button>
+        <Button ref={approveRef} size="sm" onClick={() => onRespond(true)} disabled={busy} className="gap-1"><Check className="h-4 w-4" /> Approve</Button>
         <Button size="sm" variant="outline" onClick={() => onRespond(false)} disabled={busy} className="gap-1"><X className="h-4 w-4" /> Cancel</Button>
       </div>
     </div>

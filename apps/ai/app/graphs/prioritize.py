@@ -72,17 +72,23 @@ class TaskFeatures:
     days_since_activity: int | None
     open_items: int
     baseline: float = 0.0
+    next_item_due: str | None = None  # earliest due date among the open subtasks
+    days_to_next_item: int | None = None
+    high_items: int = 0  # open subtasks marked HIGH
 
 
 def compute_baseline(f: TaskFeatures) -> float:
     """0.4*urgency + 0.3*priority + 0.2*momentum + 0.1*size, each in 0..1."""
-    if f.is_overdue:
+    days = [d for d in (f.days_to_deadline, f.days_to_next_item) if d is not None]  # the nearer of the two dates
+    if f.is_overdue or (days and min(days) < 0):
         urgency = 1.0
-    elif f.days_to_deadline is None:
+    elif not days:
         urgency = 0.1
     else:
-        urgency = max(0.0, 1.0 - f.days_to_deadline / 14)
+        urgency = max(0.0, 1.0 - min(days) / 14)
     priority = f.priority_weight / 3
+    if f.high_items and f.priority_weight < 3:
+        priority = max(priority, 2 / 3)  # a HIGH subtask lifts a quest that is not marked HIGH itself
     recent = 1.0 if f.days_since_activity is not None and f.days_since_activity <= 3 else 0.0
     momentum = 0.6 * f.pct_complete + 0.4 * recent
     size = 1 / (1 + max(f.open_items - 1, 0) / 5)  # fewer open subtasks => quicker win
@@ -95,6 +101,7 @@ def build_features(lists: list[dict[str, Any]], today: date) -> list[TaskFeature
         total, done = lst["items_total"], lst["items_completed"]
         deadline = lst["deadline"]
         days = (deadline - today).days if deadline else None
+        next_due = lst.get("next_item_due")
         last = lst["last_activity"] or lst["created_at"]
         feats = TaskFeatures(
             id=list_label(lst["id"]),
@@ -110,6 +117,9 @@ def build_features(lists: list[dict[str, Any]], today: date) -> list[TaskFeature
             pct_complete=round(done / total, 3) if total else 0.0,
             days_since_activity=(today - last.date()).days if last else None,
             open_items=total - done,
+            next_item_due=next_due.isoformat() if next_due else None,
+            days_to_next_item=(next_due - today).days if next_due else None,
+            high_items=int(lst.get("high_items") or 0),
         )
         feats.baseline = compute_baseline(feats)
         out.append(feats)
@@ -183,6 +193,12 @@ def _feature_table(tasks: list[TaskFeatures]) -> str:
             f'[{t.id}] "{t.name}" category={t.category or "none"} priority={t.priority or "none"} '
             f"deadline={t.deadline or 'none'} days_to_deadline={t.days_to_deadline} overdue={t.is_overdue} "
             f"progress={t.pct_complete:.0%} open_items={t.open_items} days_since_activity={t.days_since_activity}"
+            + (
+                f" next_subtask_due={t.next_item_due} days_to_next_subtask={t.days_to_next_item}"
+                if t.next_item_due
+                else ""
+            )
+            + (f" high_priority_subtasks={t.high_items}" if t.high_items else "")
             + (f"\n  description: {t.description}" if t.description else "")
         )
     return "\n".join(rows)

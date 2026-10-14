@@ -69,3 +69,16 @@ test('hourInZone and weekdayInZone follow the zone', () => {
     assert.equal(weekdayInZone('Asia/Manila', instant), 1, 'already Monday in Manila');
     assert.equal(hourInZone('Pacific/Auckland', new Date('2030-03-10T11:00:00Z')), 0, 'midnight reads as 0, not 24');
 });
+
+test('zone validity and today are stable across repeated calls (cached)', () => {
+
+    for (let i = 0; i < 3; i++) {
+        assert.equal(isValidTimeZone('Asia/Manila'), true);
+        assert.equal(isValidTimeZone('Not/AZone'), false);
+    }
+    const at = new Date('2030-03-10T20:00:00Z');
+    assert.equal(todayInZone('Asia/Manila', at), '2030-03-11');
+    assert.equal(todayInZone('America/New_York', at), '2030-03-10');
+    assert.equal(todayInZone('Pacific/Kiritimati', at), '2030-03-11');
+    assert.equal(todayInZone('Not/AZone', at), '2030-03-10');
+});

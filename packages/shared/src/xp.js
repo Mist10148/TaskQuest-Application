@@ -394,8 +394,8 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
         multiplier += CLASS_RULES.PALADIN.CRUSADE_PERCENT / 100;
     }
 
-    // Momentum: the live daily streak, counted up to a cap.
-    multiplier += bonuses.momentumPerDay * Math.min(SKILL_RULES.MOMENTUM_MAX_DAYS, Number(user.streak_count) || 0);
+    // Momentum: the live daily streak (0 once it has lapsed, until the next claim), counted up to a cap.
+    multiplier += bonuses.momentumPerDay * Math.min(SKILL_RULES.MOMENTUM_MAX_DAYS, liveStreak(user, skills, opts.now));
 
     // Bleed: a crit makes the next few actions worth more, whatever class you play.
     const procs = [];
@@ -472,6 +472,27 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
  *         | { eligible: true, newStreak, streakBroken, streakPreserved, freezeUsed, streakBonus,
  *             skillDailyBonus, xp: object, totalXP: number }}
  */
+/** How long after a claim the streak survives: 48 h, 72 h with Streak Shield or as a Paladin, 96 h with Sanctuary. */
+function streakWindowMs(user, bonuses) {
+    const paladin = user.player_class === 'PALADIN';
+    if (paladin && bonuses.paladinSanctuary) return DAILY.SANCTUARY_STREAK_WINDOW_MS;
+    return bonuses.streakShield || paladin ? DAILY.SHIELDED_STREAK_WINDOW_MS : DAILY.STREAK_WINDOW_MS;
+}
+
+/**
+ * The streak as it stands right now: the stored count while the next claim would still continue it (Unstoppable never
+ * lapses), 0 once it has lapsed but nobody has claimed to reset it yet. `skills` is a skill list or the map from toSkillMap.
+ */
+function liveStreak(user, skills, now = Date.now()) {
+    const count = Number(user.streak_count) || 0;
+    const last = user.last_daily_claim ? new Date(user.last_daily_claim).getTime() : 0;
+    if (!count) return 0;
+    if (!last) return count; // no claim on record to measure a gap from
+    const bonuses = getSkillBonuses(skills);
+    const at = now === undefined || now === null ? Date.now() : new Date(now).getTime();
+    return bonuses.streakUnstoppable || at - last <= streakWindowMs(user, bonuses) ? count : 0;
+}
+
 function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
     const lastClaim = user.last_daily_claim ? new Date(user.last_daily_claim).getTime() : 0;
     const since = now - lastClaim;
@@ -483,28 +504,26 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 
     const bonuses = getSkillBonuses(userSkills);
     // Paladins always get the Shield window; Sanctuary stretches it further.
-    const paladin = user.player_class === 'PALADIN';
-    const window =
-        paladin && getSkillBonuses(userSkills).paladinSanctuary
-            ? DAILY.SANCTUARY_STREAK_WINDOW_MS
-            : bonuses.streakShield || paladin
-              ? DAILY.SHIELDED_STREAK_WINDOW_MS
-              : DAILY.STREAK_WINDOW_MS;
+    const window = streakWindowMs(user, bonuses);
 
     let newStreak = 1;
     let streakBroken = false;
     let streakPreserved = false;
     let freezeUsed = false;
+    let freezesUsed = 0;
+    // One freeze covers one missed day: every started 24 h past the window needs its own.
+    const missedDays = lastClaim ? Math.max(1, Math.ceil((since - window) / DAILY.COOLDOWN_MS)) : 0;
     if (lastClaim && since <= window) {
         newStreak = streak + 1;
     } else if (lastClaim && bonuses.streakUnstoppable) {
         newStreak = streak + 1;
         streakPreserved = true;
-    } else if (lastClaim && streak > 1 && (Number(user.streak_freezes) || 0) > 0) {
-        // A bought streak freeze saves the streak (the skill above is free, so it goes first).
+    } else if (lastClaim && streak > 1 && (Number(user.streak_freezes) || 0) >= missedDays) {
+        // Bought streak freezes save the streak (the skill above is free, so it goes first), one per missed day.
         newStreak = streak + 1;
         streakPreserved = true;
         freezeUsed = true;
+        freezesUsed = missedDays;
     } else if (lastClaim) {
         streakBroken = streak > 1;
     }
@@ -521,6 +540,7 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
         streakBroken,
         streakPreserved,
         freezeUsed,
+        freezesUsed,
         streakBonus,
         skillDailyBonus: bonuses.dailyBonus,
         surpriseBonus,
@@ -540,5 +560,6 @@ module.exports = {
     calculateClassXP,
     calculateFinalXP,
     calculateDailyReward,
+    liveStreak,
     tankStackCap
 };

@@ -13,6 +13,7 @@ from typing import Any, Protocol
 import numpy as np
 from cachetools import TTLCache
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.rag.embed import from_blob, normalize, to_blob
@@ -62,6 +63,12 @@ class VectorStore(Protocol):
 
 _Matrix = tuple[list[dict[str, Any]], np.ndarray]
 
+_UPDATE_EMBEDDING = (
+    "UPDATE ai_embeddings SET discord_id = :uid, list_id = :lid, content = :content, "
+    "content_hash = :hash, embedding = :emb, updated_at = CURRENT_TIMESTAMP "
+    "WHERE source_type = :st AND source_id = :sid AND model = :model"
+)
+
 
 class MySQLNumpyStore:
     """Loads one user's vectors (plus the global docs) into a matrix and runs cosine top-k."""
@@ -69,9 +76,15 @@ class MySQLNumpyStore:
     def __init__(self, model: str, *, cache_size: int = 500, ttl: int = 600) -> None:
         self.model = model
         self._cache: TTLCache[str, _Matrix] = TTLCache(maxsize=cache_size, ttl=ttl)
+        self._generation = 0  # bumped by every invalidation; a load that straddles one is not cached
 
     def invalidate(self, discord_id: str | None) -> None:
-        """Drop cached matrices. ``None`` (global docs changed) drops everything."""
+        """Drop cached matrices. ``None`` (global docs changed) drops everything.
+
+        Writers also call this *after* their transaction commits: an invalidation inside the open transaction
+        can be followed by a reader that still sees the old rows and caches them.
+        """
+        self._generation += 1
         if discord_id is None:
             self._cache.clear()
         else:
@@ -115,22 +128,20 @@ class MySQLNumpyStore:
                 "emb": to_blob(row.vector),
                 "model": row.model,
             }
-            updated = await conn.execute(
-                text(
-                    "UPDATE ai_embeddings SET discord_id = :uid, list_id = :lid, content = :content, "
-                    "content_hash = :hash, embedding = :emb, updated_at = CURRENT_TIMESTAMP "
-                    "WHERE source_type = :st AND source_id = :sid AND model = :model"
-                ),
-                params,
-            )
+            updated = await conn.execute(text(_UPDATE_EMBEDDING), params)
             if updated.rowcount == 0:
-                await conn.execute(
-                    text(
-                        "INSERT INTO ai_embeddings (discord_id, source_type, source_id, list_id, content, content_hash, "
-                        "embedding, model) VALUES (:uid, :st, :sid, :lid, :content, :hash, :emb, :model)"
-                    ),
-                    params,
-                )
+                try:
+                    async with conn.begin_nested():  # a savepoint: a lost race must not poison the transaction
+                        await conn.execute(
+                            text(
+                                "INSERT INTO ai_embeddings (discord_id, source_type, source_id, list_id, content, "
+                                "content_hash, embedding, model) "
+                                "VALUES (:uid, :st, :sid, :lid, :content, :hash, :emb, :model)"
+                            ),
+                            params,
+                        )
+                except IntegrityError:  # a concurrent index call inserted the row first: update it instead
+                    await conn.execute(text(_UPDATE_EMBEDDING), params)
             self.invalidate(row.discord_id)
 
     async def touch(self, conn: AsyncConnection, source_type: str, source_ids: list[str]) -> None:
@@ -171,6 +182,7 @@ class MySQLNumpyStore:
         cached = self._cache.get(discord_id)
         if cached is not None:
             return cached
+        generation = self._generation
         result = await conn.execute(
             text(
                 "SELECT source_type, source_id, list_id, content, embedding FROM ai_embeddings "
@@ -184,7 +196,8 @@ class MySQLNumpyStore:
             meta.append({"source_type": st, "source_id": sid, "list_id": lid, "content": content})
             vecs.append(normalize(from_blob(bytes(blob))))
         matrix = np.vstack(vecs) if vecs else np.zeros((0, 1), dtype=np.float32)
-        self._cache[discord_id] = (meta, matrix)
+        if generation == self._generation:  # nothing was invalidated while the rows were loading
+            self._cache[discord_id] = (meta, matrix)
         return meta, matrix
 
     async def search(

@@ -230,3 +230,17 @@ async def test_endpoint_still_refuses_opted_out_users(seeded):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ai") as c:
         r = await c.post("/v1/prioritize", json={}, headers=auth(UID))
         assert r.status_code == 403 and r.json()["code"] == "AI_OPTED_OUT"
+
+
+def test_a_subtask_due_soon_raises_the_urgency_of_a_quest_without_a_deadline():
+    plain = feats()
+    soon = feats(next_item_due="2026-10-15", days_to_next_item=1)
+    overdue_item = feats(next_item_due="2026-10-10", days_to_next_item=-4)
+    assert P.compute_baseline(soon) > P.compute_baseline(plain)
+    assert P.compute_baseline(overdue_item) > P.compute_baseline(soon)
+    assert P.compute_baseline(feats(high_items=1)) > P.compute_baseline(plain)
+
+
+def test_the_feature_table_shows_subtask_dates_and_priorities():
+    table = P._feature_table([feats(next_item_due="2026-10-15", days_to_next_item=1, high_items=2)])
+    assert "next_subtask_due=2026-10-15" in table and "high_priority_subtasks=2" in table

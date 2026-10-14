@@ -23,6 +23,8 @@ log = logging.getLogger("taskquest.ai")
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    if 0 < len(settings.ai_internal_token) < 32:
+        raise RuntimeError("AI_INTERNAL_TOKEN must be at least 32 characters")
     configure_logging(settings)
     configure_tracing(settings)
     tasks: list[asyncio.Task] = []
@@ -40,7 +42,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="TaskQuest AI", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="TaskQuest AI", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     add_request_logging(app)
 

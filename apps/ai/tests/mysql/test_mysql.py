@@ -9,6 +9,7 @@ AI_TEST_DB_URL is set, for example::
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 
@@ -114,6 +115,27 @@ async def test_usage_update_then_insert(mysql):
         await usage.record(conn, UID, "chat", input_tokens=5, output_tokens=1)
         await usage.record(conn, UID, "chat", input_tokens=3, requests=0)
         assert await usage.requests_today(conn, UID) == 2
+
+
+async def test_concurrent_reservations_on_different_features_respect_the_daily_limit(mysql, monkeypatch):
+    """Each feature has its own row, so a plain SUM would let parallel requests on two features both pass."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ai_daily_request_limit", 1)
+    engine, _ = mysql
+
+    async def reserve(feature: str) -> bool:
+        try:
+            async with engine.begin() as conn:
+                await usage.reserve(conn, UID, feature)
+            return True
+        except usage.QuotaExceeded:
+            return False
+
+    results = await asyncio.gather(reserve("chat"), reserve("summary"), reserve("prioritize"))
+    assert results.count(True) == 1
+    async with engine.begin() as conn:
+        assert await usage.requests_today(conn, UID) == 1
 
 
 async def test_confirmation_checkpoints_survive_a_fresh_graph(mysql):

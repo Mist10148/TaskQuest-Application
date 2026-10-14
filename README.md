@@ -43,7 +43,7 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 | **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create, update, break down or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
 | **Leaderboard** | Boards for lifetime XP, XP earned this week, streaks and balance, filterable by class. Discord IDs are never exposed. |
 
-> **TODO:** the README has no screenshots yet. They need a signed-in session; capture them from a real deployment.
+> Screenshots are tracked in [KNOWN_ISSUES #26](docs/KNOWN_ISSUES.md): they need a signed-in session on a real deployment.
 
 ## Architecture
 
@@ -151,9 +151,9 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run dev:web` / `dev:server` / `dev:bot` | Run each app in watch mode |
 | `npm run build` | Build the web app into `apps/web/dist` |
 | `npm run start:server` / `start:bot` | Production start |
-| `npm run db:migrate` | Apply pending database migrations (001 to 021; both apps also do it on start) |
+| `npm run db:migrate` | Apply pending database migrations (001 to 022; both apps also do it on start) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
-| `npm run lint` / `typecheck` | ESLint and TypeScript for the web app |
+| `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |
 | `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |
 | `npm run check` | `node --check` every Node source file |
 | `npm test` | Unit tests (Node packages, the docs consistency test and the web app's Vitest suite). Integration tests also run when `TEST_DB_NAME` is set (see [CONTRIBUTING.md](CONTRIBUTING.md)). |

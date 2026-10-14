@@ -73,7 +73,7 @@ In production, set the variables in your host's dashboard instead. Because the b
 | `DISCORD_CLIENT_ID` | ✓ | — | Application ID |
 | `DISCORD_CLIENT_SECRET` | ✓ | — | OAuth2 client secret |
 | `DISCORD_REDIRECT_URI` | | `${PUBLIC_URL}/api/auth/callback` | Override only if it differs |
-| `TRUST_PROXY` | | `1` in prod, `0` in dev | Number of proxies in front of the server (affects secure cookies and rate-limit IPs) |
+| `TRUST_PROXY` | | `1` in prod, `0` in dev | Proxies in front of the server: a hop count (`1`), `true`, `false` or a comma-separated subnet list. Anything else stops startup. Affects secure cookies and rate-limit IPs |
 | `SERVE_FRONTEND` | | `true` in prod | Serve `apps/web/dist` |
 | `MIGRATE_ON_START` | | `true` | Set `false` to only verify the schema |
 | `DB_*` | ✓ | — | See below |
@@ -117,8 +117,9 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [A
 |---|---|---|
 | `AI_ENABLED` | web, bot | `true` turns the AI features on (default `false`). The UI hides every AI entry point while it is off, and the bot's AI commands answer "AI is off". |
 | `AI_SERVICE_URL` | web, bot | Base URL of the AI service (`http://localhost:8000` locally; the private service host on Render) |
-| `AI_INTERNAL_TOKEN` | web, bot, ai | Shared secret, **at least 32 characters**, identical everywhere. The web server refuses to start with `AI_ENABLED=true` and a short token. |
+| `AI_INTERNAL_TOKEN` | web, bot, ai | Shared secret, **at least 32 characters**, identical everywhere. The web server refuses to start with `AI_ENABLED=true` and a short token, and the AI service refuses to start with a token of 1 to 31 characters. |
 | `AI_TIMEOUT_MS` | web, bot | Per-request timeout for non-streaming calls (default `20000`) |
+| `AI_STREAM_IDLE_MS` | web | A chat stream that sends nothing for this long is cut and the browser gets an error (default `90000`) |
 | `AI_CHAT_MESSAGE_CONTENT` | bot | `true` also answers replies to the bot that have the ping turned off. This needs the privileged **Message Content** intent in the Discord Developer Portal (Bot → Privileged Gateway Intents), otherwise the bot fails to log in. Mentions and DMs work without it (default `false`). |
 | `WEB_INTERNAL_URL` | ai | Base URL of the web service, used by chat tools to make confirmed changes (`/internal/*`) |
 | `GEMINI_API_KEY` | ai | Google AI Studio key. Server-side only, never a `VITE_*` variable. |
@@ -213,7 +214,7 @@ If you ran `taskquest-botv2` (v3.x) and/or `taskquest-web_deploy` (v1.5):
 
 Behaviour changes players may notice are listed in [CHANGELOG.md](../CHANGELOG.md#400).
 
-**Upgrading to the improvement pass** (migrations `010` to `021`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
+**Upgrading to the improvement pass** (migrations `010` to `022`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
 
 ## 7. Operations
 

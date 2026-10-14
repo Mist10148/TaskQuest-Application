@@ -9,7 +9,8 @@ import { parseQuickAdd, type QuickAddResult } from "@/lib/quickAdd";
 interface Props {
   pending: boolean;
   aiEnabled: boolean;
-  onAdd: (parsed: QuickAddResult) => Promise<void>;
+  /** Resolves true when the task was created; the text is kept when it was not, so nothing typed is lost. */
+  onAdd: (parsed: QuickAddResult) => Promise<boolean>;
 }
 
 /**
@@ -24,8 +25,7 @@ export const QuickAddBar = forwardRef<HTMLInputElement, Props>(({ pending, aiEna
 
   const submit = async () => {
     if (!parsed.name || pending) return;
-    await onAdd(parsed);
-    setText("");
+    if (await onAdd(parsed)) setText("");
   };
 
   return (

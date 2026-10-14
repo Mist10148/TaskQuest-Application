@@ -37,6 +37,7 @@ async def index(body: IndexBody):
     if body.listId is None:
         async with pool.connection() as conn:
             await indexer.index_user(conn, runtime.get_store(), runtime.get_embedder(), body.discordId)
+        runtime.get_store().invalidate(body.discordId)  # after the commit
     else:
         await indexer.reindex_list(body.discordId, body.listId)
     return Response(status_code=204)

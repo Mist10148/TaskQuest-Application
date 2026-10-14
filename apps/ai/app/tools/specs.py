@@ -147,6 +147,14 @@ class SearchTasksArgs(Args):
     category: str | None = Field(default=None, max_length=50)
 
 
+def _passes_filters(lst: dict[str, Any], status: str | None, category: str | None) -> bool:
+    """The retriever's status/category rules, for the keyword fallback."""
+    is_open = lst["items_total"] == 0 or lst["items_completed"] < lst["items_total"]
+    if (status == "open" and not is_open) or (status == "done" and is_open):
+        return False
+    return not category or (lst.get("category") or "").lower() == category.lower()
+
+
 async def search_tasks(ctx: ToolContext, a: SearchTasksArgs) -> dict[str, Any]:
     try:
         if ctx.retriever is None:
@@ -174,6 +182,7 @@ async def search_tasks(ctx: ToolContext, a: SearchTasksArgs) -> dict[str, Any]:
             lst
             for lst in lists
             if words & set(re.findall(r"[a-z0-9]{3,}", f"{lst['name']} {lst.get('description') or ''}".lower()))
+            and _passes_filters(lst, a.status, a.category)
         ]
         return {
             "results": [_list_view(lst, ctx.today) for lst in matches[:6]],
@@ -284,6 +293,11 @@ class CreateListArgs(Args):
     items: list[Annotated[str, StringConstraints(min_length=1, max_length=150)]] | None = Field(
         default=None, max_length=20, description="Initial subtask names"
     )
+
+    @field_validator("deadline")
+    @classmethod
+    def _deadline_is_real(cls, v: str | None) -> str | None:
+        return _real_date(v)
 
 
 async def create_list(ctx: ToolContext, a: CreateListArgs) -> dict[str, Any]:
@@ -426,6 +440,11 @@ class UpdateListArgs(Args):
     list_id: str = Field(description='Quest id such as "L42"')
     priority: Priority | None = None
     deadline: str | None = Field(default=None, pattern=_DATE, description="YYYY-MM-DD")
+
+    @field_validator("deadline")
+    @classmethod
+    def _deadline_is_real(cls, v: str | None) -> str | None:
+        return _real_date(v)
 
 
 async def update_list(ctx: ToolContext, a: UpdateListArgs) -> dict[str, Any]:

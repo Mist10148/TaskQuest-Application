@@ -106,6 +106,62 @@ async def test_store_cosine_top_k_and_user_isolation(engine):
     assert hits[0].score >= hits[1].score
 
 
+class _Spy:
+    """Wraps a connection so a test can run code around ``execute`` (AsyncConnection attributes are read-only)."""
+
+    def __init__(self, conn, before=None, after=None):
+        self._conn, self._before, self._after = conn, before, after
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    async def execute(self, statement, params=None, *a, **kw):
+        if self._before:
+            await self._before(self._conn, str(statement), params)
+        result = await self._conn.execute(statement, params, *a, **kw)
+        if self._after:
+            await self._after(self._conn, str(statement), params)
+        return result
+
+
+async def test_a_load_that_straddles_an_invalidation_is_not_cached(engine):
+    store = make_store()
+    async with engine.begin() as conn:
+        await conn.execute(text("INSERT INTO users (discord_id) VALUES (:u)"), {"u": UID})
+        # a writer commits (and invalidates) while this reader is loading
+        async def invalidate(*_):
+            store.invalidate(UID)
+
+        await store._matrix(_Spy(conn, after=invalidate), UID)
+    assert UID not in store._cache
+
+
+async def test_upsert_survives_losing_the_insert_race(engine):
+    """Another index call inserts the same row between our UPDATE and INSERT: update it instead of failing."""
+    store = make_store()
+    vec = np.ones(4, dtype=np.float32)
+    raced = []
+
+    async def competitor(conn, sql, params):
+        # right after our UPDATE matched nothing, the other index call inserts the row
+        if sql.startswith("UPDATE ai_embeddings") and not raced:
+            raced.append(True)
+            await conn.execute(
+                text(
+                    "INSERT INTO ai_embeddings (discord_id, source_type, source_id, list_id, content, content_hash, "
+                    "embedding, model) VALUES (:uid, :st, :sid, :lid, :content, :hash, :emb, :model)"
+                ),
+                params,
+            )
+
+    async with engine.begin() as conn:
+        await conn.execute(text("INSERT INTO users (discord_id) VALUES (:u)"), {"u": UID})
+        row = EmbeddingRow(UID, "list", "L1", 1, "new text", sha256("new"), vec, store.model)
+        await store.upsert(_Spy(conn, after=competitor), [row])
+        rows = [tuple(r) for r in (await conn.execute(text("SELECT content, content_hash FROM ai_embeddings"))).all()]
+    assert raced and rows == [("new text", sha256("new"))]
+
+
 # ── indexer ──────────────────────────────────────────────────────────────────
 
 
@@ -418,3 +474,18 @@ async def test_a_quest_shared_after_indexing_is_purged_and_never_indexed_again(s
         await conn.execute(text("UPDATE ai_embeddings SET list_id = 1 WHERE source_id = 'L2'"))
         await indexer.index_user(conn, store, emb, UID)
         assert (await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE list_id = 1"))).scalar() == 0
+
+
+def test_subtask_due_date_priority_and_tags_are_part_of_the_quest_text():
+    from datetime import date
+
+    from app.rag.chunking import render_list
+
+    lst = {"id": 1, "name": "Trip", "deadline": None}
+    items = [
+        {"id": 1, "name": "Book flights", "completed": False, "due_date": date(2026, 10, 20), "priority": "HIGH", "tags": "travel,money"},
+        {"id": 2, "name": "Pack", "completed": True},
+    ]
+    text_ = render_list(lst, items)
+    assert "- [ ] Book flights (due 2026-10-20, HIGH, #travel #money)" in text_
+    assert "- [x] Pack\n" in text_ + "\n"

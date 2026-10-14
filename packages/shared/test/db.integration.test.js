@@ -542,6 +542,58 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number((await db.users.getUser(BOB)).player_xp), mid);
     });
 
+    await t.test('one broken stale session does not stop the others from expiring', async () => {
+        const OTHER = '100000000000000603';
+        await db.users.ensureUser(OTHER);
+        await setXP(BOB, 1000);
+        await setXP(OTHER, 1000);
+        const fresh = async (who) => {
+            let s = await db.games.startBlackjack(who, 50);
+            while (s.settlement) s = await db.games.startBlackjack(who, 50);
+            return s;
+        };
+        const broken = await fresh(BOB);
+        const good = await fresh(OTHER);
+        await pool.query("UPDATE game_sessions SET game_data = '{\"finished\":false}' WHERE id = ?", [broken.sessionId]);
+        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id IN (?, ?)', [broken.sessionId, good.sessionId]);
+        const original = console.error;
+        console.error = () => {};
+        try {
+            await db.games.expireStaleSessions();
+        } finally {
+            console.error = original;
+        }
+        const state = async (id) => (await pool.query('SELECT state FROM game_sessions WHERE id = ?', [id]))[0][0].state;
+        assert.equal(await state(broken.sessionId), 'active', 'the broken row is left alone');
+        assert.notEqual(await state(good.sessionId), 'active', 'the healthy one after it still expired');
+        await pool.query("UPDATE game_sessions SET state = 'cancelled' WHERE id = ?", [broken.sessionId]);
+    });
+
+    await t.test('a game run past the daily cap does not advance class counters', async () => {
+        const W = '100000000000000601';
+        await db.users.ensureUser(W);
+        await pool.query("UPDATE users SET player_class = 'WIZARD', owns_wizard = 1 WHERE discord_id = ?", [W]);
+        const user = await db.users.getUser(W);
+        const capped = await db.withTransaction((conn) => db.progression.rewardAction(conn, user, 'game_reward', 10, { maxXP: 0, context: { action: 'game' } }));
+        assert.equal(capped.capped, true);
+        assert.equal(Number((await db.users.getUser(W)).wizard_counter), 0);
+        const paid = await db.withTransaction((conn) => db.progression.rewardAction(conn, user, 'game_reward', 10, { maxXP: 100, context: { action: 'game' } }));
+        assert.ok(paid.finalXP > 0);
+        assert.equal(Number((await db.users.getUser(W)).wizard_counter), 1, 'a paid run still counts');
+    });
+
+    await t.test('completing an item that is already completed keeps its completion time', async () => {
+        const U = '100000000000000602';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Idempotent' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'Once' });
+        await db.tasks.setItemCompleted(U, item.id, true);
+        await db.query("UPDATE items SET completed_at = '2020-01-01 00:00:00' WHERE id = ?", [item.id]);
+        await db.tasks.setItemCompleted(U, item.id, true);
+        const [[row]] = await pool.query('SELECT completed_at FROM items WHERE id = ?', [item.id]);
+        assert.equal(new Date(row.completed_at).getUTCFullYear(), 2020, 'a repeat completion must not move the time');
+    });
+
     await t.test('games refuse to settle while XP is off', async () => {
         await setXP(BOB, 1000);
         let s = await db.games.startBlackjack(BOB, 50);
@@ -2602,7 +2654,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // ...but not by the same inviter within the cooldown, and the inviter is not told (nothing is sent, nothing is stored).
         assert.deepEqual(await S.invite(O, list.id, { discordId: b }), { sent: false });
         assert.equal((await db.query("SELECT COUNT(*) AS n FROM list_invites WHERE invitee_discord_id = ? AND status = 'pending'", [b]))[0].n, 0);
-        await db.query('UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE id = ?', [declined.id]);
+        await db.query('UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, responded_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE id = ?', [declined.id]);
         const retry = await S.invite(O, list.id, { discordId: b });
         assert.ok(retry.sent && retry.id > declined.id, 'after the cooldown they can be invited again');
 
@@ -2665,6 +2717,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const X = '200000000000000754';
         await db.users.ensureUser(X, { username: 'lim_extra', handle: 'lim_extra', avatar: null });
         await assert.rejects(S.invite(O, list.id, { discordId: X }), { code: 'RATE_LIMITED', status: 429 });
+        // The limit does not depend on who is invited, so it can't be used to find out which usernames exist.
+        await assert.rejects(S.invite(O, list.id, { username: 'nobody_has_this_name' }), { code: 'RATE_LIMITED', status: 429 });
     });
 
     await t.test('invite identity: the exact Discord username only, never the display name; a dry run shows who it resolved to', async () => {
@@ -2745,7 +2799,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await S.respond(V, viaManager.id, false);
         assert.deepEqual(await S.invite(M, list.id, { discordId: V }), { sent: false }, 'the manager now has their own cooldown');
         // After the cooldown (counted from when the declined invitation was made) it works again.
-        await db.query("UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ? AND status = 'declined'", [V]);
+        await db.query("UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, responded_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ? AND status = 'declined'", [V]);
         assert.equal((await S.invite(O, list.id, { discordId: V })).sent, true);
 
         // Parties have the same cooldown (their own declines).
@@ -2755,7 +2809,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.parties.respond(W, pi.id, false);
         assert.deepEqual(await db.parties.invite(O, { discordId: W }), { sent: false });
         assert.equal((await db.parties.invite(O, { username: 'abuse_4', dryRun: true })).name, null);
-        await db.query("UPDATE party_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ?", [W]);
+        await db.query("UPDATE party_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, responded_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ?", [W]);
         assert.equal((await db.parties.invite(O, { discordId: W })).sent, true);
 
         // The switch: with invitations off nothing is sent to a list or a party, by name or by ID, and the answer gives nothing away.
@@ -3143,6 +3197,34 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await PA.disband(u.own);
         assert.equal(await PA.status(more[0]), null);
         assert.equal((await db.query('SELECT COUNT(*) AS n FROM party_members WHERE party_id = ?', [party.id]))[0].n, 0);
+    });
+
+    await t.test('the decline cooldown counts from the moment of the decline, not from when the invitation was sent', async () => {
+        const S = db.sharing;
+        const [O, B] = ['300000000000000101', '300000000000000102'];
+        await db.users.ensureUser(O, { username: 'cd_owner', handle: 'cd_owner', avatar: null });
+        await db.users.ensureUser(B, { username: 'cd_bravo', handle: 'cd_bravo', avatar: null });
+        const { list } = await db.tasks.createList(O, { name: 'Cooldown list' });
+        const invite = await S.invite(O, list.id, { discordId: B });
+        // The invitation is 8 days old but still open (a long-lived one), and is declined just now.
+        await db.query('UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, expires_at = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE id = ?', [invite.id]);
+        assert.equal((await S.respond(B, invite.id, false)).accepted, false);
+        assert.deepEqual(await S.invite(O, list.id, { discordId: B }), { sent: false }, 'still inside the cooldown');
+    });
+
+    await t.test('accepting a party invitation does not put other inviters on a decline cooldown', async () => {
+        const PA = db.parties;
+        const [O1, O2, X] = ['300000000000000111', '300000000000000112', '300000000000000113'];
+        for (const [id, n] of [[O1, 'pc_one'], [O2, 'pc_two'], [X, 'pc_x']]) await db.users.ensureUser(id, { username: n, handle: n, avatar: null });
+        await PA.create(O1, 'Party One');
+        await PA.create(O2, 'Party Two');
+        const first = await PA.invite(O1, { discordId: X });
+        const second = await PA.invite(O2, { discordId: X });
+        assert.equal((await PA.respond(X, first.id, true)).accepted, true);
+        const row = (await db.query('SELECT status FROM party_invites WHERE id = ?', [second.id]))[0];
+        assert.equal(row.status, 'revoked', 'the other invitation is withdrawn, not declined');
+        await PA.leave(X);
+        assert.equal((await PA.invite(O2, { discordId: X })).sent, true, 'party two can invite them again');
     });
 
     await t.test('party reward: idle seats and spare accounts earn nothing, only work since joining counts, and the owner can remove a member', async () => {

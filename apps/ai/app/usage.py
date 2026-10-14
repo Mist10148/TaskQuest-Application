@@ -77,9 +77,13 @@ async def reserve(conn: AsyncConnection, discord_id: str, feature: str) -> None:
     """Spend one request up front, atomically, or raise QuotaExceeded (and leave nothing booked).
 
     The increment happens before the limit is read, so concurrent requests cannot all slip under
-    the limit. Run it inside a transaction that rolls back when this raises.
+    the limit. Each feature has its own row, so on MySQL the user's row is locked first: reservations of one user
+    queue up (a plain read would miss another feature's booking, and locking the usage rows one by one deadlocks).
+    Run it inside a transaction that rolls back when this raises.
     """
     assert feature in FEATURES
+    if is_mysql(conn):
+        await conn.execute(text("SELECT 1 FROM users WHERE discord_id = :uid FOR UPDATE"), {"uid": discord_id})
     await _add(conn, discord_id, feature, 1, 0, 0)
     if await requests_today(conn, discord_id) > get_settings().ai_daily_request_limit:
         raise QuotaExceeded

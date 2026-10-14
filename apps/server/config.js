@@ -8,12 +8,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import sharedEnv from '@taskquest/shared/env';
 import { pushConfigProblems } from './lib/pushConfig.js';
+import { parseTrustProxy } from './lib/trustProxy.js';
 
 // apps/server/.env first, then the shared root .env.
 sharedEnv.loadEnv(path.dirname(fileURLToPath(import.meta.url)));
 
 const env = process.env;
 const isProduction = env.NODE_ENV === 'production';
+const trustProxy = parseTrustProxy(env.TRUST_PROXY, isProduction ? 1 : false);
 
 function stripSlash(url) {
     return url ? url.replace(/\/+$/, '') : url;
@@ -30,7 +32,7 @@ const config = {
     publicUrl,
     /** Origins allowed to make state-changing requests (CSRF protection). */
     allowedOrigins: [publicUrl, ...(env.ALLOWED_ORIGINS || '').split(',').map((s) => stripSlash(s.trim()))].filter(Boolean),
-    trustProxy: env.TRUST_PROXY !== undefined ? Number(env.TRUST_PROXY) : isProduction ? 1 : 0,
+    trustProxy: trustProxy.value,
     sessionSecret: env.SESSION_SECRET,
     sessionMaxAgeMs: 7 * 24 * 60 * 60 * 1000,
     discord: {
@@ -44,7 +46,9 @@ const config = {
         enabled: env.AI_ENABLED === 'true',
         serviceUrl: stripSlash(env.AI_SERVICE_URL || 'http://localhost:8000'),
         internalToken: env.AI_INTERNAL_TOKEN,
-        timeoutMs: parseInt(env.AI_TIMEOUT_MS, 10) || 20000
+        timeoutMs: parseInt(env.AI_TIMEOUT_MS, 10) || 20000,
+        /** A chat stream that sends nothing for this long is cut (a hung model must not hold the socket). */
+        streamIdleMs: parseInt(env.AI_STREAM_IDLE_MS, 10) || 90000
     },
     /** Optional web push (docs/DEPLOYMENT.md): on only when all three VAPID values are set. */
     push: {
@@ -76,6 +80,8 @@ export function validateConfig() {
     if (config.ai.enabled && (!config.ai.internalToken || config.ai.internalToken.length < 32)) {
         problems.push('AI_INTERNAL_TOKEN must be at least 32 characters when AI_ENABLED=true.');
     }
+
+    if (trustProxy.error) problems.push(trustProxy.error);
 
     problems.push(...pushConfigProblems(config.push));
 

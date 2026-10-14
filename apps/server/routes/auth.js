@@ -51,31 +51,39 @@ router.get(
             return loginError(res, 'invalid_state');
         }
 
-        const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                client_id: config.discord.clientId,
-                client_secret: config.discord.clientSecret,
-                grant_type: 'authorization_code',
-                code,
-                redirect_uri: config.discord.redirectUri
-            }),
-            signal: AbortSignal.timeout(10_000)
-        });
-        if (!tokenRes.ok) {
-            console.warn(`Discord token exchange failed with HTTP ${tokenRes.status}`);
+        // A timeout or network error talking to Discord should land the user
+        // back on the login page with a message, not on a raw JSON 500.
+        let me;
+        try {
+            const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: config.discord.clientId,
+                    client_secret: config.discord.clientSecret,
+                    grant_type: 'authorization_code',
+                    code,
+                    redirect_uri: config.discord.redirectUri
+                }),
+                signal: AbortSignal.timeout(10_000)
+            });
+            if (!tokenRes.ok) {
+                console.warn(`Discord token exchange failed with HTTP ${tokenRes.status}`);
+                return loginError(res, 'token_failed');
+            }
+            const tokens = await tokenRes.json();
+
+            const meRes = await fetch(`${DISCORD_API}/users/@me`, {
+                headers: { Authorization: `Bearer ${tokens.access_token}` },
+                signal: AbortSignal.timeout(10_000)
+            });
+            if (!meRes.ok) return loginError(res, 'profile_failed');
+            me = await meRes.json();
+        } catch (err) {
+            console.warn(`Discord login request failed: ${err.message}`);
             return loginError(res, 'token_failed');
         }
-        const tokens = await tokenRes.json();
-
-        const meRes = await fetch(`${DISCORD_API}/users/@me`, {
-            headers: { Authorization: `Bearer ${tokens.access_token}` },
-            signal: AbortSignal.timeout(10_000)
-        });
-        if (!meRes.ok) return loginError(res, 'profile_failed');
-        const me = await meRes.json();
-        if (!/^\d{5,25}$/.test(String(me.id))) return loginError(res, 'profile_failed');
+        if (!/^\d{5,25}$/.test(String(me?.id))) return loginError(res, 'profile_failed');
 
         await db.users.ensureUser(me.id, { username: me.global_name || me.username, handle: me.username, avatar: me.avatar });
 
@@ -88,7 +96,10 @@ router.get(
                 globalName: me.global_name || null,
                 avatar: me.avatar || null
             };
-            req.session.save(() => res.redirect(`${config.publicUrl}/dashboard`));
+            req.session.save((saveErr) => {
+                if (saveErr) return loginError(res, 'session_failed');
+                res.redirect(`${config.publicUrl}/dashboard`);
+            });
         });
     })
 );

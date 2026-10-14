@@ -10,6 +10,7 @@ import { ConfirmActionCard } from "@/components/ai/ConfirmActionCard";
 import { useSlow } from "@/components/ai/useSlow";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/hooks/useChat";
+import { usePreferences } from "@/contexts/PreferencesContext";
 import { showError, useChatThreads, useDeleteThread } from "@/hooks/useApi";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const Chat = () => {
   const [showThreads, setShowThreads] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { reduceMotion } = usePreferences();
   const waiting = chat.isStreaming && !chat.messages[chat.messages.length - 1]?.text;
   const slow = useSlow(waiting);
   const lastMessage = chat.messages[chat.messages.length - 1];
@@ -41,8 +43,8 @@ const Chat = () => {
   }, [chat.createdThreadId, chat.isStreaming, routeThreadId, navigate]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [chat.messages, chat.pending.length]);
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
+  }, [chat.messages, chat.pending.length, reduceMotion]);
 
   if (!enabled) return <Navigate to="/dashboard" replace />;
 

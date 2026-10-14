@@ -635,7 +635,7 @@ Configuration and deployment are documented in [DEPLOYMENT.md](DEPLOYMENT.md#ai-
 ## 17. Open questions
 
 1. **Vector backend migration trigger.** At what size (total rows or per-user chunks) do we move off in-app cosine? Proposal: when p95 retrieval exceeds 150 ms or any user exceeds 10k chunks.
-2. **Item-level deadlines and priorities.** *Now built in the task model* (migration `007_item_fields`: due date, priority, tags, subtasks, recurrence). The AI side hasn't caught up: chunk templates, the prioritizer's features and the chat tools don't use them yet ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
+2. **Item-level deadlines and priorities.** *Now built in the task model* (migration `007_item_fields`: due date, priority, tags, subtasks, recurrence). The chat tools (`add_item`, `update_item`) use them. Still open: item chunks for retrieval (`app/rag/chunking.py`) and the prioritizer's features ignore item-level due date, priority and tags ([KNOWN_ISSUES #38](KNOWN_ISSUES.md)).
 3. **Language.** Should the assistant reply in the user's language? Gemini handles this well, but the eval sets are English-only.
 4. **Opt-out and data retention.** Opt-out lives on `users.ai_enabled`, and *Reset progress* now purges a user's vectors, chat threads and cached summaries (`POST /internal/forget` without a list). Still open: should chat threads also expire on their own (for example after 90 days)?
 5. **Proactive features.** *Built as a weekly digest*: an opt-in Monday DM (`/weekly`, `users.weekly_digest`) that appends the summarizer's weekly recap when AI is on. A daily digest remains open.

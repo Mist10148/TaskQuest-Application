@@ -75,6 +75,16 @@ export const aiClient = {
         assertEnabled();
         const controller = new AbortController();
         res.on('close', () => controller.abort());
+        let idleTimedOut = false;
+        let idleTimer;
+        const armIdleTimer = () => {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                idleTimedOut = true;
+                controller.abort();
+            }, config.ai.streamIdleMs);
+        };
+        armIdleTimer();
         let upstream;
         try {
             upstream = await fetch(`${config.ai.serviceUrl}${path}`, {
@@ -84,16 +94,31 @@ export const aiClient = {
                 signal: controller.signal
             });
         } catch {
+            clearTimeout(idleTimer);
             throw new TaskQuestError('AI_UNAVAILABLE', UNAVAILABLE, 503);
         }
-        if (!upstream.ok) throw await toError(upstream);
+        if (!upstream.ok) {
+            clearTimeout(idleTimer);
+            throw await toError(upstream);
+        }
 
         res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
         res.flushHeaders();
         try {
-            for await (const chunk of upstream.body) res.write(chunk);
+            for await (const chunk of upstream.body) {
+                armIdleTimer();
+                res.write(chunk);
+            }
         } catch {
-            /* client went away or upstream dropped; nothing more to send */
+            // The browser leaving is fine. An upstream drop or stall mid-stream would otherwise look like a clean, truncated answer.
+            if ((idleTimedOut || !controller.signal.aborted) && !res.writableEnded) {
+                res.write(`event: error
+data: ${JSON.stringify({ message: 'The AI connection was interrupted. Please try again.' })}
+
+`);
+            }
+        } finally {
+            clearTimeout(idleTimer);
         }
         res.end();
     },

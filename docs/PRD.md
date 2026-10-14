@@ -188,7 +188,7 @@ TaskQuest addresses this in three ways:
 | FR4 | Rewards are capped per day in the user's time zone: 10 list creations, 50 task creations and 50 task completions | Done |
 | FR5 | Free games (RPS, Hangman, arcade) share a cap of 500 XP per day in the user's time zone | Done |
 | FR6 | Game state is persisted in `game_sessions.game_data`, so games survive restarts | Done |
-| FR7 | Schema changes happen only through versioned migrations (001 to 021), and legacy databases are upgraded automatically | Done |
+| FR7 | Schema changes happen only through versioned migrations (001 to 022), and legacy databases are upgraded automatically | Done |
 | FR8 | Bot interactions that show XP or achievements are ephemeral | Done |
 | FR9 | The web app and API are served from one origin | Done |
 | FR10 | The bot exposes a health endpoint; the web app exposes `/api/health` | Done |
@@ -281,7 +281,7 @@ TaskQuest addresses this in three ways:
 - CI and tests.
 - Consolidated documentation.
 
-**Improvement pass (unreleased, migrations 010 to 021):** the balance rework and five new classes, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
+**Improvement pass (unreleased, migrations 010 to 022):** the balance rework and five new classes, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
 
 **Out of scope:** the items listed under Later in the roadmap.
 
@@ -293,7 +293,7 @@ TaskQuest addresses this in three ways:
 | Later | Ownership transfer for shared lists |
 | Later | Party features beyond the weekly quest (party boards, more quests) |
 | Later | Push notifications for AI results |
-| Later | Component tests for the web app |
+| Later | More component tests for the web app (the first set exists) |
 | Later | Internationalisation |
 | Done | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |
 | Done | The class rebalance, five new classes and 62 skills; task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, the weekly review, the monthly boss, rotating quests and prestige; the cosmetics shop |

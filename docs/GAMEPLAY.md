@@ -234,7 +234,7 @@ The leaderboard defaults to **lifetime XP** (the never-reset total, so buying a 
 
 ### Streak freeze
 
-A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price is 120 XP and you can hold 5. It is used automatically when you claim your daily reward after a gap that would otherwise reset a streak of 2 or more days. Order of protection: Unstoppable (free, always) first, then the longer window (Streak Shield, Paladin, Sanctuary), then a freeze. A freeze never gets spent while your streak is alive or when the streak is 1.
+A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price is 120 XP and you can hold 5. It is used automatically when you claim your daily reward after a gap that would otherwise reset a streak of 2 or more days. **One freeze covers one missed day**: every started 24 hours past your streak window (48 hours, 72 with protection, 96 with Sanctuary) costs one freeze, so a long absence needs several and a months-old streak cannot be saved. Momentum and the streak leaderboard count a streak that has lapsed (and not yet been claimed over) as 0. Order of protection: Unstoppable (free, always) first, then the longer window (Streak Shield, Paladin, Sanctuary), then a freeze. A freeze never gets spent while your streak is alive or when the streak is 1.
 
 ## 5b. Quests
 

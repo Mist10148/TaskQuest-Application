@@ -28,7 +28,7 @@ from app.config import get_settings
 from app.db import pool, repo
 from app.llm_call import structured_call
 from app.prompts import load_prompt
-from app.rag.chunking import item_label, list_label, sha256
+from app.rag.chunking import item_details, item_label, list_label, sha256
 
 log = logging.getLogger("taskquest.ai.summarize")
 
@@ -83,7 +83,7 @@ def _fmt_list(lst: dict[str, Any], items: list[dict[str, Any]] | None, today: da
     if lst.get("description"):
         lines.append(f"  description: {lst['description']}")
     for it in items or []:
-        lines.append(f"  [{item_label(it['id'])}] [{'x' if it['completed'] else ' '}] {it['name']}")
+        lines.append(f"  [{item_label(it['id'])}] [{'x' if it['completed'] else ' '}] {it['name']}{item_details(it)}")
     return "\n".join(lines)
 
 

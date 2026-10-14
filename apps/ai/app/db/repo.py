@@ -51,7 +51,9 @@ _LIST_COLUMNS = """
     l.id, l.name, l.description, l.category, l.deadline, l.priority, l.created_at,
     (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id) AS items_total,
     (SELECT COALESCE(SUM(i.completed), 0) FROM items i WHERE i.list_id = l.id) AS items_completed,
-    (SELECT MAX(COALESCE(i.completed_at, i.updated_at)) FROM items i WHERE i.list_id = l.id) AS last_activity
+    (SELECT MAX(COALESCE(i.completed_at, i.updated_at)) FROM items i WHERE i.list_id = l.id) AS last_activity,
+    (SELECT MIN(i.due_date) FROM items i WHERE i.list_id = l.id AND i.completed = 0 AND i.due_date IS NOT NULL) AS next_item_due,
+    (SELECT COUNT(*) FROM items i WHERE i.list_id = l.id AND i.completed = 0 AND i.priority = 'HIGH') AS high_items
 """
 
 
@@ -67,6 +69,8 @@ async def _load_lists(conn: AsyncConnection, discord_id: str, list_id: int | Non
         r["items_total"] = int(r["items_total"] or 0)
         r["items_completed"] = int(r["items_completed"] or 0)
         r["deadline"] = to_date(r["deadline"])
+        r["next_item_due"] = to_date(r["next_item_due"])
+        r["high_items"] = int(r["high_items"] or 0)
         r["created_at"] = to_datetime(r["created_at"])
         r["last_activity"] = to_datetime(r["last_activity"])
     return rows
@@ -83,7 +87,8 @@ async def lists_for_user(conn: AsyncConnection, discord_id: str, *, open_only: b
 async def items_for_list(conn: AsyncConnection, discord_id: str, list_id: int) -> list[dict[str, Any]]:
     result = await conn.execute(
         text(
-            "SELECT i.id, i.list_id, i.name, i.description, i.completed, i.completed_at, i.position "
+            "SELECT i.id, i.list_id, i.name, i.description, i.completed, i.completed_at, i.position, "
+            "i.due_date, i.priority, i.tags "
             "FROM items i JOIN lists l ON l.id = i.list_id "
             f"WHERE l.discord_id = :uid AND {UNSHARED} AND i.list_id = :lid ORDER BY i.position, i.id"
         ),
@@ -93,6 +98,7 @@ async def items_for_list(conn: AsyncConnection, discord_id: str, list_id: int) -
     for r in rows:
         r["completed"] = bool(r["completed"])
         r["completed_at"] = to_datetime(r["completed_at"])
+        r["due_date"] = to_date(r["due_date"])
     return rows
 
 
@@ -109,7 +115,8 @@ async def get_list_with_items(conn: AsyncConnection, discord_id: str, list_id: i
 async def all_items_for_user(conn: AsyncConnection, discord_id: str) -> list[dict[str, Any]]:
     result = await conn.execute(
         text(
-            "SELECT i.id, i.list_id, i.name, i.description, i.completed, i.completed_at, i.position "
+            "SELECT i.id, i.list_id, i.name, i.description, i.completed, i.completed_at, i.position, "
+            "i.due_date, i.priority, i.tags "
             f"FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = :uid AND {UNSHARED} "
             "ORDER BY i.list_id, i.position, i.id"
         ),
@@ -119,6 +126,7 @@ async def all_items_for_user(conn: AsyncConnection, discord_id: str) -> list[dic
     for r in rows:
         r["completed"] = bool(r["completed"])
         r["completed_at"] = to_datetime(r["completed_at"])
+        r["due_date"] = to_date(r["due_date"])
     return rows
 
 

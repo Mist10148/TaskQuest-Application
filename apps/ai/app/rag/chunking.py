@@ -42,6 +42,19 @@ def item_label(item_id: int) -> str:
     return f"I{item_id}"
 
 
+def item_details(it: dict[str, Any]) -> str:
+    """`` (due 2026-10-20, HIGH, #work #home)`` for the task's own due date, priority and tags, or an empty string."""
+    parts = []
+    if it.get("due_date"):
+        parts.append(f"due {it['due_date'].isoformat()}")
+    if it.get("priority"):
+        parts.append(it["priority"])
+    tags = [t for t in (it.get("tags") or "").split(",") if t]
+    if tags:
+        parts.append(" ".join(f"#{t}" for t in tags))
+    return f" ({', '.join(parts)})" if parts else ""
+
+
 def render_list(lst: dict[str, Any], items: list[dict[str, Any]]) -> str:
     """Canonical text for a quest and its subtasks (also used for fresh re-reads and prompts)."""
     lines = [
@@ -54,7 +67,7 @@ def render_list(lst: dict[str, Any], items: list[dict[str, Any]]) -> str:
         lines.append(f"Description: {lst['description']}")
     if items:
         lines.append("Subtasks:")
-        lines.extend(f"- [{'x' if it['completed'] else ' '}] {it['name']}" for it in items)
+        lines.extend(f"- [{'x' if it['completed'] else ' '}] {it['name']}{item_details(it)}" for it in items)
     else:
         lines.append("Subtasks: none yet")
     return "\n".join(lines)

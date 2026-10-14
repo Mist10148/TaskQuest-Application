@@ -474,3 +474,18 @@ async def test_a_quest_shared_after_indexing_is_purged_and_never_indexed_again(s
         await conn.execute(text("UPDATE ai_embeddings SET list_id = 1 WHERE source_id = 'L2'"))
         await indexer.index_user(conn, store, emb, UID)
         assert (await conn.execute(text("SELECT COUNT(*) FROM ai_embeddings WHERE list_id = 1"))).scalar() == 0
+
+
+def test_subtask_due_date_priority_and_tags_are_part_of_the_quest_text():
+    from datetime import date
+
+    from app.rag.chunking import render_list
+
+    lst = {"id": 1, "name": "Trip", "deadline": None}
+    items = [
+        {"id": 1, "name": "Book flights", "completed": False, "due_date": date(2026, 10, 20), "priority": "HIGH", "tags": "travel,money"},
+        {"id": 2, "name": "Pack", "completed": True},
+    ]
+    text_ = render_list(lst, items)
+    assert "- [ ] Book flights (due 2026-10-20, HIGH, #travel #money)" in text_
+    assert "- [x] Pack\n" in text_ + "\n"

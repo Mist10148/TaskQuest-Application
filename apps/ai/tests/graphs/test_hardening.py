@@ -267,3 +267,20 @@ async def test_requests_failing_validation_or_erroring_early_spend_nothing(seede
         r = await c.post("/v1/summary", json={"mode": "list", "listId": 4}, headers=auth())
         assert r.status_code == 404
         assert await usage_row("summary") == (0, 0, 0)
+
+
+async def test_a_failed_model_call_refunds_once_and_keeps_earlier_requests(seeded):
+    """The chain and the gate both used to refund, so one failure erased another request's booking."""
+
+    def broken_factory():
+        raise RuntimeError("provider down")
+
+    async with pool.connection() as conn:
+        await usage.reserve(conn, UID, "summary")  # an earlier, successful request
+    app = create_app()
+    app.dependency_overrides[get_llm_factory] = lambda: broken_factory
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://ai") as c:
+        r = await c.post("/v1/summary", json={"mode": "digest"}, headers=auth())
+        assert r.status_code >= 500
+    assert (await usage_row("summary"))[0] == 1

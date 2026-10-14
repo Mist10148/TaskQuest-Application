@@ -45,6 +45,9 @@ async def summary(
     except summarize_chain.NotFound:
         access.settled = True  # the chain already handed the request back
         raise HTTPException(status_code=404, detail="List not found") from None
+    except Exception:
+        access.settled = True  # the chain already handed the request back; refunding again would erase another one
+        raise
 
 
 class PrioritizeBody(BaseModel):
@@ -57,6 +60,10 @@ async def prioritize(
     access: AIAccess = Depends(require_ai("prioritize", degrade_on_quota=True)),
     llm_factory: Callable[..., Any] = Depends(get_llm_factory),
 ):
-    return await prioritize_graph.prioritize(
-        access.discord_id, llm_factory, limit=body.limit if body else None, reserved=access.reserved
-    )
+    try:
+        return await prioritize_graph.prioritize(
+            access.discord_id, llm_factory, limit=body.limit if body else None, reserved=access.reserved
+        )
+    except Exception:
+        access.settled = True  # the graph already handed the request back
+        raise

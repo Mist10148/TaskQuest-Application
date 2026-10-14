@@ -293,7 +293,7 @@ TaskQuest addresses this in three ways:
 | Later | Ownership transfer for shared lists |
 | Later | Party features beyond the weekly quest (party boards, more quests) |
 | Later | Push notifications for AI results |
-| Later | Component tests for the web app |
+| Later | More component tests for the web app (the first set exists) |
 | Later | Internationalisation |
 | Done | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |
 | Done | The class rebalance, five new classes and 62 skills; task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, the weekly review, the monthly boss, rotating quests and prestige; the cosmetics shop |

@@ -95,7 +95,7 @@ async function invite(actorId, input = {}) {
 
         if (!Number(invitee.accept_invites)) return notSent(input);
         const [[declined]] = await conn.query(
-            "SELECT 1 AS x FROM party_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND created_at > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
+            "SELECT 1 AS x FROM party_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND COALESCE(responded_at, created_at) > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
             [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
         );
         if (declined) return notSent(input);
@@ -147,7 +147,7 @@ async function respondIn(userId, id, accept) {
             throw errors.conflict('This invitation has expired. Ask for a new one.');
         }
         if (!accept) {
-            await conn.query("UPDATE party_invites SET status = 'declined' WHERE id = ?", [id]);
+            await conn.query("UPDATE party_invites SET status = 'declined', responded_at = UTC_TIMESTAMP() WHERE id = ?", [id]);
             return { accepted: false, party: null };
         }
         if (await myParty(conn, user.discord_id)) throw errors.conflict('You are already in a party. Leave it first.');
@@ -162,8 +162,8 @@ async function respondIn(userId, id, accept) {
         if (Number(m.n) >= LIMITS.MAX_PARTY_MEMBERS) throw errors.validation('This party is full.');
         await conn.query('INSERT INTO party_members (party_id, discord_id, public_id) VALUES (?, ?, ?)', [party.id, user.discord_id, newPublicId()]);
         await conn.query("UPDATE party_invites SET status = 'accepted' WHERE id = ?", [id]);
-        // Any other open invitation of mine is moot now.
-        await conn.query("UPDATE party_invites SET status = 'declined' WHERE invitee_discord_id = ? AND status = 'pending'", [user.discord_id]);
+        // Any other open invitation of mine is moot now. Revoked, not declined: the other inviters must not get a decline cooldown.
+        await conn.query("UPDATE party_invites SET status = 'revoked' WHERE invitee_discord_id = ? AND status = 'pending'", [user.discord_id]);
         return { accepted: true, party: { id: party.id, name: party.name } };
     });
 }

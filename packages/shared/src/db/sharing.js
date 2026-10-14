@@ -121,7 +121,7 @@ async function invite(actorId, listId, input = {}) {
         // Hidden from the inviter: the person takes no invitations, or declined this inviter in the last few days (on any list).
         if (!Number(invitee.accept_invites)) return notSent(input);
         const [[declined]] = await conn.query(
-            "SELECT 1 AS x FROM list_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND created_at > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
+            "SELECT 1 AS x FROM list_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND COALESCE(responded_at, created_at) > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
             [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
         );
         if (declined) return notSent(input);
@@ -191,7 +191,7 @@ async function respondIn(userId, id, accept) {
             throw errors.conflict('This invitation has expired. Ask for a new one.');
         }
         if (!accept) {
-            await conn.query("UPDATE list_invites SET status = 'declined' WHERE id = ?", [id]);
+            await conn.query("UPDATE list_invites SET status = 'declined', responded_at = UTC_TIMESTAMP() WHERE id = ?", [id]);
             return { accepted: false, list: null, role: inv.role };
         }
         const [[list]] = await conn.query('SELECT id, name, discord_id FROM lists WHERE id = ?', [inv.list_id]);

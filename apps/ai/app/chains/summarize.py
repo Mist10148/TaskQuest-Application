@@ -21,6 +21,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
@@ -224,20 +225,22 @@ async def get_cached(conn: AsyncConnection, discord_id: str, scope_key: str, inp
 
 async def put_cache(conn: AsyncConnection, discord_id: str, scope_key: str, input_hash: str, summary: Summary) -> None:
     params = {"uid": discord_id, "k": scope_key, "h": input_hash, "j": summary.model_dump_json()}
-    updated = await conn.execute(
-        text(
-            "UPDATE ai_summary_cache SET input_hash = :h, summary_json = :j, created_at = CURRENT_TIMESTAMP "
-            "WHERE discord_id = :uid AND scope_key = :k"
-        ),
-        params,
+    update = text(
+        "UPDATE ai_summary_cache SET input_hash = :h, summary_json = :j, created_at = CURRENT_TIMESTAMP "
+        "WHERE discord_id = :uid AND scope_key = :k"
     )
-    if updated.rowcount == 0:
-        await conn.execute(
-            text(
-                "INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) VALUES (:uid, :k, :h, :j)"
-            ),
-            params,
-        )
+    if (await conn.execute(update, params)).rowcount == 0:
+        try:
+            async with conn.begin_nested():  # a savepoint: losing a race must not poison the transaction
+                await conn.execute(
+                    text(
+                        "INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json) "
+                        "VALUES (:uid, :k, :h, :j)"
+                    ),
+                    params,
+                )
+        except IntegrityError:  # a concurrent request cached it first
+            await conn.execute(update, params)
 
 
 async def summarize(

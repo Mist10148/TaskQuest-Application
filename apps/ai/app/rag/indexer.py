@@ -238,11 +238,13 @@ async def reconcile(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Emb
 async def reindex_list(discord_id: str, list_id: int) -> None:
     async with pool.connection() as conn:
         await index_list(conn, runtime.get_store(), runtime.get_embedder(), discord_id, list_id)
+    runtime.get_store().invalidate(discord_id)  # after the commit, so a reader cannot cache the old rows
 
 
 async def forget_list(discord_id: str, list_id: int) -> None:
     async with pool.connection() as conn:
         await runtime.get_store().delete(conn, discord_id, list_id=list_id)
+    runtime.get_store().invalidate(discord_id)
 
 
 async def reconcile_loop() -> None:
@@ -252,6 +254,7 @@ async def reconcile_loop() -> None:
         try:
             async with pool.connection() as conn:
                 fixed = await reconcile(conn, runtime.get_store(), runtime.get_embedder())
+            runtime.get_store().invalidate(None)  # committed now
             if fixed:
                 log.info("reconcile re-indexed %d lists", fixed)
         except asyncio.CancelledError:

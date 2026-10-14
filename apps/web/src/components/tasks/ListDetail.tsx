@@ -25,7 +25,7 @@ interface Props {
   onBack: () => void;
   onOpenMembers: () => void;
   onAddItem: (parentId?: number) => void;
-  onQuickAdd: (parsed: QuickAddResult) => Promise<void>;
+  onQuickAdd: (parsed: QuickAddResult) => Promise<boolean>;
   onEditList: () => void;
   onSaveTemplate: () => void;
   onDeleteList: () => void;

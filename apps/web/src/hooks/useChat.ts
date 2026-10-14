@@ -119,7 +119,7 @@ export function useChat(initialThreadId: string | null) {
     );
 
     const run = useCallback(
-        async (start: (signal: AbortSignal) => Promise<void>): Promise<'ok' | 'blocked'> => {
+        async (start: (signal: AbortSignal) => Promise<void>, onFail?: () => void): Promise<'ok' | 'blocked'> => {
             setNotice(null);
             abortRef.current?.abort();
             const controller = new AbortController();
@@ -137,11 +137,16 @@ export function useChat(initialThreadId: string | null) {
                     return 'blocked';
                 }
                 if ((err as Error).name !== 'AbortError') {
+                    onFail?.();
                     showError(err);
                     setMessages((prev) => applyEvent(prev, { event: 'error', data: { message: 'The assistant could not answer. Please try again.' } }));
                 }
             } finally {
-                if (abortRef.current === controller) setIsStreaming(false);
+                if (abortRef.current === controller) {
+                    setIsStreaming(false);
+                    // A stream that ended without a done or error event must not leave a message "typing" forever.
+                    setMessages((prev) => (prev.some((m) => m.streaming) ? prev.map((m) => ({ ...m, streaming: false })) : prev));
+                }
             }
             return 'ok';
         },
@@ -172,12 +177,14 @@ export function useChat(initialThreadId: string | null) {
         async (approved: boolean) => {
             const id = threadRef.current;
             if (!id || !pending.length || isStreaming) return;
+            const waiting = pending;
             setPending([]);
             setNotice(null);
             setMessages((prev) => [...prev, { id: newId(), role: 'assistant', text: '', sources: [], tools: [], streaming: true }]);
-            await run((signal) => aiApi.resumeStream(id, approved, handleEvent, signal));
+            // If the answer never reached the server, the action is still waiting there: show the card again.
+            await run((signal) => aiApi.resumeStream(id, approved, handleEvent, signal), () => setPending(waiting));
         },
-        [handleEvent, isStreaming, pending.length, run]
+        [handleEvent, isStreaming, pending, run]
     );
 
     const stop = useCallback(() => {

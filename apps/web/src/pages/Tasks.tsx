@@ -155,12 +155,15 @@ const Tasks = () => {
     } catch { /* error toast shown by the mutation hook */ }
   };
 
-  const handleQuickAdd = async (parsed: QuickAddResult) => {
-    if (!selectedListId) return;
+  const handleQuickAdd = async (parsed: QuickAddResult): Promise<boolean> => {
+    if (!selectedListId) return false;
     try {
       await createItem.mutateAsync({ listId: selectedListId, name: parsed.name, due_date: parsed.due_date, priority: parsed.priority, tags: parsed.tags, recurrence: parsed.recurrence });
       refetchList();
-    } catch { /* error toast shown by the mutation hook */ }
+      return true;
+    } catch {
+      return false; // error toast shown by the mutation hook; the bar keeps the text
+    }
   };
 
   const confirmDeleteList = async () => {

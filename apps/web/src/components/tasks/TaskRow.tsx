@@ -95,9 +95,10 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         onClick={() => onToggle(item.id)}
         disabled={readOnly}
         aria-pressed={completed}
-        aria-label={completed ? `Mark "${item.name}" as not done` : `Mark "${item.name}" as done`}
+        aria-label={`Mark "${item.name}" as done`}
         className={cn(
-          "shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+          // The ::after widens the hit area to 28px (WCAG 2.5.8) without growing the box.
+          "relative after:absolute after:-inset-1 shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
           completed ? "bg-success border-success" : "border-border hover:border-primary",
           readOnly && "cursor-not-allowed opacity-60 hover:border-border"
         )}

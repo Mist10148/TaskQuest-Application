@@ -51,12 +51,12 @@ test('an owner invites a friend by username, who accepts, finishes a task and th
     await expect(ally.getByRole('heading', { name: quest })).toBeVisible();
     await expect(ally.getByRole('button', { name: 'Delete quest' })).toHaveCount(0);
     await ally.getByRole('button', { name: `Mark "${task}" as done` }).click();
-    await expect(ally.getByRole('button', { name: `Mark "${task}" as not done` })).toHaveAttribute('aria-pressed', 'true');
+    await expect(ally.getByRole('button', { name: `Mark "${task}" as done` })).toHaveAttribute('aria-pressed', 'true');
 
     // The owner sees it completed, and by whom.
     await captain.reload();
     await captain.getByRole('button', { name: new RegExp(quest) }).click();
-    await expect(captain.getByRole('button', { name: `Mark "${task}" as not done` })).toHaveAttribute('aria-pressed', 'true');
+    await expect(captain.getByRole('button', { name: `Mark "${task}" as done` })).toHaveAttribute('aria-pressed', 'true');
     await expect(captain.getByText('Done by e2e_ally')).toBeVisible();
     await expect(captain.getByRole('button', { name: 'Delete quest' })).toBeVisible();
 });

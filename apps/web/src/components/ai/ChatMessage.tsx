@@ -73,7 +73,7 @@ export function ChatMessage({ message }: { message: Message }) {
       </div>
       <div className={cn("max-w-[85%] space-y-2", isUser && "items-end")}>
         <div className={cn("rounded-2xl px-4 py-2.5 text-sm leading-relaxed", isUser ? "bg-primary text-primary-foreground" : "bg-card border border-border")}>
-          {isUser ? <p className="whitespace-pre-wrap">{message.text}</p> : message.text ? renderBody(message.text, known) : message.streaming ? <span className="inline-block h-4 w-2 bg-primary/60 animate-pulse rounded-sm" aria-label="Thinking" /> : null}
+          {isUser ? <p className="whitespace-pre-wrap">{message.text}</p> : message.text ? renderBody(message.text, known) : message.streaming ? <span className="inline-block h-4 w-2 bg-primary/60 animate-pulse rounded-sm" role="img" aria-label="Thinking" /> : null}
           {!isUser && message.streaming && message.text && <span className="inline-block h-4 w-1.5 ml-0.5 align-middle bg-primary/60 animate-pulse rounded-sm" />}
         </div>
         {!isUser && doneTools.length > 0 && (

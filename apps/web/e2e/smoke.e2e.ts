@@ -42,7 +42,7 @@ test('creates a quest, adds a task with quick add and completes it for XP', asyn
     const before = await progress.getAttribute('aria-valuenow');
 
     await done.click();
-    await expect(page.getByRole('button', { name: `Mark "${task}" as not done` })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: `Mark "${task}" as done` })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByText(/\+\d+ XP!/).first()).toBeVisible();
     await expect(progress).not.toHaveAttribute('aria-valuenow', before ?? '');
 });

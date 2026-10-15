@@ -17,6 +17,8 @@ const TOOL_LABELS: Record<string, string> = {
   add_item: "Added a task",
   complete_item: "Completed a task",
   update_list: "Updated a quest",
+  update_item: "Edited a task",
+  break_down_task: "Broke a task into steps",
 };
 
 /** Bold, inline code and quest ids that the answer actually drew on (links go to the quest). */

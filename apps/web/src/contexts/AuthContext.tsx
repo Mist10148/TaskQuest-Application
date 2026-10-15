@@ -7,6 +7,7 @@
 import React, { createContext, useContext, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi, ApiError, type UserData, type DiscordUser } from '@/lib/api';
+import { disablePush } from '@/lib/push';
 
 interface AuthContextType {
     user: UserData | null;
@@ -44,6 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = useCallback(async () => {
         try {
+            // This browser must stop receiving the signed-out player's notifications (it needs the session, so before logging out).
+            await disablePush().catch(() => {});
             await authApi.logout();
         } finally {
             qc.clear();

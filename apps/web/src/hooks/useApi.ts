@@ -79,6 +79,13 @@ export function showError(error: unknown) {
     toast.error(error instanceof Error ? error.message : 'Something went wrong');
 }
 
+/** Refresh what a change to tasks or lists can alter: the lists, and the Today page and the stats that are derived from due dates and completions. */
+function invalidateTaskViews(qc: QueryClient) {
+    qc.invalidateQueries({ queryKey: ['lists'] });
+    qc.invalidateQueries({ queryKey: ['today'] });
+    qc.invalidateQueries({ queryKey: ['stats'] });
+}
+
 /** Refresh everything that depends on the player's XP balance. */
 export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['user'] });
@@ -271,7 +278,7 @@ export function useUpdateList() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ listId, data }: { listId: number; data: Partial<CreateListData> }) => listsApi.update(listId, data),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['lists'] }),
+        onSuccess: () => invalidateTaskViews(qc),
         onError: showError,
     });
 }
@@ -400,7 +407,7 @@ export function useUpdateItem() {
     return useMutation({
         mutationFn: ({ itemId, data }: { itemId: number; data: Partial<ItemInput> & { position?: number } }) =>
             itemsApi.update(itemId, data),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['lists'] }),
+        onSuccess: () => invalidateTaskViews(qc),
         onError: showError,
     });
 }
@@ -410,7 +417,7 @@ export function useDeleteItem() {
     return useMutation({
         mutationFn: (itemId: number) => itemsApi.delete(itemId),
         onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['lists'] });
+            invalidateTaskViews(qc);
             qc.invalidateQueries({ queryKey: ['auth'] });
         },
         onError: showError,

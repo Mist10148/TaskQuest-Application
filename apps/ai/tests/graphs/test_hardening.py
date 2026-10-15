@@ -310,3 +310,33 @@ async def test_a_short_internal_token_stops_the_service_from_starting():
                 pass
     finally:
         settings.ai_internal_token = original
+
+
+# ── a converse turn that fails after the model ran is not refunded ───────────
+
+
+async def _failing_converse(monkeypatch, tokens: list[int]):
+    from types import SimpleNamespace
+
+    from app.deps import AIAccess, Caller
+    from app.routers import converse as converse_router
+
+    async def boom(*_a, **_k):
+        raise chat_service.AIUnavailable("conversation failed")
+
+    monkeypatch.setattr(converse_router.chat_service, "converse_turn", boom)
+    access = AIAccess(Caller(discord_id=UID, request_id="r1"), "chat")
+    body = converse_router.ConverseBody(channelId="1234567890", message="hello")
+    with pytest.raises(chat_service.AIUnavailable):
+        await converse_router.converse(body, access, SimpleNamespace(tokens=tokens), None)
+    return access
+
+
+async def test_a_converse_failure_after_the_model_ran_keeps_the_request_booked(monkeypatch):
+    access = await _failing_converse(monkeypatch, [120, 30])
+    assert access.settled is True, "tokens were spent, so the dependency must not hand the request back"
+
+
+async def test_a_converse_failure_before_the_model_ran_is_still_refunded(monkeypatch):
+    access = await _failing_converse(monkeypatch, [0, 0])
+    assert access.settled is False, "no model call happened: the gate refunds it"

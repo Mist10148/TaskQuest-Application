@@ -44,9 +44,15 @@ async def converse(
         except Exception:  # noqa: BLE001 - a CDN hiccup should not fail the whole message
             await access.refund()
             raise HTTPException(status_code=400, detail="Could not download the image.") from None
-    return await chat_service.converse_turn(
-        deps, access.discord_id, body.channelId, body.message, image, public=body.public
-    )
+    try:
+        return await chat_service.converse_turn(
+            deps, access.discord_id, body.channelId, body.message, image, public=body.public
+        )
+    except Exception:
+        if any(deps.tokens):
+            # The model already ran (tokens were booked with the turn): the reserved request is spent, not refunded.
+            access.settled = True
+        raise
 
 
 @router.delete("/converse/{channel_id}")

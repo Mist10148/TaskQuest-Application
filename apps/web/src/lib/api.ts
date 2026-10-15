@@ -347,6 +347,16 @@ export interface ClassPreview {
     fullTree: number;
 }
 
+export interface RespecResult {
+    success: boolean;
+    treeKey: string;
+    removed: string[];
+    spent: number;
+    refund: number;
+    balance: number;
+    percent: number;
+}
+
 export interface SkillPreview {
     classKey: string;
     level: number;
@@ -403,6 +413,7 @@ export const pushApi = {
 export const skillsApi = {
     getAll: () => apiFetch<SkillsData>('/api/skills'),
     preview: () => apiFetch<SkillPreview>('/api/skills/preview'),
+    respec: (classKey: string) => post<RespecResult>('/api/skills/respec', { classKey }),
     unlock: (skillId: string) => post<{ success: boolean; skill: { skill_id: string; skill_level: number }; balance: number }>(`/api/skills/${skillId}/unlock`),
 };
 

@@ -15,6 +15,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Skill respec.** Unlearn a whole skill tree and get 75% of its cost back (a refund, never lifetime XP), once a day: a Reset button on the Skills page, `POST /api/skills/respec`. Skills used to be a one-way purchase.
 - **"What would I earn?" previews.** The Classes page shows, before you buy, what a 10 XP task pays with no skills and with the whole tree; the Skills page shows what each skill's next level adds for your equipped class. A deterministic simulation of the real XP rules (`simulateAverage` in the shared package, also used by `scripts/balance-sim.js`); `GET /api/classes/:key/preview`, `GET /api/skills/preview`.
 - **Task estimates and a good-estimate bonus.** A task can carry an estimate in minutes (`estimate_minutes`, 1 to 600; export and import keep it). Finishing it within 10 minutes after a focus session whose real minutes are within 25% of the estimate pays +10 XP (30 a day). The web task form has an Estimate field.
 - **A daily reflection and a weekly goal.** Write one line about your day for +10 XP (once a day), or set how many tasks you will finish this week (3 to 60) and claim 10 + 2 XP per task, at most 80, when you get there. `/api/reflection`, `/api/goal`; migration `024_engagement` adds the tables.

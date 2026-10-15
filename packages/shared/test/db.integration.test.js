@@ -1127,6 +1127,44 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.tasks.setItemCompleted(U, close)).bonuses.find((b) => b.key === 'estimate_accuracy').xp, 10, '25% off is still inside the tolerance');
     });
 
+    await t.test('skill respec: 75% of a tree comes back as a refund, once a day, never lifetime XP', async () => {
+        const R = '100000000000000902';
+        await db.users.ensureUser(R);
+        await setXP(R, 3000);
+        await db.progression.buyClass(R, 'Hero');
+        await assert.rejects(db.progression.respecSkills(R, 'hero'), { code: 'CONFLICT' }, 'no skills yet');
+        await assert.rejects(db.progression.respecSkills(R, 'nope'), { code: 'NOT_FOUND' });
+        await db.progression.unlockSkill(R, 'hero_valor');
+        await db.progression.unlockSkill(R, 'hero_valor');
+        await db.progression.unlockSkill(R, 'hero_inspire');
+        const before = await db.users.getUser(R);
+        const spent = 100 + 100 + 150;
+        const r = await db.progression.respecSkills(R, 'HERO');
+        assert.deepEqual([r.spent, r.refund, r.percent], [spent, Math.floor(spent * 0.75), 75]);
+        assert.deepEqual(r.removed.sort(), ['hero_inspire', 'hero_valor']);
+        const after = await db.users.getUser(R);
+        assert.equal(Number(after.player_xp), Number(before.player_xp) + r.refund);
+        assert.equal(Number(after.lifetime_xp), Number(before.lifetime_xp), 'a refund is not lifetime XP');
+        assert.equal(Number(after.xp_spent), Number(before.xp_spent), 'the spending total is unchanged');
+        assert.equal((await db.users.getUserSkills(R)).length, 0);
+        // once a day
+        await db.progression.unlockSkill(R, 'hero_valor');
+        await assert.rejects(db.progression.respecSkills(R, 'HERO'), { code: 'COOLDOWN' });
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 2 DAY) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
+        assert.equal((await db.progression.respecSkills(R, 'HERO')).refund, 75);
+
+        // Freeze Cache cannot be dropped while more than 3 freezes are held
+        await db.progression.unlockSkill(R, 'default_xp_boost');
+        await db.progression.unlockSkill(R, 'default_daily_boost');
+        await db.progression.unlockSkill(R, 'default_streak_shield');
+        await db.progression.unlockSkill(R, 'default_freeze_cache');
+        await db.query('UPDATE users SET streak_freezes = 5 WHERE discord_id = ?', [R]);
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 2 DAY) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
+        await assert.rejects(db.progression.respecSkills(R, 'DEFAULT'), { code: 'VALIDATION' });
+        await db.query('UPDATE users SET streak_freezes = 3 WHERE discord_id = ?', [R]);
+        assert.ok((await db.progression.respecSkills(R, 'DEFAULT')).refund > 0);
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

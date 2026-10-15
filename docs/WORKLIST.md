@@ -47,7 +47,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 
 ## P6 Product and UX
 - [x] P6.1 Class what-if calculator
-- [ ] P6.2 Skill respec / refund
+- [x] P6.2 Skill respec / refund
 - [ ] P6.3 XP breakdown popover
 - [ ] P6.4 Undo for completions
 - [ ] P6.5 Today screen

@@ -27,6 +27,7 @@ export const previewQuery = z
         mix: z.enum(shared.SIM_MIXES).optional()
     })
     .strict();
+export const respecBody = z.object({ classKey: z.string().regex(/^[A-Za-z]{1,20}$/) }).strict();
 export const skillParam = z.object({ skillId: z.string().regex(/^[a-z_]{1,50}$/) });
 
 const optionalText = (max) => z.string().max(max).nullable().optional();

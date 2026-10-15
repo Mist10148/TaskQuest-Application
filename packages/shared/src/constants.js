@@ -636,6 +636,9 @@ const LIMITS = {
     ITEM_ADD_REWARDS_PER_DAY: 50,
     /** Only the first N task completions per day award XP (stops add/complete/delete loops). */
     ITEM_COMPLETE_REWARDS_PER_DAY: 50,
+    /** Skill respec: a tree's skills are removed and this share of what they cost comes back (not as lifetime XP); once a day. */
+    RESPEC_REFUND_PERCENT: 75,
+    RESPEC_COOLDOWN_HOURS: 24,
     /** perfect_day: this many top-level tasks due today (on your own lists), all done. */
     PERFECT_DAY_MIN_TASKS: 3,
     /** inbox_zero: this many overdue tasks cleared in the week, and none left overdue. */

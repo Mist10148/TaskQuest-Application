@@ -17,6 +17,8 @@ const {
     findSkill,
     LIMITS,
     REWARDS,
+    SKILL_TREES,
+    STREAK_FREEZE,
     SPEND_SOURCES,
     STREAK_CHESTS,
     PRESTIGE,
@@ -472,7 +474,47 @@ async function unlockSkill(discordId, skillId) {
     });
 }
 
+/**
+ * Unlearn every skill of one tree and get RESPEC_REFUND_PERCENT of what the levels cost back (a refund: it never counts as
+ * lifetime XP and does not lower xp_spent). Once a day. Freeze Cache cannot be dropped while you hold more freezes than
+ * the normal limit, so no purchased freeze is ever lost.
+ */
+async function respecSkills(discordId, treeKey) {
+    const key = String(treeKey || '').toUpperCase();
+    const tree = SKILL_TREES[key];
+    if (!tree) throw errors.notFound('Skill tree not found.');
+    return withTransaction(async (conn) => {
+        const user = await lockUser(conn, discordId);
+        requireGamification(user);
+        const ids = Object.keys(tree.skills);
+        const [rows] = await conn.query(`SELECT skill_id, skill_level FROM user_skills WHERE discord_id = ? AND skill_id IN (${ids.map(() => '?').join(',')}) FOR UPDATE`, [user.discord_id, ...ids]);
+        if (!rows.length) throw errors.conflict(`You have no ${tree.name} skills to reset.`);
+
+        const [[last]] = await conn.query("SELECT MAX(created_at) AS at FROM xp_transactions WHERE discord_id = ? AND source = 'skill_refund'", [user.discord_id]);
+        if (last && last.at) {
+            const wait = new Date(last.at).getTime() + LIMITS.RESPEC_COOLDOWN_HOURS * 3600e3 - Date.now();
+            if (wait > 0) {
+                const err = errors.cooldown(wait);
+                err.message = `You can reset one skill tree a day. Try again in about ${Math.ceil(wait / 3600e3)} hours.`;
+                throw err;
+            }
+        }
+        if (rows.some((r) => r.skill_id === 'default_freeze_cache') && Number(user.streak_freezes) > STREAK_FREEZE.MAX) {
+            throw errors.validation(`You hold ${user.streak_freezes} streak freezes; use some first, because without Freeze Cache you can hold ${STREAK_FREEZE.MAX}.`);
+        }
+
+        const spent = rows.reduce((sum, r) => sum + tree.skills[r.skill_id].cost * Number(r.skill_level), 0);
+        const refund = Math.floor((spent * LIMITS.RESPEC_REFUND_PERCENT) / 100);
+        await conn.query(`DELETE FROM user_skills WHERE discord_id = ? AND skill_id IN (${ids.map(() => '?').join(',')})`, [user.discord_id, ...ids]);
+        // Counters that only the removed skills explained are cleared with them.
+        await conn.query('UPDATE users SET assassin_bleed = 0 WHERE discord_id = ?', [user.discord_id]);
+        const tx = await applyXP(conn, user, refund, 'skill_refund', { lifetimeDelta: 0 });
+        return { treeKey: key, removed: rows.map((r) => r.skill_id), spent, refund, balance: tx.balanceAfter, percent: LIMITS.RESPEC_REFUND_PERCENT };
+    });
+}
+
 module.exports = {
+    respecSkills,
     applyXP,
     rewardAction,
     awardFlat,

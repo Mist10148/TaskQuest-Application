@@ -42,6 +42,8 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 
 Task bonuses (`first_of_day` to `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist`, `estimate_accuracy`) are paid only on a task's **first, paid completion**: un-checking and re-checking pays nothing, neither does a completion over the 50-a-day cap, and imported tasks and auto-created repeat copies never earn them. An *early* or *overdue* effect needs a due date that was set at least 24 hours before the completion. Imports, templates and exports never pay XP.
 
+Giving a skill tree back refunds 75% of its cost as a plain balance credit (`skill_refund`, never lifetime XP), once a day.
+
 Spending sinks: classes (300 to 750), skills (50 to 360 a level), streak freezes (150, or 120 with Freeze Cache), cosmetics (200 to 2000), Blackjack bets. Prestige empties your balance.
 
 ## Order of calculation

@@ -236,6 +236,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | `reflection`, `weekly_goal` | + | A daily note and a weekly goal (flat XP) |
 | `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist`, `estimate_accuracy` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
 | `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review`, `quest_reward`, `party_quest` | + | Flat bonuses from streaks, achievements, focus sessions, the weekly review, daily/weekly/monthly quests and the party quest |
+| `skill_refund` | + | 75% of a skill tree's cost handed back when it is reset. Never lifetime XP. |
 | `prestige` | − | The balance leaving at a prestige (not spending: `xp_spent` is unchanged) |
 | `game_reward` | + | RPS, Hangman and arcade winnings. These count toward the free-game daily cap. |
 | `blackjack_bet` | − | Bet escrow (and double down) |

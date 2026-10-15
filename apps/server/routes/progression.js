@@ -4,7 +4,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, requireAuth, uid, avatarUrl } from '../lib/http.js';
-import { keyParam, skillParam, leaderboardQuery, previewQuery } from '../lib/schemas.js';
+import { keyParam, skillParam, leaderboardQuery, previewQuery, respecBody } from '../lib/schemas.js';
 import { sealId, openId } from '../lib/avatarProxy.js';
 
 const { CLASSES, SKILL_TREES, ACHIEVEMENTS, classOwnershipColumn, simulateAverage, FAVOURABLE } = shared;
@@ -113,6 +113,15 @@ skillsRouter.get(
             }
         }
         res.json({ classKey: cls, level, mix, base: 10, average: Math.round(base * 10) / 10, gains });
+    })
+);
+
+/** Unlearn a whole tree for a partial refund (once a day). */
+skillsRouter.post(
+    '/respec',
+    asyncRoute(async (req, res) => {
+        const { classKey } = parse(respecBody, req.body);
+        res.json({ success: true, ...(await db.progression.respecSkills(uid(req), classKey)) });
     })
 );
 

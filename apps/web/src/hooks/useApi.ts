@@ -497,6 +497,15 @@ export function useSkillPreview() {
     return useQuery({ queryKey: ['skills', 'preview'], queryFn: skillsApi.preview, staleTime: 1000 * 60 * 5 });
 }
 
+export function useRespecSkills() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (classKey: string) => skillsApi.respec(classKey),
+        onSuccess: () => invalidateProgress(qc),
+        onError: showError,
+    });
+}
+
 export function useClassPreview(classKey: string | undefined, mix?: string) {
     return useQuery({ queryKey: ['classes', 'preview', classKey, mix ?? 'default'], queryFn: () => classesApi.preview(classKey as string, mix), enabled: Boolean(classKey), staleTime: 1000 * 60 * 5 });
 }

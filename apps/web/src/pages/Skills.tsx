@@ -3,10 +3,10 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Lock, Check, Sparkles, Loader2, ShieldX } from "lucide-react";
+import { Lock, Check, Sparkles, Loader2, ShieldX, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSkills, useSkillPreview, useUnlockSkill } from "@/hooks/useApi";
+import { useSkills, useSkillPreview, useUnlockSkill, useRespecSkills } from "@/hooks/useApi";
 import { MIX_LABELS } from "@/lib/classInfo";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
@@ -21,6 +21,8 @@ const Skills = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useSkills();
   const unlockSkill = useUnlockSkill();
   const preview = useSkillPreview().data;
+  const respec = useRespecSkills();
+  const [confirmRespec, setConfirmRespec] = useState(false);
   const equippedKey: string = user?.user?.player_class || 'DEFAULT';
   // Until the player picks a tab, show the tree of the class they have equipped.
   const [pickedTreeKey, setPickedTreeKey] = useState<string | null>(null);
@@ -64,6 +66,18 @@ const Skills = () => {
   };
 
   const color = classColor(selectedTreeKey);
+  const spentOnTree = (selectedTree?.skills ?? []).reduce((sum: number, s: Skill) => sum + s.cost * s.currentLevel, 0);
+  const refundPreview = Math.floor(spentOnTree * 0.75);
+
+  const handleRespec = async () => {
+    try {
+      const r = await respec.mutateAsync(selectedTreeKey);
+      toast.success(`🔄 ${selectedTree?.name ?? "Tree"} reset`, { description: `${r.refund.toLocaleString()} XP came back (${r.percent}% of ${r.spent.toLocaleString()}).` });
+      refresh();
+    } catch {
+      /* error toast shown by the mutation hook */
+    }
+  };
 
   // With 12 trees the tab list scrolls; keep the selected tab in view.
   useEffect(() => {
@@ -157,6 +171,11 @@ const Skills = () => {
                 <Lock className="h-3 w-3" /> Requires owning this class
               </p>
             )}
+            {isClassOwned && spentOnTree > 0 && (
+              <Button type="button" variant="outline" size="sm" className="mt-3 gap-2" onClick={() => setConfirmRespec(true)} disabled={respec.isPending}>
+                {respec.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Reset this tree
+              </Button>
+            )}
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -234,6 +253,19 @@ const Skills = () => {
           </div>
         </motion.div>
       )}
+      <ConfirmDialog
+        open={confirmRespec}
+        onOpenChange={setConfirmRespec}
+        title={`Reset the ${selectedTree?.name ?? ""} tree?`}
+        description={(
+          <div className="space-y-1 text-sm">
+            <p>Every {selectedTree?.name} skill is unlearned and <span className="font-semibold text-xp">{refundPreview.toLocaleString()} XP</span> comes back (75% of the {spentOnTree.toLocaleString()} XP you spent).</p>
+            <p>You can reset one tree a day. The refund never counts as lifetime XP.</p>
+          </div>
+        )}
+        confirmLabel="Reset the tree"
+        onConfirm={() => { setConfirmRespec(false); void handleRespec(); }}
+      />
       <ConfirmDialog
         open={confirmSkill !== null}
         onOpenChange={(open) => { if (!open) setConfirmSkill(null); }}

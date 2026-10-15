@@ -52,9 +52,9 @@ For every reward:
 2. multiplier = 1 + Σ percentage skills
                   + conditional skills: Execute, Revenge, Crusade (class), Bleed, Momentum  (§4)
 3. final      = ⌊classXP × multiplier⌋ + Σ flat skill bonuses
-                  (Valor, Fortify, Arcane Study, and on task completions Multishot,
-                   Rally for HIGH priority, Anchor for recurring tasks)
-4. Hero Champion: ×1.5 if your level is a multiple of 5 (Hero equipped)
+                  (Valor, Fortify, Arcane Study, and on task completions Multishot, each only
+                   with its own class equipped; Rally for HIGH priority, Anchor for recurring tasks)
+4. Hero Champion: ×1.35 if your level is a multiple of 5 (Hero equipped)
 5. Crit (Assassin Critical Hit): +50 % (or +100 % with Shadow Step); a crit arms Bleed
 6. Double Down skill: chance to ×2
 7. Jackpot skill: 1 % chance to ×10
@@ -77,7 +77,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | ⚔️ **Hero** | 500 | +25 flat XP, but never more than 3 × the base reward (so a 5 XP action gets +15, not +25). |
 | 🎲 **Gambler** | 450 | Rolls a bonus of 0 to (2 × base + 40). 20% of the time it is *bad luck* instead: the reward shrinks by min(bonus, base − 1), and never drops below 1 XP. Counts consecutive lucky rolls (`gambler_streak`) for Hot Hand. |
 | 🗡️ **Assassin** | 400 | Each action raises the streak by 1. From streak 3, each action also adds a stack (max 10). Bonus is +8% per stack. **Decay:** after more than 48 hours without a rewarded action the streak and stacks reset to 0 before the action is applied. |
-| 🔮 **Wizard** | 700 | Wisdom = level × 2. The 3rd action in a cycle adds +Wisdom (Combo). The 5th adds +2 × Wisdom (Burst). Then the cycle restarts. |
+| 🔮 **Wizard** | 700 | Wisdom = level × 2, never more than 50 (level 25), Tome included. The 3rd action in a cycle adds +Wisdom (Combo). The 5th adds +2 × Wisdom (Burst). Then the cycle restarts. |
 | 🏹 **Archer** | 600 | Hit chance is min(97%, 80% + 0.5% × level). A **hit** raises the streak by 1 (max 15) and adds ⌊base × streak × 6%⌋ + 2 + ⌊streak ÷ 2⌋. On a hit, a *headshot* triggers if the roll is under min(30, hit% × 0.2) and adds ⌊1.5 × base⌋ + 2 × streak. A 3% *perfect shot* adds 3 × base + 6 × streak. A **miss** lowers the streak by 2. |
 | 🛡️ **Tank** | 500 | +1 shield stack per action, capped at min(15, 5 + ⌊level / 3⌋) (plus 2 per Absorb level). Bonus is ⌊base × stacks × 7%⌋ + ⌊stacks / 2⌋. |
 | 🧘 **Monk** | 550 | **Rhythm** (max 14, counted in your days). The first rewarded action on a new day continues the Rhythm if you were active yesterday (+1), otherwise it restarts at 1. Further actions the same day keep it. Bonus on every action = ⌊base × Rhythm × 2%⌋ + Rhythm. |
@@ -95,7 +95,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 
 ## 4. Skills
 
-- You can learn skills from the **Default** tree and from the trees of classes you **own**. The class doesn't need to be equipped for generic bonuses.
+- You can learn skills from the **Default** tree and from the trees of classes you **own**. The class doesn't need to be equipped for generic bonuses. Skills marked *(class)* only work while that class is equipped; this includes the flat per-action skills Valor, Fortify, Arcane Study and Multishot, so they cannot be borrowed by another class.
 - Each level costs the listed price.
 - A skill's prerequisite must be unlocked (at any level) first.
 - Effects marked *(class)* only matter while that class is equipped.
@@ -118,9 +118,9 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 
 | Skill | Max | Cost | Effect | Requires |
 |---|---|---|---|---|
-| ⚔️ Valor | 3 | 100 | +10 flat XP | — |
+| ⚔️ Valor | 3 | 100 | +10 flat XP *(class)* | — |
 | ✨ Inspire | 2 | 150 | +8% XP | Valor |
-| 👑 Champion | 1 | 200 | +50% XP while your level is a multiple of 5 *(class)* | Inspire |
+| 👑 Champion | 1 | 200 | +35% XP while your level is a multiple of 5 *(class)* | Inspire |
 | 🏆 Legendary | 1 | 300 | +15% XP *(class)* | Champion |
 | 🛡️ Oath | 1 | 250 | Hero bonus becomes min(25 + level, 50), still capped at 3 × base *(class)* | Legendary |
 | 📣 Rally | 1 | 220 | +15 flat XP when you complete a HIGH priority task | Oath |
@@ -154,7 +154,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 
 | Skill | Max | Cost | Effect | Requires |
 |---|---|---|---|---|
-| 📖 Arcane Study | 3 | 100 | +3 flat XP | — |
+| 📖 Arcane Study | 3 | 100 | +3 flat XP *(class)* | — |
 | 🔥 Spell Combo | 2 | 150 | Combo bonus +50% *(class)* | Arcane Study |
 | 🧘 Focus | 2 | 200 | +10% XP | Spell Combo |
 | 🌟 Arcane Mastery | 1 | 350 | Burst = 3 × Wisdom instead of 2 × *(class)* | Focus |
@@ -167,7 +167,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | Skill | Max | Cost | Effect | Requires |
 |---|---|---|---|---|
 | 🎯 Steady Aim | 3 | 85 | +3% XP | — |
-| 🏹 Multishot | 2 | 140 | +5 XP on task completions | Steady Aim |
+| 🏹 Multishot | 2 | 140 | +5 XP on task completions *(class)* | Steady Aim |
 | 💫 Piercing Shot | 1 | 190 | Misses don't reduce the streak *(class)* | Multishot |
 | 🦅 Sniper | 1 | 300 | Completing a HIGH-priority task (its own priority, else the priority of its list) is always a hit and headshot *(class)* | Piercing Shot |
 | 🪶 Quiver | 2 | 150 | +3% hit chance per level, still capped at 97% *(class)* | Sniper |
@@ -178,9 +178,9 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 
 | Skill | Max | Cost | Effect | Requires |
 |---|---|---|---|---|
-| 🧱 Fortify | 3 | 70 | +5 flat XP | — |
+| 🧱 Fortify | 3 | 70 | +5 flat XP *(class)* | — |
 | 💪 Absorb | 2 | 145 | +2 max shield stacks *(class)* | Fortify |
-| ⚡ Revenge | 2 | 200 | +10% XP while at max stacks *(class)* | Absorb |
+| ⚡ Revenge | 2 | 200 | +15% XP while at max stacks *(class)* | Absorb |
 | 🚀 Unstoppable | 1 | 320 | The daily streak never resets. A missed day just continues it. | Revenge |
 | 🏰 Bulwark | 1 | 240 | Each action adds 2 shield stacks instead of 1 *(class)* | Unstoppable |
 | ⚓ Anchor | 1 | 260 | +8 flat XP when you complete a recurring task | Bulwark |
@@ -190,7 +190,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 
 | Skill | Max | Cost | Effect | Requires |
 |---|---|---|---|---|
-| 🌬️ Steady Breath | 3 | 120 | +0.5 XP per Rhythm day on every action, per level *(class)* | — |
+| 🌬️ Steady Breath | 3 | 120 | +0.4 XP per Rhythm day on every action, per level *(class)* | — |
 | 🧠 Inner Focus | 2 | 180 | Monk bonus +15% per level *(class)* | Steady Breath |
 | 🪷 Discipline | 1 | 260 | Maximum Rhythm +2 (14 → 16) *(class)* | Inner Focus |
 | ☯️ Serenity | 1 | 340 | Rhythm survives one missed day (a gap of 2 days continues it) *(class)* | Discipline |

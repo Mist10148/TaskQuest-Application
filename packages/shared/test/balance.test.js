@@ -47,3 +47,32 @@ test('class power stays inside the balance bands (per task, base 10, levels 6 / 
         assert.ok(payback >= 15 && payback <= 70, `${cls}: class and tree repay in ${payback} tasks`);
     }
 });
+
+test('borrowing skills from other trees stays modest: a Default player with every skill of every tree earns under 3x the base', () => {
+    const { SKILL_TREES } = require('../src');
+    const rows = [];
+    for (const tree of Object.values(SKILL_TREES)) {
+        for (const [id, s] of Object.entries(tree.skills)) rows.push({ skill_id: id, skill_level: s.maxLevel });
+    }
+    const { simulateAverage } = require('../src');
+    for (const level of [6, 29, 100]) {
+        const avg = simulateAverage('DEFAULT', rows, { level });
+        assert.ok(avg <= 30, `L${level}: Default with every skill of every tree pays ${avg.toFixed(1)} on a 10 XP task`);
+    }
+});
+
+test('level-scaled classes stop growing: the Wizard at level 100 pays what it does at the Wisdom cap', () => {
+    const cap = sim.perAction('WIZARD', { level: 30, tree: 'full' });
+    assert.equal(sim.perAction('WIZARD', { level: 100, tree: 'full' }), cap);
+    assert.equal(sim.perAction('WIZARD', { level: 500 }), sim.perAction('WIZARD', { level: 30 }));
+    for (const cls of ['HERO', 'TANK', 'ARCHER']) {
+        assert.ok(sim.perAction(cls, { level: 500, tree: 'full' }) <= sim.perAction(cls, { level: 30, tree: 'full' }) * 1.1, `${cls} keeps growing with level`);
+    }
+});
+
+test('no class tops 13x the base on a plain task with its full tree, or 10x with no skills at its cap level', () => {
+    for (const cls of sim.PURCHASABLE) {
+        assert.ok(sim.perAction(cls, { level: 30, tree: 'full' }) <= 130, `${cls} full tree`);
+        assert.ok(sim.perAction(cls, { level: 30 }) <= 50, `${cls} no skills`);
+    }
+});

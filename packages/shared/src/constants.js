@@ -38,7 +38,7 @@ const CLASSES = {
         name: 'Assassin',
         emoji: '🗡️',
         cost: 400,
-        description: 'From the 3rd consecutive action, gain one stack per action (max 10). Each stack adds +7% XP. Stacks reset when you change class or after 48 hours without acting.',
+        description: 'From the 3rd consecutive action, gain one stack per action (max 10). Each stack adds +8% XP. Stacks reset when you change class or after 48 hours without acting.',
         playstyle: 'Rewards long, uninterrupted streaks of activity.'
     },
     WIZARD: {
@@ -59,8 +59,8 @@ const CLASSES = {
         name: 'Tank',
         emoji: '🛡️',
         cost: 500,
-        description: 'Every action adds a shield stack (cap = min(15, 5 + level ÷ 3), plus Absorb). Each stack adds +6% XP plus +1 XP per two stacks.',
-        playstyle: 'Strong early, steady momentum.'
+        description: 'Every action adds a shield stack (cap = min(15, 5 + level ÷ 3), plus Absorb). Each stack adds +7% XP plus +1 XP per two stacks.',
+        playstyle: 'Steady momentum that builds with every action; the cap grows with your level.'
     },
     MONK: {
         name: 'Monk',
@@ -169,9 +169,9 @@ const SKILL_TREES = {
         emoji: '⚔️',
         description: 'Reliable XP gains',
         skills: {
-            hero_valor: { name: 'Valor', emoji: '⚔️', description: '+10 flat XP per action per level', maxLevel: 3, cost: 100, requires: null },
+            hero_valor: { name: 'Valor', emoji: '⚔️', description: '+10 flat XP per action per level (Hero)', maxLevel: 3, cost: 100, requires: null, classOnly: true },
             hero_inspire: { name: 'Inspire', emoji: '✨', description: '+8% XP per level', maxLevel: 2, cost: 150, requires: 'hero_valor' },
-            hero_champion: { name: 'Champion', emoji: '👑', description: '+50% XP while your level is a multiple of 5 (Hero)', maxLevel: 1, cost: 200, requires: 'hero_inspire', classOnly: true },
+            hero_champion: { name: 'Champion', emoji: '👑', description: '+35% XP while your level is a multiple of 5 (Hero)', maxLevel: 1, cost: 200, requires: 'hero_inspire', classOnly: true },
             hero_legend: { name: 'Legendary', emoji: '🏆', description: '+15% XP on every action (Hero)', maxLevel: 1, cost: 300, requires: 'hero_champion', classOnly: true },
             hero_oath: { name: 'Oath', emoji: '🛡️', description: 'Hero bonus becomes min(25 + level, 50), still capped at 3× the base reward (Hero)', maxLevel: 1, cost: 250, requires: 'hero_legend' },
             hero_rally: { name: 'Rally', emoji: '📣', description: '+15 flat XP when you complete a HIGH priority task', maxLevel: 1, cost: 220, requires: 'hero_oath' },
@@ -211,7 +211,7 @@ const SKILL_TREES = {
         emoji: '🔮',
         description: 'Spell combos and wisdom scaling',
         skills: {
-            wizard_study: { name: 'Arcane Study', emoji: '📖', description: '+3 flat XP per action per level', maxLevel: 3, cost: 100, requires: null },
+            wizard_study: { name: 'Arcane Study', emoji: '📖', description: '+3 flat XP per action per level (Wizard)', maxLevel: 3, cost: 100, requires: null, classOnly: true },
             wizard_combo: { name: 'Spell Combo', emoji: '🔥', description: 'Wizard Combo bonus +50% per level', maxLevel: 2, cost: 150, requires: 'wizard_study' },
             wizard_focus: { name: 'Focus', emoji: '🧘', description: '+10% XP per level', maxLevel: 2, cost: 200, requires: 'wizard_combo' },
             wizard_mastery: { name: 'Arcane Mastery', emoji: '🌟', description: 'Wizard Burst grants 3× Wisdom instead of 2×', maxLevel: 1, cost: 350, requires: 'wizard_focus' },
@@ -226,7 +226,7 @@ const SKILL_TREES = {
         description: 'Precision and critical strikes',
         skills: {
             archer_aim: { name: 'Steady Aim', emoji: '🎯', description: '+3% XP per level', maxLevel: 3, cost: 85, requires: null },
-            archer_multishot: { name: 'Multishot', emoji: '🏹', description: '+5 XP per level when completing a task', maxLevel: 2, cost: 140, requires: 'archer_aim' },
+            archer_multishot: { name: 'Multishot', emoji: '🏹', description: '+5 XP per level when completing a task (Archer)', maxLevel: 2, cost: 140, requires: 'archer_aim', classOnly: true },
             archer_piercing: { name: 'Piercing Shot', emoji: '💫', description: 'Archer misses no longer reduce your streak', maxLevel: 1, cost: 190, requires: 'archer_multishot' },
             archer_sniper: { name: 'Sniper', emoji: '🦅', description: 'Completing a HIGH-priority task (its own priority, else the priority of its list) is always a headshot (Archer)', maxLevel: 1, cost: 300, requires: 'archer_piercing' },
             archer_quiver: { name: 'Quiver', emoji: '🪶', description: '+3% Archer hit chance per level (still capped at 97%)', maxLevel: 2, cost: 150, requires: 'archer_sniper' },
@@ -239,9 +239,9 @@ const SKILL_TREES = {
         emoji: '🛡️',
         description: 'Slow but unstoppable momentum',
         skills: {
-            tank_fortify: { name: 'Fortify', emoji: '🧱', description: '+5 flat XP per action per level', maxLevel: 3, cost: 70, requires: null },
+            tank_fortify: { name: 'Fortify', emoji: '🧱', description: '+5 flat XP per action per level (Tank)', maxLevel: 3, cost: 70, requires: null, classOnly: true },
             tank_absorb: { name: 'Absorb', emoji: '💪', description: '+2 Tank max shield stacks per level', maxLevel: 2, cost: 145, requires: 'tank_fortify' },
-            tank_revenge: { name: 'Revenge', emoji: '⚡', description: '+10% XP per level while at max shield stacks', maxLevel: 2, cost: 200, requires: 'tank_absorb' },
+            tank_revenge: { name: 'Revenge', emoji: '⚡', description: '+15% XP per level while at max shield stacks', maxLevel: 2, cost: 200, requires: 'tank_absorb' },
             tank_unstoppable: { name: 'Unstoppable', emoji: '🚀', description: 'Your daily streak never resets; a missed day only pauses it', maxLevel: 1, cost: 320, requires: 'tank_revenge' },
             tank_bulwark: { name: 'Bulwark', emoji: '🏰', description: 'Each action adds 2 Tank shield stacks instead of 1 (Tank)', maxLevel: 1, cost: 240, requires: 'tank_unstoppable' },
             tank_anchor: { name: 'Anchor', emoji: '⚓', description: '+8 flat XP when you complete a recurring task', maxLevel: 1, cost: 260, requires: 'tank_bulwark' },
@@ -253,7 +253,7 @@ const SKILL_TREES = {
         emoji: '🧘',
         description: 'Daily rhythm and calm focus',
         skills: {
-            monk_breath: { name: 'Steady Breath', emoji: '🌬️', description: '+0.5 XP per Rhythm day on every action, per level (Monk)', maxLevel: 3, cost: 120, requires: null },
+            monk_breath: { name: 'Steady Breath', emoji: '🌬️', description: '+0.4 XP per Rhythm day on every action, per level (Monk)', maxLevel: 3, cost: 120, requires: null },
             monk_focus: { name: 'Inner Focus', emoji: '🧠', description: 'Monk bonus +15% per level (Monk)', maxLevel: 2, cost: 180, requires: 'monk_breath' },
             monk_discipline: { name: 'Discipline', emoji: '🪷', description: 'Maximum Rhythm +2 (14 → 16) (Monk)', maxLevel: 1, cost: 260, requires: 'monk_focus' },
             monk_serenity: { name: 'Serenity', emoji: '☯️', description: 'Rhythm survives one missed day (Monk)', maxLevel: 1, cost: 340, requires: 'monk_discipline' },
@@ -558,17 +558,17 @@ const STREAK_FREEZE_CACHE = { COST: 120, MAX: 5 };
  * tables them. Percentages are plain numbers (20 = 20%).
  */
 const CLASS_RULES = {
-    HERO: { LAST_STAND_XP: 20, FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15, CHAMPION_MULTIPLIER: 1.5, LEGEND_PERCENT: 15 },
+    HERO: { LAST_STAND_XP: 20, FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15, CHAMPION_MULTIPLIER: 1.35, LEGEND_PERCENT: 15 },
     GAMBLER: { BONUS_BASE_MULTIPLE: 2, BONUS_FLAT: 40, LOADED_FLOOR: 0.25, LOSS_CHANCE: 0.2, MIN_LOSS_CHANCE: 0.05, INSURANCE_FLOOR: 0.6, HOT_HAND_STREAK: 3 },
     ASSASSIN: { VANISH_KEEP_PERCENT: 50, DECAY_HOURS: 48, NIGHT_OWL_DECAY_HOURS: 72, STACK_PERCENT: 8, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
-    WIZARD: { CANTRIP_PERCENT: 25, WISDOM_PER_LEVEL: 2, OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
+    WIZARD: { CANTRIP_PERCENT: 25, WISDOM_PER_LEVEL: 2, WISDOM_MAX: 50, OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
     ARCHER: { RICOCHET_PER_STREAK: 1, QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97, STREAK_PERCENT: 6, HIT_FLAT: 2, HEADSHOT_BASE_MULTIPLE: 1.5, HEADSHOT_PER_STREAK: 2, PERFECT_CHANCE: 0.03, PERFECT_BASE_MULTIPLE: 3, PERFECT_PER_STREAK: 6 },
-    TANK: { TAUNT_STACKS: 1, CAP_MAX: 15, CAP_BASE: 5, CAP_LEVELS_PER_STACK: 3, STACK_PERCENT: 7, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    TANK: { REVENGE_PERCENT: 15, TAUNT_STACKS: 1, CAP_MAX: 15, CAP_BASE: 5, CAP_LEVELS_PER_STACK: 3, STACK_PERCENT: 7, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
     PALADIN: { AEGIS_PERCENT: 50, HIGH_FLAT: 10, OTHER_FLAT: 8, AURA_FLAT: 3, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
     NECROMANCER: { SOUL_EATER_PERCENT: 25, SOUL_EATER_SOULS: 3, MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 8, SIPHON_PERCENT: 2, HARVEST_EVERY: 10, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
     RANGER: { TRACKER_FLAT: 4, MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 3, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 5, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
     ARTISAN: { PROTOTYPE_KEEP_PERCENT: 75, MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 6, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 0.5, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
-    MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 },
+    MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.4, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 },
     BARD: { WINDOW: 5, HARMONY_WINDOW: 7, PERCENT_PER_STEP: 4, FLAT_PER_STEP: 3, OTHER_FLAT: 2, ENCORE_PER_STEP: 1, CRESCENDO_PERCENT: 25 },
     ALCHEMIST: { STEP_FLAT: 2, BREW_PERCENT: 150, BREW_FLAT: 15, OTHER_FLAT: 2, CATALYST_FLAT: 5, ELIXIR_STEP: 2, TRANSMUTE_PERCENT: 50 },
     DRUID: { STREAK_CAP: 10, BLOOM_CAP_EXTRA: 5, PERCENT_PER_STEP: 6, FLAT_PER_STEP: 2, OTHER_FLAT: 3, ROOTS_PER_STEP: 1, SEASONS_MULTIPLIER: 2, GROVE_FLAT: 3 },

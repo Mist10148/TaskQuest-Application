@@ -11,6 +11,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **New optional environment variables** for web push: `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` (set all three or none), plus `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_INTERNAL_URL`, `WEB_PUSH_INTERNAL_TOKEN` and `WEB_PUSH_TIMEOUT_MS`. Nothing changes while they are unset. See [DEPLOYMENT.md](docs/DEPLOYMENT.md#web-push-optional).
 - **Invite handles fill in over time.** Sharing lists and parties invites people by their exact Discord username (`users.discord_handle`, migration `021`). It is stored at each person's next web login or slash command, never backfilled, so a person who has not used TaskQuest since the upgrade cannot be invited yet.
 - **Open arcade tabs must be refreshed.** Arcade runs now carry a recorded input timeline; an old client gets a "refresh the page" error instead of XP.
+- **Borrowed flat skills stop working.** Valor, Fortify, Arcane Study and Multishot now only work while their own class (Hero, Tank, Wizard, Archer) is equipped, so a player who bought them for another class loses that bonus. The skills stay owned; a tree reset (Skills page) refunds 75%. Nothing else about owned skills, classes or levels changes.
 - **Blackjack no longer takes class or skill bonuses**, so a Hero or Gambler earns less from it than before. Nobody's level drops: the level curve is unchanged.
 
 ### Added
@@ -98,6 +99,11 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 ### Changed
 
 - **Documentation structure.** A [START_HERE](docs/START_HERE.md) page for players and contributors, [KNOWN_ISSUES](docs/KNOWN_ISSUES.md) split into limitations and by-design decisions (numbers kept), a balance-change workflow in CONTRIBUTING, and the docs index refreshed.
+- **Balance pass 3: borrowed skills and runaway scaling.** Measured with `npm run balance` and a cross-class simulation (details in [design/balance.md](docs/design/balance.md#borrowed-skills-and-unbounded-scaling)).
+  - Valor, Fortify, Arcane Study and Multishot are `classOnly`. A Default player with only borrowed skills (2,095 XP) used to earn 79 XP on a 10 XP task, more than nearly every class's own full tree; it now earns 15.
+  - Wizard Wisdom is capped at 50 (`CLASS_RULES.WIZARD.WISDOM_MAX`, level 25, Tome included). A level-100 Wizard used to pay 45× the base and a level-200 one 88×; the full tree at level 30 is 126 XP instead of 164.
+  - Hero's Champion +50% → +35%, Monk's Steady Breath +0.5 → +0.4 XP per Rhythm day (Monk full tree 75 → 68), Tank's Revenge +10% → +15% per level (`CLASS_RULES.TANK.REVENGE_PERCENT`; Tank full tree 41/46/53 → 43/48/56).
+  - New balance tests: every skill of every tree on a Default player stays under 3× the base, and no class keeps growing with level.
 - **Balance pass 2: the weak classes are lifted.**
   - Tank: shield cap `min(15, 5 + level ÷ 3)` (was 3), +7% per stack (was +4%), Fortify costs 70 XP (was 95).
   - Assassin: +8% per stack (was +5%), the streak survives 48 hours (was 36; Night Owl 72, was 48).
@@ -130,6 +136,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Stale class text and docs.** The Assassin card said +7% per stack and the Tank card +6% with a "strong early" playstyle (the rules are +8% and +7%, and the Tank is weak early); XP_GUIDE said Champion "doubles" XP; the balance note gave the Wizard's Wisdom as level × 5.
 - **HIGH priority bonuses are capped at 3 a day.** Priority is the player's own label, so marking every task HIGH made the Paladin's Vow, the Hero's Rally, the Archer's Sniper and Crusade pay on everything. Only the first 3 HIGH first-completions of your day now count as HIGH for classes and skills; later ones are treated as medium. The Heavy Lifter quest is unchanged (`LIMITS.HIGH_BONUS_PER_DAY`).
 - **The Artisan is no longer punished for finishing lists.** Clearing a list kept nothing and paid +5 per progress, so in the model it earned less than never clearing. A clear now keeps half the progress (rounded down) and pays +8 per progress (`CLASS_RULES.ARTISAN.CLEAR_KEEP_PERCENT`, `CLEAR_XP_PER_PROGRESS`).
 - **Class bonuses on adding a task and creating a list are capped.** The whole reward of those two actions is now at most 4 × the base (20 XP for a task, 40 for a list), whatever the class and skills add. Before, a full-tree Monk earned about 5,400 XP a day from the 50 rewarded additions and a level-29 Wizard about 15,000, nearly as much as from completing tasks.

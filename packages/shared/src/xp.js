@@ -216,7 +216,8 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const counter = (Number(user.wizard_counter) || 0) + 1;
             userUpdates.wizard_counter = counter >= 5 ? (lvl('wizard_overcharge') ? CLASS_RULES.WIZARD.OVERCHARGE_START : 0) : counter;
             const tome = lvl('wizard_tome') ? Math.floor((Number(user.total_items_completed) || 0) / CLASS_RULES.WIZARD.TOME_TASKS_PER_WISDOM) : 0;
-            const wisdom = level * CLASS_RULES.WIZARD.WISDOM_PER_LEVEL + tome;
+            // Wisdom stops growing at WISDOM_MAX: the level curve is endless and a Wizard must not scale without limit.
+            const wisdom = Math.min(CLASS_RULES.WIZARD.WISDOM_MAX, level * CLASS_RULES.WIZARD.WISDOM_PER_LEVEL + tome);
             if (counter % 5 === 0) {
                 const burst = wisdom * (lvl('wizard_mastery') ? 3 : 2);
                 finalXP = baseXP + burst;
@@ -531,7 +532,7 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
         multiplier += 1.0;
     }
     if (user.player_class === 'TANK' && lvl('tank_revenge') && userUpdates.tank_stacks === tankStackCap(level, skills)) {
-        multiplier += lvl('tank_revenge') * 0.10;
+        multiplier += (lvl('tank_revenge') * CLASS_RULES.TANK.REVENGE_PERCENT) / 100;
     }
 
     if (user.player_class === 'PALADIN' && lvl('paladin_crusade') && context.action === 'item_complete' && context.priority === 'HIGH') {

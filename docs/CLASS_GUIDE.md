@@ -8,7 +8,7 @@ The tables below were computed with the shared XP functions (`calculateFinalXP`)
 
 - **Plain task:** medium priority, no due date, not overdue.
 - **Favourable mix:** what the class is built for (stated under each class).
-- Levels 5, 15 and 30 are all multiples of 5, so Hero's Champion skill (+50% XP at such levels) is active in those columns.
+- Levels 5, 15 and 30 are all multiples of 5, so Hero's Champion skill (+35% XP at such levels) is active in those columns.
 - These are per-task averages. Everything is limited by the 50 rewarded completions a day, and flat bonuses ([XP_GUIDE](XP_GUIDE.md)) are the same for every class. A skill's cost is paid once per level; the class price is extra.
 
 | Baseline | Plain task at level 5 / 15 / 30 |
@@ -47,9 +47,9 @@ Favourable mix for the Hero: every second task is HIGH priority (Rally).
 |---|---|---|---|---|
 | No skills | - | 0 | 35 / 35 / 35 | 35 / 35 / 35 |
 | Starter | Valor ×3, Inspire ×2 | 600 | 70 / 70 / 70 | 70 / 70 / 70 |
-| Full tree | Valor ×3, Inspire ×2, Champion, Legendary, Oath, Rally, Last Stand | 1830 | 123 / 123 / 123 | 136 / 136 / 136 |
+| Full tree | Valor ×3, Inspire ×2, Champion, Legendary, Oath, Rally, Last Stand | 1830 | 110 / 110 / 110 | 122 / 122 / 122 |
 
-At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 123 and 136: the Champion skill adds 50% on levels 5, 10, 15 and so on.
+At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 110 and 122: the Champion skill adds 35% on levels 5, 10, 15 and so on.
 
 ## Gambler (450 XP)
 
@@ -73,13 +73,13 @@ At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 
 
 ## Wizard (700 XP)
 
-**Rewards:** Wisdom = level × 2. Every 3rd action adds Wisdom (Combo), every 5th adds twice Wisdom (Burst). **Suits:** long-term players; it is the weakest class at level 5 and the strongest at 30. **Pitfalls:** an expensive class (700 XP) that only pays off with levels; the cycle makes tasks uneven (most actions get nothing, a few get a lot).
+**Rewards:** Wisdom = level × 2, never more than 50 (reached at level 25). Every 3rd action adds Wisdom (Combo), every 5th adds twice Wisdom (Burst). **Suits:** long-term players; it is the weakest class at level 5 and the strongest at 30. **Pitfalls:** an expensive class (700 XP) that only pays off with levels, and stops growing at level 25 (prestige is the next step); the cycle makes tasks uneven (most actions get nothing, a few get a lot).
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|
-| No skills | - | 0 | 16 / 28 / 46 |
-| Starter | Arcane Study ×3, Spell Combo ×2 | 600 | 27 / 43 / 67 |
-| Full tree | Arcane Study ×3, Spell Combo ×2, Focus ×2, Arcane Mastery, Overcharge, Tome, Cantrip | 2190 | 59 / 101 / 164 |
+| No skills | - | 0 | 16 / 28 / 40 |
+| Starter | Arcane Study ×3, Spell Combo ×2 | 600 | 27 / 43 / 59 |
+| Full tree | Arcane Study ×3, Spell Combo ×2, Focus ×2, Arcane Mastery, Overcharge, Tome, Cantrip | 2190 | 59 / 101 / 126 |
 
 ## Archer (600 XP)
 
@@ -101,7 +101,7 @@ Favourable mix: every second task is HIGH priority (Sniper makes those always hi
 |---|---|---|---|
 | No skills | - | 0 | 17 / 22 / 27 |
 | Starter | Fortify ×3, Absorb ×2 | 500 | 37 / 41 / 47 |
-| Full tree | Fortify ×3, Absorb ×2, Revenge ×2, Unstoppable, Bulwark, Anchor, Taunt | 2000 | 41 / 46 / 53 |
+| Full tree | Fortify ×3, Absorb ×2, Revenge ×2, Unstoppable, Bulwark, Anchor, Taunt | 2000 | 43 / 48 / 56 |
 
 ## Monk (550 XP)
 
@@ -110,8 +110,8 @@ Favourable mix: every second task is HIGH priority (Sniper makes those always hi
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|
 | No skills | - | 0 | 26 / 26 / 26 |
-| Starter | Steady Breath ×3 | 360 | 47 / 47 / 47 |
-| Full tree | Steady Breath ×3, Inner Focus ×2, Discipline, Serenity, Meditation | 1620 | 75 / 75 / 75 |
+| Starter | Steady Breath ×3 | 360 | 42 / 42 / 42 |
+| Full tree | Steady Breath ×3, Inner Focus ×2, Discipline, Serenity, Meditation | 1620 | 68 / 68 / 68 |
 
 ## Artisan (650 XP)
 
@@ -223,4 +223,4 @@ Favourable mix: every task is on a list shared with three other people.
 
 ## Changing your mind
 
-You can own every class and switch freely (each switch resets the class counters). The skills you learned in a class tree stay; the ones marked *(class)* in [GAMEPLAY §4](GAMEPLAY.md#4-skills) only work while that class is equipped, and the generic ones (Quick Learner, Valor, Inspire, Focus, Steady Aim, Fortify, Critical Hit, Double Down and a few more) work with any class. Champion and Legendary are the exception: they need the Hero equipped, so they cannot be borrowed by a class that is already strong. At level 30 you may [prestige](PLAYER_FAQ.md#prestige), which resets your classes and skills for a permanent bonus.
+You can own every class and switch freely (each switch resets the class counters). The skills you learned in a class tree stay; the ones marked *(class)* in [GAMEPLAY §4](GAMEPLAY.md#4-skills) only work while that class is equipped, and the generic ones (Quick Learner, Inspire, Focus, Steady Aim, Critical Hit, Double Down and a few more) work with any class. The flat per-action skills Valor, Fortify, Arcane Study and Multishot are tied to their own class too, so a Default or Monk player cannot collect them from other trees. Champion and Legendary are the exception: they need the Hero equipped, so they cannot be borrowed by a class that is already strong. At level 30 you may [prestige](PLAYER_FAQ.md#prestige), which resets your classes and skills for a permanent bonus.

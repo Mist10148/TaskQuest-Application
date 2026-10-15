@@ -70,11 +70,13 @@ test('skill bonuses are applied', () => {
         { skill_id: 'hero_valor', skill_level: 1 }
     ];
     const r = shared.calculateFinalXP(user(), skills, 100, { rng: seq(0.99) });
-    assert.equal(r.finalXP, 110 + 10);
+    assert.equal(r.finalXP, 110, 'Valor is a Hero skill: a Default player gets the percentage only');
+    const hero = shared.calculateFinalXP(user({ player_class: 'HERO', player_level: 1 }), [{ skill_id: 'hero_valor', skill_level: 1 }], 100, { rng: seq(0.99) });
+    assert.equal(hero.finalXP, 100 + 25 + 10, 'the Hero gets Valor');
 
     // Champion and Legendary only work while the Hero is equipped
     const champ = shared.calculateFinalXP(user({ player_class: 'HERO', player_level: 5 }), [{ skill_id: 'hero_champion', skill_level: 1 }], 10, { rng: seq(0.99) });
-    assert.equal(champ.finalXP, Math.floor(35 * 1.5), 'Hero +25, then +50%');
+    assert.equal(champ.finalXP, Math.floor(35 * 1.35), 'Hero +25, then +35%');
     const borrowed = [{ skill_id: 'hero_champion', skill_level: 1 }, { skill_id: 'hero_legend', skill_level: 1 }];
     assert.equal(shared.calculateFinalXP(user({ player_level: 5 }), borrowed, 10, { rng: seq(0.99) }).finalXP, 10, 'a Default player does not get Champion or Legendary');
     assert.equal(shared.calculateFinalXP(user({ player_class: 'MONK', player_level: 5 }), borrowed, 10, { rng: seq(0.99), now: 0 }).finalXP, shared.calculateFinalXP(user({ player_class: 'MONK', player_level: 5 }), [], 10, { rng: seq(0.99), now: 0 }).finalXP);
@@ -546,7 +548,7 @@ test('Monk Rhythm: consecutive UTC days build it, a missed day resets it, bonus 
         ['rhythm is capped at 14', 14, '2030-01-09', [], 100, 14, 28 + 14],
         ['Discipline lifts the cap to 16', 14, '2030-01-09', [sk('monk_discipline')], 100, 15, 30 + 15],
         ['Discipline cap holds at 16', 16, '2030-01-09', [sk('monk_discipline')], 100, 16, 32 + 16],
-        ['Steady Breath adds 0.5 XP per rhythm day per level', 5, '2030-01-10', [sk('monk_breath', 2)], 100, 5, 10 + 5 * 2],
+        ['Steady Breath adds 0.4 XP per rhythm day per level', 5, '2030-01-10', [sk('monk_breath', 2)], 100, 5, 10 + 9],
         ['Inner Focus adds 15% per level', 5, '2030-01-10', [sk('monk_focus', 2)], 100, 5, 19],
         ['small actions still get the flat part', 3, '2030-01-10', [], 10, 3, 3],
         ['a DATE returned as a Date object works', 5, new Date('2030-01-09T00:00:00Z'), [], 100, 6, 18]
@@ -901,4 +903,32 @@ test('the weekly modifier: one flat source is doubled each UTC ISO week, four in
         assert.equal(currentSeason(SEASONS, at), SEASONS[isoWeek(at, null) % 4]);
     }
     assert.equal(seen.size, 4, 'all four come up');
+});
+
+test('the flat per-action skills (Valor, Fortify, Arcane Study, Multishot) only work with their own class', () => {
+    const flat = ['hero_valor', 'tank_fortify', 'wizard_study', 'archer_multishot'].map((id) => sk(id, 2));
+    for (const cls of ['DEFAULT', 'MONK', 'GAMBLER', 'PALADIN']) {
+        const withSkills = shared.calculateFinalXP(user({ player_class: cls }), flat, 10, { rng: seq(0.99), now: 0, context: { action: 'item_complete' } }).finalXP;
+        const without = shared.calculateFinalXP(user({ player_class: cls }), [], 10, { rng: seq(0.99), now: 0, context: { action: 'item_complete' } }).finalXP;
+        assert.equal(withSkills, without, `${cls} cannot borrow flat skills from other trees`);
+    }
+    const tank = (skills) => shared.calculateFinalXP(user({ player_class: 'TANK', player_level: 6 }), skills, 10, { rng: seq(0.99) }).finalXP;
+    assert.equal(tank([sk('tank_fortify', 2)]) - tank([]), 10, 'the Tank keeps Fortify');
+});
+
+test('Wizard Wisdom stops at WISDOM_MAX however high the level or the Tome goes', () => {
+    const { CLASS_RULES } = shared;
+    const burst = (level, completed) => shared.calculateClassXP(user({ player_class: 'WIZARD', player_level: level, wizard_counter: 4, total_items_completed: completed }), 10, { skills: [sk('wizard_tome')] }).bonusInfo.classBonus;
+    assert.equal(burst(100, 0), CLASS_RULES.WIZARD.WISDOM_MAX * 2, 'level 100 pays the same Burst as the cap');
+    assert.equal(burst(5000, 100000), burst(100, 0), 'a huge level and Tome change nothing');
+    assert.equal(burst(10, 0), 20 * 2, 'below the cap Wisdom is still level x 2');
+});
+
+test('Tank Revenge pays REVENGE_PERCENT per level at the stack cap', () => {
+    const { CLASS_RULES } = shared;
+    const atCap = (skills) => shared.calculateFinalXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: 99 }), skills, 100, { rng: seq(0.99) }).finalXP;
+    const base = atCap([]);
+    const withRevenge = atCap([sk('tank_revenge', 2)]);
+    assert.equal(withRevenge, Math.floor(shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: 99 }), 100, { skills: [sk('tank_revenge', 2)] }).finalXP * (1 + (2 * CLASS_RULES.TANK.REVENGE_PERCENT) / 100) + 1e-9));
+    assert.ok(withRevenge > base);
 });

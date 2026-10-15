@@ -18,7 +18,7 @@ from app.db import pool, repo
 from app.rag import runtime
 from app.rag.chunking import Chunk, doc_chunks, history_chunks, item_chunks, list_chunk, week_start
 from app.rag.embed import Embedder, embed_documents
-from app.rag.store import EmbeddingRow, MySQLNumpyStore
+from app.rag.store import EmbeddingRow, EmbeddingStore
 
 log = logging.getLogger("taskquest.ai.indexer")
 
@@ -27,7 +27,7 @@ HISTORY_WEEKS = 12
 
 async def _sync(
     conn: AsyncConnection,
-    store: MySQLNumpyStore,
+    store: EmbeddingStore,
     embedder: Embedder,
     discord_id: str | None,
     chunks: list[Chunk],
@@ -55,7 +55,7 @@ async def _sync(
 
 
 async def index_list(
-    conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str, list_id: int
+    conn: AsyncConnection, store: EmbeddingStore, embedder: Embedder, discord_id: str, list_id: int
 ) -> int:
     """(Re)index one quest and its long subtasks. Removes the rows if the quest is gone, or has become shared with anybody."""
     lst = await repo.get_list_with_items(conn, discord_id, list_id)
@@ -84,7 +84,7 @@ def history_since() -> datetime:
     return datetime.combine(week_start(datetime.now(UTC).date()) - timedelta(weeks=HISTORY_WEEKS), datetime.min.time())
 
 
-async def index_history(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str) -> int:
+async def index_history(conn: AsyncConnection, store: EmbeddingStore, embedder: Embedder, discord_id: str) -> int:
     since = history_since()
     completions = await repo.completions_since(conn, discord_id, since)
     xp_by_week: dict[date, int] = defaultdict(int)
@@ -99,7 +99,7 @@ async def index_history(conn: AsyncConnection, store: MySQLNumpyStore, embedder:
     return n
 
 
-async def index_user(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, discord_id: str) -> int:
+async def index_user(conn: AsyncConnection, store: EmbeddingStore, embedder: Embedder, discord_id: str) -> int:
     total = 0
     visible = set()
     for lst in await repo.lists_for_user(conn, discord_id):
@@ -119,7 +119,7 @@ async def index_user(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Em
     return total
 
 
-async def index_docs(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder, docs: dict[str, str]) -> int:
+async def index_docs(conn: AsyncConnection, store: EmbeddingStore, embedder: Embedder, docs: dict[str, str]) -> int:
     """Index global help docs (``discord_id IS NULL``). ``docs`` maps slug -> markdown."""
     total = 0
     for slug, markdown in docs.items():
@@ -134,7 +134,7 @@ async def index_docs(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Em
     return total
 
 
-async def stale_lists(conn: AsyncConnection, store: MySQLNumpyStore) -> list[tuple[str, int]]:
+async def stale_lists(conn: AsyncConnection, store: EmbeddingStore) -> list[tuple[str, int]]:
     """Lists (of users who allow AI) missing an embedding, or whose list or subtasks changed after it was written."""
     lists = (
         await conn.execute(
@@ -169,7 +169,7 @@ async def stale_lists(conn: AsyncConnection, store: MySQLNumpyStore) -> list[tup
     return out
 
 
-async def stale_history_users(conn: AsyncConnection, store: MySQLNumpyStore) -> list[str]:
+async def stale_history_users(conn: AsyncConnection, store: EmbeddingStore) -> list[str]:
     """Users (who allow AI) with completions or XP in the history window newer than their history chunks."""
     since = history_since()
     activity = (
@@ -220,7 +220,7 @@ async def purge_opted_out(conn: AsyncConnection) -> int:
     return int(result.rowcount or 0)
 
 
-async def reconcile(conn: AsyncConnection, store: MySQLNumpyStore, embedder: Embedder) -> int:
+async def reconcile(conn: AsyncConnection, store: EmbeddingStore, embedder: Embedder) -> int:
     """Catch lists whose fire-and-forget re-index call was missed, and refresh weekly history.
 
     Returns the number of lists re-indexed.

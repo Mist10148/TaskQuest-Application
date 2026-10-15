@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     # Database (shares the web service's variables; AI_DB_* overrides the credentials)
     db_url: str = ""
     db_host: str = "localhost"
-    db_port: int = 3306
-    db_user: str = "root"
+    db_port: int = 5432
+    db_user: str = "postgres"
     db_password: str = ""
     db_name: str = "taskquest"
     db_ssl: bool = False
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_url(self) -> str:
-        """mysql+aiomysql URL, preferring AI_DB_USER over the app's credentials."""
+        """postgresql+asyncpg URL, preferring AI_DB_USER over the app's credentials."""
         if self.db_url.startswith("sqlite"):
             return self.db_url
         user, password = self.db_user, self.db_password
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
             name = (parsed.path or "/").lstrip("/") or name
         if self.ai_db_user:
             user, password = self.ai_db_user, self.ai_db_password
-        return f"mysql+aiomysql://{quote(user)}:{quote(password)}@{host}:{port}/{name}?charset=utf8mb4"
+        return f"postgresql+asyncpg://{quote(user)}:{quote(password)}@{host}:{port}/{name}"
 
 
 @lru_cache

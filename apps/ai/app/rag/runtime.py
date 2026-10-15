@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from app.config import get_settings
 from app.rag.embed import Embedder
-from app.rag.store import MySQLNumpyStore
+from app.rag.store import EmbeddingStore
 
-_store: MySQLNumpyStore | None = None
+_store: EmbeddingStore | None = None
 _embedder: Embedder | None = None
 
 
-def get_store() -> MySQLNumpyStore:
+def get_store() -> EmbeddingStore:
     global _store
     if _store is None:
-        _store = MySQLNumpyStore(get_settings().gemini_embed_model)
+        _store = EmbeddingStore(get_settings().gemini_embed_model)
     return _store
 
 
@@ -26,6 +26,6 @@ def get_embedder() -> Embedder:
     return _embedder
 
 
-def set_runtime(store: MySQLNumpyStore | None, embedder: Embedder | None) -> None:
+def set_runtime(store: EmbeddingStore | None, embedder: Embedder | None) -> None:
     global _store, _embedder
     _store, _embedder = store, embedder

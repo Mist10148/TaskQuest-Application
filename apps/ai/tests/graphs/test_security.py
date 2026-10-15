@@ -14,7 +14,7 @@ from app.config import Settings
 from app.graphs.chat import ChatDeps, RouterOut
 from app.rag import indexer
 from app.rag.retriever import TaskRetriever
-from app.rag.store import MySQLNumpyStore
+from app.rag.store import EmbeddingStore
 from tests.conftest import UID, auth
 from tests.fakes import FakeChatLLM, FakeEmbedder
 from tests.graphs.test_chat import call, collect, kinds, make_web
@@ -35,7 +35,7 @@ async def test_injection_in_task_names_is_delimited_data_and_cannot_skip_confirm
     async with seeded.begin() as conn:
         for name in RED_TEAM["task_names"]:
             await conn.execute(text("INSERT INTO lists (discord_id, name) VALUES (:u, :n)"), {"u": UID, "n": name})
-    store, emb = MySQLNumpyStore("fake-embed"), FakeEmbedder()
+    store, emb = EmbeddingStore("fake-embed"), FakeEmbedder()
     async with seeded.begin() as conn:
         await indexer.reconcile(conn, store, emb)
 

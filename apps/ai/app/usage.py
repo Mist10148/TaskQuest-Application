@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
-from app.db.dialect import is_mysql
+from app.db.dialect import is_postgres
 
 FEATURES = ("summary", "prioritize", "chat", "embed")
 
@@ -54,16 +54,11 @@ async def record(
 async def _add(conn: AsyncConnection, discord_id: str, feature: str, requests: int, i: int, o: int) -> None:
     """Atomic upsert (no read-then-write race between concurrent requests)."""
     params = {"uid": discord_id, "day": today_utc(), "f": feature, "n": requests, "i": i, "o": o}
-    if is_mysql(conn):
-        clause = (
-            "ON DUPLICATE KEY UPDATE requests = requests + VALUES(requests), "
-            "input_tokens = input_tokens + VALUES(input_tokens), output_tokens = output_tokens + VALUES(output_tokens)"
-        )
-    else:
-        clause = (
-            "ON CONFLICT (discord_id, day, feature) DO UPDATE SET requests = requests + excluded.requests, "
-            "input_tokens = input_tokens + excluded.input_tokens, output_tokens = output_tokens + excluded.output_tokens"
-        )
+    clause = (
+        "ON CONFLICT (discord_id, day, feature) DO UPDATE SET requests = ai_usage.requests + excluded.requests, "
+        "input_tokens = ai_usage.input_tokens + excluded.input_tokens, "
+        "output_tokens = ai_usage.output_tokens + excluded.output_tokens"
+    )
     await conn.execute(
         text(
             "INSERT INTO ai_usage (discord_id, day, feature, requests, input_tokens, output_tokens) "
@@ -77,12 +72,12 @@ async def reserve(conn: AsyncConnection, discord_id: str, feature: str) -> None:
     """Spend one request up front, atomically, or raise QuotaExceeded (and leave nothing booked).
 
     The increment happens before the limit is read, so concurrent requests cannot all slip under
-    the limit. Each feature has its own row, so on MySQL the user's row is locked first: reservations of one user
+    the limit. Each feature has its own row, so on Postgres the user's row is locked first: reservations of one user
     queue up (a plain read would miss another feature's booking, and locking the usage rows one by one deadlocks).
     Run it inside a transaction that rolls back when this raises.
     """
     assert feature in FEATURES
-    if is_mysql(conn):
+    if is_postgres(conn):
         await conn.execute(text("SELECT 1 FROM users WHERE discord_id = :uid FOR UPDATE"), {"uid": discord_id})
     await _add(conn, discord_id, feature, 1, 0, 0)
     if await requests_today(conn, discord_id) > get_settings().ai_daily_request_limit:

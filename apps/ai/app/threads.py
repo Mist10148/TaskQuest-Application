@@ -12,8 +12,6 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.db.dialect import insert_ignore
-
 DEFAULT_TITLE = "New chat"
 WEB = "web"
 DISCORD = "discord"
@@ -32,8 +30,8 @@ async def create_thread(
     thread_id = thread_id or str(uuid.uuid4())
     await conn.execute(
         text(
-            f"{insert_ignore(conn)} INTO ai_chat_threads (id, discord_id, title, source) "
-            "VALUES (:id, :uid, :title, :src)"
+            "INSERT INTO ai_chat_threads (id, discord_id, title, source) "
+            "VALUES (:id, :uid, :title, :src) ON CONFLICT DO NOTHING"
         ),
         {"id": thread_id, "uid": discord_id, "title": title_from(first_message) or DEFAULT_TITLE, "src": source},
     )
@@ -85,13 +83,15 @@ async def touch_thread(conn: AsyncConnection, discord_id: str, thread_id: str) -
 
 async def rename_thread(conn: AsyncConnection, discord_id: str, thread_id: str, title: str) -> None:
     await conn.execute(
-        text("UPDATE ai_chat_threads SET title = :title WHERE id = :id AND discord_id = :uid"),
+        text(
+            "UPDATE ai_chat_threads SET title = :title, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND discord_id = :uid"
+        ),
         {"id": thread_id, "uid": discord_id, "title": title[:120]},
     )
 
 
 async def delete_thread(conn: AsyncConnection, discord_id: str, thread_id: str, *, source: str = WEB) -> bool:
-    """Delete the thread row (checkpoints cascade in MySQL; callers also clear them explicitly)."""
+    """Delete the thread row (checkpoints cascade in Postgres; callers also clear them explicitly)."""
     result = await conn.execute(
         text("DELETE FROM ai_chat_threads WHERE id = :id AND discord_id = :uid AND source = :src"),
         {"id": thread_id, "uid": discord_id, "src": source},

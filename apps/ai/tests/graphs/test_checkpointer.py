@@ -1,4 +1,4 @@
-"""MySQLCheckpointSaver round-trips LangGraph state, and threads are scoped per user."""
+"""SqlCheckpointSaver round-trips LangGraph state, and threads are scoped per user."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from app import threads
-from app.graphs.checkpointer import MySQLCheckpointSaver
+from app.graphs.checkpointer import SqlCheckpointSaver
 from tests.conftest import OTHER, UID
 
 
@@ -31,7 +31,7 @@ def build(engine):
     g.add_edge(START, "add")
     g.add_edge("add", "ask")
     g.add_edge("ask", END)
-    return g.compile(checkpointer=MySQLCheckpointSaver(engine))
+    return g.compile(checkpointer=SqlCheckpointSaver(engine))
 
 
 async def test_state_persists_across_graph_instances_and_interrupt_resumes(engine):

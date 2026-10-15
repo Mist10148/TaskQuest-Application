@@ -18,7 +18,7 @@ from app.graphs.chat import ChatDeps, RouterOut
 from app.main import create_app
 from app.rag import indexer
 from app.rag.retriever import TaskRetriever
-from app.rag.store import MySQLNumpyStore
+from app.rag.store import EmbeddingStore
 from app.routers.chat import get_chat_deps
 from tests.conftest import OTHER, UID, auth
 from tests.fakes import FakeChatLLM, FakeEmbedder
@@ -48,7 +48,7 @@ def text(events):
 
 
 async def retriever_for(engine):
-    store, emb = MySQLNumpyStore("fake-embed"), FakeEmbedder()
+    store, emb = EmbeddingStore("fake-embed"), FakeEmbedder()
     async with engine.begin() as conn:
         await indexer.reconcile(conn, store, emb)
     return TaskRetriever(store, emb)
@@ -198,7 +198,7 @@ async def test_writes_on_someone_elses_items_are_not_offered_for_confirmation(se
 
 
 async def test_app_help_routes_to_docs_only(seeded):
-    store, emb = MySQLNumpyStore("fake-embed"), FakeEmbedder()
+    store, emb = EmbeddingStore("fake-embed"), FakeEmbedder()
     async with seeded.begin() as conn:
         await indexer.reconcile(conn, store, emb)
         await indexer.index_docs(conn, store, emb, {"gameplay": "# XP\nComplete subtasks to earn XP."})

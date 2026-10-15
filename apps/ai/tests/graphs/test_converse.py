@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.db import pool
 from app.graphs import chat as C
 from app.graphs.chat import RouterOut
-from app.graphs.checkpointer import MySQLCheckpointSaver
+from app.graphs.checkpointer import SqlCheckpointSaver
 from app.graphs.converse import build_converse_graph, thread_id_for
 from tests.conftest import OTHER, UID, auth
 from tests.graphs.test_chat import call, deps_for, http, make_llm, make_web  # noqa: F401 - fixture
@@ -34,7 +34,7 @@ async def test_reply_uses_persona_and_remembers_the_channel(seeded):
     second = await chat_service.converse_turn(deps_for(llm), UID, CHANNEL, "what did I just ask?")
     assert second["reply"] == "You asked about math."
 
-    graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()))
+    graph = build_converse_graph(deps, SqlCheckpointSaver(pool.get_engine()))
     state = await graph.aget_state({"configurable": {"thread_id": thread_id_for(UID, CHANNEL)}})
     humans = [m.content for m in state.values["messages"] if isinstance(m, HumanMessage)]
     assert humans == ["what's due?", "what did I just ask?"]
@@ -82,7 +82,7 @@ async def test_memory_folds_after_twenty_messages(seeded):
     deps = deps_for(llm)
     for i in range(11):
         await chat_service.converse_turn(deps, UID, CHANNEL, f"count {i}")
-    graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()))
+    graph = build_converse_graph(deps, SqlCheckpointSaver(pool.get_engine()))
     state = await graph.aget_state({"configurable": {"thread_id": thread_id_for(UID, CHANNEL)}})
     assert len(state.values["messages"]) <= 20
     assert state.values.get("summary")
@@ -173,7 +173,7 @@ async def test_public_conversations_never_reuse_tool_bearing_history(seeded):
 
     llm2 = make_llm([AIMessage("Hi there.")], [RouterOut(intent="chitchat")])
     await chat_service.converse_turn(deps_for(llm2), UID, CHANNEL, "hello", public=True)
-    graph = build_converse_graph(deps_for(llm2), MySQLCheckpointSaver(pool.get_engine()), public=True)
+    graph = build_converse_graph(deps_for(llm2), SqlCheckpointSaver(pool.get_engine()), public=True)
     state = await graph.aget_state({"configurable": {"thread_id": thread_id_for(UID, CHANNEL, public=True)}})
     humans = [m.content for m in state.values["messages"] if isinstance(m, HumanMessage)]
     assert humans == ["hello"], "the public thread starts empty"

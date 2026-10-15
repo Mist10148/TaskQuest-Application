@@ -1,4 +1,4 @@
-"""LangGraph checkpointer persisted in MySQL (``ai_checkpoints`` / ``ai_checkpoint_writes``).
+"""LangGraph checkpointer persisted in the database (``ai_checkpoints`` / ``ai_checkpoint_writes``).
 
 Only the async API is implemented: the service runs the graphs with ``astream``/``ainvoke``.
 Checkpoint ids are time-ordered, so "latest checkpoint" is the greatest id in a thread.
@@ -28,7 +28,7 @@ def _pack(serde, obj: Any) -> tuple[str, bytes]:
     return serde.dumps_typed(obj)
 
 
-class MySQLCheckpointSaver(BaseCheckpointSaver[str]):
+class SqlCheckpointSaver(BaseCheckpointSaver[str]):
     def __init__(self, engine: AsyncEngine) -> None:
         super().__init__()
         self.engine = engine
@@ -222,13 +222,13 @@ class MySQLCheckpointSaver(BaseCheckpointSaver[str]):
 
     # The sync API is intentionally unsupported (the service is fully async).
     def get_tuple(self, config):  # pragma: no cover
-        raise NotImplementedError("MySQLCheckpointSaver is async-only")
+        raise NotImplementedError("SqlCheckpointSaver is async-only")
 
     def put(self, *a, **kw):  # pragma: no cover
-        raise NotImplementedError("MySQLCheckpointSaver is async-only")
+        raise NotImplementedError("SqlCheckpointSaver is async-only")
 
     def put_writes(self, *a, **kw):  # pragma: no cover
-        raise NotImplementedError("MySQLCheckpointSaver is async-only")
+        raise NotImplementedError("SqlCheckpointSaver is async-only")
 
     def list(self, *a, **kw):  # pragma: no cover
-        raise NotImplementedError("MySQLCheckpointSaver is async-only")
+        raise NotImplementedError("SqlCheckpointSaver is async-only")

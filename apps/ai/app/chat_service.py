@@ -23,7 +23,7 @@ from langgraph.types import Command
 from app import threads, usage
 from app.db import pool
 from app.graphs.chat import ChatDeps, build_chat_graph, text_of
-from app.graphs.checkpointer import MySQLCheckpointSaver
+from app.graphs.checkpointer import SqlCheckpointSaver
 from app.llm import BLOCKED_REPLY, AIUnavailable
 from app.locks import thread_locks
 
@@ -35,7 +35,7 @@ def sse(event: str, data: Any) -> dict[str, str]:
 
 
 def make_graph(deps: ChatDeps):
-    return build_chat_graph(deps, MySQLCheckpointSaver(pool.get_engine()))
+    return build_chat_graph(deps, SqlCheckpointSaver(pool.get_engine()))
 
 
 async def pending_actions(graph, config) -> list[dict[str, Any]]:
@@ -166,7 +166,7 @@ async def converse_turn(
         await threads.create_thread(
             conn, discord_id, f"Discord {channel_id}", thread_id=thread_id, source=threads.DISCORD
         )
-    graph = build_converse_graph(deps, MySQLCheckpointSaver(pool.get_engine()), public=public)
+    graph = build_converse_graph(deps, SqlCheckpointSaver(pool.get_engine()), public=public)
     config = {"configurable": {"thread_id": thread_id, "image": image}, "recursion_limit": 40}
     text = f"{message}\n[attached an image]" if image else message
     tools: list[dict[str, Any]] = []  # every tool round of this turn (state keeps only the last one)
@@ -209,5 +209,5 @@ async def forget_conversation(discord_id: str, channel_id: str) -> bool:
         thread_id = thread_id_for(discord_id, channel_id, public=public)
         async with pool.connection() as conn:
             existed |= await threads.delete_thread(conn, discord_id, thread_id, source=threads.DISCORD)
-        await MySQLCheckpointSaver(pool.get_engine()).adelete_thread(thread_id)
+        await SqlCheckpointSaver(pool.get_engine()).adelete_thread(thread_id)
     return existed

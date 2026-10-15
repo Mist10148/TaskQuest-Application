@@ -16,7 +16,7 @@ from app import chat_service, threads, usage
 from app.db import pool
 from app.deps import AIAccess, Caller, get_caller, require_ai
 from app.graphs.chat import ChatDeps
-from app.graphs.checkpointer import MySQLCheckpointSaver
+from app.graphs.checkpointer import SqlCheckpointSaver
 from app.llm import AIUnavailable, chat_model
 from app.rag import runtime
 from app.rag.retriever import TaskRetriever
@@ -157,5 +157,5 @@ async def delete_thread(thread_id: str, caller: Caller = Depends(get_caller)):
     async with pool.connection() as conn:
         if not await threads.delete_thread(conn, caller.discord_id, thread_id):
             raise HTTPException(status_code=404, detail="Thread not found")
-    await MySQLCheckpointSaver(pool.get_engine()).adelete_thread(thread_id)
+    await SqlCheckpointSaver(pool.get_engine()).adelete_thread(thread_id)
     return {"success": True}

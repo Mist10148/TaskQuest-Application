@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import ssl
+from datetime import date, datetime, timedelta, timezone
 
 import certifi
 
 from app.config import Settings
-from app.db.pool import ssl_context
+from app.db.pool import decode_date, decode_timestamptz, encode_date, encode_timestamptz, ssl_context
 
 
 def _first_pem() -> str:
@@ -43,8 +44,24 @@ def test_reject_unauthorized_false_disables_checks():
     assert not ctx.check_hostname
 
 
-def test_aiomysql_can_escape_blob_parameters():
-    """Guards the PyMySQL pin: embeddings and checkpoints are sent to MySQL as bytes."""
-    from aiomysql.connection import Connection
+def test_timestamptz_codec_reads_and_writes_naive_utc():
+    """asyncpg would treat a naive datetime as local time; the service's naive datetimes are UTC."""
+    naive = datetime(2026, 3, 1, 12, 30, 15, 123456)
+    assert decode_timestamptz(encode_timestamptz(naive)) == naive
+    aware = datetime(2026, 3, 1, 20, 30, 15, 123456, tzinfo=timezone(timedelta(hours=8)))
+    assert decode_timestamptz(encode_timestamptz(aware)) == naive
+    assert decode_timestamptz(encode_timestamptz("2026-03-01 12:30:15.123456")) == naive
+    assert encode_timestamptz(datetime(2000, 1, 1)) == (0,)
 
-    assert Connection.escape(None, b"\x00ab") == r"_binary'\0ab'"  # type: ignore[arg-type]
+
+def test_date_codec_accepts_iso_strings_and_dates():
+    assert encode_date("2026-03-01") == "2026-03-01"
+    assert encode_date(date(2026, 3, 1)) == "2026-03-01"
+    assert decode_date("2026-03-01") == date(2026, 3, 1)
+
+
+def test_url_is_postgres_with_ai_credentials():
+    url = Settings(
+        db_url="postgresql://app:pw@db.example:6543/tq", ai_db_user="ai", ai_db_password="s3cret"
+    ).sqlalchemy_url
+    assert url == "postgresql+asyncpg://ai:s3cret@db.example:6543/tq"

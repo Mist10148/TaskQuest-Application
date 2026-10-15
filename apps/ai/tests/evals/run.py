@@ -9,7 +9,7 @@ Offline mode uses a bag-of-words fake embedder, a heuristic fake summarizer (whi
 first answer, to exercise the validation retry) and the deterministic prioritizer fallback. Its numbers say the
 plumbing works, not that the model is good. Run ``--live`` before changing prompts or models.
 
-Everything runs on an in-memory SQLite copy of the schema seeded from ``seed.json``; no MySQL is needed.
+Everything runs on an in-memory SQLite copy of the schema seeded from ``seed.json``; no database server is needed.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from app.llm_call import structured_call  # noqa: E402
 from app.rag import indexer  # noqa: E402
 from app.rag.embed import Embedder  # noqa: E402
 from app.rag.retriever import Retrieved, TaskRetriever  # noqa: E402
-from app.rag.store import MySQLNumpyStore  # noqa: E402
+from app.rag.store import EmbeddingStore  # noqa: E402
 from tests.evals.seed import Seeded, load_json, seed  # noqa: E402
 from tests.fakes import FakeEmbedder  # noqa: E402
 from tests.schema import create_engine, drop_engine  # noqa: E402
@@ -202,7 +202,7 @@ class Env:
     seeded: Seeded
     live: bool
     embedder: Embedder
-    store: MySQLNumpyStore
+    store: EmbeddingStore
     llm_factory: Callable[..., Any]
     judge: bool = False
 
@@ -223,11 +223,11 @@ async def make_env(live: bool, judge: bool = False) -> Env:
             seeded,
             True,
             llm.embeddings_model(),
-            MySQLNumpyStore(settings.gemini_embed_model),
+            EmbeddingStore(settings.gemini_embed_model),
             llm.chat_model,
             judge,
         )
-    return Env(engine, seeded, False, FakeEmbedder(), MySQLNumpyStore("fake-embed"), _offline_prioritize_factory, judge)
+    return Env(engine, seeded, False, FakeEmbedder(), EmbeddingStore("fake-embed"), _offline_prioritize_factory, judge)
 
 
 def _matches(ref: str, hit: Retrieved, seeded: Seeded) -> bool:

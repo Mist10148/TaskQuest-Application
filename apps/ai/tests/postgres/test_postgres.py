@@ -1,10 +1,10 @@
-"""The service's SQL against real MySQL 8 with the Node migrations applied (CI job "AI service on MySQL").
+"""The service's SQL against real PostgreSQL with the Node migrations applied (CI job "AI service on Postgres").
 
-Everything else runs on SQLite; these cover what SQLite cannot: the real schema and its foreign keys, the
-checkpointer's LONGBLOB round trips, ENUM columns and MySQL's UPDATE/INSERT semantics. Skipped unless
-AI_TEST_DB_URL is set, for example::
+Everything else runs on SQLite; these cover what SQLite cannot: the real schema and its foreign keys, pgvector
+search, the checkpointer's BYTEA round trips, the CHECK constraints, asyncpg's strict types and Postgres's
+UPDATE/INSERT semantics. Skipped unless AI_TEST_DB_URL is set, for example::
 
-    AI_TEST_DB_URL=mysql://root:pw@127.0.0.1:3306/taskquest_ai_test pytest tests/mysql
+    AI_TEST_DB_URL=postgresql://postgres:pw@127.0.0.1:5432/taskquest_ai_test pytest tests/postgres
 """
 
 from __future__ import annotations
@@ -24,21 +24,21 @@ from app import chat_service, threads, usage
 from app.config import Settings
 from app.db import pool, repo
 from app.graphs.chat import RouterOut
-from app.graphs.checkpointer import MySQLCheckpointSaver
+from app.graphs.checkpointer import SqlCheckpointSaver
 from app.rag import indexer
-from app.rag.store import EmbeddingRow, MySQLNumpyStore
+from app.rag.store import EmbeddingRow, EmbeddingStore
 from tests.fakes import FakeEmbedder
 from tests.graphs.test_chat import call, collect, deps_for, kinds, make_llm, make_web
 
 URL = os.environ.get("AI_TEST_DB_URL")
-pytestmark = pytest.mark.skipif(not URL, reason="AI_TEST_DB_URL not set (needs migrated MySQL)")
+pytestmark = pytest.mark.skipif(not URL, reason="AI_TEST_DB_URL not set (needs migrated Postgres)")
 
 UID = "990000000000000001"
 OTHER = "990000000000000002"
 
 
 @pytest_asyncio.fixture
-async def mysql():
+async def pg():
     engine = pool.make_engine(Settings(db_url=URL or "", db_pool_size=5))
     pool.set_engine(engine)
 
@@ -52,13 +52,15 @@ async def mysql():
     async with engine.begin() as conn:
         for uid in (UID, OTHER):
             await conn.execute(text("INSERT INTO users (discord_id) VALUES (:u)"), {"u": uid})
-        await conn.execute(
-            text(
-                "INSERT INTO lists (discord_id, name, category, priority) VALUES (:u, 'Math homework', 'School', 'HIGH')"
-            ),
-            {"u": UID},
-        )
-        list_id = (await conn.execute(text("SELECT LAST_INSERT_ID()"))).scalar()
+        list_id = (
+            await conn.execute(
+                text(
+                    "INSERT INTO lists (discord_id, name, category, priority) "
+                    "VALUES (:u, 'Math homework', 'School', 'HIGH') RETURNING id"
+                ),
+                {"u": UID},
+            )
+        ).scalar()
         await conn.execute(
             text(
                 "INSERT INTO items (list_id, name, position) VALUES (:l, 'Problems 1-10', 0), (:l, 'Problems 11-20', 1)"
@@ -74,8 +76,8 @@ async def mysql():
         await engine.dispose()
 
 
-async def test_repo_reads_the_real_schema(mysql):
-    engine, list_id = mysql
+async def test_repo_reads_the_real_schema(pg):
+    engine, list_id = pg
     async with engine.connect() as conn:
         lst = await repo.get_list_with_items(conn, UID, list_id)
         assert lst is not None and lst["items_total"] == 2 and lst["priority"] == "HIGH"
@@ -88,9 +90,9 @@ async def test_repo_reads_the_real_schema(mysql):
         assert stats is not None and stats["lifetime_xp"] == 40 and stats["lifetime_xp_total"] == 900
 
 
-async def test_store_and_reconcile_on_mysql(mysql):
-    engine, list_id = mysql
-    store, emb = MySQLNumpyStore("fake-embed-ci"), FakeEmbedder()
+async def test_store_and_reconcile_on_postgres(pg):
+    engine, list_id = pg
+    store, emb = EmbeddingStore("fake-embed-ci"), FakeEmbedder()
     async with engine.begin() as conn:
         await indexer.reconcile(conn, store, emb)
         assert (UID, list_id) not in await indexer.stale_lists(conn, store)
@@ -108,8 +110,8 @@ async def test_store_and_reconcile_on_mysql(mysql):
         assert left.scalar() == 0
 
 
-async def test_usage_update_then_insert(mysql):
-    engine, _ = mysql
+async def test_usage_update_then_insert(pg):
+    engine, _ = pg
     async with engine.begin() as conn:
         await usage.record(conn, UID, "chat", input_tokens=5, output_tokens=1)
         await usage.record(conn, UID, "chat", input_tokens=5, output_tokens=1)
@@ -117,12 +119,12 @@ async def test_usage_update_then_insert(mysql):
         assert await usage.requests_today(conn, UID) == 2
 
 
-async def test_concurrent_reservations_on_different_features_respect_the_daily_limit(mysql, monkeypatch):
+async def test_concurrent_reservations_on_different_features_respect_the_daily_limit(pg, monkeypatch):
     """Each feature has its own row, so a plain SUM would let parallel requests on two features both pass."""
     from app.config import get_settings
 
     monkeypatch.setattr(get_settings(), "ai_daily_request_limit", 1)
-    engine, _ = mysql
+    engine, _ = pg
 
     async def reserve(feature: str) -> bool:
         try:
@@ -138,8 +140,8 @@ async def test_concurrent_reservations_on_different_features_respect_the_daily_l
         assert await usage.requests_today(conn, UID) == 1
 
 
-async def test_confirmation_checkpoints_survive_a_fresh_graph(mysql):
-    engine, _ = mysql
+async def test_confirmation_checkpoints_survive_a_fresh_graph(pg):
+    engine, _ = pg
     calls: list = []
     async with engine.begin() as conn:
         thread_id = await threads.create_thread(conn, UID, "mark it done")
@@ -165,13 +167,13 @@ async def test_confirmation_checkpoints_survive_a_fresh_graph(mysql):
     assert len(calls) == 1
     assert await chat_service.pending_actions(graph, {"configurable": {"thread_id": thread_id}}) == []
 
-    await MySQLCheckpointSaver(engine).adelete_thread(thread_id)
+    await SqlCheckpointSaver(engine).adelete_thread(thread_id)
     async with engine.connect() as conn:
         n = await conn.execute(text("SELECT COUNT(*) FROM ai_checkpoints WHERE thread_id = :t"), {"t": thread_id})
         assert n.scalar() == 0
 
 
-async def test_discord_conversation_threads_on_mysql(mysql):
+async def test_discord_conversation_threads_on_postgres(pg):
     channel = str(uuid.uuid4().int)[:18]
     llm = make_llm([AIMessage("Hey."), AIMessage("Still here.")], [RouterOut(intent="chitchat")] * 2)
     out = await chat_service.converse_turn(deps_for(llm), UID, channel, "hi")
@@ -182,8 +184,8 @@ async def test_discord_conversation_threads_on_mysql(mysql):
     assert await chat_service.forget_conversation(UID, channel) is True
 
 
-async def test_forgetting_a_user_removes_threads_checkpoints_and_summaries_but_keeps_usage(mysql):
-    engine, _ = mysql
+async def test_forgetting_a_user_removes_threads_checkpoints_and_summaries_but_keeps_usage(pg):
+    engine, _ = pg
     async with engine.begin() as conn:
         mine = await threads.create_thread(conn, UID, "my chat")
         theirs = await threads.create_thread(conn, OTHER, "their chat")
@@ -225,8 +227,8 @@ async def test_forgetting_a_user_removes_threads_checkpoints_and_summaries_but_k
         assert await usage.requests_today(conn, UID) == 1
 
 
-async def test_quota_reservation_and_idempotent_threads_on_mysql(mysql, monkeypatch):
-    """ON DUPLICATE KEY UPDATE / INSERT IGNORE: the real-MySQL spellings of what the SQLite tests cover."""
+async def test_quota_reservation_and_idempotent_threads_on_postgres(pg, monkeypatch):
+    """ON CONFLICT upserts and row locks on real Postgres: what the SQLite tests cannot show under concurrency."""
     import asyncio
 
     from app.config import get_settings

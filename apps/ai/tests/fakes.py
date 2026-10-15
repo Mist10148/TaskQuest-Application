@@ -40,7 +40,7 @@ class ScriptedLLM:
         return "\n".join(str(m.content) for m in self.calls[-1])
 
 
-DIM = 64
+DIM = 768  # the size of ai_embeddings.embedding (vector(768)), so the fake also works on Postgres
 
 
 class FakeEmbedder:

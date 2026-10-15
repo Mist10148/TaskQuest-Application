@@ -1,8 +1,11 @@
-"""Vector store: MySQL rows + in-process cosine similarity, behind a small interface.
+"""Vector store over ``ai_embeddings``, behind a small interface.
 
-A user with 2,000 chunks x 768 dims is about 6 MB and a matrix-vector product takes
-well under a millisecond, which is fine to roughly 10k chunks per user. Beyond that,
-implement ``VectorStore`` on pgvector/Qdrant/TiDB Vector; callers do not change.
+On PostgreSQL the embedding is a pgvector ``vector`` column and search is an exact cosine top-k in SQL over the
+user's rows plus the global docs (``embedding <=> query``). A user has at most a few thousand chunks, so the exact
+scan is fast and, unlike an approximate index over every user's rows, always finds k results. If that ever grows
+too large, add an HNSW index with iterative scans; callers do not change.
+
+On SQLite (the offline tests) embeddings are float32 BLOBs and the same top-k runs in numpy.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from app.db.dialect import is_postgres
 from app.rag.embed import from_blob, normalize, to_blob
 
 
@@ -63,15 +67,24 @@ class VectorStore(Protocol):
 
 _Matrix = tuple[list[dict[str, Any]], np.ndarray]
 
-_UPDATE_EMBEDDING = (
-    "UPDATE ai_embeddings SET discord_id = :uid, list_id = :lid, content = :content, "
-    "content_hash = :hash, embedding = :emb, updated_at = CURRENT_TIMESTAMP "
-    "WHERE source_type = :st AND source_id = :sid AND model = :model"
-)
+# On Postgres a vector travels as its text form ('[0.1,0.2,...]') and is cast in SQL, so the driver needs no codec.
+_PG_VECTOR = "CAST(CAST(:emb AS text) AS vector)"
 
 
-class MySQLNumpyStore:
-    """Loads one user's vectors (plus the global docs) into a matrix and runs cosine top-k."""
+def to_pgvector(vec: np.ndarray) -> str:
+    return "[" + ",".join(f"{x:.7g}" for x in np.asarray(vec, dtype=np.float32)) + "]"
+
+
+def _update_sql(emb: str) -> str:
+    return (
+        "UPDATE ai_embeddings SET discord_id = :uid, list_id = :lid, content = :content, "
+        f"content_hash = :hash, embedding = {emb}, updated_at = CURRENT_TIMESTAMP "
+        "WHERE source_type = :st AND source_id = :sid AND model = :model"
+    )
+
+
+class EmbeddingStore:
+    """Cosine top-k over one user's vectors plus the global docs: in SQL on Postgres, in numpy on SQLite."""
 
     def __init__(self, model: str, *, cache_size: int = 500, ttl: int = 600) -> None:
         self.model = model
@@ -116,7 +129,10 @@ class MySQLNumpyStore:
         return {(r[0], r[1]): r[2] for r in result.all()}
 
     async def upsert(self, conn: AsyncConnection, rows: list[EmbeddingRow]) -> None:
-        # UPDATE-then-INSERT keeps this portable (MySQL and the SQLite used in tests).
+        # UPDATE-then-INSERT keeps this portable (Postgres and the SQLite used in tests).
+        pg = is_postgres(conn)
+        emb = _PG_VECTOR if pg else ":emb"
+        update = text(_update_sql(emb))
         for row in rows:
             params = {
                 "uid": row.discord_id,
@@ -125,10 +141,10 @@ class MySQLNumpyStore:
                 "lid": row.list_id,
                 "content": row.content,
                 "hash": row.content_hash,
-                "emb": to_blob(row.vector),
+                "emb": to_pgvector(row.vector) if pg else to_blob(row.vector),
                 "model": row.model,
             }
-            updated = await conn.execute(text(_UPDATE_EMBEDDING), params)
+            updated = await conn.execute(update, params)
             if updated.rowcount == 0:
                 try:
                     async with conn.begin_nested():  # a savepoint: a lost race must not poison the transaction
@@ -136,12 +152,12 @@ class MySQLNumpyStore:
                             text(
                                 "INSERT INTO ai_embeddings (discord_id, source_type, source_id, list_id, content, "
                                 "content_hash, embedding, model) "
-                                "VALUES (:uid, :st, :sid, :lid, :content, :hash, :emb, :model)"
+                                f"VALUES (:uid, :st, :sid, :lid, :content, :hash, {emb}, :model)"
                             ),
                             params,
                         )
                 except IntegrityError:  # a concurrent index call inserted the row first: update it instead
-                    await conn.execute(text(_UPDATE_EMBEDDING), params)
+                    await conn.execute(update, params)
             self.invalidate(row.discord_id)
 
     async def touch(self, conn: AsyncConnection, source_type: str, source_ids: list[str]) -> None:
@@ -208,6 +224,8 @@ class MySQLNumpyStore:
         k: int,
         filters: SearchFilters | None = None,
     ) -> list[Hit]:
+        if is_postgres(conn):
+            return await self._search_sql(conn, discord_id, query_vec, k, filters)
         meta, matrix = await self._matrix(conn, discord_id)
         if not meta or matrix.shape[1] != query_vec.shape[0]:
             return []
@@ -231,4 +249,41 @@ class MySQLNumpyStore:
                 score=float(scores[i]),
             )
             for i in order
+        ]
+
+    async def _search_sql(
+        self,
+        conn: AsyncConnection,
+        discord_id: str,
+        query_vec: np.ndarray,
+        k: int,
+        filters: SearchFilters | None,
+    ) -> list[Hit]:
+        """Exact cosine top-k in Postgres. Vectors are stored normalised, so 1 - cosine distance is the cosine."""
+        params: dict[str, Any] = {
+            "model": self.model,
+            "uid": discord_id,
+            "q": to_pgvector(normalize(query_vec)),
+            "k": k,
+        }
+        where = "model = :model AND (discord_id = :uid OR discord_id IS NULL)"
+        if filters and filters.source_types:
+            names = [f"st{i}" for i in range(len(filters.source_types))]
+            params.update(zip(names, sorted(filters.source_types), strict=True))
+            where += f" AND source_type IN ({', '.join(':' + n for n in names)})"
+        if filters and filters.list_ids:
+            names = [f"l{i}" for i in range(len(filters.list_ids))]
+            params.update(zip(names, sorted(filters.list_ids), strict=True))
+            where += f" AND list_id IN ({', '.join(':' + n for n in names)})"
+        query = "CAST(CAST(:q AS text) AS vector)"
+        result = await conn.execute(
+            text(
+                f"SELECT source_type, source_id, list_id, content, 1 - (embedding <=> {query}) AS score "
+                f"FROM ai_embeddings WHERE {where} ORDER BY embedding <=> {query} LIMIT :k"
+            ),
+            params,
+        )
+        return [
+            Hit(source_type=st, source_id=sid, list_id=lid, content=content, score=float(score))
+            for st, sid, lid, content, score in result.all()
         ]

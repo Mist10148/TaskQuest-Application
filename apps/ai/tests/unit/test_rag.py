@@ -11,13 +11,13 @@ from app.rag import indexer
 from app.rag.chunking import doc_chunks, history_chunks, item_chunks, list_chunk, sha256
 from app.rag.embed import from_blob, to_blob
 from app.rag.retriever import TaskRetriever, format_context, keyword_overlap, urgency_boost
-from app.rag.store import EmbeddingRow, MySQLNumpyStore
+from app.rag.store import EmbeddingRow, EmbeddingStore
 from tests.conftest import OTHER, UID
 from tests.fakes import FakeEmbedder
 
 
-def make_store() -> MySQLNumpyStore:
-    return MySQLNumpyStore("fake-embed")
+def make_store() -> EmbeddingStore:
+    return EmbeddingStore("fake-embed")
 
 
 # ── chunking ─────────────────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ async def test_retrieval_is_fresh_scoped_and_filtered(seeded):
         ids = [x.id for x in results]
         assert ids[0] == "L1"
         assert "L4" not in ids  # other user's quest ("Secret plans")
-        # Fresh re-read: completion state comes from MySQL, not the stale chunk
+        # Fresh re-read: completion state comes from the database, not the stale chunk
         await conn.execute(text("UPDATE items SET completed = 1 WHERE list_id = 1"))
         done = await r.retrieve(conn, UID, "math homework", k=3, status="done")
         done = [x for x in done if x.kind == "list"]  # weekly history chunks are "done" too

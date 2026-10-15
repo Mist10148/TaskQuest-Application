@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import ssl
 from contextlib import asynccontextmanager
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.config import Settings, get_settings
 
 _engine: AsyncEngine | None = None
+
+_PG_EPOCH = datetime(2000, 1, 1)
 
 
 def ssl_context(settings: Settings) -> ssl.SSLContext | None:
@@ -26,6 +30,45 @@ def ssl_context(settings: Settings) -> ssl.SSLContext | None:
     return ctx
 
 
+# ── asyncpg codecs ───────────────────────────────────────────────────────────
+# The code works in naive UTC datetimes (what Express stores and what SQLite returns in tests). asyncpg would read
+# a naive datetime as LOCAL time and return aware ones, so timestamptz is (de)coded here as naive UTC, and DATE
+# accepts the ISO strings the code passes as well as date objects.
+
+
+def encode_timestamptz(value: datetime | str) -> tuple[int]:
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if value.tzinfo is not None:
+        value = value.astimezone(UTC).replace(tzinfo=None)
+    delta = value - _PG_EPOCH
+    return ((delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds,)
+
+
+def decode_timestamptz(value: tuple[int]) -> datetime:
+    return _PG_EPOCH + timedelta(microseconds=value[0])
+
+
+def encode_date(value: date | str) -> str:
+    return value.isoformat() if isinstance(value, date) else str(value)[:10]
+
+
+def decode_date(value: str) -> date:
+    return date.fromisoformat(value)
+
+
+async def _setup_connection(conn: Any) -> None:
+    await conn.execute("SET TIME ZONE 'UTC'")
+    await conn.set_type_codec(
+        "timestamptz", schema="pg_catalog", encoder=encode_timestamptz, decoder=decode_timestamptz, format="tuple"
+    )
+    await conn.set_type_codec("date", schema="pg_catalog", encoder=encode_date, decoder=decode_date, format="text")
+
+
+def _on_connect(dbapi_connection: Any, _record: Any) -> None:
+    dbapi_connection.run_async(_setup_connection)
+
+
 def make_engine(settings: Settings) -> AsyncEngine:
     url = settings.sqlalchemy_url
     if url.startswith("sqlite"):
@@ -34,7 +77,9 @@ def make_engine(settings: Settings) -> AsyncEngine:
     ctx = ssl_context(settings)
     if ctx is not None:
         connect_args["ssl"] = ctx
-    return create_async_engine(url, connect_args=connect_args, pool_size=settings.db_pool_size, pool_pre_ping=True)
+    engine = create_async_engine(url, connect_args=connect_args, pool_size=settings.db_pool_size, pool_pre_ping=True)
+    event.listen(engine.sync_engine, "connect", _on_connect)
+    return engine
 
 
 def get_engine() -> AsyncEngine:

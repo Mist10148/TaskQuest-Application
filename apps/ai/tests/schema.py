@@ -45,7 +45,7 @@ async def create_engine() -> AsyncEngine:
     """A fresh temporary SQLite database with the schema applied. Release it with ``drop_engine``.
 
     A file (not ``:memory:`` + StaticPool) so every ``engine.begin()`` gets its own connection, like
-    MySQL in production. LangGraph saves checkpoints and writes from concurrent tasks; on one shared
+    Postgres in production. LangGraph saves checkpoints and writes from concurrent tasks; on one shared
     connection their transactions interleave and writes (e.g. interrupts) can be lost.
     """
     fd, path = tempfile.mkstemp(prefix="taskquest-ai-", suffix=".db")

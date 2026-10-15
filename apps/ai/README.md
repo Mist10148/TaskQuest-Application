@@ -63,7 +63,7 @@ app/
 ├── graphs/
 │   ├── prioritize.py     LangGraph: features -> LLM rank -> validate -> merge / fallback
 │   ├── chat.py           LangGraph agent: router, retrieval, tools, confirmation, memory
-│   └── checkpointer.py   MySQL checkpoint saver
+│   └── checkpointer.py   SQL checkpoint saver (Postgres, SQLite in tests)
 ├── tools/                chat tools (specs.py) and the Express /internal client (web_client.py)
 ├── chat_service.py       runs a turn and turns graph output into SSE events
 ├── threads.py            chat thread rows

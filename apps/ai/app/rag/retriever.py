@@ -2,7 +2,7 @@
 
 score = 0.75 * cosine + 0.15 * keyword overlap + 0.10 * urgency boost
 
-Candidates come from the vector store, are re-read fresh from MySQL (so the model
+Candidates come from the vector store, are re-read fresh from the database (so the model
 never sees stale completion state), then filtered by status/category and trimmed to k.
 """
 
@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.db import repo
 from app.rag.chunking import item_label, list_label, render_list
 from app.rag.embed import Embedder, embed_query
-from app.rag.store import Hit, MySQLNumpyStore, SearchFilters
+from app.rag.store import EmbeddingStore, Hit, SearchFilters
 
 W_COSINE, W_KEYWORD, W_URGENCY = 0.75, 0.15, 0.10
 _WORD = re.compile(r"[a-z0-9]{3,}")
@@ -58,7 +58,7 @@ def _title(content: str) -> str:
 
 
 class TaskRetriever:
-    def __init__(self, store: MySQLNumpyStore, embedder: Embedder) -> None:
+    def __init__(self, store: EmbeddingStore, embedder: Embedder) -> None:
         self.store = store
         self.embedder = embedder
 

@@ -253,7 +253,6 @@ const STATEMENTS = [
     )`,
     'CREATE INDEX IF NOT EXISTS idx_ai_emb_user ON ai_embeddings (discord_id, source_type)',
     'CREATE INDEX IF NOT EXISTS idx_ai_emb_list ON ai_embeddings (list_id)',
-    'CREATE INDEX IF NOT EXISTS idx_ai_emb_vector ON ai_embeddings USING hnsw (embedding vector_cosine_ops)',
 
     `CREATE TABLE IF NOT EXISTS ai_chat_threads (
         id VARCHAR(36) NOT NULL PRIMARY KEY,

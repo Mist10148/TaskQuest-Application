@@ -114,6 +114,19 @@ SELECT id, discord_id, name, deadline FROM lists
 SELECT * FROM schema_migrations ORDER BY id;
 ```
 
+### Before upgrading a database from a 3.x release
+
+Migration `002_upgrade_legacy` converts the old tables to `utf8mb4_unicode_ci`, while the tables created by later migrations use the server's default `utf8mb4` collation. MySQL needs the two columns of a foreign key to share a collation, so on some servers a later migration (the first one that adds a foreign key to `users`, `009_quest_claims`) can stop with error 3780 or 1215. CI only migrates fresh databases and no upgraded 3.x database was available to test this, so it is **unverified**. Always upgrade a copy first (restore a backup into a scratch database, run `npm run db:migrate` against it) and, if you want to check before migrating, compare collations after migration `002` has run:
+
+```sql
+SELECT TABLE_NAME, COLUMN_NAME, COLLATION_NAME FROM information_schema.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'discord_id' AND COLLATION_NAME IS NOT NULL
+ ORDER BY COLLATION_NAME, TABLE_NAME;
+-- More than one distinct COLLATION_NAME means the foreign keys to users.discord_id will not line up.
+```
+
+If the migration stops with one of those errors, restore the backup and open an issue with the output of that query; do not edit a migration that has shipped.
+
 ---
 
 ## First live Gemini run

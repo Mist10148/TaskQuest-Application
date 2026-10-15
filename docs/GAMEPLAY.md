@@ -53,7 +53,7 @@ For every reward:
 3. final      = ⌊classXP × multiplier⌋ + Σ flat skill bonuses
                   (Valor, Fortify, Arcane Study, and on task completions Multishot,
                    Rally for HIGH priority, Anchor for recurring tasks)
-4. Hero Champion: ×2 if your level is a multiple of 5 (Hero equipped)
+4. Hero Champion: ×1.5 if your level is a multiple of 5 (Hero equipped)
 5. Crit (Assassin Critical Hit): +50 % (or +100 % with Shadow Step); a crit arms Bleed
 6. Double Down skill: chance to ×2
 7. Jackpot skill: 1 % chance to ×10
@@ -74,12 +74,12 @@ The Default class is free. Buying a class also equips it. Switching class resets
 |---|---|---|
 | ⚪ **Default** | 0 | No modifier. |
 | ⚔️ **Hero** | 500 | +25 flat XP, but never more than 3 × the base reward (so a 5 XP action gets +15, not +25). |
-| 🎲 **Gambler** | 300 | Rolls a bonus of 0 to (base + 99). 20% of the time it is *bad luck* instead: the reward shrinks by min(bonus, base − 1), and never drops below 1 XP. Counts consecutive lucky rolls (`gambler_streak`) for Hot Hand. |
+| 🎲 **Gambler** | 450 | Rolls a bonus of 0 to (2 × base + 40). 20% of the time it is *bad luck* instead: the reward shrinks by min(bonus, base − 1), and never drops below 1 XP. Counts consecutive lucky rolls (`gambler_streak`) for Hot Hand. |
 | 🗡️ **Assassin** | 400 | Each action raises the streak by 1. From streak 3, each action also adds a stack (max 10). Bonus is +5% per stack. **Decay:** after more than 36 hours without a rewarded action the streak and stacks reset to 0 before the action is applied. |
-| 🔮 **Wizard** | 700 | Wisdom = level × 5. The 3rd action in a cycle adds +Wisdom (Combo). The 5th adds +2 × Wisdom (Burst). Then the cycle restarts. |
-| 🏹 **Archer** | 600 | Hit chance is min(97%, 80% + 0.5% × level). A **hit** raises the streak by 1 (max 15) and adds ⌊base × streak × 8%⌋ + 3 + streak. On a hit, a *headshot* triggers if the roll is under min(30, hit% × 0.2) and adds 2 × base + 3 × streak. A 5% *perfect shot* adds 4 × base + 10 × streak. A **miss** lowers the streak by 2. |
+| 🔮 **Wizard** | 700 | Wisdom = level × 2. The 3rd action in a cycle adds +Wisdom (Combo). The 5th adds +2 × Wisdom (Burst). Then the cycle restarts. |
+| 🏹 **Archer** | 600 | Hit chance is min(97%, 80% + 0.5% × level). A **hit** raises the streak by 1 (max 15) and adds ⌊base × streak × 6%⌋ + 2 + ⌊streak ÷ 2⌋. On a hit, a *headshot* triggers if the roll is under min(30, hit% × 0.2) and adds ⌊1.5 × base⌋ + 2 × streak. A 3% *perfect shot* adds 3 × base + 6 × streak. A **miss** lowers the streak by 2. |
 | 🛡️ **Tank** | 500 | +1 shield stack per action, capped at min(15, 3 + ⌊level / 3⌋) (plus 2 per Absorb level). Bonus is ⌊base × stacks × 4%⌋ + ⌊stacks / 2⌋. |
-| 🧘 **Monk** | 550 | **Rhythm** (max 14, counted in your days). The first rewarded action on a new day continues the Rhythm if you were active yesterday (+1), otherwise it restarts at 1. Further actions the same day keep it. Bonus on every action = ⌊base × Rhythm × 3%⌋ + Rhythm. |
+| 🧘 **Monk** | 550 | **Rhythm** (max 14, counted in your days). The first rewarded action on a new day continues the Rhythm if you were active yesterday (+1), otherwise it restarts at 1. Further actions the same day keep it. Bonus on every action = ⌊base × Rhythm × 2%⌋ + Rhythm. |
 | 🛠️ **Artisan** | 650 | **Project** (max 10). Every action adds 1 progress and pays +2 XP per progress. Completing the last open task of a list that has at least 3 tasks finishes the project: +8 XP per progress on top, then half of the progress is kept (rounded down). Repeating tasks and subtasks never count as the last task. |
 | 🧭 **Ranger** | 600 | **Deadline Hunter.** (The due date must be at least 24 hours old; a freshly set date counts as no due date.) Completing a task with a due date *early* by d days (up to 7) pays ⌊base × 10% × d⌋ + 2 × d. *Due today* pays ⌊base × 25%⌋. *Overdue* pays nothing. Every other action (including completing a task with no due date) pays +3. No counter. |
 | 💀 **Necromancer** | 600 | **Revive.** (The due date must be at least 24 hours old, or the task is not overdue for this purpose.) Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 5%⌋ to *every* action (counted after the new soul). Souls do not decay. |
@@ -111,8 +111,8 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 |---|---|---|---|---|
 | ⚔️ Valor | 3 | 100 | +10 flat XP | — |
 | ✨ Inspire | 2 | 150 | +8% XP | Valor |
-| 👑 Champion | 1 | 200 | ×2 XP while your level is a multiple of 5 *(class)* | Inspire |
-| 🏆 Legendary | 1 | 300 | +25% XP *(class)* | Champion |
+| 👑 Champion | 1 | 200 | +50% XP while your level is a multiple of 5 *(class)* | Inspire |
+| 🏆 Legendary | 1 | 300 | +15% XP *(class)* | Champion |
 | 🛡️ Oath | 1 | 250 | Hero bonus becomes min(25 + level, 50), still capped at 3 × base *(class)* | Legendary |
 | 📣 Rally | 1 | 220 | +15 flat XP when you complete a HIGH priority task | Oath |
 
@@ -175,9 +175,9 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 
 | Skill | Max | Cost | Effect | Requires |
 |---|---|---|---|---|
-| 🌬️ Steady Breath | 3 | 120 | +1 XP per Rhythm day on every action, per level *(class)* | — |
-| 🧠 Inner Focus | 2 | 180 | Monk bonus +25% per level *(class)* | Steady Breath |
-| 🪷 Discipline | 1 | 260 | Maximum Rhythm +4 (14 → 18) *(class)* | Inner Focus |
+| 🌬️ Steady Breath | 3 | 120 | +0.5 XP per Rhythm day on every action, per level *(class)* | — |
+| 🧠 Inner Focus | 2 | 180 | Monk bonus +15% per level *(class)* | Steady Breath |
+| 🪷 Discipline | 1 | 260 | Maximum Rhythm +2 (14 → 16) *(class)* | Inner Focus |
 | ☯️ Serenity | 1 | 340 | Rhythm survives one missed day (a gap of 2 days continues it) *(class)* | Discipline |
 
 ### 🛠️ Artisan

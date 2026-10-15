@@ -46,7 +46,7 @@ test('class mechanics', () => {
     assert.equal(assassin.finalXP, 150);
 
     const wizard = shared.calculateClassXP(user({ player_class: 'WIZARD', player_level: 4, wizard_counter: 4 }), base);
-    assert.equal(wizard.finalXP, 10 + 4 * 5 * 2, 'burst on 5th action');
+    assert.equal(wizard.finalXP, 10 + 4 * 2 * 2, 'burst on 5th action');
     assert.equal(wizard.userUpdates.wizard_counter, 0);
 
     const tank = shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: 99 }), 100);
@@ -74,7 +74,7 @@ test('skill bonuses are applied', () => {
 
     // Champion and Legendary only work while the Hero is equipped
     const champ = shared.calculateFinalXP(user({ player_class: 'HERO', player_level: 5 }), [{ skill_id: 'hero_champion', skill_level: 1 }], 10, { rng: seq(0.99) });
-    assert.equal(champ.finalXP, 2 * 35, 'Hero +25, then doubled');
+    assert.equal(champ.finalXP, Math.floor(35 * 1.5), 'Hero +25, then +50%');
     const borrowed = [{ skill_id: 'hero_champion', skill_level: 1 }, { skill_id: 'hero_legend', skill_level: 1 }];
     assert.equal(shared.calculateFinalXP(user({ player_level: 5 }), borrowed, 10, { rng: seq(0.99) }).finalXP, 10, 'a Default player does not get Champion or Legendary');
     assert.equal(shared.calculateFinalXP(user({ player_class: 'MONK', player_level: 5 }), borrowed, 10, { rng: seq(0.99), now: 0 }).finalXP, shared.calculateFinalXP(user({ player_class: 'MONK', player_level: 5 }), [], 10, { rng: seq(0.99), now: 0 }).finalXP);
@@ -486,12 +486,12 @@ test('Wizard Overcharge restarts the cycle at 2 charges; Tome adds Wisdom per 20
     // after an Overcharge burst the 3rd charge is a combo again
     assert.equal(w({ wizard_counter: 2 }, [sk('wizard_overcharge')]).bonusInfo.type, 'WIZARD_COMBO');
 
-    // Tome: wisdom = level * 5 + floor(tasks / 20); [tasks done, expected combo XP (= wisdom)]
-    for (const [done, wisdom] of [[0, 20], [19, 20], [20, 21], [95, 24], [400, 40]]) {
+    // Tome: wisdom = level * 2 + floor(tasks / 20); [tasks done, expected combo XP (= wisdom)]
+    for (const [done, wisdom] of [[0, 8], [19, 8], [20, 9], [95, 12], [400, 28]]) {
         const combo = w({ wizard_counter: 2, total_items_completed: done }, [sk('wizard_tome')]);
         assert.equal(combo.bonusInfo.classBonus, wisdom, `${done} tasks`);
     }
-    assert.equal(w({ wizard_counter: 2, total_items_completed: 400 }).bonusInfo.classBonus, 20, 'no Tome, no growth');
+    assert.equal(w({ wizard_counter: 2, total_items_completed: 400 }).bonusInfo.classBonus, 8, 'no Tome, no growth');
 });
 
 test('Archer Quiver (+3% hit per level, cap 97) and Eagle Eye (headshots x1.5)', () => {
@@ -534,23 +534,23 @@ test('Tank Bulwark (+2 stacks per action) and Anchor (+8 XP on recurring tasks)'
 
 // ─── Monk ────────────────────────────────────────────────────────────────────
 
-test('Monk Rhythm: consecutive UTC days build it, a missed day resets it, bonus = 3% x rhythm + rhythm', () => {
+test('Monk Rhythm: consecutive UTC days build it, a missed day resets it, bonus = 2% x rhythm + rhythm', () => {
     const monk = (rhythm, day) => user({ player_class: 'MONK', monk_rhythm: rhythm, monk_day: day });
     // [label, rhythm, last day, skills, base, expected rhythm, expected bonus]
     const cases = [
-        ['first action ever', 0, null, [], 100, 1, 4],
-        ['same day keeps rhythm', 5, '2030-01-10', [], 100, 5, 20],
-        ['yesterday adds one', 5, '2030-01-09', [], 100, 6, 24],
-        ['two days ago resets', 5, '2030-01-08', [], 100, 1, 4],
-        ['two days ago, Serenity forgives', 5, '2030-01-08', [sk('monk_serenity')], 100, 6, 24],
-        ['three days ago, Serenity does not', 5, '2030-01-07', [sk('monk_serenity')], 100, 1, 4],
-        ['rhythm is capped at 14', 14, '2030-01-09', [], 100, 14, 42 + 14],
-        ['Discipline lifts the cap to 18', 14, '2030-01-09', [sk('monk_discipline')], 100, 15, 45 + 15],
-        ['Discipline cap holds at 18', 18, '2030-01-09', [sk('monk_discipline')], 100, 18, 54 + 18],
-        ['Steady Breath adds 1 XP per rhythm day per level', 5, '2030-01-10', [sk('monk_breath', 2)], 100, 5, 15 + 5 * 3],
-        ['Inner Focus adds 25% per level', 5, '2030-01-10', [sk('monk_focus', 2)], 100, 5, 30],
+        ['first action ever', 0, null, [], 100, 1, 3],
+        ['same day keeps rhythm', 5, '2030-01-10', [], 100, 5, 15],
+        ['yesterday adds one', 5, '2030-01-09', [], 100, 6, 18],
+        ['two days ago resets', 5, '2030-01-08', [], 100, 1, 3],
+        ['two days ago, Serenity forgives', 5, '2030-01-08', [sk('monk_serenity')], 100, 6, 18],
+        ['three days ago, Serenity does not', 5, '2030-01-07', [sk('monk_serenity')], 100, 1, 3],
+        ['rhythm is capped at 14', 14, '2030-01-09', [], 100, 14, 28 + 14],
+        ['Discipline lifts the cap to 16', 14, '2030-01-09', [sk('monk_discipline')], 100, 15, 30 + 15],
+        ['Discipline cap holds at 16', 16, '2030-01-09', [sk('monk_discipline')], 100, 16, 32 + 16],
+        ['Steady Breath adds 0.5 XP per rhythm day per level', 5, '2030-01-10', [sk('monk_breath', 2)], 100, 5, 10 + 5 * 2],
+        ['Inner Focus adds 15% per level', 5, '2030-01-10', [sk('monk_focus', 2)], 100, 5, 19],
         ['small actions still get the flat part', 3, '2030-01-10', [], 10, 3, 3],
-        ['a DATE returned as a Date object works', 5, new Date('2030-01-09T00:00:00Z'), [], 100, 6, 24]
+        ['a DATE returned as a Date object works', 5, new Date('2030-01-09T00:00:00Z'), [], 100, 6, 18]
     ];
     for (const [label, rhythm, day, skills, base, expectedRhythm, expectedBonus] of cases) {
         const r = shared.calculateClassXP(monk(rhythm, day), base, { now: NOW, skills });

@@ -68,7 +68,7 @@ At a level that is not a multiple of 5 the full tree gives 86 and 93 instead of 
 
 ## Wizard (700 XP)
 
-**Rewards:** Wisdom = level × 5. Every 3rd action adds Wisdom (Combo), every 5th adds twice Wisdom (Burst). **Suits:** long-term players; it is the weakest class at level 5 and the strongest at 30. **Pitfalls:** an expensive class (700 XP) that only pays off with levels; the cycle makes tasks uneven (most actions get nothing, a few get a lot).
+**Rewards:** Wisdom = level × 2. Every 3rd action adds Wisdom (Combo), every 5th adds twice Wisdom (Burst). **Suits:** long-term players; it is the weakest class at level 5 and the strongest at 30. **Pitfalls:** an expensive class (700 XP) that only pays off with levels; the cycle makes tasks uneven (most actions get nothing, a few get a lot).
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|

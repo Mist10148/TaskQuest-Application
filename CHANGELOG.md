@@ -80,6 +80,12 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **Balance pass 1: the strongest classes are reined in** (numbers re-derived with `scripts/balance-sim.js`; see [design/balance.md](docs/design/balance.md)).
+  - Monk: 2% of the base per Rhythm day (was 3%), Steady Breath +0.5 per day (was +1), Inner Focus +15% per level (was +25%), Discipline +2 Rhythm (was +4). A full-tree Monk was about 12× the base, now about 6×.
+  - Wizard: Wisdom is level × 2 (was × 5). A level-29 full tree was 31× the base, now about 14×.
+  - Hero: Champion is +50% (was ×2) and Legendary +15% (was +25%).
+  - Gambler: the bonus is 0 to (2 × base + 40) (was base + 99) and the class costs 450 XP (was 300). Unskilled it was 5.5× the base, now about 3.4×.
+  - Archer: 6% per streak step (was 8%), +2 + ⌊streak ÷ 2⌋ flat per hit (was +3 + streak), headshots ⌊1.5 × base⌋ + 2 per streak (was 2 × base + 3), perfect shots 3% for 3 × base + 6 per streak (was 5% for 4 × base + 10).
 - **The daily streak now follows your calendar days.** It continues when you claim on the next day (your time zone); Streak Shield and the Paladin forgive one missed day, Sanctuary two, and each further missed day costs a streak freeze. Before, a rolling 48/72/96 hour window let someone claiming every 47 hours add one streak day per two calendar days. The 24-hour cooldown between claims is unchanged, and the streak leaderboard keeps the rolling windows as an approximation (it can show a lapsed streak for up to a day). `DAILY.STREAK_DAYS`, `SHIELDED_STREAK_DAYS`, `SANCTUARY_STREAK_DAYS`.
 - **Champion and Legendary only work while the Hero is equipped.** They were generic skills, so a Monk or Wizard that had bought the Hero tree doubled and boosted its already large output. Skills can now carry `classOnly: true` (`activeSkills` in `xp.js`). Valor and Inspire stay generic.
 - **Prestige now also pays +1 flat XP per prestige on every task completion** (up to +10), next to the +2% multiplier. The percentage alone rounded away on small rewards (a 10 XP task stayed 10 XP even after ten prestiges). `PRESTIGE.FLAT_PER_PRESTIGE`.

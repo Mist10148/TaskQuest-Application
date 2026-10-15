@@ -74,7 +74,7 @@ test('classCounterLine reads the counters and the skill-dependent caps', () => {
     const today = new Date().toISOString().slice(0, 10);
     assert.equal(ui.classCounterLine(userOf('HERO')), '');
     assert.match(ui.classCounterLine(userOf('MONK', { monk_rhythm: 3, monk_day: today })), /Rhythm \*\*3\/14\*\*$/);
-    assert.match(ui.classCounterLine(userOf('MONK', { monk_rhythm: 3, monk_day: today }), [{ skill_id: 'monk_discipline', skill_level: 1 }]), /3\/18/);
+    assert.match(ui.classCounterLine(userOf('MONK', { monk_rhythm: 3, monk_day: today }), [{ skill_id: 'monk_discipline', skill_level: 1 }]), /3\/16/);
     assert.match(ui.classCounterLine(userOf('MONK', { monk_rhythm: 3, monk_day: '2020-01-01' })), /lapsed/);
     assert.match(ui.classCounterLine(userOf('ARTISAN', { artisan_progress: 7 })), /Project \*\*7\/10\*\*/);
     assert.match(ui.classCounterLine(userOf('ARTISAN', { artisan_progress: 7 }), [{ skill_id: 'artisan_blueprint', skill_level: 1 }]), /7\/13/);

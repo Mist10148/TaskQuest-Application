@@ -21,7 +21,7 @@ describe("classCounter", () => {
 
   it("shows the Monk rhythm with the Discipline cap and flags a lapsed rhythm", () => {
     expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-10" }, [], NOW)).toMatchObject({ value: 5, max: 14, note: undefined });
-    expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-09" }, [skill("monk_discipline")], NOW)).toMatchObject({ max: 18, note: undefined });
+    expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-09" }, [skill("monk_discipline")], NOW)).toMatchObject({ max: 16, note: undefined });
     expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-07" }, [], NOW)?.note).toMatch(/Lapsed/);
     // Serenity forgives one skipped day.
     expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-08" }, [skill("monk_serenity")], NOW)?.note).toBeUndefined();

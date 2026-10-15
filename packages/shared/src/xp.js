@@ -85,7 +85,7 @@ function getSkillBonuses(userSkills) {
         xpMultiplier: 1
             + lvl('default_xp_boost') * 0.05
             + lvl('hero_inspire') * 0.08
-            + (lvl('hero_legend') ? 0.25 : 0)
+            + (lvl('hero_legend') ? CLASS_RULES.HERO.LEGEND_PERCENT / 100 : 0)
             + lvl('wizard_focus') * 0.10
             + lvl('archer_aim') * 0.03,
         flatXPBonus: lvl('hero_valor') * 10 + lvl('tank_fortify') * 5 + lvl('wizard_study') * 3,
@@ -161,7 +161,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
         }
 
         case 'GAMBLER': {
-            const bonus = Math.floor(rng() * (baseXP + 100));
+            const bonus = Math.floor(rng() * (baseXP * CLASS_RULES.GAMBLER.BONUS_BASE_MULTIPLE + CLASS_RULES.GAMBLER.BONUS_FLAT));
             const lossChance = Math.max(CLASS_RULES.GAMBLER.MIN_LOSS_CHANCE, CLASS_RULES.GAMBLER.LOSS_CHANCE - lvl('gambler_lucky') * 0.05);
             const streak = Number(user.gambler_streak) || 0;
             // Hot Hand: a run of lucky rolls guarantees the next one is not bad luck (the roll is still drawn).
@@ -211,7 +211,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const counter = (Number(user.wizard_counter) || 0) + 1;
             userUpdates.wizard_counter = counter >= 5 ? (lvl('wizard_overcharge') ? CLASS_RULES.WIZARD.OVERCHARGE_START : 0) : counter;
             const tome = lvl('wizard_tome') ? Math.floor((Number(user.total_items_completed) || 0) / CLASS_RULES.WIZARD.TOME_TASKS_PER_WISDOM) : 0;
-            const wisdom = level * 5 + tome;
+            const wisdom = level * CLASS_RULES.WIZARD.WISDOM_PER_LEVEL + tome;
             if (counter % 5 === 0) {
                 const burst = wisdom * (lvl('wizard_mastery') ? 3 : 2);
                 finalXP = baseXP + burst;
@@ -233,18 +233,19 @@ function calculateClassXP(user, baseXP, opts = {}) {
             if (sniper || roll < hitChance) {
                 const streak = Math.min(15, (Number(user.archer_streak) || 0) + 1);
                 userUpdates.archer_streak = streak;
-                const streakBonus = Math.floor((baseXP * streak * 8) / 100) + 3 + streak;
+                const ar = CLASS_RULES.ARCHER;
+                const streakBonus = Math.floor((baseXP * streak * ar.STREAK_PERCENT) / 100) + ar.HIT_FLAT + Math.floor(streak / 2);
                 let total = streakBonus;
                 let details = `🎯 Hit x${streak} +${streakBonus}`;
 
                 const headshotChance = Math.min(30, hitChance * 0.2) * (lvl('archer_eagle') ? CLASS_RULES.ARCHER.EAGLE_HEADSHOT_MULTIPLIER : 1);
                 if (sniper || roll < headshotChance) {
-                    const crit = baseXP * 2 + streak * 3;
+                    const crit = Math.floor(baseXP * ar.HEADSHOT_BASE_MULTIPLE) + streak * ar.HEADSHOT_PER_STREAK;
                     total += crit;
                     details += ` 💥+${crit}`;
                 }
-                if (rng() < 0.05) {
-                    const perfect = baseXP * 4 + streak * 10;
+                if (rng() < ar.PERFECT_CHANCE) {
+                    const perfect = baseXP * ar.PERFECT_BASE_MULTIPLE + streak * ar.PERFECT_PER_STREAK;
                     total += perfect;
                     details += ` 🌟+${perfect}`;
                 }
@@ -441,8 +442,8 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     const skillBonus = finalXP - classXP;
 
     if (lvl('hero_champion') && level % 5 === 0) {
-        finalXP *= 2;
-        procs.push('👑 Champion x2');
+        finalXP = Math.floor(finalXP * CLASS_RULES.HERO.CHAMPION_MULTIPLIER);
+        procs.push('👑 Champion x' + CLASS_RULES.HERO.CHAMPION_MULTIPLIER);
     }
 
     let critBonus = 0;

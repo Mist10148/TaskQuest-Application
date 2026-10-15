@@ -30,8 +30,8 @@ const CLASSES = {
     GAMBLER: {
         name: 'Gambler',
         emoji: '🎲',
-        cost: 300,
-        description: 'Each action rolls a random bonus of 0 to (base + 99) XP, but 20% of rolls are bad luck and shrink the reward instead (never below 1 XP).',
+        cost: 450,
+        description: 'Each action rolls a random bonus of 0 to (2 x base + 40) XP, but 20% of rolls are bad luck and shrink the reward instead (never below 1 XP).',
         playstyle: 'High variance. Big wins, occasional losses.'
     },
     ASSASSIN: {
@@ -45,14 +45,14 @@ const CLASSES = {
         name: 'Wizard',
         emoji: '🔮',
         cost: 700,
-        description: 'Wisdom = level × 5. Every 3rd action adds +Wisdom XP (Combo), every 5th action adds +2× Wisdom XP (Burst). The cycle then restarts.',
+        description: 'Wisdom = level × 2. Every 3rd action adds +Wisdom XP (Combo), every 5th action adds +2× Wisdom XP (Burst). The cycle then restarts.',
         playstyle: 'Scales with level. Strongest late game.'
     },
     ARCHER: {
         name: 'Archer',
         emoji: '🏹',
         cost: 600,
-        description: 'Each action is a shot with a min(97%, 80% + 0.5% × level) hit chance. Hits build a streak (max 15) for bonus XP and can headshot or land a perfect shot; misses drop the streak by 2.',
+        description: 'Each action is a shot with a min(97%, 80% + 0.5% × level) hit chance. Hits build a streak (max 15) for bonus XP (6% of the base per streak step) and can headshot or land a perfect shot (3%); misses drop the streak by 2.',
         playstyle: 'Precision streaks with critical spikes.'
     },
     TANK: {
@@ -66,7 +66,7 @@ const CLASSES = {
         name: 'Monk',
         emoji: '🧘',
         cost: 550,
-        description: 'Rhythm: act on consecutive days to build Rhythm (max 14). Every action adds 3% of the base XP per Rhythm day plus 1 XP per Rhythm day. Skip a day and it restarts at 1.',
+        description: 'Rhythm: act on consecutive days to build Rhythm (max 14). Every action adds 2% of the base XP per Rhythm day plus 1 XP per Rhythm day. Skip a day and it restarts at 1.',
         playstyle: 'Rewards doing something small every single day.'
     },
     ARTISAN: {
@@ -133,8 +133,8 @@ const SKILL_TREES = {
         skills: {
             hero_valor: { name: 'Valor', emoji: '⚔️', description: '+10 flat XP per action per level', maxLevel: 3, cost: 100, requires: null },
             hero_inspire: { name: 'Inspire', emoji: '✨', description: '+8% XP per level', maxLevel: 2, cost: 150, requires: 'hero_valor' },
-            hero_champion: { name: 'Champion', emoji: '👑', description: 'Double XP while your level is a multiple of 5 (Hero)', maxLevel: 1, cost: 200, requires: 'hero_inspire', classOnly: true },
-            hero_legend: { name: 'Legendary', emoji: '🏆', description: '+25% XP on every action (Hero)', maxLevel: 1, cost: 300, requires: 'hero_champion', classOnly: true },
+            hero_champion: { name: 'Champion', emoji: '👑', description: '+50% XP while your level is a multiple of 5 (Hero)', maxLevel: 1, cost: 200, requires: 'hero_inspire', classOnly: true },
+            hero_legend: { name: 'Legendary', emoji: '🏆', description: '+15% XP on every action (Hero)', maxLevel: 1, cost: 300, requires: 'hero_champion', classOnly: true },
             hero_oath: { name: 'Oath', emoji: '🛡️', description: 'Hero bonus becomes min(25 + level, 50), still capped at 3× the base reward (Hero)', maxLevel: 1, cost: 250, requires: 'hero_legend' },
             hero_rally: { name: 'Rally', emoji: '📣', description: '+15 flat XP when you complete a HIGH priority task', maxLevel: 1, cost: 220, requires: 'hero_oath' }
         }
@@ -209,9 +209,9 @@ const SKILL_TREES = {
         emoji: '🧘',
         description: 'Daily rhythm and calm focus',
         skills: {
-            monk_breath: { name: 'Steady Breath', emoji: '🌬️', description: '+1 XP per Rhythm day on every action, per level (Monk)', maxLevel: 3, cost: 120, requires: null },
-            monk_focus: { name: 'Inner Focus', emoji: '🧠', description: 'Monk bonus +25% per level (Monk)', maxLevel: 2, cost: 180, requires: 'monk_breath' },
-            monk_discipline: { name: 'Discipline', emoji: '🪷', description: 'Maximum Rhythm +4 (14 → 18) (Monk)', maxLevel: 1, cost: 260, requires: 'monk_focus' },
+            monk_breath: { name: 'Steady Breath', emoji: '🌬️', description: '+0.5 XP per Rhythm day on every action, per level (Monk)', maxLevel: 3, cost: 120, requires: null },
+            monk_focus: { name: 'Inner Focus', emoji: '🧠', description: 'Monk bonus +15% per level (Monk)', maxLevel: 2, cost: 180, requires: 'monk_breath' },
+            monk_discipline: { name: 'Discipline', emoji: '🪷', description: 'Maximum Rhythm +2 (14 → 16) (Monk)', maxLevel: 1, cost: 260, requires: 'monk_focus' },
             monk_serenity: { name: 'Serenity', emoji: '☯️', description: 'Rhythm survives one missed day (Monk)', maxLevel: 1, cost: 340, requires: 'monk_discipline' }
         }
     },
@@ -423,17 +423,17 @@ const STREAK_FREEZE_CACHE = { COST: 120, MAX: 5 };
  * tables them. Percentages are plain numbers (20 = 20%).
  */
 const CLASS_RULES = {
-    HERO: { FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15 },
-    GAMBLER: { LOSS_CHANCE: 0.2, MIN_LOSS_CHANCE: 0.05, INSURANCE_FLOOR: 0.6, HOT_HAND_STREAK: 3 },
+    HERO: { FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15, CHAMPION_MULTIPLIER: 1.5, LEGEND_PERCENT: 15 },
+    GAMBLER: { BONUS_BASE_MULTIPLE: 2, BONUS_FLAT: 40, LOSS_CHANCE: 0.2, MIN_LOSS_CHANCE: 0.05, INSURANCE_FLOOR: 0.6, HOT_HAND_STREAK: 3 },
     ASSASSIN: { DECAY_HOURS: 36, NIGHT_OWL_DECAY_HOURS: 48, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
-    WIZARD: { OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
-    ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97 },
+    WIZARD: { WISDOM_PER_LEVEL: 2, OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
+    ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97, STREAK_PERCENT: 6, HIT_FLAT: 2, HEADSHOT_BASE_MULTIPLE: 1.5, HEADSHOT_PER_STREAK: 2, PERFECT_CHANCE: 0.03, PERFECT_BASE_MULTIPLE: 3, PERFECT_PER_STREAK: 6 },
     TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
     PALADIN: { HIGH_FLAT: 10, OTHER_FLAT: 5, AURA_FLAT: 2, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
     NECROMANCER: { MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 5, SIPHON_PERCENT: 2, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
     RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 2, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 3, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
     ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 8, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
-    MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 3, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 1, FOCUS_PERCENT: 25, DISCIPLINE_CAP: 4 }
+    MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 }
 };
 
 /**

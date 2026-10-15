@@ -18,7 +18,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P1.7 Lint warnings (7)
 
 ## P2 Balance pass (existing classes)
-- [ ] P2.1 Nerfs: Monk, Wizard, Hero, Gambler, Archer
+- [x] P2.1 Nerfs: Monk, Wizard, Hero, Gambler, Archer
 - [ ] P2.2 Buffs: Tank, Assassin, Paladin, Ranger, Necromancer
 - [ ] P2.3 Docs tables regenerated from the sim
 

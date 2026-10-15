@@ -42,7 +42,7 @@ export function classCounter(user: Partial<User>, skills: UserSkill[] = [], now:
   const level = (id: string) => skills.find((s) => s.skill_id === id)?.skill_level ?? 0;
   switch (user.player_class) {
     case "MONK": {
-      const max = 14 + (level("monk_discipline") > 0 ? 4 : 0);
+      const max = 14 + (level("monk_discipline") > 0 ? 2 : 0);
       const value = Math.min(max, Number(user.monk_rhythm) || 0);
       const today = dayInZone(now, user.timezone);
       const gap = user.monk_day ? dayNumber(today) - dayNumber(String(user.monk_day)) : null;
@@ -50,7 +50,7 @@ export function classCounter(user: Partial<User>, skills: UserSkill[] = [], now:
       return { label: "Rhythm", emoji: "🧘", value, max, note: lapsed ? "Lapsed: restarts at 1 on your next action" : undefined };
     }
     case "ARTISAN": {
-      const max = 10 + (level("artisan_blueprint") > 0 ? 3 : 0);
+      const max = 10 + level("artisan_blueprint") * 3;
       return { label: "Project", emoji: "🛠️", value: Math.min(max, Number(user.artisan_progress) || 0), max };
     }
     case "NECROMANCER": {

@@ -49,8 +49,10 @@ For every reward:
 
 ```
 1. classXP    = class mechanic(base XP)                          (§3)
-2. multiplier = 1 + Σ percentage skills
-                  + conditional skills: Execute, Revenge, Crusade (class), Bleed, Momentum  (§4)
+2. multiplier = 1 + Σ percentage skills + Bleed, Momentum, Scholar, Night Shift
+                  (together at most +75%)
+                  + class-gated skills: Execute, Revenge, Crusade  (§4, not limited)
+                  + prestige bonus (+2% each, not limited)
 3. final      = ⌊classXP × multiplier⌋ + Σ flat skill bonuses
                   (Valor, Fortify, Arcane Study, and on task completions Multishot, each only
                    with its own class equipped; Rally for HIGH priority, Anchor for recurring tasks)

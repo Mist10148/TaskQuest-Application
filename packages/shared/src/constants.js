@@ -584,6 +584,8 @@ const SMALL_ACTION_CAP = { ACTIONS: ['item_add', 'list_create'], MAX_MULTIPLE: 4
 
 /** Numbers behind the default-tree skills. */
 const SKILL_RULES = {
+    /** The most the generic skill percentages (Quick Learner, Inspire, Focus, Steady Aim, Momentum, Scholar, Night Shift, Bleed) may give together. */
+    MAX_PERCENT_BONUS: 75,
     SCHOLAR_PERCENT: 15,
     NIGHT_SHIFT_PERCENT: 5,
     NIGHT_SHIFT_FROM: 21,

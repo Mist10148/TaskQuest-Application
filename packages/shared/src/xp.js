@@ -527,16 +527,18 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     const bonuses = getSkillBonuses(skills);
 
     // Conditional multipliers that depend on class state after this action.
-    let multiplier = bonuses.xpMultiplier + prestigeMultiplier(user);
+    let multiplier = bonuses.xpMultiplier;
+    // Class-gated bonuses (they only exist for their own class) sit outside the limit applied to the generic percentages below.
+    let classMultiplier = 0;
     if (user.player_class === 'ASSASSIN' && lvl('assassin_execute') && userUpdates.assassin_stacks === CLASS_RULES.ASSASSIN.MAX_STACKS) {
-        multiplier += 1.0;
+        classMultiplier += 1.0;
     }
     if (user.player_class === 'TANK' && lvl('tank_revenge') && userUpdates.tank_stacks === tankStackCap(level, skills)) {
-        multiplier += (lvl('tank_revenge') * CLASS_RULES.TANK.REVENGE_PERCENT) / 100;
+        classMultiplier += (lvl('tank_revenge') * CLASS_RULES.TANK.REVENGE_PERCENT) / 100;
     }
 
     if (user.player_class === 'PALADIN' && lvl('paladin_crusade') && context.action === 'item_complete' && context.priority === 'HIGH') {
-        multiplier += CLASS_RULES.PALADIN.CRUSADE_PERCENT / 100;
+        classMultiplier += CLASS_RULES.PALADIN.CRUSADE_PERCENT / 100;
     }
 
     // Momentum: the live daily streak (0 once it has lapsed, until the next claim), counted up to a cap.
@@ -557,6 +559,10 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
         bleedLeft -= 1;
         procs.push('🩸 Bleed');
     }
+
+    // The generic percentages (Quick Learner, Inspire, Focus, Steady Aim, Momentum, Scholar, Night Shift, Bleed) are added together and
+    // limited, so borrowing all of them from other trees cannot compound on an already strong class. Prestige is outside the limit.
+    multiplier = 1 + Math.min(SKILL_RULES.MAX_PERCENT_BONUS / 100, multiplier - 1) + classMultiplier + prestigeMultiplier(user);
 
     let flat = bonuses.flatXPBonus;
     if (context.action === 'item_complete') {

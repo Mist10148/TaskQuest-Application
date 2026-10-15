@@ -104,6 +104,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
   - Wizard Wisdom is capped at 50 (`CLASS_RULES.WIZARD.WISDOM_MAX`, level 25, Tome included). A level-100 Wizard used to pay 45× the base and a level-200 one 88×; the full tree at level 30 is 126 XP instead of 164.
   - Hero's Champion +50% → +35%, Monk's Steady Breath +0.5 → +0.4 XP per Rhythm day (Monk full tree 75 → 68), Tank's Revenge +10% → +15% per level (`CLASS_RULES.TANK.REVENGE_PERCENT`; Tank full tree 41/46/53 → 43/48/56).
   - New balance tests: every skill of every tree on a Default player stays under 3× the base, and no class keeps growing with level.
+  - The generic skill percentages (Quick Learner, Inspire, Focus, Steady Aim, Momentum, Scholar, Night Shift, Bleed) are limited to +75% together (`SKILL_RULES.MAX_PERCENT_BONUS`); Execute, Revenge, Crusade and prestige are outside the limit. No own-tree figure changes.
 - **Balance pass 2: the weak classes are lifted.**
   - Tank: shield cap `min(15, 5 + level ÷ 3)` (was 3), +7% per stack (was +4%), Fortify costs 70 XP (was 95).
   - Assassin: +8% per stack (was +5%), the streak survives 48 hours (was 36; Night Owl 72, was 48).

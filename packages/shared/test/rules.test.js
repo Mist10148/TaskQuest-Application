@@ -932,3 +932,17 @@ test('Tank Revenge pays REVENGE_PERCENT per level at the stack cap', () => {
     assert.equal(withRevenge, Math.floor(shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: 99 }), 100, { skills: [sk('tank_revenge', 2)] }).finalXP * (1 + (2 * CLASS_RULES.TANK.REVENGE_PERCENT) / 100) + 1e-9));
     assert.ok(withRevenge > base);
 });
+
+test('the generic percentage skills are limited to MAX_PERCENT_BONUS together; prestige and class-gated bonuses sit outside it', () => {
+    const { SKILL_RULES } = shared;
+    const all = [['default_xp_boost', 3], ['default_momentum', 3], ['default_scholar', 1], ['default_nightshift', 2], ['hero_inspire', 2], ['wizard_focus', 2], ['archer_aim', 3]].map(([id, n]) => sk(id, n));
+    const night = Date.parse('2030-01-10T23:00:00Z');
+    const run = (u, skills = all) => shared.calculateFinalXP({ timezone: 'UTC', streak_count: 10, ...u }, skills, 100, { rng: seq(0.99), now: night, context: { action: 'item_complete', firstOfDay: true } }).finalXP;
+    const cap = SKILL_RULES.MAX_PERCENT_BONUS;
+    assert.equal(run(user()), 100 + cap, 'ten percent skills add up to more than the limit; the limit wins');
+    assert.equal(run(user({ prestige: 5 })), 100 + cap + 10 + 5, 'prestige (+2% each, +1 flat each) is added after the limit');
+    assert.equal(run(user(), [sk('default_xp_boost', 3)]), 115, 'below the limit nothing changes');
+    // Execute (+100% at 10 stacks) only exists for the Assassin, so it is not part of the limited group: class result 100 + 8% x 10 = 180.
+    const assassin = user({ player_class: 'ASSASSIN', assassin_stacks: 9, assassin_streak: 20, assassin_last_at: new Date(night) });
+    assert.equal(run(assassin, [sk('assassin_execute'), ...all]), Math.floor(180 * (1 + cap / 100 + 1)));
+});

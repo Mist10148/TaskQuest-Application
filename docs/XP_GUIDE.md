@@ -51,7 +51,7 @@ Spending sinks: classes (300 to 750), skills (50 to 360 a level), streak freezes
 For a modified reward:
 
 1. **Class mechanic** turns the base into a class result (Hero adds its flat bonus, Wizard a combo or burst, Monk its Rhythm bonus, and so on).
-2. **Multiplier** = 1 + percentage skills (Quick Learner, Inspire, Legendary, Focus, Steady Aim) + the prestige bonus (+2% each) + conditional bonuses (Execute, Revenge, Crusade, Bleed, Momentum). These are added together, not multiplied.
+2. **Multiplier** = 1 + percentage skills (Quick Learner, Inspire, Legendary, Focus, Steady Aim, Momentum, Scholar, Night Shift, Bleed), added together and limited to +75%, + the class-gated bonuses (Execute, Revenge, Crusade), which are not limited, + the prestige bonus (+2% each, not limited). These are added together, not multiplied.
 3. **Final** = ⌊class result × multiplier⌋ + flat skill bonuses (Valor, Fortify, Arcane Study, which only work with their own class; on task completions also Multishot (Archer only), Rally, Anchor and the prestige flat bonus of +1 per prestige).
 4. **Champion** (Hero only) adds 35% when your level is a multiple of 5.
 5. **Critical hit** (Assassin skill) adds +50% (+100% with Shadow Step) and arms Bleed.

@@ -8,7 +8,7 @@ The tables below were computed with the shared XP functions (`calculateFinalXP`)
 
 - **Plain task:** medium priority, no due date, not overdue.
 - **Favourable mix:** what the class is built for (stated under each class).
-- Levels 5, 15 and 30 are all multiples of 5, so Hero's Champion skill (double XP at such levels) is active in those columns.
+- Levels 5, 15 and 30 are all multiples of 5, so Hero's Champion skill (+50% XP at such levels) is active in those columns.
 - These are per-task averages. Everything is limited by the 50 rewarded completions a day, and flat bonuses ([XP_GUIDE](XP_GUIDE.md)) are the same for every class. A skill's cost is paid once per level; the class price is extra.
 
 | Baseline | Plain task at level 5 / 15 / 30 |
@@ -42,19 +42,19 @@ Favourable mix for the Hero: every second task is HIGH priority (Rally).
 |---|---|---|---|---|
 | No skills | - | 0 | 35 / 35 / 35 | 35 / 35 / 35 |
 | Starter | Valor ×3, Inspire ×2 | 600 | 70 / 70 / 70 | 70 / 70 / 70 |
-| Full tree | Valor ×3, Inspire ×2, Champion, Legendary, Oath, Rally | 1570 | 172 / 172 / 172 | 187 / 187 / 187 |
+| Full tree | Valor ×3, Inspire ×2, Champion, Legendary, Oath, Rally | 1570 | 123 / 123 / 123 | 136 / 136 / 136 |
 
-At a level that is not a multiple of 5 the full tree gives 86 and 93 instead of 172 and 187: the Champion skill doubles everything on levels 5, 10, 15 and so on.
+At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 123 and 136: the Champion skill adds 50% on levels 5, 10, 15 and so on.
 
-## Gambler (300 XP)
+## Gambler (450 XP)
 
-**Rewards:** each action rolls a bonus of 0 to (base + 99); 20% of the time it is bad luck and shrinks the reward instead (never below 1 XP). **Suits:** players who enjoy randomness and do not mind uneven days. **Pitfalls:** the average is high, but single actions swing widely, and a run of bad luck is real; Lucky Streak lowers the odds and Insurance and Safety Net soften losses.
+**Rewards:** each action rolls a bonus of 0 to (2 × base + 40); 20% of the time it is bad luck and shrinks the reward instead (never below 1 XP). **Suits:** players who enjoy randomness and do not mind uneven days. **Pitfalls:** the average is still well above Default, but single actions swing widely, and a run of bad luck is real; Lucky Streak lowers the odds and Insurance and Safety Net soften losses.
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|
-| No skills | - | 0 | 52 / 52 / 52 |
-| Starter | Lucky Streak ×3, Double Down ×2 | 480 | 75 / 75 / 75 |
-| Full tree | Lucky Streak ×3, Double Down ×2, Safety Net ×2, Jackpot, Insurance, Hot Hand | 1460 | 79 / 79 / 79 |
+| No skills | - | 0 | 34 / 34 / 34 |
+| Starter | Lucky Streak ×3, Double Down ×2 | 480 | 46 / 46 / 46 |
+| Full tree | Lucky Streak ×3, Double Down ×2, Safety Net ×2, Jackpot, Insurance, Hot Hand | 1460 | 50 / 50 / 50 |
 
 ## Assassin (400 XP)
 
@@ -62,9 +62,9 @@ At a level that is not a multiple of 5 the full tree gives 86 and 93 instead of 
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|
-| No skills | - | 0 | 15 / 15 / 15 |
-| Starter | Swift Strike ×3, Critical Hit ×2 | 530 | 16 / 16 / 16 |
-| Full tree | Swift Strike ×3, Critical Hit ×2, Shadow Step, Execute, Night Owl, Bleed | 1430 | 38 / 38 / 38 |
+| No skills | - | 0 | 18 / 18 / 18 |
+| Starter | Swift Strike ×3, Critical Hit ×2 | 530 | 20 / 20 / 20 |
+| Full tree | Swift Strike ×3, Critical Hit ×2, Shadow Step, Execute, Night Owl, Bleed | 1430 | 44 / 44 / 44 |
 
 ## Wizard (700 XP)
 
@@ -72,89 +72,89 @@ At a level that is not a multiple of 5 the full tree gives 86 and 93 instead of 
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|
-| No skills | - | 0 | 25 / 55 / 100 |
-| Starter | Arcane Study ×3, Spell Combo ×2 | 600 | 39 / 79 / 139 |
-| Full tree | Arcane Study ×3, Spell Combo ×2, Focus ×2, Arcane Mastery, Overcharge, Tome | 1910 | 101 / 201 / 351 |
+| No skills | - | 0 | 16 / 28 / 46 |
+| Starter | Arcane Study ×3, Spell Combo ×2 | 600 | 27 / 43 / 67 |
+| Full tree | Arcane Study ×3, Spell Combo ×2, Focus ×2, Arcane Mastery, Overcharge, Tome | 1910 | 57 / 97 / 157 |
 
 ## Archer (600 XP)
 
-**Rewards:** every action is a shot with an 80% + 0.5% × level hit chance; hits build a streak (max 15) for bonus XP and can headshot or land a perfect shot. **Suits:** risk-takers who like frequent spikes. **Pitfalls:** misses lower the streak by 2 (Piercing Shot stops that); the variance is high; Sniper only helps with HIGH priority tasks.
+**Rewards:** every action is a shot with an 80% + 0.5% × level hit chance; hits build a streak (max 15) for bonus XP (6% of the base per step) and can headshot or land a 3% perfect shot. **Suits:** risk-takers who like frequent spikes. **Pitfalls:** misses lower the streak by 2 (Piercing Shot stops that); the variance is high; Sniper only helps with HIGH priority tasks.
 
 Favourable mix: every second task is HIGH priority (Sniper makes those always hit and headshot).
 
 | Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
 |---|---|---|---|---|
-| No skills | - | 0 | 52 / 56 / 59 | 52 / 56 / 59 |
-| Starter | Steady Aim ×3, Multishot ×2 | 535 | 66 / 70 / 74 | 66 / 70 / 74 |
-| Full tree | Steady Aim ×3, Multishot ×2, Piercing Shot, Sniper, Quiver ×2, Eagle Eye | 1585 | 77 / 80 / 84 | 106 / 106 / 109 |
+| No skills | - | 0 | 33 / 35 / 38 | 33 / 35 / 38 |
+| Starter | Steady Aim ×3, Multishot ×2 | 535 | 45 / 47 / 51 | 45 / 47 / 51 |
+| Full tree | Steady Aim ×3, Multishot ×2, Piercing Shot, Sniper, Quiver ×2, Eagle Eye | 1585 | 51 / 53 / 57 | 75 / 76 / 78 |
 
 ## Tank (500 XP)
 
-**Rewards:** every action adds a shield stack (cap min(15, 3 + level ÷ 3), plus Absorb); each stack adds +4% XP plus +1 XP per two stacks. **Suits:** steady daily workers; with Unstoppable the daily streak never resets. **Pitfalls:** the cap is small at low levels, so the bare class is the weakest of the always-on classes early (level 5: 13); Fortify and Absorb do most of the early work.
+**Rewards:** every action adds a shield stack (cap min(15, 5 + level ÷ 3), plus Absorb); each stack adds +7% XP plus +1 XP per two stacks. **Suits:** steady daily workers; with Unstoppable the daily streak never resets. **Pitfalls:** the cap is small at low levels, so the bare class is the weakest of the always-on classes early (level 5: 17); Fortify and Absorb do most of the early work.
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|
-| No skills | - | 0 | 13 / 17 / 21 |
-| Starter | Fortify ×3, Absorb ×2 | 575 | 32 / 35 / 39 |
-| Full tree | Fortify ×3, Absorb ×2, Revenge ×2, Unstoppable, Bulwark, Anchor | 1795 | 35 / 39 / 43 |
+| No skills | - | 0 | 17 / 22 / 27 |
+| Starter | Fortify ×3, Absorb ×2 | 500 | 37 / 41 / 47 |
+| Full tree | Fortify ×3, Absorb ×2, Revenge ×2, Unstoppable, Bulwark, Anchor | 1720 | 41 / 46 / 53 |
 
 ## Monk (550 XP)
 
-**Rewards:** Rhythm (max 14) counts consecutive days of your own on which you finished a rewarded action; every action pays 3% of the base per Rhythm day plus 1 XP per day. **Suits:** habit builders who act daily, even a little. **Pitfalls:** a missed day sends Rhythm back to 1 (Serenity forgives one missed day), it starts from 1 after a class switch, and the level does not matter.
+**Rewards:** Rhythm (max 14) counts consecutive days of your own on which you finished a rewarded action; every action pays 2% of the base per Rhythm day plus 1 XP per day. **Suits:** habit builders who act daily, even a little. **Pitfalls:** a missed day sends Rhythm back to 1 (Serenity forgives one missed day), it starts from 1 after a class switch, and the level does not matter.
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|
-| No skills | - | 0 | 28 / 28 / 28 |
-| Starter | Steady Breath ×3 | 360 | 70 / 70 / 70 |
-| Full tree | Steady Breath ×3, Inner Focus ×2, Discipline, Serenity | 1320 | 125 / 125 / 125 |
+| No skills | - | 0 | 26 / 26 / 26 |
+| Starter | Steady Breath ×3 | 360 | 47 / 47 / 47 |
+| Full tree | Steady Breath ×3, Inner Focus ×2, Discipline, Serenity | 1320 | 64 / 64 / 64 |
 
 ## Artisan (650 XP)
 
-**Rewards:** every action adds 1 progress (max 10) and pays +2 XP per progress; finishing the last open task of a list of at least 3 tasks pays +8 XP per progress on top. **Suits:** people who work through whole lists. **Pitfalls:** completing a list halves your progress, so a long run of clearing small lists builds less than steadily working one big one; the clear bonus is paid once per list, ever, and repeating tasks and subtasks never count as the last task.
+**Rewards:** every action adds 1 progress (max 10) and pays +2 XP per progress; finishing the last open task of a list of at least 3 tasks pays +6 XP per progress on top. **Suits:** people who work through whole lists. **Pitfalls:** completing a list halves your progress, so a long run of clearing small lists builds less than steadily working one big one; the clear bonus is paid once per list, ever, and repeating tasks and subtasks never count as the last task.
 
-Favourable mix: lists of ten tasks, cleared on every tenth completion. Keeping half the progress and the +8 clear bonus make clearing lists worth more than never clearing them.
+Favourable mix: lists of ten tasks, cleared on every tenth completion. Keeping half the progress and the +6 clear bonus make clearing lists worth more than never clearing them.
 
 | Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
 |---|---|---|---|---|
-| No skills | - | 0 | 30 / 30 / 30 | 26 / 26 / 26 |
-| Starter | Toolkit ×3 | 390 | 60 / 60 / 60 | 43 / 43 / 43 |
-| Full tree | Toolkit ×3, Blueprint ×2, Assembly Line, Masterwork | 1410 | 90 / 90 / 90 | 74 / 74 / 74 |
+| No skills | - | 0 | 30 / 30 / 30 | 35 / 35 / 35 |
+| Starter | Toolkit ×3 | 390 | 45 / 45 / 45 | 45 / 45 / 45 |
+| Full tree | Toolkit ×3, Blueprint ×2, Assembly Line, Masterwork | 1410 | 66 / 66 / 66 | 86 / 86 / 86 |
 
 ## Ranger (600 XP)
 
-**Rewards:** finishing a task with a due date early pays 10% of the base plus 2 XP per day early (up to 7 days), due today 25% of the base, overdue nothing; every other action +3. **Suits:** planners who give tasks due dates and finish ahead. **Pitfalls:** the due date must have been set at least 24 hours before, so a date typed just before finishing counts as none; overdue tasks earn nothing from the class; Long Sight, Bullseye and Second Wind only matter for far-ahead, on-the-day and late tasks.
+**Rewards:** finishing a task with a due date early pays 10% of the base plus 3 XP per day early (up to 7 days), due today 25% of the base, overdue nothing; every other action +5. **Suits:** planners who give tasks due dates and finish ahead. **Pitfalls:** the due date must have been set at least 24 hours before, so a date typed just before finishing counts as none; overdue tasks earn nothing from the class; Long Sight, Bullseye and Second Wind only matter for far-ahead, on-the-day and late tasks.
 
 Favourable mix: every task finished three days early.
 
 | Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
 |---|---|---|---|---|
-| No skills | - | 0 | 13 / 13 / 13 | 19 / 19 / 19 |
-| Starter | Scout ×3 | 390 | 13 / 13 / 13 | 37 / 37 / 37 |
-| Full tree | Scout ×3, Long Sight, Bullseye, Second Wind | 1220 | 13 / 13 / 13 | 37 / 37 / 37 |
+| No skills | - | 0 | 15 / 15 / 15 | 22 / 22 / 22 |
+| Starter | Scout ×3 | 390 | 15 / 15 / 15 | 40 / 40 / 40 |
+| Full tree | Scout ×3, Long Sight, Bullseye, Second Wind | 1220 | 15 / 15 / 15 | 40 / 40 / 40 |
 
 ## Necromancer (600 XP)
 
-**Rewards:** completing an overdue task pays +150% of the base plus 3 XP per day overdue (max 30) and binds a soul (max 5, or 8 with Soul Jar); every soul adds +5% of the base to every action. **Suits:** people with a backlog to clear. **Pitfalls:** plain tasks pay only the base plus the soul bonus; the overdue date must be at least 24 hours old; souls never decay. Letting tasks go overdue on purpose is a poor trade, because the days-overdue part of the bonus is capped at 30 XP and every overdue task also lacks the early-finish bonus.
+**Rewards:** completing an overdue task pays +150% of the base plus 3 XP per day overdue (max 30) and binds a soul (max 5, or 8 with Soul Jar), and every 10th task you complete also binds one; every soul adds +8% of the base to every action. **Suits:** people with a backlog to clear. **Pitfalls:** plain tasks pay the base plus the soul bonus only; the overdue date must be at least 24 hours old; souls never decay. Letting tasks go overdue on purpose is a poor trade, because the days-overdue part of the bonus is capped at 30 XP and every overdue task also lacks the early-finish bonus.
 
 Favourable mix: every third task is three days overdue.
 
 | Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
 |---|---|---|---|---|
-| No skills | - | 0 | 10 / 10 / 10 | 20 / 20 / 20 |
-| Starter | Siphon ×3 | 390 | 10 / 10 / 10 | 23 / 23 / 23 |
-| Full tree | Siphon ×3, Soul Jar, Dark Ritual, Lichdom | 1230 | 10 / 10 / 10 | 38 / 38 / 38 |
+| No skills | - | 0 | 14 / 14 / 14 | 24 / 24 / 24 |
+| Starter | Siphon ×3 | 390 | 17 / 17 / 17 | 27 / 27 / 27 |
+| Full tree | Siphon ×3, Soul Jar, Dark Ritual, Lichdom | 1230 | 21 / 21 / 21 | 45 / 45 / 45 |
 
-## Paladin (750 XP)
+## Paladin (600 XP)
 
-**Rewards:** completing a HIGH priority task pays +100% of the base plus 10; every other action +5. Your daily streak always has the Streak Shield window for free (one missed day forgiven, two with Sanctuary). **Suits:** people who really separate the important tasks, and who sometimes miss a day. **Pitfalls:** the priority is your own label: tagging everything HIGH works and is not checked, which empties the idea; the most expensive class.
+**Rewards:** completing a HIGH priority task pays +100% of the base plus 10; every other action +8. Your daily streak always has the Streak Shield window for free (one missed day forgiven, two with Sanctuary). **Suits:** people who really separate the important tasks, and who sometimes miss a day. **Pitfalls:** the priority is your own label: tagging everything HIGH works and is not checked, which empties the idea (only the first 3 HIGH completions a day count); the price is 600 XP.
 
 Favourable mix: every second task is HIGH priority.
 
 | Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
 |---|---|---|---|---|
-| No skills | - | 0 | 15 / 15 / 15 | 23 / 23 / 23 |
-| Starter | Holy Aura ×3 | 420 | 21 / 21 / 21 | 29 / 29 / 29 |
-| Full tree | Holy Aura ×3, Smite ×2, Crusade, Sanctuary | 1480 | 21 / 21 / 21 | 38 / 38 / 38 |
+| No skills | - | 0 | 18 / 18 / 18 | 25 / 25 / 25 |
+| Starter | Holy Aura ×3 | 420 | 27 / 27 / 27 | 34 / 34 / 34 |
+| Full tree | Holy Aura ×3, Smite ×2, Crusade, Sanctuary | 1480 | 27 / 27 / 27 | 46 / 46 / 46 |
 
 ## Changing your mind
 

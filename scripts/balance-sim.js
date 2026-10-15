@@ -44,9 +44,12 @@ function fullTree(cls) {
  * @param {object} o { level, tree: 'none'|'full', action, base, mix, perDay, days }
  */
 function perAction(cls, o = {}) {
-    const { level = 6, tree = 'none', action = 'item_complete', base = 10, mix = 'plain', perDay = 5, days = 60 } = o;
+    return perActionRows(cls, o.tree === 'full' ? fullTree(cls).rows : [], o);
+}
+
+function perActionRows(cls, skills, o = {}) {
+    const { level = 6, action = 'item_complete', base = 10, mix = 'plain', perDay = 5, days = 60 } = o;
     const rng = rngFor(7);
-    const skills = tree === 'full' ? fullTree(cls).rows : [];
     const user = { player_class: cls, player_level: level, timezone: 'UTC', streak_count: 7, last_daily_claim: null, total_items_completed: 0 };
     const start = Date.parse('2026-01-01T09:00:00Z');
     let sum = 0;
@@ -88,6 +91,51 @@ function paybackTasks(cls, level = 16) {
     return gain > 0 ? Math.ceil(cost / gain) : Infinity;
 }
 
+/** Cheap starter builds used by docs/CLASS_GUIDE.md: [skill id, levels]. */
+const STARTER = {
+    HERO: [['hero_valor', 3], ['hero_inspire', 2]],
+    GAMBLER: [['gambler_lucky', 3], ['gambler_double', 2]],
+    ASSASSIN: [['assassin_swift', 3], ['assassin_critical', 2]],
+    WIZARD: [['wizard_study', 3], ['wizard_combo', 2]],
+    ARCHER: [['archer_aim', 3], ['archer_multishot', 2]],
+    TANK: [['tank_fortify', 3], ['tank_absorb', 2]],
+    MONK: [['monk_breath', 3]],
+    ARTISAN: [['artisan_toolkit', 3]],
+    RANGER: [['ranger_scout', 3]],
+    NECROMANCER: [['necro_siphon', 3]],
+    PALADIN: [['paladin_aura', 3]]
+};
+
+/** XP of one task for an arbitrary skill list (rows of { skill_id, skill_level }). */
+function perActionWith(cls, skills, o = {}) {
+    const rows = skills.map(([skill_id, skill_level]) => ({ skill_id, skill_level }));
+    return perActionRows(cls, rows, o);
+}
+
+function skillCost(rows) {
+    let cost = 0;
+    for (const [id, levels] of rows) {
+        for (const tree of Object.values(SKILL_TREES)) if (tree.skills[id]) cost += tree.skills[id].cost * levels;
+    }
+    return cost;
+}
+
+/** The builds table of one class for the docs: none, starter and full tree at levels 5 / 15 / 30. */
+function buildTable(cls) {
+    const mix = FAVOURABLE[cls] || null;
+    const levels = [5, 15, 30];
+    const full = fullTree(cls).rows.map((r) => [r.skill_id, r.skill_level]);
+    const name = (id) => Object.values(SKILL_TREES).map((t) => t.skills[id]).find(Boolean).name;
+    const label = (rows) => rows.map(([id, n]) => (n > 1 ? `${name(id)} ×${n}` : name(id))).join(', ');
+    const builds = [['No skills', [], '-'], ['Starter', STARTER[cls], label(STARTER[cls])], ['Full tree', full, label(full)]];
+    const cell = (rows, m) => levels.map((l) => Math.round(perActionWith(cls, rows, { level: l, mix: m }))).join(' / ');
+    const head = mix
+        ? ['| Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |', '|---|---|---|---|---|']
+        : ['| Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |', '|---|---|---|---|'];
+    const lines = builds.map(([b, rows, text]) => `| ${b} | ${text} | ${skillCost(rows)} | ${cell(rows, 'plain')} |` + (mix ? ` ${cell(rows, mix)} |` : ''));
+    return [...head, ...lines].join('\n');
+}
+
 function report() {
     const rows = [];
     for (const cls of PURCHASABLE) {
@@ -107,9 +155,11 @@ function report() {
     return rows;
 }
 
-module.exports = { PURCHASABLE, FAVOURABLE, MIXES, fullTree, perAction, perDayTotal, paybackTasks, report };
+module.exports = { PURCHASABLE, FAVOURABLE, MIXES, STARTER, fullTree, perAction, perActionWith, perDayTotal, paybackTasks, buildTable, report };
 
-if (require.main === module) {
+if (require.main === module && process.argv.includes('--markdown')) {
+    for (const cls of PURCHASABLE) console.log(['### ' + cls, '', buildTable(cls), ''].join('\n'));
+} else if (require.main === module) {
     console.log('Per task (base 10, levels 6 / 16 / 29). payback = tasks to repay class + whole tree.');
     console.table(report());
 }

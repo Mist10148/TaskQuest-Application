@@ -20,7 +20,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 ## P2 Balance pass (existing classes)
 - [x] P2.1 Nerfs: Monk, Wizard, Hero, Gambler, Archer
 - [x] P2.2 Buffs: Tank, Assassin, Paladin, Ranger, Necromancer
-- [ ] P2.3 Docs tables regenerated from the sim
+- [x] P2.3 Docs tables regenerated from the sim
 
 ## P3 New skills for existing classes
 - [ ] P3.1 One new skill per existing class tree

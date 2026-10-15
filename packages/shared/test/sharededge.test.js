@@ -40,3 +40,14 @@ test('an imported task never pays the list-cleared bonus', async () => {
     assert.equal(real.listCleared, true);
     assert.equal(imported.listCleared, false);
 });
+
+test('publicUser never carries the calendar token', () => {
+    const { publicUser } = require('../src/db/users');
+    const row = { discord_id: '1', player_class: 'HERO', calendar_token: 'secret-token' };
+    const out = publicUser(row);
+    assert.equal('calendar_token' in out, false);
+    assert.equal(out.has_calendar_token, true);
+    assert.equal(publicUser({ discord_id: '1', calendar_token: null }).has_calendar_token, false);
+    assert.equal(out.player_class, 'HERO');
+    assert.equal(row.calendar_token, 'secret-token', 'the row itself is not changed');
+});

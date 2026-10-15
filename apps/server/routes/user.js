@@ -24,7 +24,7 @@ router.patch(
         const result = await db.users.updateSettings(uid(req), body);
         // Opting out deletes the user's vectors now; opting back in rebuilds them.
         if (body.ai_enabled !== undefined) aiClient.syncUser(uid(req));
-        res.json(result);
+        res.json(db.users.publicUser(result));
     })
 );
 

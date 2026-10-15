@@ -164,6 +164,17 @@ async function getGameCounts(discordId, conn) {
     return { played: Number(row.played), won: Number(row.won), lost: Number(row.lost), draws: Number(row.draws) };
 }
 
+/**
+ * A user row as it may leave the server: the calendar feed token is a secret (a bearer credential for the .ics feed), so it never
+ * travels with the profile, a settings response or a class purchase. Settings reads it from GET /api/user/calendar-token, which
+ * only returns it when asked; `has_calendar_token` says whether there is one.
+ */
+function publicUser(user) {
+    if (!user) return user;
+    const { calendar_token: calendarToken, ...safe } = user;
+    return { ...safe, has_calendar_token: Boolean(calendarToken) };
+}
+
 /** Profile snapshot used by /profile and GET /api/user. */
 async function getUserStats(discordId) {
     const id = String(discordId);
@@ -180,11 +191,8 @@ async function getUserStats(discordId) {
         run(null, 'SELECT COUNT(*) AS count FROM achievements WHERE discord_id = ?', [id]),
         getGameCounts(id)
     ]);
-    // The calendar feed token is a secret: it never travels with the profile. Settings reads it
-    // from GET /api/user/calendar-token, which only returns it when asked.
-    const { calendar_token: calendarToken, ...safeUser } = user;
     return {
-        user: { ...safeUser, has_calendar_token: Boolean(calendarToken), prestige_title: prestigeTitle(safeUser.prestige), cosmetics: describeEquipped(safeUser) },
+        user: { ...publicUser(user), prestige_title: prestigeTitle(user.prestige), cosmetics: describeEquipped(user) },
         lists: { total: Number(lists.total) },
         items: { total: Number(items.total), completed: Number(items.completed) },
         achievements: Number(achs.count),
@@ -432,6 +440,7 @@ async function getXPHistory(discordId, limit = 20) {
 }
 
 module.exports = {
+    publicUser,
     SETTINGS,
     AI_CHAT_FORMATS,
     setAiChatFormat,

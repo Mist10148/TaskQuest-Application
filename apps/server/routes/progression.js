@@ -54,7 +54,7 @@ classesRouter.post(
     asyncRoute(async (req, res) => {
         const { key } = parse(keyParam, req.params);
         const r = await db.progression.buyClass(uid(req), key);
-        res.json({ success: true, user: r.user, newAchievements: r.achievements });
+        res.json({ success: true, user: db.users.publicUser(r.user), newAchievements: r.achievements });
     })
 );
 
@@ -63,7 +63,7 @@ classesRouter.post(
     asyncRoute(async (req, res) => {
         const { key } = parse(keyParam, req.params);
         const r = await db.progression.equipClass(uid(req), key);
-        res.json({ success: true, user: r.user });
+        res.json({ success: true, user: db.users.publicUser(r.user) });
     })
 );
 

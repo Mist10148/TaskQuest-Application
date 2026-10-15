@@ -171,8 +171,8 @@ All routes are 🔒 and owner-scoped (another user's template ID is `404`). A te
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/classes` | 🔒 | `{classes:[{key,name,emoji,cost,description,playstyle,owned,equipped}], currentClass, playerXP}` |
-| POST | `/api/classes/:key/buy` | 🔒 | Buys and equips. `{success, user, newAchievements}`. `409` if owned, `400 INSUFFICIENT_XP`, `404` for unknown keys. |
-| POST | `/api/classes/:key/equip` | 🔒 | `403` if not owned. Switching resets class counters. |
+| POST | `/api/classes/:key/buy` | 🔒 | Buys and equips. `{success, user, newAchievements}` (`user` never holds `calendar_token`; it reports `has_calendar_token`, like `/api/user`). `409` if owned, `400 INSUFFICIENT_XP`, `404` for unknown keys. |
+| POST | `/api/classes/:key/equip` | 🔒 | `{success, user}` (same `user` shape as buy). `403` if not owned. Switching resets class counters. |
 | GET | `/api/skills` | 🔒 | `{skillTrees:[{classKey,name,emoji,description,classOwned,skills:[{id,name,emoji,description,maxLevel,cost,requires,currentLevel}]}], skillPoints, userXP, playerClass}` |
 | POST | `/api/skills/:skillId/unlock` | 🔒 | Unlocks or levels up one skill (cost per level). The tree is derived on the server; any `classKey` in the body is ignored. `{success, skill:{skill_id, skill_level}, balance}` |
 | POST | `/api/skills/respec` | 🔒 `{classKey}` (strict) | Unlearns every skill of one tree and refunds 75% of what the levels cost as a plain balance credit (source `skill_refund`: never lifetime XP, `xp_spent` unchanged). `{success, treeKey, removed, spent, refund, balance, percent}`. Once a day (`429`-style cooldown error with `retryAfterMs`), `409` with no skills in that tree, `400` when dropping Freeze Cache would leave more freezes than the normal limit, `403` when XP is off, `404` for an unknown tree. |

@@ -228,6 +228,16 @@ A server-timed work timer. The server measures the time; the client only says st
 | GET 🔒 | `/api/review` | — | `{weekStart, resetsAt, completed, xpEarned, claimed, claimable, streak, reward}` for the current week in your time zone (`weekStart` is its Monday, a local date) |
 | POST 🔒 | `/api/review/claim` | — | `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. Once per week (`409`); `400` unless you finished at least one task this week; `403` when XP is off. |
 
+## Reflection and weekly goal
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET 🔒 | `/api/reflection` | — | `{day, reflection: {day, note, createdAt}\|null, reward, maxLength}` for your day (your time zone) |
+| POST 🔒 | `/api/reflection` | `{note: string (1–200 characters)}` | `{success, day, note, xp, balance, level, leveledUp, newAchievements}`. One reflection a day (`409`); the note is kept even with XP off (then `xp` is 0). |
+| GET 🔒 | `/api/goal` | — | `{weekStart, resetsAt, target\|null, progress, claimed, claimable, reward\|null, min, max}`; `progress` counts the tasks you first finished this week (the same count as the weekly review) |
+| PUT 🔒 | `/api/goal` | `{target: integer 3–60}` | The goal as above. `400` unless the target is above this week's progress; `409` once claimed. It can be changed while it is open. |
+| POST 🔒 | `/api/goal/claim` | — | `{success, weekStart, target, xp, balance, level, leveledUp, newAchievements}`. Pays `min(80, 10 + 2 × target)` once a week (`409`); `400` before the goal is reached or set; `403` when XP is off. |
+
 ## Statistics
 
 Read-only numbers for the web Stats page. Days are days in your time zone (UTC when unset); only your own data is ever read.

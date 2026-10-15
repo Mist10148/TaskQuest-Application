@@ -13,6 +13,7 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
    - [Bonus XP sources](#5c-bonus-xp-sources)
    - [Focus sessions](#5d-focus-sessions)
    - [Weekly review](#5e-weekly-review)
+   - [Reflection and weekly goal](#5e-reflection-and-weekly-goal)
    - [Prestige](#5f-prestige)
    - [Cosmetics](#5g-cosmetics-the-shop)
    - [Parties](#5h-parties)
@@ -348,6 +349,8 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | `boss_defeated` | +30 when you finish the last open subtask of a task that has at least 4 subtasks | Once per task, 60 XP a day |
 | `comeback` | +25 for the first completion after 3 idle days (the previous paid completion is 3 or more days old) | Once a week |
 | `party_assist` | +3 for every completion while you are in a party of two or more | 15 XP a day |
+| `reflection` | +10 for a one-line note about your day ([reflection](#5e-reflection-and-weekly-goal)) | Once a day |
+| `weekly_goal` | +10 + 2 per task of your goal, at most 80, when you reach the goal you set ([weekly goal](#5e-reflection-and-weekly-goal)) | Once a week |
 | `focus_session` | floor(minutes × 0.6) per [focus session](#5d-focus-sessions) | 100 XP and 8 sessions a day |
 | `weekly_review` | +40 ([weekly review](#5e-weekly-review)) | Once per week |
 
@@ -364,6 +367,13 @@ A server-timed work timer. `POST /api/focus/start {minutes}` (10 to 90) starts a
 ## 5e. Weekly review
 
 Once per week of yours (Monday to Monday in your time zone) you can claim **+40 XP** after finishing at least one task that week (first completions only; imported and auto-created copies don't count). `GET /api/review` shows the week's finished tasks, the XP earned and whether the review is claimable; `POST /api/review/claim` pays it.
+
+## 5e. Reflection and weekly goal
+
+Two small, player-driven sources (flat XP, no class or skill modifiers):
+
+- **Reflection.** One short note a day (1 to 200 characters, your day and time zone) pays **+10 XP** once. `POST /api/reflection {note}`. The note is saved even when XP is off.
+- **Weekly goal.** Pick how many tasks you will finish this week, **3 to 60**. Finish them (the same count as the [weekly review](#5e-weekly-review)) and claim **10 + 2 XP per task of the goal, at most 80**, once a week. The goal must be above what you have already finished this week, so it cannot be set after the fact; it can be changed while it is open. `PUT /api/goal {target}`, `POST /api/goal/claim`.
 
 ## 5f. Prestige
 
@@ -511,6 +521,8 @@ Every "per day" below, the quests, the weekly review and the Stats page use **yo
 | Habit bonus | 20 XP per completion, 60 XP a day |
 | Focus sessions | 10 to 90 minutes each, 100 XP and 8 sessions a day, one active session |
 | Weekly review | Once per week |
+| Reflection | Once a day, 1 to 200 characters |
+| Weekly goal | A target of 3 to 60 tasks, claimed once a week; the reward is at most 80 XP |
 | Party quest | 12 first completions for each member who took part in the UTC week (at most 12 counted per member, only since joining); +60 XP once per person per week, and only after 6 tasks of their own |
 | List members | 10 people besides the owner (members and pending invitations); 30 invitations a day per person; an invitation lives 7 days |
 | Party members | 6 including the owner, one party per user |

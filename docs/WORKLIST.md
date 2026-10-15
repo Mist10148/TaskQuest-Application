@@ -37,10 +37,10 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 ## P5 New XP sources
 - [x] P5.1 perfect_day
 - [x] P5.2 inbox_zero (weekly)
-- [ ] P5.3 reflection (daily)
+- [x] P5.3 reflection (daily) (API and shared logic; the UI lives on the Today screen, P6.5)
 - [x] P5.4 boss tasks
 - [x] P5.5 comeback bonus
-- [ ] P5.6 weekly goal
+- [x] P5.6 weekly goal (API and shared logic; the UI lives on the Today screen, P6.5)
 - [x] P5.7 party task bonus
 - [x] P5.8 seasonal weekly modifier (also: migration 024 and the constants for P5)
 - [ ] P5.9 estimate accuracy

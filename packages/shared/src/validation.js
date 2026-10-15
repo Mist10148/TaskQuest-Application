@@ -5,7 +5,9 @@
 
 'use strict';
 
-const { TEXT_LIMITS, PRIORITIES } = require('./constants');
+const { TEXT_LIMITS, PRIORITIES, LIMITS } = require('./constants');
+
+const LIMITS_REFLECTION_MAX = LIMITS.REFLECTION_MAX_LENGTH;
 
 const ok = (value) => ({ ok: true, value });
 const fail = (error) => ({ ok: false, error });
@@ -34,6 +36,7 @@ function optionalText(value, max, label) {
 
 const listName = (v) => requiredText(v, TEXT_LIMITS.LIST_NAME, 'List name');
 const partyName = (v) => requiredText(v, TEXT_LIMITS.PARTY_NAME, 'Party name');
+const reflection = (v) => requiredText(v, LIMITS_REFLECTION_MAX, 'Reflection');
 const itemName = (v) => requiredText(v, TEXT_LIMITS.ITEM_NAME, 'Task name');
 const description = (v) => optionalText(v, TEXT_LIMITS.DESCRIPTION, 'Description');
 const category = (v) => optionalText(v, TEXT_LIMITS.CATEGORY, 'Category');
@@ -125,6 +128,7 @@ module.exports = {
     partyName,
     listName,
     itemName,
+    reflection,
     description,
     category,
     priority,

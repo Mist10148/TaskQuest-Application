@@ -24,5 +24,6 @@ const push = require('./push');
 const access = require('./access');
 const sharing = require('./sharing');
 const parties = require('./parties');
+const goals = require('./goals');
 
-module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates, cosmetics, push, access, sharing, parties };
+module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates, cosmetics, push, access, sharing, parties, goals };

@@ -372,6 +372,32 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).status, 409);
     });
 
+    await t.test('reflection and weekly goal endpoints', async () => {
+        assert.equal((await call('GET', '/api/reflection')).status, 401);
+        assert.equal((await call('POST', '/api/reflection', { body: { note: 'hi' } })).status, 401);
+        assert.equal((await call('GET', '/api/goal')).status, 401);
+        // reflection: validated, paid once
+        assert.equal((await call('POST', '/api/reflection', { cookie: mallory, body: {} })).status, 400);
+        assert.equal((await call('POST', '/api/reflection', { cookie: mallory, body: { note: '' } })).status, 400);
+        assert.equal((await call('POST', '/api/reflection', { cookie: mallory, body: { note: 'x'.repeat(201) } })).status, 400);
+        assert.equal((await call('POST', '/api/reflection', { cookie: mallory, body: { note: 'ok', extra: 1 } })).status, 400, 'strict body');
+        const wrote = await call('POST', '/api/reflection', { cookie: mallory, body: { note: 'A calm, focused day.' } });
+        assert.equal(wrote.status, 200);
+        assert.equal((await wrote.json()).xp, 10);
+        assert.equal((await call('POST', '/api/reflection', { cookie: mallory, body: { note: 'again' } })).status, 409);
+        assert.equal((await (await call('GET', '/api/reflection', { cookie: mallory })).json()).reflection.note, 'A calm, focused day.');
+        assert.equal((await call('POST', '/api/reflection', { cookie: mallory, body: { note: 'x' }, origin: 'https://evil.example' })).status, 403);
+        // goal: range, set, claim before the goal is reached
+        assert.equal((await call('PUT', '/api/goal', { cookie: mallory, body: { target: 2 } })).status, 400);
+        assert.equal((await call('PUT', '/api/goal', { cookie: mallory, body: { target: 'five' } })).status, 400);
+        const set = await call('PUT', '/api/goal', { cookie: mallory, body: { target: 5 } });
+        assert.equal(set.status, 200);
+        const goal = await set.json();
+        assert.deepEqual([goal.target, goal.reward, goal.claimable, goal.claimed], [5, 20, false, false]);
+        assert.equal((await (await call('GET', '/api/goal', { cookie: mallory })).json()).target, 5);
+        assert.equal((await call('POST', '/api/goal/claim', { cookie: mallory })).status, 400, 'not reached');
+    });
+
     await t.test('weekly review endpoints', async () => {
         assert.equal((await call('GET', '/api/review')).status, 401);
         assert.equal((await call('POST', '/api/review/claim')).status, 401);

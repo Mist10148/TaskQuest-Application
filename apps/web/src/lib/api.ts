@@ -435,6 +435,17 @@ export const reviewApi = {
     claim: () => post<ReviewClaimResult>('/api/review/claim'),
 };
 
+export const reflectionApi = {
+    get: () => apiFetch<ReflectionStatus>('/api/reflection'),
+    write: (note: string) => post<ReflectionResult>('/api/reflection', { note }),
+};
+
+export const goalApi = {
+    get: () => apiFetch<WeeklyGoal>('/api/goal'),
+    set: (target: number) => apiFetch<WeeklyGoal & { success: boolean }>('/api/goal', { method: 'PUT', json: { target } }),
+    claim: () => post<GoalClaimResult>('/api/goal/claim'),
+};
+
 export const xpApi = {
     getHistory: () => apiFetch<XPTransaction[]>('/api/xp/history'),
 };
@@ -983,6 +994,47 @@ export interface WeeklyReview {
     claimable: boolean;
     streak: number;
     reward: number;
+}
+
+export interface ReflectionStatus {
+    day: string;
+    reflection: { day: string; note: string; createdAt: string } | null;
+    reward: number;
+    maxLength: number;
+}
+
+export interface ReflectionResult {
+    success: boolean;
+    day: string;
+    note: string;
+    xp: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
+}
+
+export interface WeeklyGoal {
+    weekStart: string;
+    resetsAt: string;
+    target: number | null;
+    progress: number;
+    claimed: boolean;
+    claimable: boolean;
+    reward: number | null;
+    min: number;
+    max: number;
+}
+
+export interface GoalClaimResult {
+    success: boolean;
+    weekStart: string;
+    target: number;
+    xp: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
 }
 
 export interface ReviewClaimResult {

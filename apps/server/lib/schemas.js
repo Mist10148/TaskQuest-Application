@@ -173,6 +173,8 @@ export const arcadeFinishBody = z
 export const quitParam = z.object({ type: z.enum(GAME_TYPES) });
 
 export const focusStartBody = z.object({ minutes: z.number().int().min(shared.LIMITS.FOCUS_MIN_MINUTES).max(shared.LIMITS.FOCUS_MAX_MINUTES) }).strict();
+export const reflectionBody = z.object({ note: z.string().min(1).max(shared.LIMITS.REFLECTION_MAX_LENGTH) }).strict();
+export const goalBody = z.object({ target: z.number().int().min(shared.LIMITS.WEEKLY_GOAL_MIN).max(shared.LIMITS.WEEKLY_GOAL_MAX) }).strict();
 export const focusFinishBody = z.object({ sessionId: z.number().int().positive() }).strict();
 
 export const statsHistoryQuery = z.object({ days: z.coerce.number().int().refine((n) => [7, 30, 90].includes(n), 'days must be 7, 30 or 90').default(30) }).strip();

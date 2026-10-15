@@ -571,7 +571,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('a game run past the daily cap does not advance class counters', async () => {
-        const W = '100000000000000601';
+        const W = '100000000000000701';
         await db.users.ensureUser(W);
         await pool.query("UPDATE users SET player_class = 'WIZARD', owns_wizard = 1 WHERE discord_id = ?", [W]);
         const user = await db.users.getUser(W);
@@ -584,7 +584,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('completing an item that is already completed keeps its completion time', async () => {
-        const U = '100000000000000602';
+        const U = '100000000000000702';
         await db.users.ensureUser(U);
         const { list } = await db.tasks.createList(U, { name: 'Idempotent' });
         const { item } = await db.tasks.addItem(U, list.id, { name: 'Once' });
@@ -1056,6 +1056,50 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const crew = (await db.query("SELECT id FROM parties WHERE owner_id = ? AND name = 'Crew'", [P]))[0];
         await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?), (?, ?)', [crew.id, P, crew.id, Q]);
         assert.equal((await db.tasks.setItemCompleted(P, await add(P, camp.id))).bonuses.find((b) => b.key === 'party_assist').xp, 3);
+    });
+
+    await t.test('daily reflection and weekly goal: pay once, flat, and cannot be gamed', async () => {
+        const R = '100000000000000801';
+        await db.users.ensureUser(R);
+
+        // reflection: once a day, validated, and paid flat
+        assert.equal((await db.goals.getReflection(R)).reflection, null);
+        await assert.rejects(db.goals.writeReflection(R, '   '), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.writeReflection(R, 'x'.repeat(201)), { code: 'VALIDATION' });
+        const first = await db.goals.writeReflection(R, 'Finished the hard thing first.');
+        assert.equal(first.xp, 10);
+        assert.equal((await db.goals.getReflection(R)).reflection.note, 'Finished the hard thing first.');
+        await assert.rejects(db.goals.writeReflection(R, 'again'), { code: 'CONFLICT' });
+        assert.equal((await db.query("SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'reflection'", [R]))[0].n, 10);
+        // with XP off the note is kept and nothing is paid
+        const Z = '100000000000000802';
+        await db.users.ensureUser(Z);
+        await db.query('UPDATE users SET gamification_enabled = 0 WHERE discord_id = ?', [Z]);
+        assert.equal((await db.goals.writeReflection(Z, 'quiet day')).xp, 0);
+
+        // weekly goal: set above your progress, finish, claim once
+        const empty = await db.goals.getGoal(R);
+        assert.deepEqual([empty.target, empty.progress, empty.claimed, empty.claimable, empty.min, empty.max], [null, 0, false, false, 3, 60]);
+        await assert.rejects(db.goals.setGoal(R, 2), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.setGoal(R, 61), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.setGoal(R, 3.5), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.claimGoal(R), { code: 'VALIDATION' }, 'no goal yet');
+        const set = await db.goals.setGoal(R, 3);
+        assert.deepEqual([set.target, set.reward], [3, 16]);
+        assert.equal((await db.goals.setGoal(R, 4)).target, 4, 'the target can change while it is open');
+        await db.goals.setGoal(R, 3);
+        await assert.rejects(db.goals.claimGoal(R), { code: 'VALIDATION' }, 'not there yet');
+        const { list } = await db.tasks.createList(R, { name: 'Week' });
+        for (let n = 0; n < 3; n++) await db.tasks.setItemCompleted(R, (await db.tasks.addItem(R, list.id, { name: `t${n}` })).item.id);
+        const done = await db.goals.getGoal(R);
+        assert.deepEqual([done.progress, done.claimable], [3, true]);
+        await assert.rejects(db.goals.setGoal(R, 3), { code: 'VALIDATION' }, 'a goal at or below your progress is refused');
+        const claimed = await db.goals.claimGoal(R);
+        assert.equal(claimed.xp, 16);
+        await assert.rejects(db.goals.claimGoal(R), { code: 'CONFLICT' });
+        await assert.rejects(db.goals.setGoal(R, 10), { code: 'CONFLICT' }, 'a claimed goal is closed');
+        assert.equal(db.goals.goalReward(60), 80, 'the reward is capped at 80');
+        assert.equal(db.goals.goalReward(5), 20);
     });
 
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
@@ -3538,8 +3582,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('backdated and far-future due dates earn no overdue or early extras until they are 24 hours old', async () => {
-        const N = '100000000000000601';
-        const G = '100000000000000602';
+        const N = '100000000000000701';
+        const G = '100000000000000702';
         const E = '100000000000000603';
         for (const id of [N, G, E]) await db.users.ensureUser(id);
         for (const [id, cls] of [[N, 'necromancer'], [G, 'RANGER']]) {

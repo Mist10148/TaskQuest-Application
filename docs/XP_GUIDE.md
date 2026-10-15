@@ -29,6 +29,8 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `boss_defeated` | +30 for the last open subtask of a task with at least 4 subtasks | Once per task, 60 XP a day | No |
 | `comeback` | +25 for the first completion after 3 idle days | Once a week | No |
 | `party_assist` | +3 per completion while you are in a party of two or more | 15 XP a day | No |
+| `reflection` | +10 for a one-line note about your day | Once a day | No |
+| `weekly_goal` | 10 + 2 per task of the goal you set (3 to 60 tasks), max 80 | Once a week | No |
 | `achievement_reward` | +25 per newly unlocked achievement | Each achievement once (33 in total) | No |
 | `focus_session` | floor(minutes × 0.6) for a 10 to 90 minute session | 100 XP and 8 sessions a day | No |
 | `weekly_review` | +40 after finishing at least one task that week | Once a week | No |

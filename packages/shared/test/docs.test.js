@@ -257,7 +257,9 @@ test('GAMEPLAY §5c bonus sources match REWARDS, LIMITS and STREAK_CHESTS', () =
         inbox_zero: [R.INBOX_ZERO, L.INBOX_ZERO_MIN_OVERDUE],
         boss_defeated: [R.BOSS_DEFEATED, L.BOSS_MIN_SUBTASKS, L.BOSS_XP_PER_DAY],
         comeback: [R.COMEBACK, L.COMEBACK_AFTER_DAYS],
-        party_assist: [R.PARTY_ASSIST, L.PARTY_ASSIST_XP_PER_DAY]
+        party_assist: [R.PARTY_ASSIST, L.PARTY_ASSIST_XP_PER_DAY],
+        reflection: [R.REFLECTION],
+        weekly_goal: [R.WEEKLY_GOAL_BASE, R.WEEKLY_GOAL_PER_TASK, L.WEEKLY_GOAL_MAX_XP]
     };
     for (const [source, expected] of Object.entries(spec)) {
         expectRow(problems, `§5c row \`${source}\``, rowOf(block, new RegExp('^' + source + '$'), source), expected);

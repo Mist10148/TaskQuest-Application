@@ -5,8 +5,8 @@ Tracking file for the docs/balance review pass. **Delete this file in the last c
 How to resume: read the first unticked item, do it, run `npm test`, `npm run lint`, `npm run typecheck`, update the docs and CHANGELOG in the same commit, tick the box here with the commit hash. Rules: additive migrations only (023+), no `Co-Authored-By` trailers, one commit per item or small group.
 
 ## P0 Tracking and safety net
-- [ ] P0.1 This worklist
-- [ ] P0.2 `scripts/balance-sim.js` and `packages/shared/test/balance.test.js`
+- [x] P0.1 This worklist (cc726bf)
+- [x] P0.2 `scripts/balance-sim.js` and `packages/shared/test/balance.test.js`
 
 ## P1 Bug fixes
 - [ ] P1.1 Cap class bonus on item_add and list_create at 3x base

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classCounter, dailyDescription, describeChest, freezeLimits } from "./classInfo";
+import { classCounter, dailyDescription, describeChest, freezeLimits, MIX_LABELS } from "./classInfo";
 import type { UserSkill } from "./api";
 
 const skill = (id: string): UserSkill => ({ skill_id: id, skill_level: 1, unlocked_at: "" });
@@ -51,5 +51,13 @@ describe("daily reward text", () => {
     expect(dailyDescription({ success: true, bonusInfo: { details: "Hero +25" }, surpriseBonus: 50 })).toBe("Hero +25 · 🎉 Daily Surprise +50 XP");
     expect(dailyDescription({ success: true, surpriseBonus: 50 })).toBe("🎉 Daily Surprise +50 XP");
     expect(dailyDescription({ success: true })).toBe("");
+  });
+});
+
+describe("preview labels", () => {
+  it("has a plain-words label for every situation the server simulates", () => {
+    for (const mix of ["plain", "high", "early", "overdue", "list", "variety", "rotate", "habit", "focus", "shared"]) {
+      expect(MIX_LABELS[mix], mix).toBeTruthy();
+    }
   });
 });

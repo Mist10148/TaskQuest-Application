@@ -398,6 +398,27 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('POST', '/api/goal/claim', { cookie: mallory })).status, 400, 'not reached');
     });
 
+    await t.test('class and skill previews simulate the real rules', async () => {
+        assert.equal((await call('GET', '/api/classes/hero/preview')).status, 401);
+        assert.equal((await call('GET', '/api/skills/preview')).status, 401);
+        const hero = await (await call('GET', '/api/classes/hero/preview?level=6&mix=plain', { cookie: mallory })).json();
+        assert.deepEqual([hero.classKey, hero.level, hero.mix, hero.base, hero.noSkills], ['HERO', 6, 'plain', 10, 35]);
+        assert.ok(hero.fullTree > hero.noSkills, 'the whole tree pays more than no skills');
+        assert.ok(hero.yourSkills >= hero.noSkills);
+        const wizard = await (await call('GET', '/api/classes/WIZARD/preview?level=30&mix=plain', { cookie: mallory })).json();
+        const young = await (await call('GET', '/api/classes/WIZARD/preview?level=5&mix=plain', { cookie: mallory })).json();
+        assert.ok(wizard.noSkills > young.noSkills, 'the Wizard grows with level');
+        assert.equal((await call('GET', '/api/classes/nope/preview', { cookie: mallory })).status, 404);
+        assert.equal((await call('GET', '/api/classes/hero/preview?mix=weird', { cookie: mallory })).status, 400);
+        assert.equal((await call('GET', '/api/classes/hero/preview?level=0', { cookie: mallory })).status, 400);
+        assert.equal((await call('GET', '/api/classes/hero/preview?extra=1', { cookie: mallory })).status, 400);
+        const skills = await (await call('GET', '/api/skills/preview', { cookie: mallory })).json();
+        assert.equal(skills.gains.hero_valor, 10, 'Valor is a flat +10 for any class');
+        assert.ok(skills.gains.default_xp_boost >= 0, 'a 5% boost on a 10 XP task rounds down: the preview is honest about that');
+        assert.equal(typeof skills.average, 'number');
+        assert.ok(Object.keys(skills.gains).length >= 80, 'every skill that is not maxed is listed');
+    });
+
     await t.test('weekly review endpoints', async () => {
         assert.equal((await call('GET', '/api/review')).status, 401);
         assert.equal((await call('POST', '/api/review/claim')).status, 401);

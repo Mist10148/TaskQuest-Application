@@ -91,3 +91,17 @@ export function dailyDescription(r: DailyClaimResult): string {
   if ((r.surpriseBonus ?? 0) > 0) text = [text, `🎉 Daily Surprise +${r.surpriseBonus} XP`].filter(Boolean).join(" · ");
   return text;
 }
+
+/** Plain words for the situations the "what would I earn?" preview simulates (`mix` in the preview). */
+export const MIX_LABELS: Record<string, string> = {
+  plain: "an ordinary task",
+  high: "every second task HIGH priority",
+  early: "tasks finished 3 days early",
+  overdue: "every third task overdue",
+  list: "finishing lists of ten",
+  variety: "tasks from five lists in rotation",
+  rotate: "LOW, MEDIUM and HIGH tasks in rotation",
+  habit: "daily habits with an 8 step streak",
+  focus: "tasks right after a focus session",
+  shared: "lists shared with three people",
+};

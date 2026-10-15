@@ -333,7 +333,29 @@ export const classesApi = {
     getAll: () => apiFetch<ClassesData>('/api/classes'),
     buy: (classKey: string) => post<{ success: boolean; user: User; newAchievements?: AchievementUnlock[] }>(`/api/classes/${classKey}/buy`),
     equip: (classKey: string) => post<{ success: boolean; user: User }>(`/api/classes/${classKey}/equip`),
+    preview: (classKey: string, mix?: string) => apiFetch<ClassPreview>(`/api/classes/${classKey}/preview${mix ? `?mix=${encodeURIComponent(mix)}` : ''}`),
 };
+
+/** "What would I earn?": the average XP of a 10 XP task (a simulation of the real rules). */
+export interface ClassPreview {
+    classKey: string;
+    level: number;
+    mix: string;
+    base: number;
+    noSkills: number;
+    yourSkills: number;
+    fullTree: number;
+}
+
+export interface SkillPreview {
+    classKey: string;
+    level: number;
+    mix: string;
+    base: number;
+    average: number;
+    /** skill id -> what its next level adds to the average XP of a 10 XP task for the equipped class. */
+    gains: Record<string, number>;
+}
 
 export type CosmeticKind = 'title' | 'frame' | 'accent';
 
@@ -380,6 +402,7 @@ export const pushApi = {
 
 export const skillsApi = {
     getAll: () => apiFetch<SkillsData>('/api/skills'),
+    preview: () => apiFetch<SkillPreview>('/api/skills/preview'),
     unlock: (skillId: string) => post<{ success: boolean; skill: { skill_id: string; skill_level: number }; balance: number }>(`/api/skills/${skillId}/unlock`),
 };
 

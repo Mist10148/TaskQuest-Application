@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import { Check, Lock, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useClasses, useBuyClass, useEquipClass } from "@/hooks/useApi";
+import { useClasses, useBuyClass, useEquipClass, useClassPreview } from "@/hooks/useApi";
+import { MIX_LABELS } from "@/lib/classInfo";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
@@ -44,6 +45,7 @@ const Classes = () => {
 
   const classes = data?.classes || [];
   const playerXP = data?.playerXP || 0;
+  const preview = useClassPreview(confirmBuy?.key).data;
 
   return (
     <DashboardLayout>
@@ -146,6 +148,11 @@ const Classes = () => {
           <div className="space-y-1 text-sm">
             <p>Price: <span className="font-semibold text-xp">{confirmBuy.cost.toLocaleString()} XP</span></p>
             <p>Balance after: <span className="font-semibold">{Math.max(0, playerXP - confirmBuy.cost).toLocaleString()} XP</span></p>
+            {preview && preview.classKey === confirmBuy.key && (
+              <p data-testid="class-preview">
+                A 10 XP task at level {preview.level} ({MIX_LABELS[preview.mix] ?? "a task"}): about <span className="font-semibold">{preview.noSkills} XP</span> with no skills, <span className="font-semibold">{preview.fullTree} XP</span> with the whole tree.
+              </p>
+            )}
           </div>
         )}
         confirmLabel={`Spend ${confirmBuy?.cost.toLocaleString() ?? ""} XP`}

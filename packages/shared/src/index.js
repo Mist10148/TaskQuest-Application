@@ -13,6 +13,7 @@ const random = require('./random');
 const dates = require('./dates');
 const cosmetics = require('./cosmetics');
 const push = require('./push');
+const { MIXES: SIM_MIXES, FAVOURABLE, simulateAverage } = require('./simulate');
 const { questPeriod, isoWeek, activeRotatingQuest, currentSeason } = require('./quests');
 const tz = require('./tz');
 const { buildIcs } = require('./ics');
@@ -42,6 +43,9 @@ module.exports = {
     isoWeek,
     activeRotatingQuest,
     currentSeason,
+    SIM_MIXES,
+    FAVOURABLE,
+    simulateAverage,
     buildIcs,
     parseQuickAdd,
     parseCsv,

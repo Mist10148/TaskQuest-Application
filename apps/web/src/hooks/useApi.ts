@@ -492,6 +492,15 @@ export function useSkills() {
     return useQuery({ queryKey: ['skills'], queryFn: skillsApi.getAll });
 }
 
+/** What each skill's next level adds for the equipped class (a simulation, so it is cached for a while). */
+export function useSkillPreview() {
+    return useQuery({ queryKey: ['skills', 'preview'], queryFn: skillsApi.preview, staleTime: 1000 * 60 * 5 });
+}
+
+export function useClassPreview(classKey: string | undefined, mix?: string) {
+    return useQuery({ queryKey: ['classes', 'preview', classKey, mix ?? 'default'], queryFn: () => classesApi.preview(classKey as string, mix), enabled: Boolean(classKey), staleTime: 1000 * 60 * 5 });
+}
+
 export function useUnlockSkill() {
     const qc = useQueryClient();
     return useMutation({

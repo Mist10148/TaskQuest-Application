@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 import { Lock, Check, Sparkles, Loader2, ShieldX } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSkills, useUnlockSkill } from "@/hooks/useApi";
+import { useSkills, useSkillPreview, useUnlockSkill } from "@/hooks/useApi";
+import { MIX_LABELS } from "@/lib/classInfo";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
 import { nextTabIndex } from "@/lib/tabs";
@@ -19,6 +20,7 @@ const Skills = () => {
   const { refresh, user } = useAuth();
   const { data, isLoading, isError, error, refetch, isFetching } = useSkills();
   const unlockSkill = useUnlockSkill();
+  const preview = useSkillPreview().data;
   const equippedKey: string = user?.user?.player_class || 'DEFAULT';
   // Until the player picks a tab, show the tree of the class they have equipped.
   const [pickedTreeKey, setPickedTreeKey] = useState<string | null>(null);
@@ -187,6 +189,15 @@ const Skills = () => {
                     <h4 className="font-heading font-semibold text-sm sm:text-base">{skill.name}</h4>
                   </div>
                   <p className="text-[10px] sm:text-xs text-foreground-muted mb-2 sm:mb-3">{skill.description}</p>
+                  {preview && skill.currentLevel < skill.maxLevel && preview.gains[skill.id] !== undefined && (
+                    <p className="text-[10px] sm:text-xs mb-2 sm:mb-3" data-testid={`skill-gain-${skill.id}`}>
+                      {preview.gains[skill.id] > 0 ? (
+                        <span className="text-xp font-medium">≈ +{preview.gains[skill.id]} XP per task</span>
+                      ) : (
+                        <span className="text-foreground-muted">Adds nothing to {MIX_LABELS[preview.mix] ?? "a task"} right now</span>
+                      )}
+                    </p>
+                  )}
                   
                   <div className="flex items-center justify-between mb-2 sm:mb-3">
                     <div className="flex gap-1">
@@ -231,6 +242,12 @@ const Skills = () => {
           <div className="space-y-1 text-sm">
             <p>Price: <span className="font-semibold text-xp">{confirmSkill.cost.toLocaleString()} XP</span></p>
             <p>Balance after: <span className="font-semibold">{Math.max(0, userXP - confirmSkill.cost).toLocaleString()} XP</span></p>
+            {preview && preview.gains[confirmSkill.id] !== undefined && (
+              <p>
+                For your {preview.classKey.toLowerCase()} at level {preview.level}:{" "}
+                <span className="font-semibold">{preview.gains[confirmSkill.id] > 0 ? `≈ +${preview.gains[confirmSkill.id]} XP` : "no change"}</span> per 10 XP task ({MIX_LABELS[preview.mix] ?? "a task"}).
+              </p>
+            )}
           </div>
         )}
         confirmLabel={`Spend ${confirmSkill?.cost.toLocaleString() ?? ""} XP`}

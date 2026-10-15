@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSkills, useSkillPreview, useUnlockSkill, useRespecSkills } from "@/hooks/useApi";
 import { MIX_LABELS } from "@/lib/classInfo";
+import { skillTiers } from "@/lib/skillTree";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
 import { nextTabIndex } from "@/lib/tabs";
@@ -178,8 +179,12 @@ const Skills = () => {
             )}
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {selectedTree.skills.map((skill: Skill) => {
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-2" data-testid="skill-tiers">
+            {skillTiers(selectedTree.skills).map((tier, tierIndex) => (
+              <div key={tierIndex} className="flex flex-1 flex-col gap-3 sm:gap-4 lg:min-w-0">
+                {tierIndex > 0 && <div className="text-center text-foreground-muted lg:hidden" aria-hidden>↓</div>}
+                <div className="hidden text-center text-[10px] uppercase tracking-wide text-foreground-muted lg:block">{tierIndex === 0 ? "Start" : `Tier ${tierIndex + 1}`}</div>
+            {tier.map((skill: Skill) => {
               const status = getSkillStatus(skill);
               const canAfford = userXP >= skill.cost;
               const isClassLocked = status === 'class_locked';
@@ -250,6 +255,8 @@ const Skills = () => {
                 </motion.div>
               );
             })}
+              </div>
+            ))}
           </div>
         </motion.div>
       )}

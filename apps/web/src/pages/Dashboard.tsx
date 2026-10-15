@@ -20,6 +20,7 @@ import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist"
 import { InvitesBanner } from "@/components/tasks/InvitesBanner";
 import { sharedSubtitle } from "@/lib/sharing";
 import { QuestsCard } from "@/components/dashboard/QuestsCard";
+import { NextUnlocks } from "@/components/dashboard/NextUnlocks";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { dailyDescription } from "@/lib/classInfo";
 import { lifetimeTotal } from "@/lib/prestige";
@@ -146,6 +147,8 @@ const Dashboard = () => {
         </div>
 
         <QuestsCard />
+
+        <NextUnlocks />
 
         <BriefingCard />
 

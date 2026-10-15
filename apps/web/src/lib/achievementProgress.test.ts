@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { achievementProgress, cappedDelay, type AchievementStats } from "./achievementProgress";
+import { achievementProgress, cappedDelay, nextUnlocks, type AchievementStats } from "./achievementProgress";
 
 const stats: AchievementStats = { lists: 3, items: 120, completed: 7, lifetimeXP: 450, level: 5, streak: 0, gamesWon: 2 };
 
@@ -25,5 +25,19 @@ describe("cappedDelay", () => {
   it("grows with the index, then stops at the cap", () => {
     expect(cappedDelay(0.2, 2, 0.05)).toBeCloseTo(0.3);
     expect(cappedDelay(0.2, 100, 0.05)).toBe(0.6);
+  });
+});
+
+describe("nextUnlocks", () => {
+  it("lists the achievements closest to unlocking, most progress first", () => {
+    const next = nextUnlocks(["FIVE_LISTS", "XP_500", "TEN_COMPLETE", "LEVEL_10"], stats);
+    expect(next.map((n) => n.key)).toEqual(["XP_500", "TEN_COMPLETE", "FIVE_LISTS"]);
+    expect(next[0]).toMatchObject({ remaining: 50 });
+  });
+  it("skips what is not started, already reached or not countable by the client", () => {
+    expect(nextUnlocks(["STREAK_3", "TEN_ITEMS", "SOMETHING_ELSE"], stats)).toEqual([]);
+  });
+  it("respects the limit", () => {
+    expect(nextUnlocks(["FIVE_LISTS", "XP_500", "TEN_COMPLETE", "LEVEL_10"], stats, 1)).toHaveLength(1);
   });
 });

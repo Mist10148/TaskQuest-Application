@@ -452,7 +452,17 @@ const REWARDS = {
     HABIT_PER_STREAK: 2,
     HABIT_MIN_STREAK: 2,
     FOCUS_XP_PER_MINUTE: 0.6,
-    WEEKLY_REVIEW: 40
+    WEEKLY_REVIEW: 40,
+    // Engagement sources (migration 024): flat, capped, no class or skill modifiers.
+    PERFECT_DAY: 30,
+    INBOX_ZERO: 40,
+    BOSS_DEFEATED: 30,
+    COMEBACK: 25,
+    REFLECTION: 10,
+    WEEKLY_GOAL_BASE: 10,
+    WEEKLY_GOAL_PER_TASK: 2,
+    PARTY_ASSIST: 3,
+    ESTIMATE_ACCURACY: 10
 };
 
 /** quest_claims.quest_key under which the weekly review claim is stored. */
@@ -476,7 +486,13 @@ const BONUS_LABELS = {
     subtasks_done: 'All subtasks done',
     streak_chest: 'Streak chest',
     achievement_reward: 'Achievement reward',
-    habit_bonus: 'Habit streak'
+    habit_bonus: 'Habit streak',
+    perfect_day: 'Perfect day',
+    inbox_zero: 'Inbox zero',
+    boss_defeated: 'Boss defeated',
+    comeback: 'Welcome back',
+    party_assist: 'Party assist',
+    estimate_accuracy: 'Good estimate'
 };
 
 /**
@@ -513,7 +529,19 @@ const LEADERBOARDS = ['lifetime', 'xp', 'streak', 'weekly'];
 const WEEKLY_XP_SOURCES = [
     'list_create', 'item_add', 'item_complete', 'daily', 'game_reward', 'quest_reward',
     'first_of_day', 'list_cleared', 'early_finish', 'overdue_clear', 'subtasks_done', 'streak_chest',
-    'achievement_reward', 'habit_bonus', 'focus_session', 'weekly_review', 'party_quest'
+    'achievement_reward', 'habit_bonus', 'focus_session', 'weekly_review', 'party_quest',
+    'perfect_day', 'inbox_zero', 'boss_defeated', 'comeback', 'reflection', 'weekly_goal', 'party_assist', 'estimate_accuracy'
+];
+
+/**
+ * The weekly modifier: each UTC ISO week (the same week for everyone, like the weekly board) doubles one flat bonus
+ * source. The week number mod 4 picks it, so the four rotate. Daily caps still apply to the doubled amount.
+ */
+const SEASONS = [
+    { key: 'early', name: 'Early-bird week', doubles: 'early_finish', blurb: 'Finishing early pays double.' },
+    { key: 'cleanup', name: 'Cleanup week', doubles: 'overdue_clear', blurb: 'Clearing overdue tasks pays double.' },
+    { key: 'habit', name: 'Habit week', doubles: 'habit_bonus', blurb: 'Habit streaks pay double.' },
+    { key: 'tidy', name: 'Tidy week', doubles: 'list_cleared', blurb: 'Clearing a list pays double.' }
 ];
 
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
@@ -608,6 +636,28 @@ const LIMITS = {
     ITEM_ADD_REWARDS_PER_DAY: 50,
     /** Only the first N task completions per day award XP (stops add/complete/delete loops). */
     ITEM_COMPLETE_REWARDS_PER_DAY: 50,
+    /** perfect_day: this many top-level tasks due today (on your own lists), all done. */
+    PERFECT_DAY_MIN_TASKS: 3,
+    /** inbox_zero: this many overdue tasks cleared in the week, and none left overdue. */
+    INBOX_ZERO_MIN_OVERDUE: 3,
+    /** boss_defeated: a task with at least this many subtasks is a boss; 60 XP a day. */
+    BOSS_MIN_SUBTASKS: 4,
+    BOSS_XP_PER_DAY: 60,
+    /** comeback: the first completion after this many idle days, at most once per cooldown. */
+    COMEBACK_AFTER_DAYS: 3,
+    COMEBACK_COOLDOWN_DAYS: 7,
+    /** reflection: the longest note. */
+    REFLECTION_MAX_LENGTH: 200,
+    /** weekly_goal: the target range and the most XP the reward can reach. */
+    WEEKLY_GOAL_MIN: 3,
+    WEEKLY_GOAL_MAX: 60,
+    WEEKLY_GOAL_MAX_XP: 80,
+    /** party_assist: 15 XP a day. */
+    PARTY_ASSIST_XP_PER_DAY: 15,
+    /** estimate_accuracy: the longest estimate, how close a guess must be, and 30 XP a day. */
+    ESTIMATE_MAX_MINUTES: 600,
+    ESTIMATE_TOLERANCE_PERCENT: 25,
+    ESTIMATE_XP_PER_DAY: 30,
     /** HIGH priority is the player's own label: only the first N HIGH completions a day count as HIGH for classes and skills (Vow, Rally, Sniper, Crusade). */
     HIGH_BONUS_PER_DAY: 3,
     /** LIST_CLEARED pays at most this many lists a day (and each list only once). */
@@ -765,6 +815,7 @@ module.exports = {
     PRESTIGE_TITLES,
     LEADERBOARDS,
     WEEKLY_XP_SOURCES,
+    SEASONS,
     LIMITS,
     LIST_ROLES,
     PARTY_QUEST,

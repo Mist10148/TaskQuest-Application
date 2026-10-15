@@ -19,12 +19,14 @@ const {
     REWARDS,
     SPEND_SOURCES,
     STREAK_CHESTS,
-    PRESTIGE
+    PRESTIGE,
+    SEASONS
 } = require('../constants');
 const { levelFromXP, prestigeTitle, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
 const tz = require('../tz');
 const { todayInZone } = require('../dates');
+const { currentSeason } = require('../quests');
 
 /** Columns applyXP() may update alongside the balance. */
 const UPDATABLE_COLUMNS = new Set([
@@ -191,6 +193,8 @@ async function rewardAction(conn, user, source, baseXP, opts = {}) {
 async function awardFlat(conn, user, source, amount, opts = {}) {
     if (!user.gamification_enabled) return null;
     let pay = Math.trunc(Number(amount));
+    // The weekly modifier doubles one source for everybody; the daily cap below still bounds the doubled amount.
+    if (process.env.XP_WEEKLY_MODIFIER !== 'off' && currentSeason(SEASONS, opts.now || new Date()).doubles === source) pay *= 2;
     if (opts.dailyCap !== undefined) {
         let paid = 0;
         for (const s of opts.capSources || [source]) paid += await sumToday(conn, user, s);

@@ -13,7 +13,7 @@ const random = require('./random');
 const dates = require('./dates');
 const cosmetics = require('./cosmetics');
 const push = require('./push');
-const { questPeriod, isoWeek, activeRotatingQuest } = require('./quests');
+const { questPeriod, isoWeek, activeRotatingQuest, currentSeason } = require('./quests');
 const tz = require('./tz');
 const { buildIcs } = require('./ics');
 const { parseQuickAdd } = require('./quickAdd');
@@ -41,6 +41,7 @@ module.exports = {
     questPeriod,
     isoWeek,
     activeRotatingQuest,
+    currentSeason,
     buildIcs,
     parseQuickAdd,
     parseCsv,

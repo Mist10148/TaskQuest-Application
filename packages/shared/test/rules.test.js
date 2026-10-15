@@ -885,3 +885,20 @@ test('cosmetics: a well-formed catalogue, requirement text and what an equipped 
     assert.ok(!JSON.stringify(drawn).includes('discord_id'));
     assert.deepEqual(shared.describeEquipped({ equipped_title: 'gone' }), { title: null, frame: null, accent: null });
 });
+
+test('the weekly modifier: one flat source is doubled each UTC ISO week, four in rotation', () => {
+    const { SEASONS, currentSeason, isoWeek } = shared;
+    assert.equal(SEASONS.length, 4);
+    assert.deepEqual(SEASONS.map((s) => s.doubles), ['early_finish', 'overdue_clear', 'habit_bonus', 'list_cleared']);
+    for (const s of SEASONS) {
+        assert.ok(shared.WEEKLY_XP_SOURCES.includes(s.doubles), `${s.doubles} counts for the weekly board`);
+        assert.ok(s.name && s.blurb);
+    }
+    const seen = new Set();
+    for (let week = 0; week < 8; week++) {
+        const at = new Date(Date.UTC(2030, 0, 7 + week * 7, 12)); // Mondays
+        seen.add(currentSeason(SEASONS, at).key);
+        assert.equal(currentSeason(SEASONS, at), SEASONS[isoWeek(at, null) % 4]);
+    }
+    assert.equal(seen.size, 4, 'all four come up');
+});

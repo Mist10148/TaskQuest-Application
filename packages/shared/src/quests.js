@@ -29,4 +29,9 @@ function activeRotatingQuest(rotation, now = new Date(), zone = null) {
     return rotation[isoWeek(now, zone) % rotation.length];
 }
 
-module.exports = { questPeriod, isoWeek, activeRotatingQuest };
+/** The weekly modifier that is live at `now` (the UTC ISO week, the same for everybody): see SEASONS in constants. */
+function currentSeason(seasons, now = new Date()) {
+    return seasons[isoWeek(now, null) % seasons.length];
+}
+
+module.exports = { questPeriod, isoWeek, activeRotatingQuest, currentSeason };

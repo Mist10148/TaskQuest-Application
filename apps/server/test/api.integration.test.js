@@ -22,6 +22,7 @@ if (enabled) {
         DB_USER: process.env.TEST_DB_USER || 'root',
         DB_PASSWORD: process.env.TEST_DB_PASSWORD || '',
         DB_NAME: process.env.TEST_DB_NAME,
+        XP_WEEKLY_MODIFIER: 'off',
         PUBLIC_URL: ORIGIN,
         SESSION_SECRET: SECRET,
         DISCORD_CLIENT_ID: 'test',

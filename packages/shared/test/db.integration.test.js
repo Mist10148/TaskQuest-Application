@@ -20,6 +20,7 @@ if (enabled) {
     process.env.DB_USER = process.env.TEST_DB_USER || 'root';
     process.env.DB_PASSWORD = process.env.TEST_DB_PASSWORD || '';
     process.env.DB_NAME = process.env.TEST_DB_NAME;
+    process.env.XP_WEEKLY_MODIFIER = 'off'; // the real week would double one bonus source and change the expected amounts
 }
 
 const db = enabled ? require('../src/db') : null;
@@ -958,6 +959,28 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             assert.equal(u.player_class, 'DEFAULT');
             assert.equal(u.bard_recent, '');
             assert.equal(Number(u.alchemist_mix), 0);
+        }
+    });
+
+    await t.test('the weekly modifier doubles the source of the week and nothing else', async () => {
+        const shared = require('../src');
+        const season = shared.currentSeason(shared.SEASONS, new Date());
+        const other = shared.SEASONS.find((s) => s.key !== season.key).doubles;
+        const M = '100000000000000401';
+        await db.users.ensureUser(M);
+        const pay = (source) =>
+            db.withTransaction(async (conn) => {
+                const user = await db.users.lockUser(conn, M);
+                return (await db.progression.awardFlat(conn, user, source, 10)).xp;
+            });
+        process.env.XP_WEEKLY_MODIFIER = 'on';
+        try {
+            assert.equal(await pay(season.doubles), 20, `${season.name} doubles ${season.doubles}`);
+            assert.equal(await pay(other), 10, 'another source is untouched');
+            process.env.XP_WEEKLY_MODIFIER = 'off';
+            assert.equal(await pay(season.doubles), 10, 'the operator switch turns it off');
+        } finally {
+            process.env.XP_WEEKLY_MODIFIER = 'off';
         }
     });
 

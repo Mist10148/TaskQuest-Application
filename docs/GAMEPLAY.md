@@ -346,6 +346,8 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | `focus_session` | floor(minutes × 0.6) per [focus session](#5d-focus-sessions) | 100 XP and 8 sessions a day |
 | `weekly_review` | +40 ([weekly review](#5e-weekly-review)) | Once per week |
 
+**The weekly modifier.** Every UTC ISO week (the same week for everybody, like the weekly board) doubles one flat bonus source; the week number mod 4 picks it, so the four rotate: **Early-bird week** (`early_finish`), **Cleanup week** (`overdue_clear`), **Habit week** (`habit_bonus`) and **Tidy week** (`list_cleared`). The doubled amount still counts against the source's daily cap. Operators can turn the modifier off with `XP_WEEKLY_MODIFIER=off`.
+
 **Achievement rewards** are paid in the transaction that unlocks the achievement. The XP can itself unlock an XP or level achievement, which pays in turn; the check repeats until nothing new unlocks (it always ends, because every achievement unlocks once). With XP off, achievements still unlock but pay nothing.
 
 **Habit streaks.** A repeating task carries a `habit_streak`: finishing it on or before its due date adds one to the next copy, finishing it late resets it to 0. Finishing a copy a whole recurrence period early (daily: a day early, weekly: 7 days, monthly: 28) neither adds nor resets, and pays nothing, so ticking copies off the moment they appear cannot grow a streak.

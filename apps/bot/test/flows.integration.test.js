@@ -14,6 +14,7 @@ const enabled = Boolean(process.env.TEST_DB_NAME);
 if (enabled) {
     Object.assign(process.env, {
         DB_URL: '',
+        XP_WEEKLY_MODIFIER: 'off',
         DB_HOST: process.env.TEST_DB_HOST || '127.0.0.1',
         DB_PORT: process.env.TEST_DB_PORT || '3306',
         DB_USER: process.env.TEST_DB_USER || 'root',

@@ -15,6 +15,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **A clearer XP toast and an Undo button.** The "Task done" toast lists each part of the reward on its own line (base, class and skill parts, every bonus), and carries an **Undo** button for a few seconds that un-checks the task again (the XP stays paid and finishing it again pays nothing, as always).
 - **A Today page** (`/today`, `GET /api/today`): what is overdue, due today or HIGH priority with a tick button, a warning when today is the last day to keep your streak, the weekly modifier, and the reflection and weekly goal cards. It is also in the command palette.
 - **Skill respec.** Unlearn a whole skill tree and get 75% of its cost back (a refund, never lifetime XP), once a day: a Reset button on the Skills page, `POST /api/skills/respec`. Skills used to be a one-way purchase.
 - **"What would I earn?" previews.** The Classes page shows, before you buy, what a 10 XP task pays with no skills and with the whole tree; the Skills page shows what each skill's next level adds for your equipped class. A deterministic simulation of the real XP rules (`simulateAverage` in the shared package, also used by `scripts/balance-sim.js`); `GET /api/classes/:key/preview`, `GET /api/skills/preview`.

@@ -5,13 +5,15 @@
  */
 
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { createElement } from 'react';
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
 import { applyItemOrder } from '@/lib/reorder';
 import { isAccessLost, type ListRole } from '@/lib/sharing';
 import { celebrate } from '@/lib/celebrate';
 import { describeChest } from '@/lib/classInfo';
-import { achievementDescription, rewardDescription } from '@/lib/bonuses';
+import { achievementDescription } from '@/lib/bonuses';
+import { RewardBreakdown } from '@/components/feedback/RewardBreakdown';
 import {
     userApi,
     importApi,
@@ -49,13 +51,18 @@ import {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export function showXPNotification(result: Partial<RewardFields> | null | undefined, action: string, emoji = '✨') {
+export function showXPNotification(result: Partial<RewardFields> | null | undefined, action: string, emoji = '✨', undo?: () => void) {
     const xp = result?.xpResult;
-    if (!xp || xp.finalXP <= 0) return;
+    // An undo button keeps the toast up a little longer; it only un-checks the task (XP is paid once per task).
+    const extra = undo ? { action: { label: 'Undo', onClick: undo }, duration: 6000 } : { duration: 3500 };
+    if (!xp || xp.finalXP <= 0) {
+        if (undo) toast(`✓ ${action}`, extra);
+        return;
+    }
     if (xp.leveledUp) celebrate('level');
     toast.success(`${emoji} ${action} +${xp.finalXP} XP!`, {
-        description: rewardDescription({ leveledUp: xp.leveledUp, newLevel: xp.newLevel, details: xp.bonusInfo?.details, bonuses: result?.bonuses }),
-        duration: 3500,
+        description: createElement(RewardBreakdown, { leveledUp: xp.leveledUp, newLevel: xp.newLevel, details: xp.bonusInfo?.details, bonuses: result?.bonuses }),
+        ...extra,
     });
 }
 
@@ -426,7 +433,11 @@ export function useToggleItem() {
         onSuccess: (result) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);
-            if (result.completed) showXPNotification(result, 'Task done!', '✨');
+            if (result.completed) {
+                // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing.
+                const undo = () => itemsApi.toggle(result.id, false).then(() => qc.invalidateQueries({ queryKey: ['lists'] })).catch(showError);
+                showXPNotification(result, 'Task done!', '✨', undo);
+            }
             if (result.nextItem) {
                 toast('🔁 Next one is ready', { description: result.nextItem.due_date ? `Due ${formatDeadline(result.nextItem.due_date)}` : undefined });
             }

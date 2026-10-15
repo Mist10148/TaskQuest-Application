@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { achievementDescription, formatBonus, rewardDescription } from "./bonuses";
+import { achievementDescription, breakdownLines, formatBonus, rewardDescription } from "./bonuses";
 
 describe("formatBonus", () => {
   it("shows the XP and the label", () => {
@@ -35,5 +35,18 @@ describe("achievementDescription", () => {
   it("leaves the description alone without a reward", () => {
     expect(achievementDescription({ description: "Finish 10 tasks" })).toBe("Finish 10 tasks");
     expect(achievementDescription({ description: "Finish 10 tasks", xp: 0 })).toBe("Finish 10 tasks");
+  });
+});
+
+describe("breakdownLines", () => {
+  const bonuses = [{ key: "first_of_day", label: "First of the day", xp: 10 }];
+  it("splits the class and skill breakdown into its parts and adds each flat bonus", () => {
+    expect(breakdownLines({ details: "Base: 10 | 🎯 Hit x4 +10 | 📚 Skill +10", bonuses })).toEqual(["Base: 10", "🎯 Hit x4 +10", "📚 Skill +10", "+10 First of the day"]);
+  });
+  it("starts with the level-up and ignores empty or zero entries", () => {
+    expect(breakdownLines({ leveledUp: true, newLevel: 3, details: "", bonuses: [{ key: "x", label: "Zero", xp: 0 }, ...bonuses] })).toEqual(["🎉 Level up! You are now level 3.", "+10 First of the day"]);
+  });
+  it("is empty when there is nothing to say", () => {
+    expect(breakdownLines({})).toEqual([]);
   });
 });

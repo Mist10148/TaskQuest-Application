@@ -84,6 +84,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🧭 **Ranger** | 600 | **Deadline Hunter.** (The due date must be at least 24 hours old; a freshly set date counts as no due date.) Completing a task with a due date *early* by d days (up to 7) pays ⌊base × 10% × d⌋ + 3 × d. *Due today* pays ⌊base × 25%⌋. *Overdue* pays nothing. Every other action (including completing a task with no due date) pays +5. No counter. |
 | 💀 **Necromancer** | 600 | **Revive.** (The due date must be at least 24 hours old, or the task is not overdue for this purpose.) Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 8%⌋ to *every* action (counted after the new soul). Every 10th task you complete also binds a soul. Souls do not decay. |
 | ⚜️ **Paladin** | 600 | **Vow.** Completing a HIGH priority task pays base + 10; every other action pays +8. Passive: your daily streak always has the Streak Shield window (one missed day forgiven) for free, including on the streak leaderboard. |
+| 🎵 **Bard** | 600 | **Variety.** Completing a task remembers its list; among your last 5 completions, every list beyond the first adds ⌊base × 4%⌋ + 3 XP (a medley of up to 4 steps). Other actions, and a medley of one list, pay +2. The counter is `bard_recent`. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
@@ -230,7 +231,16 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🏛️ Sanctuary | 1 | 350 | Your daily streak survives two missed days (a claim up to 3 days after the last one) *(class)* | Crusade |
 | 🔰 Aegis | 1 | 300 | The +8 on non-HIGH actions is 50% larger *(class)* | Sanctuary |
 
-There are 76 skills in 12 trees (Default plus the eleven classes).
+### 🎵 Bard
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🎶 Encore | 3 | 110 | +1 XP per medley step on every completion, per level *(class)* | — |
+| 🎼 Harmony | 1 | 200 | The medley looks at your last 7 completions instead of 5 *(class)* | Encore |
+| 📯 Crescendo | 1 | 260 | +25% Bard bonus when every task of the medley is from a different list *(class)* | Harmony |
+| 🪕 Ballad | 1 | 300 | The first task you complete each day counts as a full medley *(class)* | Crescendo |
+
+There are 80 skills in 13 trees (Default plus the eleven classes).
 
 ## 5. Daily reward
 

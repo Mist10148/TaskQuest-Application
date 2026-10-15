@@ -31,6 +31,7 @@ const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   RANGER: { name: 'Ranger', emoji: '🧭' },
   NECROMANCER: { name: 'Necromancer', emoji: '💀' },
   PALADIN: { name: 'Paladin', emoji: '⚜️' },
+  BARD: { name: 'Bard', emoji: '🎵' },
 };
 
 // Full class names, so Tailwind's scanner keeps them (it cannot see `bg-${color}-500/20`).

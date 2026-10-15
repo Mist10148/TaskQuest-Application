@@ -57,6 +57,11 @@ export function classCounter(user: Partial<User>, skills: UserSkill[] = [], now:
       const max = 5 + (level("necro_jar") > 0 ? 3 : 0);
       return { label: "Souls", emoji: "💀", value: Math.min(max, Number(user.necro_souls) || 0), max };
     }
+    case "BARD": {
+      const max = level("bard_harmony") > 0 ? 7 : 5;
+      const recent = String(user.bard_recent ?? "").split(",").filter(Boolean).slice(-max);
+      return { label: "Medley", emoji: "🎵", value: new Set(recent).size, max };
+    }
     default:
       return null;
   }

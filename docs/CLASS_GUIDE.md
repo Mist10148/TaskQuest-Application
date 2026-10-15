@@ -1,6 +1,6 @@
 # Choosing a class
 
-Twelve classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
+Thirteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
 
 ## How to read the numbers
 
@@ -31,6 +31,7 @@ A bare Default player gets exactly the base. Every class beats it, by very diffe
 | work through a backlog of overdue tasks | Necromancer |
 | mark real priorities | Paladin |
 | want rewards that grow with your level | Wizard (and Tank, Archer slowly) |
+| juggle many lists | Bard |
 
 ## Hero (500 XP)
 
@@ -155,6 +156,18 @@ Favourable mix: every second task is HIGH priority.
 | No skills | - | 0 | 18 / 18 / 18 | 25 / 25 / 25 |
 | Starter | Holy Aura ×3 | 420 | 27 / 27 / 27 | 34 / 34 / 34 |
 | Full tree | Holy Aura ×3, Smite ×2, Crusade, Sanctuary, Aegis | 1780 | 31 / 31 / 31 | 47 / 47 / 47 |
+
+## Bard (600 XP)
+
+**Rewards:** every list beyond the first among your last 5 completions adds 4% of the base plus 3 XP, so finishing tasks from five different lists in a row is a medley of 4 steps; every other action pays +2. **Suits:** people who juggle several lists. **Pitfalls:** grinding one list pays almost nothing (the +2); the medley counts completions, not days, and Ballad only helps the first task of a day.
+
+Favourable mix: every task comes from a different list than the last four.
+
+| Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
+|---|---|---|---|---|
+| No skills | - | 0 | 12 / 12 / 12 | 23 / 23 / 23 |
+| Starter | Encore ×3 | 330 | 12 / 12 / 12 | 35 / 35 / 35 |
+| Full tree | Encore ×3, Harmony, Crescendo, Ballad | 1090 | 21 / 21 / 21 | 39 / 39 / 39 |
 
 ## Changing your mind
 

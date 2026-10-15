@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun } from "lucide-react";
+import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun, Music } from "lucide-react";
 
 export type PlayerClass = 
   | "DEFAULT" 
@@ -13,7 +13,8 @@ export type PlayerClass =
   | "ARTISAN"
   | "RANGER"
   | "NECROMANCER"
-  | "PALADIN";
+  | "PALADIN"
+  | "BARD";
 
 interface ClassBadgeProps {
   playerClass: PlayerClass;
@@ -139,6 +140,15 @@ const classConfig: Record<PlayerClass, {
     bgClass: "bg-class-paladin/10",
     borderClass: "border-class-paladin",
     description: "Rewards HIGH priority work",
+  },
+  BARD: {
+    name: "Bard",
+    icon: Music,
+    emoji: "🎵",
+    colorClass: "text-class-bard",
+    bgClass: "bg-class-bard/10",
+    borderClass: "border-class-bard",
+    description: "Rewards hopping between lists",
   },
 };
 

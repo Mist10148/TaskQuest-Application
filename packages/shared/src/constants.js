@@ -96,6 +96,13 @@ const CLASSES = {
         cost: 600,
         description: 'Vow: completing a HIGH priority task pays +100% of the base XP plus 10; every other action gives +8 XP. Your daily streak always has the Streak Shield window (one missed day forgiven) for free.',
         playstyle: 'Rewards taking on the hard tasks, and forgives a missed day.'
+    },
+    BARD: {
+        name: 'Bard',
+        emoji: '🎵',
+        cost: 600,
+        description: 'Variety: finishing tasks from different lists in a row builds a medley. Every list beyond the first among your last 5 completions adds 4% of the base XP plus 3 XP. Every other action gives +2 XP.',
+        playstyle: 'Rewards hopping between lists instead of grinding one.'
     }
 };
 
@@ -272,6 +279,17 @@ const SKILL_TREES = {
             paladin_sanctuary: { name: 'Sanctuary', emoji: '🏛️', description: 'Your daily streak survives two missed days (a claim up to 3 days after the last one) (Paladin)', maxLevel: 1, cost: 350, requires: 'paladin_crusade' },
             paladin_aegis: { name: 'Aegis', emoji: '🔰', description: 'The +8 on non-HIGH actions is 50% larger (Paladin)', maxLevel: 1, cost: 300, requires: 'paladin_sanctuary' }
         }
+    },
+    BARD: {
+        name: 'Bard',
+        emoji: '🎵',
+        description: 'Variety and medleys',
+        skills: {
+            bard_encore: { name: 'Encore', emoji: '🎶', description: '+1 XP per medley step on every completion, per level (Bard)', maxLevel: 3, cost: 110, requires: null },
+            bard_harmony: { name: 'Harmony', emoji: '🎼', description: 'The medley looks at your last 7 completions instead of 5 (Bard)', maxLevel: 1, cost: 200, requires: 'bard_encore' },
+            bard_crescendo: { name: 'Crescendo', emoji: '📯', description: '+25% Bard bonus when every task of the medley is from a different list (Bard)', maxLevel: 1, cost: 260, requires: 'bard_harmony' },
+            bard_ballad: { name: 'Ballad', emoji: '🪕', description: 'The first task you complete each day counts as a full medley (Bard)', maxLevel: 1, cost: 300, requires: 'bard_crescendo' }
+        }
     }
 };
 
@@ -447,7 +465,8 @@ const CLASS_RULES = {
     NECROMANCER: { SOUL_EATER_PERCENT: 25, SOUL_EATER_SOULS: 3, MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 8, SIPHON_PERCENT: 2, HARVEST_EVERY: 10, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
     RANGER: { TRACKER_FLAT: 4, MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 3, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 5, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
     ARTISAN: { PROTOTYPE_KEEP_PERCENT: 75, MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 6, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 0.5, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
-    MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 }
+    MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 },
+    BARD: { WINDOW: 5, HARMONY_WINDOW: 7, PERCENT_PER_STEP: 4, FLAT_PER_STEP: 3, OTHER_FLAT: 2, ENCORE_PER_STEP: 1, CRESCENDO_PERCENT: 25 }
 };
 
 /**

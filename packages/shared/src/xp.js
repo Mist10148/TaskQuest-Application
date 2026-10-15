@@ -390,6 +390,29 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'BARD': {
+            const b = CLASS_RULES.BARD;
+            const listId = context.action === 'item_complete' && context.listId !== undefined && context.listId !== null ? String(context.listId) : null;
+            if (listId === null) {
+                finalXP = baseXP + b.OTHER_FLAT;
+                bonusInfo = { type: 'BARD', details: `🎵 Bard +${b.OTHER_FLAT}`, classBonus: b.OTHER_FLAT };
+                break;
+            }
+            const window = lvl('bard_harmony') ? b.HARMONY_WINDOW : b.WINDOW;
+            const recent = String(user.bard_recent || '').split(',').filter(Boolean);
+            const medley = [...recent, listId].slice(-window);
+            userUpdates.bard_recent = medley.join(',');
+            const maxSteps = window - 1;
+            // Ballad: the first task of the day counts as a full medley.
+            const steps = lvl('bard_ballad') && context.firstOfDay ? maxSteps : new Set(medley).size - 1;
+            let bonus = Math.floor((baseXP * b.PERCENT_PER_STEP * steps) / 100) + steps * (b.FLAT_PER_STEP + lvl('bard_encore') * b.ENCORE_PER_STEP);
+            if (lvl('bard_crescendo') && steps === maxSteps) bonus = Math.floor((bonus * (100 + b.CRESCENDO_PERCENT)) / 100);
+            bonus = Math.max(b.OTHER_FLAT, bonus);
+            finalXP = baseXP + bonus;
+            bonusInfo = { type: 'BARD_MEDLEY', details: `🎵 Medley ${steps + 1}/${window} +${bonus}`, classBonus: bonus };
+            break;
+        }
+
         default:
             break;
     }

@@ -31,7 +31,7 @@ const COLORS = {
     // Class Colors
     DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6, ASSASSIN: 0x2C3E50,
     WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C,
-    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1,
+    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1, BARD: 0xE91E8C,
     
     // Skill Colors
     skill: 0x9B59B6, locked: 0x2C3E50, unlocked: 0x27AE60
@@ -67,6 +67,11 @@ function classCounterLine(user, userSkills = [], now = Date.now()) {
             const n = CLASS_RULES.NECROMANCER;
             const cap = n.MAX_SOULS + (lvl('necro_jar') ? n.JAR_SOULS : 0);
             return `💀 Souls **${Math.min(cap, Number(user.necro_souls) || 0)}/${cap}**`;
+        }
+        case 'BARD': {
+            const window = lvl('bard_harmony') ? CLASS_RULES.BARD.HARMONY_WINDOW : CLASS_RULES.BARD.WINDOW;
+            const recent = String(user.bard_recent || '').split(',').filter(Boolean).slice(-window);
+            return `🎵 Medley **${new Set(recent).size}/${window}** lists`;
         }
         default:
             return '';
@@ -967,7 +972,7 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     
     const rows = [];
     
-    // Jump straight to any class (12 classes fit one select menu, the limit is 25).
+    // Jump straight to any class (13 classes fit one select menu, the limit is 25).
     rows.push(classSelectMenu(CLASSES, user, classKey));
     
     // Navigation row: Previous / Class Count / Next

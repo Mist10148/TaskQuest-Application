@@ -12,9 +12,9 @@
 const { calculateFinalXP, CLASSES, SKILL_TREES } = require('../packages/shared/src');
 
 const PURCHASABLE = Object.keys(CLASSES).filter((k) => k !== 'DEFAULT');
-const MIXES = ['plain', 'high', 'early', 'overdue', 'list'];
+const MIXES = ['plain', 'high', 'early', 'overdue', 'list', 'variety', 'rotate', 'habit', 'focus', 'shared'];
 /** The mix each class is built for. */
-const FAVOURABLE = { HERO: 'high', ARCHER: 'high', PALADIN: 'high', RANGER: 'early', NECROMANCER: 'overdue', ARTISAN: 'list' };
+const FAVOURABLE = { BARD: 'variety', HERO: 'high', ARCHER: 'high', PALADIN: 'high', RANGER: 'early', NECROMANCER: 'overdue', ARTISAN: 'list' };
 
 function rngFor(seed) {
     let a = seed | 0;
@@ -57,7 +57,12 @@ function perActionRows(cls, skills, o = {}) {
     for (let d = 0; d < days; d++) {
         for (let i = 0; i < perDay; i++) {
             const now = start + d * 864e5 + i * 36e5;
-            const context = { action, priority: mix === 'high' && i % 2 === 0 ? 'HIGH' : 'MEDIUM', recurring: false };
+            const step = d * perDay + i;
+            const priority = mix === 'high' && i % 2 === 0 ? 'HIGH' : mix === 'rotate' ? ['LOW', 'MEDIUM', 'HIGH'][step % 3] : 'MEDIUM';
+            const context = { action, priority, recurring: mix === 'habit', listId: mix === 'variety' ? (step % 5) + 1 : 1, firstOfDay: i === 0 };
+            if (mix === 'habit') Object.assign(context, { habitStreak: 8, recurrence: 'daily' });
+            if (mix === 'focus') context.afterFocus = { minutes: 10, completions: i };
+            if (mix === 'shared') context.sharedMembers = 3;
             if (mix === 'early') {
                 context.dueDate = new Date(now + 3 * 864e5).toISOString().slice(0, 10);
                 context.today = new Date(now).toISOString().slice(0, 10);
@@ -103,7 +108,8 @@ const STARTER = {
     ARTISAN: [['artisan_toolkit', 3]],
     RANGER: [['ranger_scout', 3]],
     NECROMANCER: [['necro_siphon', 3]],
-    PALADIN: [['paladin_aura', 3]]
+    PALADIN: [['paladin_aura', 3]],
+    BARD: [['bard_encore', 3]]
 };
 
 /** XP of one task for an arbitrary skill list (rows of { skill_id, skill_level }). */

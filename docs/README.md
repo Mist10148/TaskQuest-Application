@@ -9,7 +9,7 @@ Last verified against code: 11 October 2026 (2026-10-11), branch `feat/improveme
 | Document | What it is |
 |---|---|
 | [XP_GUIDE.md](XP_GUIDE.md) | How XP is earned: every source with its amount, cap, modifiers and the order of calculation |
-| [CLASS_GUIDE.md](CLASS_GUIDE.md) | The twelve classes: what each rewards, who it suits, example builds with computed XP, pitfalls |
+| [CLASS_GUIDE.md](CLASS_GUIDE.md) | The thirteen classes: what each rewards, who it suits, example builds with computed XP, pitfalls |
 | [PLAYER_FAQ.md](PLAYER_FAQ.md) | Streaks, freezes, XP off, reminders, time zone days, prestige, sharing, import and export, push, Blackjack |
 | [GAMEPLAY.md](GAMEPLAY.md) | The exact rules: XP, levels, classes, skills, quests, bonuses, prestige, cosmetics, parties, achievements, games, limits |
 | [COMMANDS.md](COMMANDS.md) | Every Discord command, the `/list` flow, background behaviour and interaction ids |

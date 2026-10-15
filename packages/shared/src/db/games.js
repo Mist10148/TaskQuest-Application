@@ -88,7 +88,8 @@ async function settleBlackjack(conn, user, session, state) {
     if (state.outcome === 'won' || state.outcome === 'blackjack') {
         credited = state.bet + winnings;
         await applyXP(conn, user, credited, state.outcome === 'blackjack' ? 'blackjack_blackjack' : 'blackjack_win', {
-            lifetimeDelta: winnings,
+            // Blackjack moves XP between hands, it does not earn it: losses never subtract from lifetime XP, so counting wins would mint levels.
+            lifetimeDelta: 0,
             referenceId: session.id
         });
     } else if (state.outcome === 'push') {

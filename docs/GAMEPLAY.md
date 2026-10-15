@@ -41,7 +41,7 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 | RPS win | 10 | Free game |
 | Hangman win | max(10, 10 × lives left) | Free game |
 | Arcade run | points × rate, capped | Free game (web) |
-| Blackjack win | your winnings | Flat 1:1 (3:2 for a natural). Class and skill bonuses do **not** apply |
+| Blackjack win | your winnings | Flat 1:1 (3:2 for a natural). Class and skill bonuses do **not** apply, and winnings do not count toward lifetime XP or level |
 
 ## 2. How XP is calculated
 

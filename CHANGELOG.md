@@ -15,6 +15,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **A Today page** (`/today`, `GET /api/today`): what is overdue, due today or HIGH priority with a tick button, a warning when today is the last day to keep your streak, the weekly modifier, and the reflection and weekly goal cards. It is also in the command palette.
 - **Skill respec.** Unlearn a whole skill tree and get 75% of its cost back (a refund, never lifetime XP), once a day: a Reset button on the Skills page, `POST /api/skills/respec`. Skills used to be a one-way purchase.
 - **"What would I earn?" previews.** The Classes page shows, before you buy, what a 10 XP task pays with no skills and with the whole tree; the Skills page shows what each skill's next level adds for your equipped class. A deterministic simulation of the real XP rules (`simulateAverage` in the shared package, also used by `scripts/balance-sim.js`); `GET /api/classes/:key/preview`, `GET /api/skills/preview`.
 - **Task estimates and a good-estimate bonus.** A task can carry an estimate in minutes (`estimate_minutes`, 1 to 600; export and import keep it). Finishing it within 10 minutes after a focus session whose real minutes are within 25% of the estimate pays +10 XP (30 a day). The web task form has an Estimate field.

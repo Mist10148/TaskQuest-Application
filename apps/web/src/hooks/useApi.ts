@@ -30,6 +30,9 @@ import {
     statsApi,
     focusApi,
     reviewApi,
+    todayApi,
+    reflectionApi,
+    goalApi,
     partyApi,
     aiApi,
     type AchievementUnlock,
@@ -82,6 +85,7 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['focus'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
     qc.invalidateQueries({ queryKey: ['prestige'] });
+    qc.invalidateQueries({ queryKey: ['today'] });
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -551,6 +555,46 @@ export function useXpHistory(days: HistoryRange) {
 
 export function useStatsSummary() {
     return useQuery({ queryKey: ['stats', 'summary'], queryFn: statsApi.summary });
+}
+
+export function useToday() {
+    return useQuery({ queryKey: ['today'], queryFn: todayApi.get });
+}
+
+export function useWriteReflection() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (note: string) => reflectionApi.write(note),
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            toast.success(result.xp > 0 ? `📝 Reflection saved +${result.xp} XP` : '📝 Reflection saved');
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
+export function useSetGoal() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (target: number) => goalApi.set(target),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['today'] }),
+        onError: showError,
+    });
+}
+
+export function useClaimGoal() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: goalApi.claim,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            celebrate(result.leveledUp ? 'level' : 'quest');
+            toast.success(`🎯 Weekly goal reached +${result.xp} XP!`, { description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
 }
 
 export function useReview() {

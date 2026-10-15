@@ -1165,6 +1165,53 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await db.progression.respecSkills(R, 'DEFAULT')).refund > 0);
     });
 
+    await t.test('the Today read: what needs doing, counts, the weekly modifier and the streak', async () => {
+        const shared = require('../src');
+        const day = (offset) => {
+            const d = new Date(`${shared.todayInZone()}T00:00:00Z`);
+            d.setUTCDate(d.getUTCDate() + offset);
+            return d.toISOString().slice(0, 10);
+        };
+        const Y = '100000000000000903';
+        await db.users.ensureUser(Y);
+        const empty = await db.today.getToday(Y);
+        assert.deepEqual([empty.tasks.length, empty.counts.dueToday, empty.counts.overdue, empty.counts.doneToday], [0, 0, 0, 0]);
+        assert.equal(empty.day, shared.todayInZone());
+        assert.deepEqual(Object.keys(empty.season).sort(), ['blurb', 'doubles', 'enabled', 'key', 'name']);
+        assert.equal(empty.streak.atRisk, false);
+        assert.equal(empty.goal.target, null);
+        assert.equal(empty.reflection.reflection, null);
+
+        const { list } = await db.tasks.createList(Y, { name: 'Today' });
+        const add = async (extra) => (await db.tasks.addItem(Y, list.id, { name: 'task', ...extra })).item.id;
+        const late = await add({ name: 'late', due_date: day(-2) });
+        const now = await add({ name: 'now', due_date: day(0) });
+        const urgent = await add({ name: 'urgent', priority: 'high' });
+        await add({ name: 'later', due_date: day(5) });
+        await add({ name: 'whenever' });
+        const done = await add({ name: 'done', due_date: day(0) });
+        await db.tasks.setItemCompleted(Y, done);
+        const sub = await add({ name: 'sub', due_date: day(0), parent_id: now });
+        assert.ok(sub);
+
+        const r = await db.today.getToday(Y);
+        assert.deepEqual(r.tasks.map((x) => x.name), ['late', 'now', 'urgent'], 'overdue first, then today, then HIGH without a date');
+        assert.deepEqual(r.tasks.map((x) => x.overdueDays), [2, 0, 0]);
+        assert.deepEqual([r.counts.dueToday, r.counts.overdue, r.counts.doneToday], [1, 1, 1], 'subtasks and finished tasks are not counted');
+        assert.equal(r.tasks[0].id, late);
+        assert.equal(r.tasks[2].id, urgent);
+
+        // the streak: claimed today is safe; a streak last claimed yesterday has until the end of today
+        await db.query('UPDATE users SET streak_count = 5, last_daily_claim = UTC_TIMESTAMP() WHERE discord_id = ?', [Y]);
+        const safe = (await db.today.getToday(Y)).streak;
+        assert.deepEqual([safe.live, safe.claimedToday, safe.atRisk], [5, true, false]);
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY WHERE discord_id = ?', [Y]);
+        const risky = (await db.today.getToday(Y)).streak;
+        assert.deepEqual([risky.live, risky.claimedToday, risky.daysLeft, risky.atRisk], [5, false, 0, true]);
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 3 DAY WHERE discord_id = ?', [Y]);
+        assert.equal((await db.today.getToday(Y)).streak.live, 0, 'a lapsed streak reads 0');
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

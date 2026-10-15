@@ -469,6 +469,10 @@ export const reviewApi = {
     claim: () => post<ReviewClaimResult>('/api/review/claim'),
 };
 
+export const todayApi = {
+    get: () => apiFetch<TodayData>('/api/today'),
+};
+
 export const reflectionApi = {
     get: () => apiFetch<ReflectionStatus>('/api/reflection'),
     write: (note: string) => post<ReflectionResult>('/api/reflection', { note }),
@@ -1031,6 +1035,28 @@ export interface WeeklyReview {
     claimable: boolean;
     streak: number;
     reward: number;
+}
+
+export interface TodayTask {
+    id: number;
+    name: string;
+    listId: number;
+    listName: string;
+    dueDate: string | null;
+    priority: Priority | null;
+    estimateMinutes: number | null;
+    overdueDays: number;
+}
+
+export interface TodayData {
+    day: string;
+    season: { key: string; name: string; blurb: string; doubles: string; enabled: boolean };
+    streak: { count: number; live: number; claimedToday: boolean; daysLeft: number | null; atRisk: boolean };
+    counts: { dueToday: number; overdue: number; doneToday: number };
+    tasks: TodayTask[];
+    reflection: ReflectionStatus;
+    goal: WeeklyGoal;
+    xpEnabled: boolean;
 }
 
 export interface ReflectionStatus {

@@ -715,6 +715,8 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 }
 
 module.exports = {
+    streakWindowDays,
+    claimGapDays,
     activeSkills,
     prestigeMultiplier,
     prestigeFlat,

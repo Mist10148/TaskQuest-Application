@@ -20,6 +20,8 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 **I missed a day. Is my streak gone?** Probably, unless something protects it. In order: the Tank's *Unstoppable* skill (free, always), a longer window (the *Streak Shield* skill or the Paladin class forgive one missed day; Paladin with Sanctuary forgives two), then a **streak freeze**. A freeze costs 150 XP (120 with *Freeze Cache*, which also lets you hold 5 instead of 3) and is used automatically at your next claim, only when a streak of 2 or more days would otherwise break. One freeze covers one missed day, so a longer gap needs one freeze per day. Buy one with `/freeze` or on your profile before you need it.
 
+**What is the Today page?** One screen for right now: the tasks that are overdue, due today or marked HIGH (tick them off from there), a warning when today is the last day to keep your streak, the week's bonus modifier, a one-line reflection (+10 XP once a day) and your weekly goal (pick 3 to 60 tasks, claim 10 + 2 XP per task, at most 80, once a week).
+
 **Is the streak tied to midnight?** Yes, to your own midnight (your time zone setting): the streak needs a claim on each calendar day. The 24-hour cooldown between two claims is still counted from your last claim.
 
 **Does the Monk's Rhythm or the Assassin's streak work the same way?** No, they are class counters: Rhythm counts consecutive days of yours on which you finished a rewarded action, and the Assassin's streak resets after 48 hours (72 with Night Owl) without one.

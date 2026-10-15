@@ -21,7 +21,7 @@ import cosmeticsRouter from './routes/cosmetics.js';
 import { pushConfig, pushRouter, requirePushToken, internalPushRouter } from './routes/push.js';
 import focusRouter from './routes/focus.js';
 import reviewRouter from './routes/review.js';
-import { reflectionRouter, goalRouter } from './routes/engagement.js';
+import { todayRouter, reflectionRouter, goalRouter } from './routes/engagement.js';
 import statsRouter from './routes/stats.js';
 import calendarRouter from './routes/calendar.js';
 import aiRouter from './routes/ai.js';
@@ -106,6 +106,7 @@ export function createApp() {
     app.use('/api/push', requireAuth, pushRouter);
     app.use('/api/focus', requireAuth, focusRouter);
     app.use('/api/review', requireAuth, reviewRouter);
+    app.use('/api/today', requireAuth, todayRouter);
     app.use('/api/reflection', requireAuth, reflectionRouter);
     app.use('/api/goal', requireAuth, goalRouter);
     app.use('/api/stats', requireAuth, statsRouter);

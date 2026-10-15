@@ -5,8 +5,16 @@ import db from '@taskquest/shared/db';
 import { asyncRoute, parse, uid } from '../lib/http.js';
 import { reflectionBody, goalBody } from '../lib/schemas.js';
 
+export const todayRouter = Router();
 export const reflectionRouter = Router();
 export const goalRouter = Router();
+
+todayRouter.get(
+    '/',
+    asyncRoute(async (req, res) => {
+        res.json(await db.today.getToday(uid(req)));
+    })
+);
 
 reflectionRouter.get(
     '/',

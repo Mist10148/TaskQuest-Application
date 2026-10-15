@@ -372,6 +372,17 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).status, 409);
     });
 
+    await t.test('today endpoint', async () => {
+        assert.equal((await call('GET', '/api/today')).status, 401);
+        const today = await (await call('GET', '/api/today', { cookie: mallory })).json();
+        assert.deepEqual(Object.keys(today).sort(), ['counts', 'day', 'goal', 'reflection', 'season', 'streak', 'tasks', 'xpEnabled']);
+        assert.deepEqual(Object.keys(today.counts).sort(), ['doneToday', 'dueToday', 'overdue']);
+        assert.deepEqual(Object.keys(today.streak).sort(), ['atRisk', 'claimedToday', 'count', 'daysLeft', 'live']);
+        assert.ok(Array.isArray(today.tasks) && today.tasks.length <= 6);
+        assert.ok(today.season.name && today.season.doubles);
+        assert.equal(today.goal.min, 3);
+    });
+
     await t.test('reflection and weekly goal endpoints', async () => {
         assert.equal((await call('GET', '/api/reflection')).status, 401);
         assert.equal((await call('POST', '/api/reflection', { body: { note: 'hi' } })).status, 401);

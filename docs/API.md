@@ -231,6 +231,12 @@ A server-timed work timer. The server measures the time; the client only says st
 | GET 🔒 | `/api/review` | — | `{weekStart, resetsAt, completed, xpEarned, claimed, claimable, streak, reward}` for the current week in your time zone (`weekStart` is its Monday, a local date) |
 | POST 🔒 | `/api/review/claim` | — | `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. Once per week (`409`); `400` unless you finished at least one task this week; `403` when XP is off. |
 
+## Today
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET 🔒 | `/api/today` | — | The Today screen in one read: `{day, season: {key, name, blurb, doubles, enabled}, streak: {count, live, claimedToday, daysLeft, atRisk}, counts: {dueToday, overdue, doneToday}, tasks: [{id, name, listId, listName, dueDate, priority, estimateMinutes, overdueDays}] (up to 6 open top-level tasks on your own lists that are overdue, due today or HIGH priority, most urgent first), reflection, goal, xpEnabled}`. `streak.atRisk` is true when the streak is alive, today's reward is unclaimed and today is the last day to keep it. Read only. |
+
 ## Reflection and weekly goal
 
 | Method | Path | Body | Response |

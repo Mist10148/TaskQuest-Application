@@ -16,6 +16,7 @@ const TOKENS: Record<string, string> = {
   RANGER: "--class-ranger",
   NECROMANCER: "--class-necromancer",
   PALADIN: "--class-paladin",
+  DRUID: "--class-druid",
   ALCHEMIST: "--class-alchemist",
   BARD: "--class-bard",
 };

@@ -87,3 +87,35 @@ test('Alchemist brew: +2 per ingredient, and the third different priority finish
 test('Alchemist tree: four chained skills', () => {
     checkTree('ALCHEMIST', ['alch_catalyst', 'alch_elixir', 'alch_transmute', 'alch_distill'], 650);
 });
+
+// ─── Druid ───────────────────────────────────────────────────────────────────
+
+test('Druid habits: repeating tasks pay for their habit streak, everything else +3', () => {
+    const druid = user({ player_class: 'DRUID' });
+    const habit = (habitStreak, recurrence = 'daily') => ({ action: 'item_complete', recurring: true, habitStreak, recurrence });
+    // [label, context, skills, expected type, expected bonus]
+    const cases = [
+        ['a plain completion', { action: 'item_complete', recurring: false, habitStreak: 9 }, [], 'DRUID', 3],
+        ['other actions', { action: 'item_add' }, [], 'DRUID', 3],
+        ['a repeating task with no streak', habit(0), [], 'DRUID_HABIT', 3],
+        ['streak 5', habit(5), [], 'DRUID_HABIT', 3 + 10],
+        ['the streak counts up to 10', habit(20), [], 'DRUID_HABIT', 6 + 20],
+        ['Roots: +1 per step per level', habit(5), [sk('druid_roots', 2)], 'DRUID_HABIT', 3 + 5 * 4],
+        ['Bloom: up to 15 steps', habit(20), [sk('druid_bloom')], 'DRUID_HABIT', 9 + 30],
+        ['Seasons: a weekly habit counts twice', habit(4, 'weekly'), [sk('druid_seasons')], 'DRUID_HABIT', 4 + 16],
+        ['Seasons: a daily habit does not', habit(4, 'daily'), [sk('druid_seasons')], 'DRUID_HABIT', 2 + 8],
+        ['Grove: other actions +3 more', { action: 'item_add' }, [sk('druid_grove')], 'DRUID', 6],
+        ['Grove is the floor for a habit with no streak', habit(0), [sk('druid_grove')], 'DRUID_HABIT', 6]
+    ];
+    for (const [label, context, skills, type, bonus] of cases) {
+        const r = calc(druid, 10, skills, context);
+        assert.equal(r.bonusInfo.type, type, `${label}: type`);
+        assert.equal(r.bonusInfo.classBonus, bonus, `${label}: bonus`);
+        assert.equal(r.finalXP, 10 + bonus, `${label}: final`);
+    }
+    assert.deepEqual(calc(druid, 10, [], habit(5)).userUpdates, {}, 'no counter column: the streak lives on the task');
+});
+
+test('Druid tree: four chained skills', () => {
+    checkTree('DRUID', ['druid_roots', 'druid_bloom', 'druid_seasons', 'druid_grove'], 600);
+});

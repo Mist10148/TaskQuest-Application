@@ -438,6 +438,25 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'DRUID': {
+            const d = CLASS_RULES.DRUID;
+            const other = d.OTHER_FLAT + (lvl('druid_grove') ? d.GROVE_FLAT : 0);
+            if (context.action === 'item_complete' && context.recurring) {
+                let steps = Number(context.habitStreak) || 0;
+                // Seasons: a weekly or monthly habit moves slowly, so its streak counts twice.
+                if (lvl('druid_seasons') && (context.recurrence === 'weekly' || context.recurrence === 'monthly')) steps *= d.SEASONS_MULTIPLIER;
+                steps = Math.min(steps, d.STREAK_CAP + (lvl('druid_bloom') ? d.BLOOM_CAP_EXTRA : 0));
+                const habit = Math.floor((baseXP * d.PERCENT_PER_STEP * steps) / 100) + steps * (d.FLAT_PER_STEP + lvl('druid_roots') * d.ROOTS_PER_STEP);
+                const bonus = Math.max(other, habit);
+                finalXP = baseXP + bonus;
+                bonusInfo = { type: 'DRUID_HABIT', details: `🌿 Habit x${steps} +${bonus}`, classBonus: bonus };
+                break;
+            }
+            finalXP = baseXP + other;
+            bonusInfo = { type: 'DRUID', details: `🌿 Druid +${other}`, classBonus: other };
+            break;
+        }
+
         default:
             break;
     }

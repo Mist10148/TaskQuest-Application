@@ -86,6 +86,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | ⚜️ **Paladin** | 600 | **Vow.** Completing a HIGH priority task pays base + 10; every other action pays +8. Passive: your daily streak always has the Streak Shield window (one missed day forgiven) for free, including on the streak leaderboard. |
 | 🎵 **Bard** | 600 | **Variety.** Completing a task remembers its list; among your last 5 completions, every list beyond the first adds ⌊base × 4%⌋ + 3 XP (a medley of up to 4 steps). Other actions, and a medley of one list, pay +2. The counter is `bard_recent`. |
 | ⚗️ **Alchemist** | 650 | **Brew.** Completing a task adds its priority to the brew (`alchemist_mix`) and pays +2 XP per ingredient in it. Completing the third different priority finishes the brew: ⌊base × 150%⌋ + 15, and the brew starts over. Other actions pay +2. A task with no priority counts as MEDIUM. |
+| 🌿 **Druid** | 600 | **Habits.** Completing a repeating task pays ⌊base × 6%⌋ × steps + 2 per step of its habit streak (up to 10 steps; the streak is the one shown on the task and kept by [habit streaks](#5c-bonus-xp-sources)), at least +3. Every other action pays +3. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
@@ -250,7 +251,16 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 💎 Transmute | 1 | 260 | A finished brew pays 50% more *(class)* | Elixir |
 | 🫗 Distill | 1 | 300 | After a brew the next one starts with a MEDIUM ingredient already in it *(class)* | Transmute |
 
-There are 84 skills in 14 trees (Default plus the eleven classes).
+### 🌿 Druid
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🌱 Roots | 3 | 110 | +1 XP per habit streak step on repeating tasks, per level *(class)* | — |
+| 🌸 Bloom | 1 | 200 | The habit streak counts up to 15 steps instead of 10 *(class)* | Roots |
+| 🍂 Seasons | 1 | 260 | Weekly and monthly habits count their streak twice *(class)* | Bloom |
+| 🌳 Grove | 1 | 300 | Every other action pays +3 XP more *(class)* | Seasons |
+
+There are 88 skills in 15 trees (Default plus the eleven classes).
 
 ## 5. Daily reward
 

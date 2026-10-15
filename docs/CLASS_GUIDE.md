@@ -1,6 +1,6 @@
 # Choosing a class
 
-Fourteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
+Fifteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
 
 ## How to read the numbers
 
@@ -33,6 +33,7 @@ A bare Default player gets exactly the base. Every class beats it, by very diffe
 | want rewards that grow with your level | Wizard (and Tank, Archer slowly) |
 | juggle many lists | Bard |
 | use all three priorities | Alchemist |
+| keep daily or weekly routines | Druid |
 
 ## Hero (500 XP)
 
@@ -181,6 +182,18 @@ Favourable mix: LOW, MEDIUM and HIGH tasks in rotation.
 | No skills | - | 0 | 12 / 12 / 12 | 22 / 22 / 22 |
 | Starter | Catalyst ×3 | 330 | 12 / 12 / 12 | 27 / 27 / 27 |
 | Full tree | Catalyst ×3, Elixir, Transmute, Distill | 1090 | 14 / 14 / 14 | 38 / 38 / 38 |
+
+## Druid (600 XP)
+
+**Rewards:** finishing a repeating task pays 6% of the base times the steps of its habit streak plus 2 XP per step (up to 10 steps), and at least +3; every other action pays +3. **Suits:** people with daily or weekly routines kept as repeating tasks. **Pitfalls:** the habit streak is the one on the task (finish it on or before the due date, a late finish resets it), so a skipped routine pays little; without repeating tasks the Druid is a +3 class.
+
+Favourable mix: every task is a daily habit with an 8 step streak.
+
+| Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
+|---|---|---|---|---|
+| No skills | - | 0 | 13 / 13 / 13 | 30 / 30 / 30 |
+| Starter | Roots ×3 | 330 | 13 / 13 / 13 | 54 / 54 / 54 |
+| Full tree | Roots ×3, Bloom, Seasons, Grove | 1090 | 16 / 16 / 16 | 54 / 54 / 54 |
 
 ## Changing your mind
 

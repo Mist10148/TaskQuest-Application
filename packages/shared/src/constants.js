@@ -110,6 +110,13 @@ const CLASSES = {
         cost: 650,
         description: 'Brew: every task you complete adds its priority (LOW, MEDIUM, HIGH) to the brew and pays +2 XP per ingredient in it. Completing the third different priority finishes the brew: +150% of the base XP plus 15, and the brew starts over. Other actions give +2 XP.',
         playstyle: 'Rewards using every priority honestly.'
+    },
+    DRUID: {
+        name: 'Druid',
+        emoji: '🌿',
+        cost: 600,
+        description: 'Habits: finishing a repeating task pays 6% of the base XP plus 2 XP per step of its habit streak (up to 10 steps). Every other action gives +3 XP.',
+        playstyle: 'Rewards steady habits.'
     }
 };
 
@@ -308,6 +315,17 @@ const SKILL_TREES = {
             alch_transmute: { name: 'Transmute', emoji: '💎', description: 'A finished brew pays 50% more (Alchemist)', maxLevel: 1, cost: 260, requires: 'alch_elixir' },
             alch_distill: { name: 'Distill', emoji: '🫗', description: 'After a brew the next one starts with a MEDIUM ingredient already in it (Alchemist)', maxLevel: 1, cost: 300, requires: 'alch_transmute' }
         }
+    },
+    DRUID: {
+        name: 'Druid',
+        emoji: '🌿',
+        description: 'Habits and seasons',
+        skills: {
+            druid_roots: { name: 'Roots', emoji: '🌱', description: '+1 XP per habit streak step on repeating tasks, per level (Druid)', maxLevel: 3, cost: 110, requires: null },
+            druid_bloom: { name: 'Bloom', emoji: '🌸', description: 'The habit streak counts up to 15 steps instead of 10 (Druid)', maxLevel: 1, cost: 200, requires: 'druid_roots' },
+            druid_seasons: { name: 'Seasons', emoji: '🍂', description: 'Weekly and monthly habits count their streak twice (Druid)', maxLevel: 1, cost: 260, requires: 'druid_bloom' },
+            druid_grove: { name: 'Grove', emoji: '🌳', description: 'Every other action pays +3 XP more (Druid)', maxLevel: 1, cost: 300, requires: 'druid_seasons' }
+        }
     }
 };
 
@@ -485,7 +503,8 @@ const CLASS_RULES = {
     ARTISAN: { PROTOTYPE_KEEP_PERCENT: 75, MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 6, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 0.5, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
     MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 },
     BARD: { WINDOW: 5, HARMONY_WINDOW: 7, PERCENT_PER_STEP: 4, FLAT_PER_STEP: 3, OTHER_FLAT: 2, ENCORE_PER_STEP: 1, CRESCENDO_PERCENT: 25 },
-    ALCHEMIST: { STEP_FLAT: 2, BREW_PERCENT: 150, BREW_FLAT: 15, OTHER_FLAT: 2, CATALYST_FLAT: 5, ELIXIR_STEP: 2, TRANSMUTE_PERCENT: 50 }
+    ALCHEMIST: { STEP_FLAT: 2, BREW_PERCENT: 150, BREW_FLAT: 15, OTHER_FLAT: 2, CATALYST_FLAT: 5, ELIXIR_STEP: 2, TRANSMUTE_PERCENT: 50 },
+    DRUID: { STREAK_CAP: 10, BLOOM_CAP_EXTRA: 5, PERCENT_PER_STEP: 6, FLAT_PER_STEP: 2, OTHER_FLAT: 3, ROOTS_PER_STEP: 1, SEASONS_MULTIPLIER: 2, GROVE_FLAT: 3 }
 };
 
 /**

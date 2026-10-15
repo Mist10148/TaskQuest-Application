@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun, Music, FlaskConical } from "lucide-react";
+import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun, Music, FlaskConical, Leaf } from "lucide-react";
 
 export type PlayerClass = 
   | "DEFAULT" 
@@ -14,6 +14,7 @@ export type PlayerClass =
   | "RANGER"
   | "NECROMANCER"
   | "PALADIN"
+  | "DRUID"
   | "ALCHEMIST"
   | "BARD";
 
@@ -159,6 +160,15 @@ const classConfig: Record<PlayerClass, {
     bgClass: "bg-class-alchemist/10",
     borderClass: "border-class-alchemist",
     description: "Rewards every priority honestly",
+  },
+  DRUID: {
+    name: "Druid",
+    icon: Leaf,
+    emoji: "🌿",
+    colorClass: "text-class-druid",
+    bgClass: "bg-class-druid/10",
+    borderClass: "border-class-druid",
+    description: "Rewards steady habits",
   },
 };
 

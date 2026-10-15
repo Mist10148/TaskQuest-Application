@@ -1333,6 +1333,46 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(!(await ids(20)).includes(W), 'the streak already lapsed');
     });
 
+    await t.test('maintenance: the XP log records the class, old rows move to the archive, and the class report reads real XP', async () => {
+        const A = '100000000000000941';
+        await db.users.ensureUser(A);
+        await setXP(A, 700);
+        await db.progression.buyClass(A, 'Hero');
+        const { list } = await db.tasks.createList(A, { name: 'Report' });
+        for (let n = 0; n < 3; n++) await db.tasks.setItemCompleted(A, (await db.tasks.addItem(A, list.id, { name: `t${n}` })).item.id);
+        const classes = (await db.query("SELECT DISTINCT player_class FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete'", [A])).map((r) => r.player_class);
+        assert.deepEqual(classes, ['HERO'], 'the class at the time is stored with the XP');
+
+        const report = await db.maintenance.xpByClass({ days: 1 });
+        const hero = report.find((r) => r.playerClass === 'HERO' && r.source === 'item_complete');
+        assert.ok(hero && hero.rewards >= 3 && hero.average >= 35, 'a Hero task pays at least 35');
+        assert.ok(report.every((r) => db.maintenance.MODIFIED_SOURCES.includes(r.source)), 'only the sources a class reshapes are reported');
+
+        // archive: old rows move, recent ones stay, a dry run changes nothing, and the move can be repeated
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 400 DAY) WHERE discord_id = ? AND source = 'item_add'", [A]);
+        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 365 DAY)", [A]))[0].n);
+        assert.ok(old >= 3);
+        const dry = await db.maintenance.archiveOld({ days: 365, dryRun: true });
+        assert.ok(dry.dryRun && dry.xpTransactions >= old && dry.gameSessions === null);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM xp_transactions_archive WHERE discord_id = ?', [A]))[0].n), 0, 'a dry run moves nothing');
+        const moved = await db.maintenance.archiveOld({ days: 365, batch: 2 });
+        assert.ok(moved.xpTransactions >= old, 'rows are moved in batches of 2 until none are left');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM xp_transactions_archive WHERE discord_id = ?', [A]))[0].n), old);
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_add'", [A]))[0].n), 0);
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete'", [A]))[0].n), 3, 'recent rows stay');
+        assert.equal((await db.maintenance.archiveOld({ days: 365 })).xpTransactions, 0, 'nothing is left to move');
+        assert.equal((await db.query("SELECT player_class FROM xp_transactions_archive WHERE discord_id = ? LIMIT 1", [A]))[0].player_class, 'HERO');
+        await assert.rejects(db.maintenance.archiveOld({ days: 0 }), /days/);
+        await assert.rejects(db.maintenance.archiveOld({ batch: 0 }), /batch/);
+
+        // game sessions only on request, and never an active one
+        await db.query("INSERT INTO game_sessions (discord_id, game_type, bet_amount, state, payout, created_at) VALUES (?, 'rps', 0, 'won', 0, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 500 DAY)), (?, 'rps', 0, 'active', 0, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 500 DAY))", [A, A]);
+        assert.equal((await db.maintenance.archiveOld({ days: 365 })).gameSessions, null, 'not touched without the option');
+        const games = await db.maintenance.archiveOld({ days: 365, games: true });
+        assert.equal(games.gameSessions, 1, 'the finished session moves, the active one stays');
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM game_sessions WHERE discord_id = ? AND state = 'active'", [A]))[0].n), 1);
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

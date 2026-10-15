@@ -96,9 +96,9 @@ async function applyXP(conn, user, amount, source, opts = {}) {
     }
 
     const [res] = await conn.query(
-        `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [user.discord_id, delta, source, balanceBefore, balanceAfter, opts.referenceId ?? null]
+        `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id, player_class)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [user.discord_id, delta, source, balanceBefore, balanceAfter, opts.referenceId ?? null, user.player_class || null]
     );
 
     return {

@@ -57,7 +57,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P6.9 Bottom nav and swipe added; empty states and reduced motion already covered (audited)
 - [x] P6.10 Shared-list ownership transfer
 - [x] P6.11 Party boards and extra party quests
-- [ ] P6.12 Archive job and XP-per-class report
+- [x] P6.12 Archive job and XP-per-class report
 
 ## P7 Docs
 - [ ] P7.1 Index refresh, start-here pages, KNOWN_ISSUES split, CHANGELOG

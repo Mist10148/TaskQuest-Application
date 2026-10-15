@@ -281,7 +281,7 @@ TaskQuest addresses this in three ways:
 - CI and tests.
 - Consolidated documentation.
 
-**Improvement pass (unreleased, migrations 010 to 025):** the balance rework, ten new classes in all, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
+**Improvement pass (unreleased, migrations 010 to 026):** the balance rework, ten new classes in all, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
 
 **Out of scope:** the items listed under Later in the roadmap.
 

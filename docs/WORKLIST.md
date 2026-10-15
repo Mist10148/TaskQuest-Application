@@ -9,7 +9,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P0.2 `scripts/balance-sim.js` and `packages/shared/test/balance.test.js`
 
 ## P1 Bug fixes
-- [ ] P1.1 Cap class bonus on item_add and list_create at 3x base
+- [x] P1.1 Cap class bonus on item_add and list_create at 3x base
 - [ ] P1.2 Prestige bonus no longer rounds away
 - [ ] P1.3 Artisan keeps half its progress on a clear, clear bonus 5 -> 8
 - [ ] P1.4 Cap HIGH-priority bonuses at 3 completions a day

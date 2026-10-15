@@ -57,6 +57,7 @@ For every reward:
 5. Crit (Assassin Critical Hit): +50 % (or +100 % with Shadow Step); a crit arms Bleed
 6. Double Down skill: chance to ×2
 7. Jackpot skill: 1 % chance to ×10
+8. Small actions (adding a task, creating a list): the result never exceeds 4 × the base
 ```
 
 The class mechanic sees more than the base XP: the **action** (create list, add task, complete task, daily, game), the task's **priority**, whether it is **recurring**, its **due date**, how many days it was **overdue**, and whether completing it **cleared a list**. Task completions always carry all of these; other actions carry only the action.

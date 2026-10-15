@@ -50,6 +50,10 @@ Assumptions behind it:
 - Skills are bought in tree order and the whole tree is bought. Prices are 50 to 360 XP per skill level, so a full tree costs 1,220 to 1,910 XP.
 - A full-tree Wizard at level 30 (35×) is the highest figure in the table, while at level 5 it is among the weakest paid classes; that is the intended "strongest late" promise.
 
+## Small actions are capped
+
+Adding a task (base 5) and creating a list (base 10) used to take the full class bonus. A Monk's Rhythm bonus or a Wizard's Burst is a flat amount, so a 5 XP action could pay 100 XP or more, and the 50 rewarded additions a day were worth nearly as much as the completions: about 5,400 XP a day for a full-tree Monk and about 15,000 for a level-29 Wizard, against 300 for Default. Adding is free and needs no finishing, so it was the cheapest source. `SMALL_ACTION_CAP` now limits the whole result of those two actions to 4 × the base, the same idea as the Hero's 3 × cap. `scripts/balance-sim.js` reports the capped daily totals.
+
 ## Caps that bound all of it
 
 Class strength only changes how fast XP arrives, because the volume is capped:

@@ -46,7 +46,8 @@ For a modified reward:
 4. **Champion** doubles it when your level is a multiple of 5.
 5. **Critical hit** (Assassin skill) adds +50% (+100% with Shadow Step) and arms Bleed.
 6. **Double Down** may double it, then **Jackpot** may multiply it by 10.
-7. For free games, the result is trimmed to what is left of the day's 500 XP allowance.
+7. For adding a task and creating a list, the whole result is capped at 4 × the base (20 XP and 40 XP), so class bonuses cannot turn the free, repeatable actions into the best source.
+8. For free games, the result is trimmed to what is left of the day's 500 XP allowance.
 
 Flat bonuses are added afterwards by their own source, and each one checks its own cap against the XP it already paid today.
 

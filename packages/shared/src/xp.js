@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { XP_PER_LEVEL, REWARDS, DAILY, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES, PRESTIGE, PRESTIGE_TITLES } = require('./constants');
+const { XP_PER_LEVEL, REWARDS, DAILY, SMALL_ACTION_CAP, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES, PRESTIGE, PRESTIGE_TITLES } = require('./constants');
 const { secureRandom } = require('./random');
 const { daysBetween, todayInZone } = require('./dates');
 
@@ -438,6 +438,9 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
         finalXP *= 10;
         procs.push('💎 JACKPOT x10');
     }
+
+    // Small actions never pay more than a few times their base, whatever the class and skills add.
+    if (SMALL_ACTION_CAP.ACTIONS.includes(context.action)) finalXP = Math.min(finalXP, baseXP * SMALL_ACTION_CAP.MAX_MULTIPLE);
 
     finalXP = Math.max(0, Math.floor(finalXP));
 

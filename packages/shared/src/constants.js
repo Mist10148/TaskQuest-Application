@@ -436,6 +436,12 @@ const CLASS_RULES = {
     MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 3, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 1, FOCUS_PERCENT: 25, DISCIPLINE_CAP: 4 }
 };
 
+/**
+ * Class and skill bonuses on small actions (adding a task, creating a list) are limited: the whole reward never
+ * exceeds MAX_MULTIPLE x the base, like the Hero's own cap. Completions, the daily reward and games are not limited.
+ */
+const SMALL_ACTION_CAP = { ACTIONS: ['item_add', 'list_create'], MAX_MULTIPLE: 4 };
+
 /** Numbers behind the default-tree skills. */
 const SKILL_RULES = {
     MOMENTUM_PERCENT_PER_DAY: 0.5,
@@ -623,6 +629,7 @@ module.exports = {
     STREAK_FREEZE,
     STREAK_FREEZE_CACHE,
     CLASS_RULES,
+    SMALL_ACTION_CAP,
     SKILL_RULES,
     SPEND_SOURCES,
     COSMETICS,

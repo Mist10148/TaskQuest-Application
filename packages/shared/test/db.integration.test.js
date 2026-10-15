@@ -984,6 +984,80 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         }
     });
 
+    await t.test('engagement bonuses: perfect day, inbox zero, boss defeated, welcome back and party assist', async () => {
+        const shared = require('../src');
+        const day = (offset) => {
+            const d = new Date(`${shared.todayInZone()}T00:00:00Z`);
+            d.setUTCDate(d.getUTCDate() + offset);
+            return d.toISOString().slice(0, 10);
+        };
+        const keys = (r) => r.bonuses.map((b) => b.key);
+        const add = async (id, listId, extra = {}) => (await db.tasks.addItem(id, listId, { name: 'task', ...extra })).item.id;
+
+        // Perfect day: three tasks due today, all done
+        const E = '100000000000000501';
+        await db.users.ensureUser(E);
+        const { list: plan } = await db.tasks.createList(E, { name: 'Plan' });
+        const due = [];
+        for (let n = 0; n < 3; n++) due.push(await add(E, plan.id, { due_date: day(0) }));
+        assert.ok(!keys(await db.tasks.setItemCompleted(E, due[0])).includes('perfect_day'));
+        assert.ok(!keys(await db.tasks.setItemCompleted(E, due[1])).includes('perfect_day'));
+        const perfect = await db.tasks.setItemCompleted(E, due[2]);
+        assert.equal(perfect.bonuses.find((b) => b.key === 'perfect_day').xp, 30);
+        const extra = await add(E, plan.id, { due_date: day(0) });
+        assert.ok(!keys(await db.tasks.setItemCompleted(E, extra)).includes('perfect_day'), 'once a day');
+
+        // Inbox zero: three overdue tasks cleared, none left
+        const I = '100000000000000502';
+        await db.users.ensureUser(I);
+        const { list: inbox } = await db.tasks.createList(I, { name: 'Inbox' });
+        const stale = [];
+        for (let n = 0; n < 3; n++) stale.push(await ageDue(await add(I, inbox.id, { due_date: day(-3) })));
+        assert.ok(!keys(await db.tasks.setItemCompleted(I, stale[0])).includes('inbox_zero'));
+        assert.ok(!keys(await db.tasks.setItemCompleted(I, stale[1])).includes('inbox_zero'));
+        assert.equal((await db.tasks.setItemCompleted(I, stale[2])).bonuses.find((b) => b.key === 'inbox_zero').xp, 40);
+        const again = await ageDue(await add(I, inbox.id, { due_date: day(-2) }));
+        assert.ok(!keys(await db.tasks.setItemCompleted(I, again)).includes('inbox_zero'), 'once a week');
+
+        // Boss defeated: a task with 4 subtasks, all done; 3 subtasks is no boss
+        const B = '100000000000000503';
+        await db.users.ensureUser(B);
+        const { list: dungeon } = await db.tasks.createList(B, { name: 'Dungeon' });
+        const boss = await add(B, dungeon.id, { name: 'Boss' });
+        const minions = [];
+        for (let n = 0; n < 4; n++) minions.push(await add(B, dungeon.id, { parent_id: boss }));
+        for (const m of minions.slice(0, 3)) assert.ok(!keys(await db.tasks.setItemCompleted(B, m)).includes('boss_defeated'));
+        const slain = await db.tasks.setItemCompleted(B, minions[3]);
+        assert.equal(slain.bonuses.find((b) => b.key === 'boss_defeated').xp, 30);
+        const small = await add(B, dungeon.id, { name: 'Imp' });
+        const imps = [];
+        for (let n = 0; n < 3; n++) imps.push(await add(B, dungeon.id, { parent_id: small }));
+        let last;
+        for (const m of imps) last = await db.tasks.setItemCompleted(B, m);
+        assert.ok(!keys(last).includes('boss_defeated'), 'three subtasks is not a boss');
+
+        // Welcome back: the first completion after three idle days
+        const W = '100000000000000504';
+        await db.users.ensureUser(W);
+        const { list: home } = await db.tasks.createList(W, { name: 'Home' });
+        assert.ok(!keys(await db.tasks.setItemCompleted(W, await add(W, home.id))).includes('comeback'));
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 5 DAY) WHERE discord_id = ? AND source = 'item_complete'", [W]);
+        assert.equal((await db.tasks.setItemCompleted(W, await add(W, home.id))).bonuses.find((b) => b.key === 'comeback').xp, 25);
+        assert.ok(!keys(await db.tasks.setItemCompleted(W, await add(W, home.id))).includes('comeback'), 'only after a break');
+
+        // Party assist: in a party of two or more
+        const P = '100000000000000505';
+        const Q = '100000000000000506';
+        await db.users.ensureUser(P);
+        await db.users.ensureUser(Q);
+        const { list: camp } = await db.tasks.createList(P, { name: 'Camp' });
+        assert.ok(!keys(await db.tasks.setItemCompleted(P, await add(P, camp.id))).includes('party_assist'), 'no party');
+        await db.query("INSERT INTO parties (name, owner_id) VALUES ('Crew', ?)", [P]);
+        const crew = (await db.query("SELECT id FROM parties WHERE owner_id = ? AND name = 'Crew'", [P]))[0];
+        await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?), (?, ?)', [crew.id, P, crew.id, Q]);
+        assert.equal((await db.tasks.setItemCompleted(P, await add(P, camp.id))).bonuses.find((b) => b.key === 'party_assist').xp, 3);
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

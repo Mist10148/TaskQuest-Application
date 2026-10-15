@@ -35,13 +35,13 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P4.5 Warden
 
 ## P5 New XP sources
-- [ ] P5.1 perfect_day
-- [ ] P5.2 inbox_zero (weekly)
+- [x] P5.1 perfect_day
+- [x] P5.2 inbox_zero (weekly)
 - [ ] P5.3 reflection (daily)
-- [ ] P5.4 boss tasks
-- [ ] P5.5 comeback bonus
+- [x] P5.4 boss tasks
+- [x] P5.5 comeback bonus
 - [ ] P5.6 weekly goal
-- [ ] P5.7 party task bonus
+- [x] P5.7 party task bonus
 - [x] P5.8 seasonal weekly modifier (also: migration 024 and the constants for P5)
 - [ ] P5.9 estimate accuracy
 

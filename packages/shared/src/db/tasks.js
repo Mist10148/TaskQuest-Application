@@ -12,6 +12,7 @@
 const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const { rewardAction, unlockAchievements, awardFlat, countToday, dayWindow } = require('./progression');
+const { completionExtras } = require('./extras');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS, BONUS_LABELS, HABIT_PERIOD_DAYS } = require('../constants');
 const v = require('../validation');
@@ -667,6 +668,7 @@ async function completionBonuses(conn, user, item, ctx) {
             await pay('subtasks_done', REWARDS.SUBTASKS_DONE, { dailyCap: LIMITS.SUBTASKS_DONE_XP_PER_DAY, referenceId: item.parent_id });
         }
     }
+    out.push(...(await completionExtras(conn, user, item, ctx)));
     return out;
 }
 

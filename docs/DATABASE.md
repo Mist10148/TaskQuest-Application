@@ -233,7 +233,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 |---|---|---|
 | `list_create`, `item_add`, `item_complete` | + | Task rewards |
 | `daily` | + | Daily reward |
-| `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
+| `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
 | `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review`, `quest_reward`, `party_quest` | + | Flat bonuses from streaks, achievements, focus sessions, the weekly review, daily/weekly/monthly quests and the party quest |
 | `prestige` | − | The balance leaving at a prestige (not spending: `xp_spent` is unchanged) |
 | `game_reward` | + | RPS, Hangman and arcade winnings. These count toward the free-game daily cap. |

@@ -343,6 +343,11 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | `streak_chest` | +100 / +250 / +600 at a 7 / 14 / 30 day streak ([daily reward](#5-daily-reward)) | Once per streak run |
 | `achievement_reward` | +25 for each newly unlocked achievement | Each achievement unlocks once |
 | `habit_bonus` | +2 per step of a repeating task's habit streak, from a streak of 2 (max +20 per completion) | 60 XP a day |
+| `perfect_day` | +30 when every top-level task due today on your own lists is done (at least 3 of them) | Once a day |
+| `inbox_zero` | +40 when your completion clears the last overdue task, after at least 3 overdue tasks cleared that week | Once a week |
+| `boss_defeated` | +30 when you finish the last open subtask of a task that has at least 4 subtasks | Once per task, 60 XP a day |
+| `comeback` | +25 for the first completion after 3 idle days (the previous paid completion is 3 or more days old) | Once a week |
+| `party_assist` | +3 for every completion while you are in a party of two or more | 15 XP a day |
 | `focus_session` | floor(minutes × 0.6) per [focus session](#5d-focus-sessions) | 100 XP and 8 sessions a day |
 | `weekly_review` | +40 ([weekly review](#5e-weekly-review)) | Once per week |
 

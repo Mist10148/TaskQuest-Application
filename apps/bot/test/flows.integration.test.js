@@ -16,8 +16,8 @@ if (enabled) {
         DB_URL: '',
         XP_WEEKLY_MODIFIER: 'off',
         DB_HOST: process.env.TEST_DB_HOST || '127.0.0.1',
-        DB_PORT: process.env.TEST_DB_PORT || '3306',
-        DB_USER: process.env.TEST_DB_USER || 'root',
+        DB_PORT: process.env.TEST_DB_PORT || '5432',
+        DB_USER: process.env.TEST_DB_USER || 'postgres',
         DB_PASSWORD: process.env.TEST_DB_PASSWORD || '',
         DB_NAME: process.env.TEST_DB_NAME
     });
@@ -75,10 +75,7 @@ const errors = (i) => i.calls.filter((c) => /Something went wrong|An error occur
 test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     const db = require('@taskquest/shared/db');
     const pool = db.getPool();
-    const [tables] = await pool.query('SHOW TABLES');
-    await pool.query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const row of tables) await pool.query(`DROP TABLE \`${Object.values(row)[0]}\``);
-    await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+    await pool.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public');
     await db.runMigrations({ log: () => {} });
 
     const list = require('../commands/list');

@@ -16,10 +16,7 @@ const { default: db } = await import('@taskquest/shared/db');
 
 try {
     const pool = db.getPool();
-    const [tables] = await pool.query('SHOW TABLES');
-    await pool.query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const row of tables) await pool.query(`DROP TABLE \`${Object.values(row)[0]}\``);
-    await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+    await pool.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public');
     await db.runMigrations({ log: () => {} });
 
     await db.users.ensureUser(USER_ID, { username: 'e2e_hero', avatar: null });

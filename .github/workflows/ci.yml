@@ -28,24 +28,24 @@ jobs:
       - run: npm run build
 
   node:
-    name: Node (syntax, tests on MySQL 8)
+    name: Node (syntax, tests on PostgreSQL)
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: pgvector/pgvector:pg16
         env:
-          MYSQL_ROOT_PASSWORD: ci-root-password
-          MYSQL_DATABASE: taskquest_test
+          POSTGRES_PASSWORD: ci-postgres-password
+          POSTGRES_DB: taskquest_test
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
+          --health-cmd="pg_isready -U postgres"
           --health-interval=5s --health-timeout=5s --health-retries=20
     env:
       TEST_DB_HOST: 127.0.0.1
-      TEST_DB_PORT: 3306
-      TEST_DB_USER: root
-      TEST_DB_PASSWORD: ci-root-password
+      TEST_DB_PORT: 5432
+      TEST_DB_USER: postgres
+      TEST_DB_PASSWORD: ci-postgres-password
       TEST_DB_NAME: taskquest_test
     steps:
       - uses: actions/checkout@v4
@@ -58,24 +58,24 @@ jobs:
       - run: npm test
 
   e2e:
-    name: Browser tests (Playwright, MySQL 8)
+    name: Browser tests (Playwright, PostgreSQL)
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: pgvector/pgvector:pg16
         env:
-          MYSQL_ROOT_PASSWORD: ci-root-password
-          MYSQL_DATABASE: taskquest_e2e
+          POSTGRES_PASSWORD: ci-postgres-password
+          POSTGRES_DB: taskquest_e2e
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
+          --health-cmd="pg_isready -U postgres"
           --health-interval=5s --health-timeout=5s --health-retries=20
     env:
       E2E_DB_HOST: 127.0.0.1
-      E2E_DB_PORT: 3306
-      E2E_DB_USER: root
-      E2E_DB_PASSWORD: ci-root-password
+      E2E_DB_PORT: 5432
+      E2E_DB_USER: postgres
+      E2E_DB_PASSWORD: ci-postgres-password
       E2E_DB_NAME: taskquest_e2e
     steps:
       - uses: actions/checkout@v4
@@ -118,25 +118,25 @@ jobs:
       # Live evals that call Gemini are not part of CI: python -m tests.evals.run --live
       - run: pytest tests/unit tests/graphs tests/evals
 
-  ai-mysql:
-    name: AI service on MySQL 8 (migrated schema)
+  ai-postgres:
+    name: AI service on PostgreSQL (migrated schema)
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: pgvector/pgvector:pg16
         env:
-          MYSQL_ROOT_PASSWORD: ci-root-password
-          MYSQL_DATABASE: taskquest_ai_test
+          POSTGRES_PASSWORD: ci-postgres-password
+          POSTGRES_DB: taskquest_ai_test
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
+          --health-cmd="pg_isready -U postgres"
           --health-interval=5s --health-timeout=5s --health-retries=20
     env:
       DB_HOST: 127.0.0.1
-      DB_PORT: 3306
-      DB_USER: root
-      DB_PASSWORD: ci-root-password
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: ci-postgres-password
       DB_NAME: taskquest_ai_test
     steps:
       - uses: actions/checkout@v4
@@ -154,10 +154,10 @@ jobs:
           cache-dependency-path: apps/ai/pyproject.toml
       - run: pip install -e ".[dev]"
         working-directory: apps/ai
-      - run: pytest tests/mysql -v
+      - run: pytest tests/postgres -v
         working-directory: apps/ai
         env:
-          AI_TEST_DB_URL: mysql://root:ci-root-password@127.0.0.1:3306/taskquest_ai_test
+          AI_TEST_DB_URL: postgresql://postgres:ci-postgres-password@127.0.0.1:5432/taskquest_ai_test
 
   audit:
     name: Dependency audit

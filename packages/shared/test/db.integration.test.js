@@ -1,7 +1,7 @@
 /**
  * Database integration tests. Skipped unless TEST_DB_NAME is set, e.g.
  *
- *   TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=3307 TEST_DB_NAME=tq_test npm test -w @taskquest/shared
+ *   TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=5432 TEST_DB_NAME=tq_test npm test -w @taskquest/shared
  *
  * WARNING: the target database is wiped. Never point this at real data.
  */
@@ -16,8 +16,8 @@ const enabled = Boolean(process.env.TEST_DB_NAME);
 if (enabled) {
     process.env.DB_URL = '';
     process.env.DB_HOST = process.env.TEST_DB_HOST || '127.0.0.1';
-    process.env.DB_PORT = process.env.TEST_DB_PORT || '3306';
-    process.env.DB_USER = process.env.TEST_DB_USER || 'root';
+    process.env.DB_PORT = process.env.TEST_DB_PORT || '5432';
+    process.env.DB_USER = process.env.TEST_DB_USER || 'postgres';
     process.env.DB_PASSWORD = process.env.TEST_DB_PASSWORD || '';
     process.env.DB_NAME = process.env.TEST_DB_NAME;
     process.env.XP_WEEKLY_MODIFIER = 'off'; // the real week would double one bonus source and change the expected amounts
@@ -38,53 +38,44 @@ async function setXP(id, xp) {
 
 /** Pretend a task's due date was set two days ago, so the 24-hour rule for early/overdue effects is met. Returns the id. */
 async function ageDue(id) {
-    await db.query('UPDATE items SET due_date_set_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 2 DAY) WHERE id = ? AND due_date IS NOT NULL', [id]);
+    await db.query('UPDATE items SET due_date_set_at = (CURRENT_TIMESTAMP - make_interval(days => 2)) WHERE id = ? AND due_date IS NOT NULL', [id]);
     return id;
 }
 
 test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     const pool = db.getPool();
-    const [tables] = await pool.query('SHOW TABLES');
-    await pool.query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const row of tables) await pool.query(`DROP TABLE \`${Object.values(row)[0]}\``);
-    await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+    await pool.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public');
     await db.runMigrations({ log: () => {} });
     await db.assertSchemaCurrent();
     await db.users.ensureUser(ALICE, { username: 'alice', handle: 'alice', avatar: null });
     await db.users.ensureUser(BOB);
 
-    await t.test('every migration from 007 on is idempotent and adds the new columns', async () => {
-        await pool.query("DELETE FROM schema_migrations WHERE id >= '007'"); // pretend they were interrupted
-        const again = await db.runMigrations({ log: () => {} });
-        // Every migration file from 007 on, however many exist: a new one is covered without touching this test.
+    await t.test('the baseline is idempotent and creates every table and column', async () => {
+        await pool.query('DELETE FROM schema_migrations'); // pretend it was interrupted
         const fs = require('fs');
         const path = require('path');
         const expected = fs
             .readdirSync(path.join(__dirname, '../src/db/migrations'))
             .filter((f) => /^\d{3}_.+\.js$/.test(f))
             .map((f) => f.replace(/\.js$/, ''))
-            .filter((id) => id >= '007')
             .sort();
-        assert.ok(expected.length >= 14, 'found the migration files');
-        assert.deepEqual(again.filter((id) => id >= '007'), expected);
-        const cols = async (table) => (await pool.query(`SHOW COLUMNS FROM ${table}`))[0].map((c) => c.Field);
+        assert.ok(expected.includes('001_baseline'), 'found the migration files');
+        assert.deepEqual(await db.runMigrations({ log: () => {} }), expected, 'every migration runs again without error');
+        const cols = async (table) =>
+            (await pool.query('SELECT column_name AS c FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?', [table]))[0].map((r) => r.c);
+        const tableExists = async (table) =>
+            Number((await pool.query('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?', [table]))[0][0].n) === 1;
         const items = await cols('items');
-        for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
+        for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence', 'first_completed_at', 'counts_for_quests', 'first_completed_high', 'repeat_anchor_day', 'habit_streak', 'first_completed_early', 'first_completed_overdue', 'due_date_set_at']) {
+            assert.ok(items.includes(c), `items.${c}`);
+        }
         const users = await cols('users');
-        for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent', 'owns_bard', 'owns_warden', 'bard_recent', 'alchemist_mix']) {
+        for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent', 'owns_bard', 'owns_warden', 'bard_recent', 'alchemist_mix', 'assassin_last_at', 'last_chest_streak', 'prestige', 'lifetime_xp_total']) {
             assert.ok(users.includes(c), `users.${c}`);
         }
-        assert.ok((await cols('lists')).includes('remind_at'));
-        assert.equal((await pool.query("SHOW TABLES LIKE 'quest_claims'"))[0].length, 1);
-        for (const c of ['first_completed_at', 'counts_for_quests', 'first_completed_high', 'repeat_anchor_day']) assert.ok(items.includes(c), `items.${c}`);
-        assert.ok(users.includes('assassin_last_at'));
-        assert.ok((await cols('lists')).includes('cleared_at'));
-        assert.ok(users.includes('last_chest_streak'));
-        assert.ok(items.includes('habit_streak'));
-        for (const c of ['prestige', 'lifetime_xp_total']) assert.ok(users.includes(c), c);
-        for (const c of ['first_completed_early', 'first_completed_overdue']) assert.ok(items.includes(c), c);
-        assert.equal((await pool.query("SHOW TABLES LIKE 'focus_sessions'"))[0].length, 1);
-        assert.ok(items.includes('due_date_set_at'), 'items.due_date_set_at');
+        const lists = await cols('lists');
+        for (const c of ['remind_at', 'cleared_at']) assert.ok(lists.includes(c), `lists.${c}`);
+        for (const table of ['quest_claims', 'focus_sessions', 'xp_transactions_archive', 'game_sessions_archive', 'ai_embeddings']) assert.ok(await tableExists(table), table);
     });
 
     await t.test('lists, items and ownership', async () => {
@@ -488,7 +479,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             while (s.settlement) s = await db.games.startBlackjack(BOB, bet);
             return s;
         };
-        const expire = (id) => pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id = ?', [id]);
+        const expire = (id) => pool.query('UPDATE game_sessions SET created_at = created_at - make_interval(hours => 2) WHERE id = ?', [id]);
         // A bad hand that was only looked at at: the player stands on 12 against 18 and loses the bet.
         let s = await fresh(50);
         let before = Number((await db.users.getUser(BOB)).player_xp);
@@ -528,7 +519,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         while (s.settlement) s = await db.games.startBlackjack(BOB, 100);
         const before = Number((await db.users.getUser(BOB)).player_xp);
         await rigHand(BOB, s.sessionId, ['5', '5', 'K'], ['10', '8']); // 20 vs 18 after a hit: would win on stand
-        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id = ?', [s.sessionId]);
+        await pool.query('UPDATE game_sessions SET created_at = created_at - make_interval(hours => 2) WHERE id = ?', [s.sessionId]);
         assert.equal(await db.games.expireStaleSessions(), 1);
         assert.equal(Number((await db.users.getUser(BOB)).player_xp) - before, 200);
         const [[row]] = await pool.query('SELECT state FROM game_sessions WHERE id = ?', [s.sessionId]);
@@ -538,7 +529,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         while (t2.settlement) t2 = await db.games.startBlackjack(BOB, 100);
         const mid = Number((await db.users.getUser(BOB)).player_xp);
         await rigHand(BOB, t2.sessionId, ['10', '6', '9'], ['10', '8']); // would bust: the bet is lost, not refunded
-        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id = ?', [t2.sessionId]);
+        await pool.query('UPDATE game_sessions SET created_at = created_at - make_interval(hours => 2) WHERE id = ?', [t2.sessionId]);
         await db.games.expireStaleSessions();
         assert.equal(Number((await db.users.getUser(BOB)).player_xp), mid);
     });
@@ -556,7 +547,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const broken = await fresh(BOB);
         const good = await fresh(OTHER);
         await pool.query("UPDATE game_sessions SET game_data = '{\"finished\":false}' WHERE id = ?", [broken.sessionId]);
-        await pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL 2 HOUR WHERE id IN (?, ?)', [broken.sessionId, good.sessionId]);
+        await pool.query('UPDATE game_sessions SET created_at = created_at - make_interval(hours => 2) WHERE id IN (?, ?)', [broken.sessionId, good.sessionId]);
         const original = console.error;
         console.error = () => {};
         try {
@@ -653,14 +644,14 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             return { ...run, play: playBot(type, run.seed, target) };
         };
         /** Pretend the run took as long as playing it takes, plus a little. */
-        const age = (run, type, ticks) => pool.query('UPDATE game_sessions SET created_at = created_at - INTERVAL ? MICROSECOND WHERE id = ?', [Math.ceil((ticks * STEP_MS[type] + 500) * 1000), run.sessionId]);
+        const age = (run, type, ticks) => pool.query('UPDATE game_sessions SET created_at = created_at - make_interval(secs => ? / 1000000.0) WHERE id = ?', [Math.ceil((ticks * STEP_MS[type] + 500) * 1000), run.sessionId]);
         const claim = (play, patch = {}) => ({ score: play.score, ticks: play.ticks, inputs: play.inputs, ...patch });
 
         await pool.query('UPDATE users SET last_game_at = NULL WHERE discord_id = ?', [BOB]);
         const first = await db.games.startArcade(BOB, 'snake');
         await assert.rejects(db.games.startArcade(BOB, 'snake'), { code: 'COOLDOWN' });
         assert.ok(Number.isInteger(first.seed) && first.seed > 0, 'the server issues a seed');
-        assert.equal((JSON.parse((await stateOf(first.sessionId)).game_data) || {}).seed, first.seed, 'and keeps it in game_data');
+        assert.equal(((await stateOf(first.sessionId)).game_data || {}).seed, first.seed, 'and keeps it in game_data');
 
         // An old client sends only a score: told to refresh, and the run is cancelled.
         await assert.rejects(db.games.finishArcade(BOB, first.sessionId, 10_000), { code: 'VALIDATION', message: /refresh the page/ });
@@ -677,7 +668,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(paid.xpGained > 0);
         const done = await stateOf(good.sessionId);
         assert.equal(done.state, 'won');
-        assert.deepEqual(JSON.parse(done.game_data), { type: 'snake', seed: good.seed, score: 6, ticks: good.play.ticks });
+        assert.deepEqual(done.game_data, { type: 'snake', seed: good.seed, score: 6, ticks: good.play.ticks });
         await assert.rejects(db.games.finishArcade(CAROL, good.sessionId, claim(good.play)), { code: 'NOT_FOUND' }, 'double submit');
 
         // A zero-score run is not a win.
@@ -737,7 +728,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { list } = await db.tasks.createList(BOB, { name: 'Old' });
         const { item: doneItem } = await db.tasks.addItem(BOB, list.id, { name: 'finished long ago' });
         await db.tasks.setItemCompleted(BOB, doneItem.id, true);
-        await db.getPool().query('UPDATE items SET updated_at = updated_at - INTERVAL 10 DAY WHERE id = ?', [doneItem.id]);
+        await db.getPool().query('UPDATE items SET updated_at = updated_at - make_interval(days => 10) WHERE id = ?', [doneItem.id]);
         const removed = await db.tasks.cleanupOldLists();
         assert.ok(removed.some((l) => l.id === list.id && l.discord_id === BOB), 'reports which lists were deleted');
         assert.equal(await db.tasks.getList(BOB, list.id), null);
@@ -759,7 +750,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // re-checking after the completion moved to an earlier period must not re-count it
         await db.tasks.setItemCompleted(QID, a.id, true);
         assert.equal(await progress('DAILY_COMPLETE_3'), 1);
-        await db.getPool().query("UPDATE items SET first_completed_at = first_completed_at - INTERVAL 3 DAY, completed_at = completed_at - INTERVAL 3 DAY WHERE id = ?", [a.id]);
+        await db.getPool().query("UPDATE items SET first_completed_at = first_completed_at - make_interval(days => 3), completed_at = completed_at - make_interval(days => 3) WHERE id = ?", [a.id]);
         assert.equal(await progress('DAILY_COMPLETE_3'), 0);
         await db.tasks.setItemCompleted(QID, a.id, false);
         await db.tasks.setItemCompleted(QID, a.id, true);
@@ -797,7 +788,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             const { list } = await db.tasks.createList(CID, { name });
             const { item } = await db.tasks.addItem(CID, list.id, { name: 'done' });
             await db.tasks.setItemCompleted(CID, item.id, true);
-            await db.getPool().query('UPDATE items SET updated_at = updated_at - INTERVAL 10 DAY WHERE id = ?', [item.id]);
+            await db.getPool().query('UPDATE items SET updated_at = updated_at - make_interval(days => 10) WHERE id = ?', [item.id]);
             return list;
         };
         const raced = await make('raced');
@@ -840,7 +831,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(!JSON.stringify(stats).includes(token));
         assert.equal(await db.transfer.findUserByCalendarToken(token), CT, 'the feed still works');
 
-        await db.query("INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, 'DAILY_ADD_3', CURDATE(), 15)", [CT]);
+        await db.query("INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, 'DAILY_ADD_3', CURRENT_DATE, 15)", [CT]);
         await db.users.resetProgress(CT);
         const [claims] = await db.getPool().query('SELECT COUNT(*) AS n FROM quest_claims WHERE discord_id = ?', [CT]);
         assert.equal(Number(claims[0].n), 0, 'a reset lets the same quest be claimed again');
@@ -851,9 +842,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const S2 = '100000000000000016';
         const S3 = '100000000000000017';
         for (const id of [S1, S2, S3]) await db.users.ensureUser(id);
-        await db.query("UPDATE users SET streak_count = 30, last_daily_claim = NOW() - INTERVAL 10 DAY, player_class = 'HERO', lifetime_xp = 900 WHERE discord_id = ?", [S1]);
-        await db.query("UPDATE users SET streak_count = 4, last_daily_claim = NOW() - INTERVAL 1 HOUR, player_class = 'HERO', lifetime_xp = 800 WHERE discord_id = ?", [S2]);
-        await db.query("UPDATE users SET streak_count = 2, last_daily_claim = NOW() - INTERVAL 1 HOUR, player_class = 'WIZARD', lifetime_xp = 700 WHERE discord_id = ?", [S3]);
+        await db.query("UPDATE users SET streak_count = 30, last_daily_claim = NOW() - make_interval(days => 10), player_class = 'HERO', lifetime_xp = 900 WHERE discord_id = ?", [S1]);
+        await db.query("UPDATE users SET streak_count = 4, last_daily_claim = NOW() - make_interval(hours => 1), player_class = 'HERO', lifetime_xp = 800 WHERE discord_id = ?", [S2]);
+        await db.query("UPDATE users SET streak_count = 2, last_daily_claim = NOW() - make_interval(hours => 1), player_class = 'WIZARD', lifetime_xp = 700 WHERE discord_id = ?", [S3]);
         const board = await db.users.getLeaderboard(100, { by: 'streak' });
         assert.ok(!board.some((r) => r.discord_id === S1), 'a 10-day-old streak is not shown');
         assert.ok(board.some((r) => r.discord_id === S2));
@@ -874,7 +865,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const A = '100000000000000201';
         await db.users.ensureUser(A);
         await db.query(
-            "UPDATE users SET player_class = 'ASSASSIN', assassin_streak = 6, assassin_stacks = 7, assassin_last_at = NOW() - INTERVAL 50 HOUR WHERE discord_id = ?",
+            "UPDATE users SET player_class = 'ASSASSIN', assassin_streak = 6, assassin_stacks = 7, assassin_last_at = NOW() - make_interval(hours => 50) WHERE discord_id = ?",
             [A]
         );
         const { list } = await db.tasks.createList(A, { name: 'Decay' });
@@ -932,7 +923,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
         // Chronomancer: the first three tasks after a finished focus session are in the flow
         const C = await mk('100000000000000304', 'Chronomancer');
-        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP() - INTERVAL 30 MINUTE, 25, 'finished', UTC_TIMESTAMP() - INTERVAL 5 MINUTE, 25, 15)", [C]);
+        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, CURRENT_TIMESTAMP - make_interval(mins => 30), 25, 'finished', CURRENT_TIMESTAMP - make_interval(mins => 5), 25, 15)", [C]);
         const { list: clock } = await db.tasks.createList(C, { name: 'Clock' });
         const types = [];
         for (let i = 0; i < 4; i++) types.push((await db.tasks.setItemCompleted(C, await add(C, clock.id))).xp.bonusInfo.type);
@@ -1041,7 +1032,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(W);
         const { list: home } = await db.tasks.createList(W, { name: 'Home' });
         assert.ok(!keys(await db.tasks.setItemCompleted(W, await add(W, home.id))).includes('comeback'));
-        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 5 DAY) WHERE discord_id = ? AND source = 'item_complete'", [W]);
+        await db.query("UPDATE xp_transactions SET created_at = (created_at - make_interval(days => 5)) WHERE discord_id = ? AND source = 'item_complete'", [W]);
         assert.equal((await db.tasks.setItemCompleted(W, await add(W, home.id))).bonuses.find((b) => b.key === 'comeback').xp, 25);
         assert.ok(!keys(await db.tasks.setItemCompleted(W, await add(W, home.id))).includes('comeback'), 'only after a break');
 
@@ -1121,7 +1112,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const keys = (r) => r.bonuses.map((b) => b.key);
         // no focus session yet
         assert.ok(!keys(await db.tasks.setItemCompleted(U, none)).includes('estimate_accuracy'));
-        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP() - INTERVAL 30 MINUTE, 25, 'finished', UTC_TIMESTAMP() - INTERVAL 3 MINUTE, 25, 15)", [U]);
+        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, CURRENT_TIMESTAMP - make_interval(mins => 30), 25, 'finished', CURRENT_TIMESTAMP - make_interval(mins => 3), 25, 15)", [U]);
         assert.ok(!keys(await db.tasks.setItemCompleted(U, off)).includes('estimate_accuracy'), '60 minutes against a 25 minute session');
         assert.equal((await db.tasks.setItemCompleted(U, guess.id)).bonuses.find((b) => b.key === 'estimate_accuracy').xp, 10);
         assert.equal((await db.tasks.setItemCompleted(U, close)).bonuses.find((b) => b.key === 'estimate_accuracy').xp, 10, '25% off is still inside the tolerance');
@@ -1150,7 +1141,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // once a day
         await db.progression.unlockSkill(R, 'hero_valor');
         await assert.rejects(db.progression.respecSkills(R, 'HERO'), { code: 'COOLDOWN' });
-        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 2 DAY) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
+        await db.query("UPDATE xp_transactions SET created_at = (created_at - make_interval(days => 2)) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
         assert.equal((await db.progression.respecSkills(R, 'HERO')).refund, 75);
 
         // Freeze Cache cannot be dropped while more than 3 freezes are held
@@ -1159,7 +1150,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.progression.unlockSkill(R, 'default_streak_shield');
         await db.progression.unlockSkill(R, 'default_freeze_cache');
         await db.query('UPDATE users SET streak_freezes = 5 WHERE discord_id = ?', [R]);
-        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 2 DAY) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
+        await db.query("UPDATE xp_transactions SET created_at = (created_at - make_interval(days => 2)) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
         await assert.rejects(db.progression.respecSkills(R, 'DEFAULT'), { code: 'VALIDATION' });
         await db.query('UPDATE users SET streak_freezes = 3 WHERE discord_id = ?', [R]);
         assert.ok((await db.progression.respecSkills(R, 'DEFAULT')).refund > 0);
@@ -1202,13 +1193,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(r.tasks[2].id, urgent);
 
         // the streak: claimed today is safe; a streak last claimed yesterday has until the end of today
-        await db.query('UPDATE users SET streak_count = 5, last_daily_claim = UTC_TIMESTAMP() WHERE discord_id = ?', [Y]);
+        await db.query('UPDATE users SET streak_count = 5, last_daily_claim = CURRENT_TIMESTAMP WHERE discord_id = ?', [Y]);
         const safe = (await db.today.getToday(Y)).streak;
         assert.deepEqual([safe.live, safe.claimedToday, safe.atRisk], [5, true, false]);
-        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY WHERE discord_id = ?', [Y]);
+        await db.query('UPDATE users SET last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 1) WHERE discord_id = ?', [Y]);
         const risky = (await db.today.getToday(Y)).streak;
         assert.deepEqual([risky.live, risky.claimedToday, risky.daysLeft, risky.atRisk], [5, false, 0, true]);
-        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 3 DAY WHERE discord_id = ?', [Y]);
+        await db.query('UPDATE users SET last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 3) WHERE discord_id = ?', [Y]);
         assert.equal((await db.today.getToday(Y)).streak.live, 0, 'a lapsed streak reads 0');
     });
 
@@ -1267,7 +1258,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const party = (await db.query("SELECT id FROM parties WHERE owner_id = ? AND name = 'Deep Work'", [P]))[0];
         await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?), (?, ?)', [party.id, P, party.id, Q]);
         const focus = (id, minutes) =>
-            db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP(), ?, 'finished', UTC_TIMESTAMP(), ?, 0)", [id, minutes, minutes]);
+            db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, CURRENT_TIMESTAMP, ?, 'finished', CURRENT_TIMESTAMP, ?, 0)", [id, minutes, minutes]);
 
         const none = (await db.parties.status(P)).focusQuest;
         assert.deepEqual([none.progress, none.target, none.reached, none.claimable], [0, 60, false, false]);
@@ -1304,7 +1295,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('streak warnings: only a live streak whose last day it is, in the evening, once a day', async () => {
         const W = '100000000000000931';
         await db.users.ensureUser(W);
-        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY, automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?", [W]);
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 1), automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?", [W]);
         const at = (hour) => new Date(`${require('../src').todayInZone()}T${String(hour).padStart(2, '0')}:30:00Z`);
         const ids = async (hour) => (await db.today.getStreakWarnings(at(hour))).map((w) => w.discord_id);
 
@@ -1321,15 +1312,15 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok((await ids(20)).includes(W), 'a released warning can be sent again');
 
         // not at risk: claimed today, a short streak, reminders off, XP off, or a streak that has lapsed
-        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() WHERE discord_id = ?', [W]);
+        await db.query('UPDATE users SET last_daily_claim = CURRENT_TIMESTAMP WHERE discord_id = ?', [W]);
         assert.ok(!(await ids(20)).includes(W), 'already claimed today');
-        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY, streak_count = 2 WHERE discord_id = ?', [W]);
+        await db.query('UPDATE users SET last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 1), streak_count = 2 WHERE discord_id = ?', [W]);
         assert.ok(!(await ids(20)).includes(W), 'under 3 days');
         await db.query('UPDATE users SET streak_count = 6, automation_enabled = 0 WHERE discord_id = ?', [W]);
         assert.ok(!(await ids(20)).includes(W), 'reminders off');
         await db.query('UPDATE users SET automation_enabled = 1, gamification_enabled = 0 WHERE discord_id = ?', [W]);
         assert.ok(!(await ids(20)).includes(W), 'XP off');
-        await db.query('UPDATE users SET gamification_enabled = 1, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 3 DAY WHERE discord_id = ?', [W]);
+        await db.query('UPDATE users SET gamification_enabled = 1, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 3) WHERE discord_id = ?', [W]);
         assert.ok(!(await ids(20)).includes(W), 'the streak already lapsed');
     });
 
@@ -1349,8 +1340,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(report.every((r) => db.maintenance.MODIFIED_SOURCES.includes(r.source)), 'only the sources a class reshapes are reported');
 
         // archive: old rows move, recent ones stay, a dry run changes nothing, and the move can be repeated
-        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 400 DAY) WHERE discord_id = ? AND source = 'item_add'", [A]);
-        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 365 DAY)", [A]))[0].n);
+        await db.query("UPDATE xp_transactions SET created_at = (created_at - make_interval(days => 400)) WHERE discord_id = ? AND source = 'item_add'", [A]);
+        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < (CURRENT_TIMESTAMP - make_interval(days => 365))", [A]))[0].n);
         assert.ok(old >= 3);
         const dry = await db.maintenance.archiveOld({ days: 365, dryRun: true });
         assert.ok(dry.dryRun && dry.xpTransactions >= old && dry.gameSessions === null);
@@ -1366,7 +1357,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(db.maintenance.archiveOld({ batch: 0 }), /batch/);
 
         // game sessions only on request, and never an active one
-        await db.query("INSERT INTO game_sessions (discord_id, game_type, bet_amount, state, payout, created_at) VALUES (?, 'rps', 0, 'won', 0, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 500 DAY)), (?, 'rps', 0, 'active', 0, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 500 DAY))", [A, A]);
+        await db.query("INSERT INTO game_sessions (discord_id, game_type, bet_amount, state, payout, created_at) VALUES (?, 'rps', 0, 'won', 0, (CURRENT_TIMESTAMP - make_interval(days => 500))), (?, 'rps', 0, 'active', 0, (CURRENT_TIMESTAMP - make_interval(days => 500)))", [A, A]);
         assert.equal((await db.maintenance.archiveOld({ days: 365 })).gameSessions, null, 'not touched without the option');
         const games = await db.maintenance.archiveOld({ days: 365, games: true });
         assert.equal(games.gameSessions, 1, 'the finished session moves, the active one stays');
@@ -1613,14 +1604,14 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // streak board: a Paladin 60h after the last claim still has a live streak, a Default player does not
         const P2 = '100000000000000211';
         await db.users.ensureUser(P2);
-        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = NOW() - INTERVAL 60 HOUR, player_class = 'PALADIN' WHERE discord_id = ?", [P2]);
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = NOW() - make_interval(hours => 60), player_class = 'PALADIN' WHERE discord_id = ?", [P2]);
         const D = '100000000000000212';
         await db.users.ensureUser(D);
-        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = NOW() - INTERVAL 60 HOUR WHERE discord_id = ?", [D]);
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = NOW() - make_interval(hours => 60) WHERE discord_id = ?", [D]);
         const board = await db.users.getLeaderboard(100, { by: 'streak' });
         assert.ok(board.some((r) => r.discord_id === P2), 'a Paladin streak survives 60h');
         assert.ok(!board.some((r) => r.discord_id === D), 'the same streak is dead for a Default player');
-        await db.query("UPDATE users SET last_daily_claim = NOW() - INTERVAL 80 HOUR WHERE discord_id = ?", [P2]);
+        await db.query("UPDATE users SET last_daily_claim = NOW() - make_interval(hours => 80) WHERE discord_id = ?", [P2]);
         assert.ok(!(await db.users.getLeaderboard(100, { by: 'streak' })).some((r) => r.discord_id === P2), 'beyond 72h without Sanctuary');
         await db.query("INSERT INTO user_skills (discord_id, skill_id, skill_level) VALUES (?, 'paladin_sanctuary', 1)", [P2]);
         assert.ok((await db.users.getLeaderboard(100, { by: 'streak' })).some((r) => r.discord_id === P2), 'Sanctuary stretches it to 96h');
@@ -1668,7 +1659,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
     const dayOffset = (n) => new Date(Date.now() + n * 86400e3).toISOString().slice(0, 10);
     /** Move everything a user earned back by `days`, so "today" is empty again. */
-    const ageXP = (id, days = 1) => db.query('UPDATE xp_transactions SET created_at = created_at - INTERVAL ? DAY WHERE discord_id = ?', [days, id]);
+    const ageXP = (id, days = 1) => db.query('UPDATE xp_transactions SET created_at = created_at - make_interval(days => ?) WHERE discord_id = ?', [days, id]);
     const sumSource = async (id, source) => Number((await db.query('SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND source = ?', [id, source]))[0].n);
     const bonusKeys = (r) => r.bonuses.map((b) => b.key);
 
@@ -1797,7 +1788,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(U);
         // The streak counts calendar days, so rewind by whole days (a fixed number of hours would depend on the time of day).
         const setStreak = (streak, daysAgo = 1) =>
-            db.query('UPDATE users SET streak_count = ?, last_daily_claim = UTC_TIMESTAMP() - INTERVAL ? DAY WHERE discord_id = ?', [streak, daysAgo, U]);
+            db.query('UPDATE users SET streak_count = ?, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => ?) WHERE discord_id = ?', [streak, daysAgo, U]);
 
         await setStreak(5);
         const six = await db.progression.claimDaily(U);
@@ -1928,7 +1919,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const V = '100000000000000142';
         await db.users.ensureUser(U);
         await db.users.ensureUser(V);
-        const age = (id, minutes) => db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL ? MINUTE WHERE id = ?', [minutes, id]);
+        const age = (id, minutes) => db.query('UPDATE focus_sessions SET started_at = started_at - make_interval(mins => ?) WHERE id = ?', [minutes, id]);
         for (const bad of [9, 91, 10.5, null, 0, NaN]) await assert.rejects(db.focus.startFocus(U, bad), { code: 'VALIDATION' }, `minutes ${bad}`);
 
         // Finishing at once credits nothing and closes the session (no XP for a start/finish loop).
@@ -1972,7 +1963,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(U);
         const session = async (minutes) => {
             const s = await db.focus.startFocus(U, minutes);
-            await db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL ? MINUTE WHERE id = ?', [minutes, s.sessionId]);
+            await db.query('UPDATE focus_sessions SET started_at = started_at - make_interval(mins => ?) WHERE id = ?', [minutes, s.sessionId]);
             return db.focus.finishFocus(U, s.sessionId);
         };
         const a = await session(90);
@@ -1987,12 +1978,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(W);
         for (let n = 0; n < 8; n++) {
             const s = await db.focus.startFocus(W, 10);
-            await db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL 10 MINUTE WHERE id = ?', [s.sessionId]);
+            await db.query('UPDATE focus_sessions SET started_at = started_at - make_interval(mins => 10) WHERE id = ?', [s.sessionId]);
             assert.equal((await db.focus.finishFocus(W, s.sessionId)).xp, 6);
         }
         await assert.rejects(db.focus.startFocus(W, 10), { code: 'CONFLICT' }, 'the ninth session of the day is refused');
-        await db.query("UPDATE focus_sessions SET finished_at = finished_at - INTERVAL 1 DAY WHERE discord_id = ?", [W]);
-        await db.query('UPDATE xp_transactions SET created_at = created_at - INTERVAL 1 DAY WHERE discord_id = ?', [W]);
+        await db.query("UPDATE focus_sessions SET finished_at = finished_at - make_interval(days => 1) WHERE discord_id = ?", [W]);
+        await db.query('UPDATE xp_transactions SET created_at = created_at - make_interval(days => 1) WHERE discord_id = ?', [W]);
         assert.ok((await db.focus.startFocus(W, 10)).sessionId, 'a new day opens the cap again');
     });
 
@@ -2030,7 +2021,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const nextWeek = new Date(Date.now() + 7 * 86400e3);
         assert.equal((await db.review.getReview(U, nextWeek)).completed, 0);
         await assert.rejects(db.review.claimReview(U, nextWeek), { code: 'VALIDATION' }, 'last week\'s task does not count twice');
-        await db.query('UPDATE items SET first_completed_at = first_completed_at + INTERVAL 7 DAY WHERE id = ?', [item.id]);
+        await db.query('UPDATE items SET first_completed_at = first_completed_at + make_interval(days => 7) WHERE id = ?', [item.id]);
         assert.equal((await db.review.claimReview(U, nextWeek)).xp, 40);
         // ...and unchecking and re-checking a task never moves its first completion into a new week.
         await db.tasks.setItemCompleted(U, item.id, false);
@@ -2103,7 +2094,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             while (shared.activeRotatingQuest(shared.ROTATING_QUESTS, new Date(Date.now() + k * 7 * 86400e3)) !== key) k++;
             const delta = k * 7 - shifted;
             await db.query(
-                'UPDATE items i JOIN lists l ON l.id = i.list_id SET i.first_completed_at = i.first_completed_at + INTERVAL ? DAY, i.created_at = i.created_at + INTERVAL ? DAY WHERE l.discord_id = ?',
+                'UPDATE items i SET first_completed_at = i.first_completed_at + make_interval(days => ?), created_at = i.created_at + make_interval(days => ?) FROM lists l WHERE l.id = i.list_id AND l.discord_id = ?',
                 [delta, delta, U]
             );
             shifted = k * 7;
@@ -2131,7 +2122,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         let at = new Date();
         while (shared.activeRotatingQuest(shared.ROTATING_QUESTS, at) !== 'WEEKLY_ROT_B') at = new Date(at.getTime() + 7 * 86400e3);
         const days = Math.round((at.getTime() - Date.now()) / 86400e3);
-        await db.query('UPDATE lists SET cleared_at = cleared_at + INTERVAL ? DAY WHERE id = ?', [days, list.id]);
+        await db.query('UPDATE lists SET cleared_at = cleared_at + make_interval(days => ?) WHERE id = ?', [days, list.id]);
         assert.equal((await db.quests.getQuests(U, at)).find((q) => q.key === 'WEEKLY_ROT_B').progress, 1);
 
         // Monthly boss: 4 first completions so far this month; re-checking adds none.
@@ -2145,7 +2136,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { list: big } = await db.tasks.createList(U, { name: 'Boss fight' });
         await db.query(
             `INSERT INTO items (list_id, name, position, completed, xp_awarded, first_completed_at, counts_for_quests)
-             SELECT ?, 'x', 0, 1, 1, UTC_TIMESTAMP(), 1 FROM information_schema.COLUMNS LIMIT 46`,
+             SELECT ?, 'x', 0, 1, 1, CURRENT_TIMESTAMP, 1 FROM generate_series(1, 46)`,
             [big.id]
         );
         assert.equal(await boss(), 50);
@@ -2172,7 +2163,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             [U]
         );
         await db.query("INSERT INTO user_skills (discord_id, skill_id, skill_level) VALUES (?, 'hero_valor', 1)", [U]);
-        await db.query("INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, 'DAILY_ADD_3', CURDATE(), 15)", [U]);
+        await db.query("INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, 'DAILY_ADD_3', CURRENT_DATE, 15)", [U]);
         const { list } = await db.tasks.createList(U, { name: 'Survives prestige' });
         await db.progression.checkAchievements(U);
         const achievementsBefore = Number((await db.query('SELECT COUNT(*) AS n FROM achievements WHERE discord_id = ?', [U]))[0].n);
@@ -2263,7 +2254,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.query("INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after) VALUES (?, -50, 'class_purchase', 100, 50)", [U]);
         const old = await db.tasks.addItem(U, list.id, { name: 'old' });
         await db.tasks.setItemCompleted(U, old.item.id);
-        await db.query('UPDATE items SET first_completed_at = first_completed_at - INTERVAL 3 DAY WHERE id = ?', [old.item.id]);
+        await db.query('UPDATE items SET first_completed_at = first_completed_at - make_interval(days => 3) WHERE id = ?', [old.item.id]);
 
         const hist = await db.stats.getXPHistory(U, 7);
         assert.equal(hist[6].tasksCompleted, 1);
@@ -2342,7 +2333,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const B = '100000000000000313';
         await db.users.ensureUser(B);
         const { list: big } = await db.tasks.createList(B, { name: 'Big' });
-        await db.query('INSERT INTO items (list_id, name, position) SELECT ?, CONCAT(\'needle \', seq), seq FROM (SELECT @n := @n + 1 AS seq FROM information_schema.columns, (SELECT @n := 0) z LIMIT 80) q', [big.id]);
+        await db.query("INSERT INTO items (list_id, name, position) SELECT ?, 'needle ' || seq, seq FROM generate_series(1, 80) AS seq", [big.id]);
         assert.equal((await db.tasks.search(B, 'needle', { scope: 'tasks' })).tasks.length, db.tasks.SEARCH_LIMIT, 'results are bounded');
     });
 
@@ -2601,7 +2592,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const now = new Date();
         const claim = await db.quests.claimQuest(KIRI, 'DAILY_HIGH_1', now);
         assert.equal(claim.reward, 25);
-        const [[row]] = await db.getPool().query("SELECT DATE_FORMAT(period_start, '%Y-%m-%d') AS d FROM quest_claims WHERE discord_id = ? AND quest_key = 'DAILY_HIGH_1'", [KIRI]);
+        const [[row]] = await db.getPool().query("SELECT to_char(period_start, 'YYYY-MM-DD') AS d FROM quest_claims WHERE discord_id = ? AND quest_key = 'DAILY_HIGH_1'", [KIRI]);
         assert.equal(row.d, tzmod.dayKey('Pacific/Kiritimati', now));
         await assert.rejects(db.quests.claimQuest(KIRI, 'DAILY_HIGH_1', now), { code: 'CONFLICT' });
         const tomorrow = tzmod.nextDayStart('Pacific/Kiritimati', now);
@@ -2727,22 +2718,6 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         slFixture = { list, a, b, template };
         return slFixture;
     }
-
-    await t.test('migration 018 is idempotent and backfills the actor of existing tasks', async () => {
-        const f = await sharedFixture();
-        await pool.query("DELETE FROM schema_migrations WHERE id = '018_list_members'");
-        await pool.query('UPDATE items SET created_by = NULL, completed_by = NULL, first_completed_by = NULL WHERE list_id = ?', [f.list.id]);
-        await db.tasks.setItemCompleted(SL.owner, f.a.id);
-        await pool.query('UPDATE items SET completed_by = NULL, first_completed_by = NULL WHERE id = ?', [f.a.id]);
-        const again = await db.runMigrations({ log: () => {} });
-        assert.ok(again.includes('018_list_members'));
-        const [[row]] = await pool.query('SELECT created_by, completed_by, first_completed_by FROM items WHERE id = ?', [f.a.id]);
-        assert.deepEqual({ ...row }, { created_by: SL.owner, completed_by: SL.owner, first_completed_by: SL.owner });
-        const [[open]] = await pool.query('SELECT completed_by, first_completed_by FROM items WHERE id = ?', [f.b.id]);
-        assert.deepEqual({ ...open }, { completed_by: null, first_completed_by: null }, 'open tasks have no completer');
-        await db.tasks.setItemCompleted(SL.owner, f.a.id, false); // leave the fixture as it was
-        await db.tasks.setItemCompleted(SL.owner, f.a.id, false);
-    });
 
     await t.test('access: owner, each role and a stranger on one list', async () => {
         const f = await sharedFixture();
@@ -2887,7 +2862,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         };
         // Functions that take no list or task id: they read or write only the caller's own data (checked below), or are not per-user at all.
         const withoutId = {
-            tasks: ['getLists', 'createList', 'createListWithItems', 'searchLists', 'searchItems', 'search', 'SEARCH_LIMIT', 'getListsDueOn', 'getReminderCandidates', 'markReminderSent', 'getTaskReminderCandidates', 'markTaskReminderSent', 'markDeadlineNotified', 'cleanupOldLists', 'asOwner'],
+            tasks: ['getLists', 'createList', 'createListWithItems', 'searchLists', 'searchItems', 'search', 'SEARCH_LIMIT', 'getListsDueOn', 'getReminderCandidates', 'markReminderSent', 'getTaskReminderCandidates', 'markTaskReminderSent', 'markDeadlineNotified', 'cleanupOldLists', 'asOwner', 'completionContext', 'mayDelete'],
             templates: ['MAX_TEMPLATES', 'MAX_ITEMS', 'parseTemplateInput', 'listTemplates', 'createTemplate'],
             transfer: ['LIMITS', 'exportAll', 'toCsv', 'importAll', 'parseImport', 'regenerateCalendarToken', 'getCalendarToken', 'clearCalendarToken', 'findUserByCalendarToken', 'getCalendarData'],
             quests: ['getQuests', 'claimQuest']
@@ -3007,7 +2982,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { list: mine } = await db.tasks.createList(CAP.owner, { name: 'Owner own' });
         await db.query(
             `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, created_at)
-             SELECT ?, 1, 'item_complete', 0, 1, UTC_TIMESTAMP() FROM information_schema.COLUMNS LIMIT ${LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY}`,
+             SELECT ?, 1, 'item_complete', 0, 1, CURRENT_TIMESTAMP FROM generate_series(1, ${LIMITS.ITEM_COMPLETE_REWARDS_PER_DAY})`,
             [CAP.owner]
         );
         const own = (await db.tasks.addItem(CAP.owner, mine.id, { name: 'capped' })).item;
@@ -3043,7 +3018,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             const { list } = await db.tasks.createList(CL.owner, { name });
             const { item } = await db.tasks.addItem(CL.owner, list.id, { name: 'only' });
             await db.tasks.setItemCompleted(CL.owner, item.id);
-            await db.query('UPDATE items SET updated_at = UTC_TIMESTAMP() - INTERVAL 30 DAY WHERE list_id = ?', [list.id]);
+            await db.query('UPDATE items SET updated_at = CURRENT_TIMESTAMP - make_interval(days => 30) WHERE list_id = ?', [list.id]);
             if (shared) await addMember(list.id, CL.member, 'viewer');
             return list.id;
         };
@@ -3133,7 +3108,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(S.invite(O, list.id, { discordId: a }), { code: 'CONFLICT' });
 
         // Expiry: an old invitation cannot be accepted, no longer shows up and no longer blocks a new one.
-        await db.query('UPDATE list_invites SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE id = ?', [first.id]);
+        await db.query('UPDATE list_invites SET expires_at = CURRENT_TIMESTAMP - make_interval(hours => 1) WHERE id = ?', [first.id]);
         assert.deepEqual(await S.listInvites(a), []);
         await assert.rejects(S.respond(a, first.id, true), { code: 'CONFLICT', message: /expired/ });
         const second = await S.invite(O, list.id, { discordId: a, role: 'viewer' });
@@ -3149,7 +3124,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // ...but not by the same inviter within the cooldown, and the inviter is not told (nothing is sent, nothing is stored).
         assert.deepEqual(await S.invite(O, list.id, { discordId: b }), { sent: false });
         assert.equal((await db.query("SELECT COUNT(*) AS n FROM list_invites WHERE invitee_discord_id = ? AND status = 'pending'", [b]))[0].n, 0);
-        await db.query('UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, responded_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE id = ?', [declined.id]);
+        await db.query('UPDATE list_invites SET created_at = CURRENT_TIMESTAMP - make_interval(days => 8), responded_at = CURRENT_TIMESTAMP - make_interval(days => 8) WHERE id = ?', [declined.id]);
         const retry = await S.invite(O, list.id, { discordId: b });
         assert.ok(retry.sent && retry.id > declined.id, 'after the cooldown they can be invited again');
 
@@ -3206,7 +3181,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { LIMITS } = require('../src');
         await db.query(
             `INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, expires_at, status)
-             SELECT ?, ?, 'viewer', ?, UTC_TIMESTAMP() + INTERVAL 1 DAY, 'declined' FROM information_schema.COLUMNS LIMIT ${LIMITS.INVITES_PER_DAY}`,
+             SELECT ?, ?, 'viewer', ?, CURRENT_TIMESTAMP + make_interval(days => 1), 'declined' FROM generate_series(1, ${LIMITS.INVITES_PER_DAY})`,
             [list.id, T, O]
         );
         const X = '200000000000000754';
@@ -3294,7 +3269,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await S.respond(V, viaManager.id, false);
         assert.deepEqual(await S.invite(M, list.id, { discordId: V }), { sent: false }, 'the manager now has their own cooldown');
         // After the cooldown (counted from when the declined invitation was made) it works again.
-        await db.query("UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, responded_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ? AND status = 'declined'", [V]);
+        await db.query("UPDATE list_invites SET created_at = CURRENT_TIMESTAMP - make_interval(days => 8), responded_at = CURRENT_TIMESTAMP - make_interval(days => 8) WHERE invitee_discord_id = ? AND status = 'declined'", [V]);
         assert.equal((await S.invite(O, list.id, { discordId: V })).sent, true);
 
         // Parties have the same cooldown (their own declines).
@@ -3304,7 +3279,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.parties.respond(W, pi.id, false);
         assert.deepEqual(await db.parties.invite(O, { discordId: W }), { sent: false });
         assert.equal((await db.parties.invite(O, { username: 'abuse_4', dryRun: true })).name, null);
-        await db.query("UPDATE party_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, responded_at = UTC_TIMESTAMP() - INTERVAL 8 DAY WHERE invitee_discord_id = ?", [W]);
+        await db.query("UPDATE party_invites SET created_at = CURRENT_TIMESTAMP - make_interval(days => 8), responded_at = CURRENT_TIMESTAMP - make_interval(days => 8) WHERE invitee_discord_id = ?", [W]);
         assert.equal((await db.parties.invite(O, { discordId: W })).sent, true);
 
         // The switch: with invitations off nothing is sent to a list or a party, by name or by ID, and the answer gives nothing away.
@@ -3439,8 +3414,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.query('SELECT rearm_count FROM items WHERE id = ?', [item.id]))[0].rearm_count, 3);
 
         // The next day the allowance is back.
-        await db.query("UPDATE items SET rearm_day = UTC_DATE() - INTERVAL 1 DAY WHERE id = ?", [item.id]);
-        await db.query("UPDATE lists SET rearm_day = UTC_DATE() - INTERVAL 1 DAY WHERE id = ?", [list.id]);
+        await db.query("UPDATE items SET rearm_day = CURRENT_DATE - make_interval(days => 1) WHERE id = ?", [item.id]);
+        await db.query("UPDATE lists SET rearm_day = CURRENT_DATE - make_interval(days => 1) WHERE id = ?", [list.id]);
         await db.tasks.updateItem(E, item.id, { due_date: '2031-05-06' });
         await db.tasks.updateList(O, list.id, { deadline: '2031-05-06' });
         assert.deepEqual([await itemRows(), await listRows(), await ownerFlags()], [0, 0, { item: false, list: false }], 'a new day: re-armed again');
@@ -3683,7 +3658,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(PA.respond(more.at(-1), pending[0].id, true), { code: 'CONFLICT' });
         // Declined and expired invitations behave like list invitations.
         const again = await PA.invite(u.own, { discordId: more.at(-1) });
-        await db.query('UPDATE party_invites SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE id = ?', [again.id]);
+        await db.query('UPDATE party_invites SET expires_at = CURRENT_TIMESTAMP - make_interval(hours => 1) WHERE id = ?', [again.id]);
         assert.deepEqual(await PA.listInvites(more.at(-1)), []);
         await assert.rejects(PA.respond(more.at(-1), again.id, true), { code: 'CONFLICT', message: /expired/ });
         const declined = await PA.invite(u.own, { discordId: more.at(-1) });
@@ -3702,7 +3677,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { list } = await db.tasks.createList(O, { name: 'Cooldown list' });
         const invite = await S.invite(O, list.id, { discordId: B });
         // The invitation is 8 days old but still open (a long-lived one), and is declined just now.
-        await db.query('UPDATE list_invites SET created_at = UTC_TIMESTAMP() - INTERVAL 8 DAY, expires_at = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE id = ?', [invite.id]);
+        await db.query('UPDATE list_invites SET created_at = CURRENT_TIMESTAMP - make_interval(days => 8), expires_at = CURRENT_TIMESTAMP + make_interval(days => 1) WHERE id = ?', [invite.id]);
         assert.equal((await S.respond(B, invite.id, false)).accepted, false);
         assert.deepEqual(await S.invite(O, list.id, { discordId: B }), { sent: false }, 'still inside the cooldown');
     });
@@ -3923,8 +3898,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const parents = [];
         for (let n = 0; n < 6; n++) parents.push((await db.tasks.addItem(U, list.id, { name: `p${n}` })).item.id);
         const deadlocks = async () => {
-            const [rows] = await pool.query("SHOW GLOBAL STATUS LIKE 'Innodb_deadlocks'");
-            return rows[0] ? Number(rows[0].Value) : null;
+            const [rows] = await pool.query('SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()');
+            return rows[0] ? Number(rows[0].deadlocks) : null;
         };
         const before = await deadlocks();
         for (let round = 0; round < 5; round++) {
@@ -3935,7 +3910,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             ]);
             for (const r of results) assert.equal(r.status, 'fulfilled', r.reason && r.reason.message);
         }
-        // Retries would hide a deadlock, so also read the server's counter (MariaDB exposes it; other servers skip this).
+        // Retries would hide a deadlock, so also read the server's counter (pg_stat_database; it can lag by a moment).
         // Other test files run against other databases at the same time, so only a rise is a failure when it is ours.
         const after = await deadlocks();
         if (before !== null) assert.equal(after, before, 'no deadlock was even raised');
@@ -3953,8 +3928,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const ids = [];
         for (let n = 0; n < 8; n++) ids.push((await db.tasks.addItem(O, list.id, { name: `t${n}` })).item.id);
         const deadlocks = async () => {
-            const [rows] = await pool.query("SHOW GLOBAL STATUS LIKE 'Innodb_deadlocks'");
-            return rows[0] ? Number(rows[0].Value) : null;
+            const [rows] = await pool.query('SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()');
+            return rows[0] ? Number(rows[0].deadlocks) : null;
         };
         const before = await deadlocks();
         for (let round = 0; round < 8; round++) {
@@ -3988,9 +3963,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.users.ensureUser(M);
         // Lists: fill to the cap with plain rows, then the next one is refused.
         const base = (await db.tasks.createList(Q, { name: 'Quota 0' })).list;
-        const rows = [];
-        for (let n = 1; n < L.MAX_LISTS_PER_USER; n++) rows.push([Q, `Quota ${n}`]);
-        await pool.query('INSERT INTO lists (discord_id, name) VALUES ?', [rows]);
+        await pool.query("INSERT INTO lists (discord_id, name) SELECT ?, 'Quota ' || n FROM generate_series(1, ?::int) AS n", [Q, L.MAX_LISTS_PER_USER - 1]);
         await assert.rejects(db.tasks.createList(Q, { name: 'One too many' }), { code: 'VALIDATION', message: /at most 200 lists/ });
         await assert.rejects(db.tasks.createListWithItems(Q, { name: 'Also too many' }, ['a']), { code: 'VALIDATION' });
         await db.query("DELETE FROM lists WHERE discord_id = ? AND name = 'Quota 1'", [Q]);
@@ -4000,9 +3973,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const recurring = (await db.tasks.addItem(Q, base.id, { name: 'repeat', recurrence: 'daily' })).item;
         const parent = (await db.tasks.addItem(Q, base.id, { name: 'parent' })).item;
         const have = Number((await db.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [Q]))[0].n);
-        const fill = [];
-        for (let n = have; n < L.MAX_ITEMS_PER_USER; n++) fill.push([base.id, `bulk${n}`, n + 10, Q]);
-        await pool.query('INSERT INTO items (list_id, name, position, created_by) VALUES ?', [fill]);
+        await pool.query("INSERT INTO items (list_id, name, position, created_by) SELECT ?, 'bulk' || n, n + 10, ? FROM generate_series(?::int, ?::int) AS n", [base.id, Q, have, L.MAX_ITEMS_PER_USER - 1]);
         await assert.rejects(db.tasks.addItem(Q, base.id, { name: 'over' }), { code: 'VALIDATION', message: /5000 tasks/ });
         await assert.rejects(db.tasks.addItems(Q, base.id, [{ name: 'o1' }, { name: 'o2' }]), { code: 'VALIDATION' });
         await assert.rejects(db.tasks.addSubtasks(Q, parent.id, ['s1']), { code: 'VALIDATION' });
@@ -4043,7 +4014,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(Number((await db.users.getUser(R)).artisan_progress) > 0, 'progress keeps building instead of resetting');
     });
 
-    await t.test('import: list names that differ only by case or accents get an (imported) suffix instead of a 500', async () => {
+    await t.test('import: list names that differ only by case get an (imported) suffix instead of a 500', async () => {
         const U = '100000000000000641';
         await db.users.ensureUser(U);
         await db.tasks.createList(U, { name: 'Café' });
@@ -4051,8 +4022,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(r.lists, 5);
         const names = (await db.query('SELECT name FROM lists WHERE discord_id = ? ORDER BY id', [U])).map((x) => x.name);
         assert.equal(new Set(names).size, 6, names.join(' | '));
-        assert.ok(names.includes('Cafe (imported)'), names.join(' | '));
-        assert.ok(names.includes('Naive (imported)'), names.join(' | '));
+        // List names are CITEXT: unique ignoring case, but accents count (Cafe and Café are two lists).
+        assert.ok(names.includes('CAFÉ (imported)'), names.join(' | '));
+        assert.ok(names.includes('cafe (imported)'), names.join(' | '));
+        assert.ok(names.includes('Naive') && names.includes('Naïve'), names.join(' | '));
     });
 
     await t.test('sending or snoozing a task reminder does not touch items.updated_at', async () => {

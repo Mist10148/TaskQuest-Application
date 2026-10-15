@@ -18,8 +18,8 @@ if (enabled) {
         NODE_ENV: 'test',
         DB_URL: '',
         DB_HOST: process.env.TEST_DB_HOST || '127.0.0.1',
-        DB_PORT: process.env.TEST_DB_PORT || '3306',
-        DB_USER: process.env.TEST_DB_USER || 'root',
+        DB_PORT: process.env.TEST_DB_PORT || '5432',
+        DB_USER: process.env.TEST_DB_USER || 'postgres',
         DB_PASSWORD: process.env.TEST_DB_PASSWORD || '',
         DB_NAME: process.env.TEST_DB_NAME,
         XP_WEEKLY_MODIFIER: 'off',
@@ -44,10 +44,7 @@ async function login(db, discordId) {
 test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     const { default: db } = await import('@taskquest/shared/db');
     const pool = db.getPool();
-    const [tables] = await pool.query('SHOW TABLES');
-    await pool.query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const row of tables) await pool.query(`DROP TABLE \`${Object.values(row)[0]}\``);
-    await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+    await pool.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public');
     await db.runMigrations({ log: () => {} });
 
     const { validateConfig } = await import('../config.js');
@@ -162,7 +159,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
             const run = await (await call('POST', `/api/games/arcade/${type}/start`, { cookie: alice })).json();
             return { ...run, play: playBot(type, run.seed, target) };
         };
-        const age = (run, ms) => db.query('UPDATE game_sessions SET created_at = created_at - INTERVAL ? SECOND WHERE id = ?', [Math.ceil(ms / 1000) + 1, run.sessionId]);
+        const age = (run, ms) => db.query('UPDATE game_sessions SET created_at = created_at - make_interval(secs => ?) WHERE id = ?', [Math.ceil(ms / 1000) + 1, run.sessionId]);
 
         // An old client (score only) is told to refresh.
         const old = await begin('dino', 3);
@@ -336,7 +333,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const justNow = await (await call('POST', `/api/lists/${list.id}/items`, { cookie: alice, body: { name: 'backdated', due_date: '2099-01-01' } })).json();
         const plain = await (await call('PATCH', `/api/items/${justNow.id}/toggle`, { cookie: alice })).json();
         assert.equal(plain.bonuses.find((b) => b.key === 'early_finish'), undefined);
-        await db.query('UPDATE items SET due_date_set_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 2 DAY) WHERE id = ?', [item.id]);
+        await db.query('UPDATE items SET due_date_set_at = CURRENT_TIMESTAMP - make_interval(days => 2) WHERE id = ?', [item.id]);
         const done = await (await call('PATCH', `/api/items/${item.id}/toggle`, { cookie: alice })).json();
         assert.ok(Array.isArray(done.bonuses));
         assert.deepEqual(done.bonuses.find((b) => b.key === 'early_finish'), { key: 'early_finish', label: 'Finished early', xp: 20 });
@@ -366,7 +363,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
 
         // A real 25 minutes pays 15 XP, exactly once.
         const real = await (await call('POST', '/api/focus/start', { cookie: alice, body: { minutes: 25 } })).json();
-        await db.query('UPDATE focus_sessions SET started_at = started_at - INTERVAL 26 MINUTE WHERE id = ?', [real.sessionId]);
+        await db.query('UPDATE focus_sessions SET started_at = started_at - make_interval(mins => 26) WHERE id = ?', [real.sessionId]);
         const paid = await (await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).json();
         assert.deepEqual([paid.state, paid.minutesCredited, paid.xp], ['finished', 25, 15]);
         assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).status, 409);
@@ -529,7 +526,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal(again.lists, 1, 'rows without a list go to "Imported"');
 
         // The per-user quota applies to CSV too, and oversized text is refused.
-        await db.query("INSERT INTO lists (discord_id, name) SELECT '200000000000000020', CONCAT('filler', seq) FROM (SELECT @r := @r + 1 AS seq FROM information_schema.columns, (SELECT @r := 0) z LIMIT 200) n");
+        await db.query("INSERT INTO lists (discord_id, name) SELECT '200000000000000020', 'filler' || seq FROM generate_series(1, 200) AS seq");
         assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task\nOne more,x\n' } })).status, 400);
         assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'a'.repeat(1_000_001) } })).status, 400);
     });
@@ -715,7 +712,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal(second.status, 400);
         assert.match((await second.json()).error, /once every 24 hours/);
         assert.equal((await set({ timezone: 'Pacific/Kiritimati', reminder_hour: 8 })).status, 200, 'the same zone is not a change');
-        await db.query('UPDATE users SET timezone_changed_at = NOW() - INTERVAL 25 HOUR WHERE discord_id = ?', [id]);
+        await db.query('UPDATE users SET timezone_changed_at = NOW() - make_interval(hours => 25) WHERE discord_id = ?', [id]);
         assert.equal((await set({ timezone: 'Pacific/Pago_Pago' })).status, 200);
     });
 

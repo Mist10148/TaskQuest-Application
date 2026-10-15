@@ -11,8 +11,8 @@ export const BASE_URL = `http://localhost:${PORT}`;
 export const DB = {
     DB_URL: '',
     DB_HOST: e.E2E_DB_HOST || '127.0.0.1',
-    DB_PORT: e.E2E_DB_PORT || '3306',
-    DB_USER: e.E2E_DB_USER || 'root',
+    DB_PORT: e.E2E_DB_PORT || '5432',
+    DB_USER: e.E2E_DB_USER || 'postgres',
     DB_PASSWORD: e.E2E_DB_PASSWORD ?? '',
     DB_NAME: e.E2E_DB_NAME || 'taskquest_e2e',
 };

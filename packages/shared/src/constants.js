@@ -544,6 +544,9 @@ const SEASONS = [
     { key: 'tidy', name: 'Tidy week', doubles: 'list_cleared', blurb: 'Clearing a list pays double.' }
 ];
 
+/** The streak-at-risk warning: only for streaks of at least MIN_STREAK days, once a day, from FROM_HOUR local time on. */
+const STREAK_WARNING = { MIN_STREAK: 3, FROM_HOUR: 18 };
+
 /** Streak freeze: a consumable that saves a daily streak that would otherwise break. */
 const STREAK_FREEZE = { COST: 150, MAX: 3 };
 
@@ -812,6 +815,7 @@ module.exports = {
     STREAK_CHESTS,
     STREAK_FREEZE,
     STREAK_FREEZE_CACHE,
+    STREAK_WARNING,
     CLASS_RULES,
     SMALL_ACTION_CAP,
     SKILL_RULES,

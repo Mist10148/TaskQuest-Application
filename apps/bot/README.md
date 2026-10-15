@@ -22,7 +22,7 @@ npm run dev                     # run with auto-reload
 | `commands/timezone.js`, `commands/weekly.js`, `commands/quick.js` | `/timezone`, `/weekly` (digest DM) and `/quick` (add a task from one line) |
 | `commands/ai.js` | `/summary /prioritize /ask /forget /ai-format` (AI service) |
 | `chat.js` | Replies to @mentions, replies and DMs through the AI service's `/v1/converse` |
-| `utils/reminders.js`, `utils/digest.js` | Deadline and task reminder DMs (and web push) and the weekly digest |
+| `utils/reminders.js`, `utils/digest.js`, `utils/streakWarning.js` | Deadline and task reminder DMs (and web push), the weekly digest and the streak-at-risk warning |
 | `utils/aiSync.js` | Re-indexes quests in the AI service after edits made in Discord |
 | `utils/ui.js` | Embeds, buttons, menus and modals |
 | `utils/respond.js` | Error and reward responses |

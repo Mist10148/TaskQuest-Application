@@ -34,6 +34,7 @@ const aiSync = require('./utils/aiSync');
 const reminders = require('./utils/reminders');
 const timezoneCommand = require('./commands/timezone');
 const digest = require('./utils/digest');
+const streakWarning = require('./utils/streakWarning');
 const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
 const sharingCommands = require('./commands/sharing');
@@ -80,6 +81,8 @@ const checkDeadlines = job('DEADLINE', async () => {
 
 const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));
 
+const streakWarnings = job('STREAK', () => streakWarning.sendStreakWarnings({ db, client, log, push }));
+
 const cleanupLists = job('AUTO-DELETE', async () => {
     const deleted = await db.tasks.cleanupOldLists();
     for (const list of deleted) aiSync.forget(list.discord_id, list.id); // drop their vectors too
@@ -100,9 +103,11 @@ client.once(Events.ClientReady, (c) => {
     setTimeout(checkDeadlines, 5_000);
     setTimeout(cleanupLists, 10_000);
     setTimeout(weeklyDigests, 15_000);
+    setTimeout(streakWarnings, 20_000);
     expireGames();
     timers.push(setInterval(checkDeadlines, 60 * 60 * 1000));
     timers.push(setInterval(weeklyDigests, 60 * 60 * 1000));
+    timers.push(setInterval(streakWarnings, 60 * 60 * 1000));
     timers.push(setInterval(cleanupLists, 24 * 60 * 60 * 1000));
     timers.push(setInterval(expireGames, 5 * 60 * 1000));
 });

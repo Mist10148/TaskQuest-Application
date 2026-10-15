@@ -151,7 +151,7 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run dev:web` / `dev:server` / `dev:bot` | Run each app in watch mode |
 | `npm run build` | Build the web app into `apps/web/dist` |
 | `npm run start:server` / `start:bot` | Production start |
-| `npm run db:migrate` | Apply pending database migrations (001 to 024; both apps also do it on start) |
+| `npm run db:migrate` | Apply pending database migrations (001 to 025; both apps also do it on start) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |
 | `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |

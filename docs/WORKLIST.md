@@ -51,7 +51,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P6.3 XP breakdown as a toast list (no popover)
 - [x] P6.4 Undo for completions
 - [x] P6.5 Today screen
-- [ ] P6.6 Streak-at-risk reminder
+- [x] P6.6 Streak-at-risk reminder
 - [x] P6.7 Visual skill tree and next-unlock hints
 - [x] P6.8 Kanban and calendar views
 - [x] P6.9 Bottom nav and swipe added; empty states and reduced motion already covered (audited)

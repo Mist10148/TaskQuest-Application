@@ -6,7 +6,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Upgrade notes
 
-- **Run the migrations.** `npm run db:migrate` (or just start the bot or the server) applies `010` to `024` in order; take a backup first. Do not point a database that was migrated at an intermediate commit of this branch at the release: migrations `011` and `012` were edited across commits before release, so reset such development databases ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)).
+- **Run the migrations.** `npm run db:migrate` (or just start the bot or the server) applies `010` to `025` in order; take a backup first. Do not point a database that was migrated at an intermediate commit of this branch at the release: migrations `011` and `012` were edited across commits before release, so reset such development databases ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)).
 - **Re-register slash commands** (`npm run deploy:commands`): `/review`, `/prestige`, `/shop`, `/share`, `/invites`, `/members`, `/leave` and `/party` are new, and `/list` gained a Details button.
 - **New optional environment variables** for web push: `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` (set all three or none), plus `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_INTERNAL_URL`, `WEB_PUSH_INTERNAL_TOKEN` and `WEB_PUSH_TIMEOUT_MS`. Nothing changes while they are unset. See [DEPLOYMENT.md](docs/DEPLOYMENT.md#web-push-optional).
 - **Invite handles fill in over time.** Sharing lists and parties invites people by their exact Discord username (`users.discord_handle`, migration `021`). It is stored at each person's next web login or slash command, never backfilled, so a person who has not used TaskQuest since the upgrade cannot be invited yet.
@@ -15,6 +15,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **A streak-at-risk warning.** On the evening of the last day a streak of 3 or more days can be saved, the bot DMs (and sends a web push) once, for players with reminders and XP on. `users.streak_warned_day` (migration `025_streak_warnings`), `db.today.getStreakWarnings`.
 - **A party board and a second party quest.** The Party page and `/party status` rank the members by this week's finished tasks and focus minutes, and a new weekly quest, **Focus together** (60 focus minutes for every member who focuses, +40 XP each for 20 minutes of your own, separate claim `POST /api/parties/focus/claim`), joins the task quest.
 - **Ownership transfer for shared lists.** The owner can hand a list to one of its members (a crown button in the Members dialog, `POST /api/lists/:id/transfer`); the old owner stays on it as a manager. It is refused when the new owner already has a quest with that name or would pass the quest or task limits.
 - **Phone ergonomics.** A bottom navigation bar on small screens (Today, Tasks, Focus, Home and a More button for the full menu) and swipe-right-to-complete on a task row (a long, mostly sideways swipe; the checkbox and keyboard work as before).

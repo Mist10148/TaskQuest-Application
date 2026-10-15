@@ -53,8 +53,9 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `022_invite_responded_at` | `list_invites.responded_at` and `party_invites.responded_at`: when the invitee declined. The 7-day decline cooldown counts from it (older rows fall back to `created_at`) |
 | `023_new_classes` | Five more classes (Bard, Alchemist, Druid, Chronomancer, Warden): `users.owns_bard` / `owns_alchemist` / `owns_druid` / `owns_chronomancer` / `owns_warden`, counters `bard_recent` (list ids of the last completions) and `alchemist_mix` (priority bitmask of the current brew), and `player_class` extended with the new values |
 | `024_engagement` | New XP sources: `reflections` (one short note a day, unique per user and day), `weekly_goals` (the target a player sets for a week and when it was claimed) and `items.estimate_minutes` (the player's own estimate of a task's length) |
+| `025_streak_warnings` | `users.streak_warned_day`: the player's own day on which the bot last warned them that today is the last day to keep their streak (at most one warning a day) |
 
-The release that introduced migrations `010` to `024` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
+The release that introduced migrations `010` to `025` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 

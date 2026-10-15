@@ -1301,6 +1301,38 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(db.parties.claimFocus(S), { code: 'VALIDATION' });
     });
 
+    await t.test('streak warnings: only a live streak whose last day it is, in the evening, once a day', async () => {
+        const W = '100000000000000931';
+        await db.users.ensureUser(W);
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY, automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?", [W]);
+        const at = (hour) => new Date(`${require('../src').todayInZone()}T${String(hour).padStart(2, '0')}:30:00Z`);
+        const ids = async (hour) => (await db.today.getStreakWarnings(at(hour))).map((w) => w.discord_id);
+
+        assert.ok(!(await ids(10)).includes(W), 'not in the morning');
+        assert.ok((await ids(19)).includes(W), 'in the evening of the last day');
+        const w = (await db.today.getStreakWarnings(at(19))).find((x) => x.discord_id === W);
+        assert.deepEqual([w.streak, w.day], [6, require('../src').todayInZone()]);
+
+        // claimed once: the same day is closed to a second run
+        assert.equal(await db.today.claimStreakWarning(W, w.day), true);
+        assert.equal(await db.today.claimStreakWarning(W, w.day), false);
+        assert.ok(!(await ids(20)).includes(W), 'warned already today');
+        await db.today.releaseStreakWarning(W, w.day);
+        assert.ok((await ids(20)).includes(W), 'a released warning can be sent again');
+
+        // not at risk: claimed today, a short streak, reminders off, XP off, or a streak that has lapsed
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'already claimed today');
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY, streak_count = 2 WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'under 3 days');
+        await db.query('UPDATE users SET streak_count = 6, automation_enabled = 0 WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'reminders off');
+        await db.query('UPDATE users SET automation_enabled = 1, gamification_enabled = 0 WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'XP off');
+        await db.query('UPDATE users SET gamification_enabled = 1, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 3 DAY WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'the streak already lapsed');
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

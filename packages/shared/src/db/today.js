@@ -6,12 +6,13 @@
 'use strict';
 
 const { getPool } = require('./pool');
+const { STREAK_WARNING } = require('../constants');
 const { getUserSkills } = require('./users');
 const { dayWindow } = require('./progression');
 const { getReflection, getGoal } = require('./goals');
 const { SEASONS } = require('../constants');
 const { currentSeason } = require('../quests');
-const { todayInZone, daysBetween } = require('../dates');
+const { todayInZone, daysBetween, hourInZone } = require('../dates');
 const { liveStreak, getSkillBonuses, streakWindowDays, claimGapDays } = require('../xp');
 
 const TASK_LIMIT = 6;
@@ -83,4 +84,38 @@ async function getToday(discordId, now = new Date()) {
     };
 }
 
-module.exports = { getToday, streakState };
+/**
+ * Players to warn right now: a streak of at least 3 days that is alive and unclaimed today, today is its last day, and it is
+ * evening where they live. Only people with XP and reminders on, and not already warned today.
+ * @returns {Promise<Array<{ discord_id: string, streak: number, day: string, timezone: string|null }>>}
+ */
+async function getStreakWarnings(now = new Date()) {
+    const pool = getPool();
+    const [rows] = await pool.query(
+        `SELECT discord_id, timezone, streak_count, last_daily_claim, player_class, streak_warned_day FROM users
+          WHERE gamification_enabled = TRUE AND automation_enabled = TRUE AND streak_count >= ? AND last_daily_claim >= ?`,
+        [STREAK_WARNING.MIN_STREAK, new Date(now.getTime() - 6 * 86400e3)]
+    );
+    const out = [];
+    for (const u of rows) {
+        const day = todayInZone(u.timezone, now);
+        if (hourInZone(u.timezone, now) < STREAK_WARNING.FROM_HOUR) continue;
+        if (u.streak_warned_day && String(u.streak_warned_day).slice(0, 10) >= day) continue;
+        const state = streakState(u, await getUserSkills(u.discord_id), now);
+        if (state.atRisk && state.live >= STREAK_WARNING.MIN_STREAK) out.push({ discord_id: String(u.discord_id), streak: state.live, day, timezone: u.timezone });
+    }
+    return out;
+}
+
+/** Atomically mark the warning as sent for `day`: true for exactly one caller. */
+async function claimStreakWarning(discordId, day) {
+    const [res] = await getPool().query('UPDATE users SET streak_warned_day = ? WHERE discord_id = ? AND (streak_warned_day IS NULL OR streak_warned_day < ?)', [day, String(discordId), day]);
+    return res.affectedRows > 0;
+}
+
+/** Give the mark back after a temporary send failure, so the next run tries again. */
+async function releaseStreakWarning(discordId, day) {
+    await getPool().query('UPDATE users SET streak_warned_day = NULL WHERE discord_id = ? AND streak_warned_day = ?', [String(discordId), day]);
+}
+
+module.exports = { getToday, streakState, getStreakWarnings, claimStreakWarning, releaseStreakWarning };

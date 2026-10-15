@@ -106,7 +106,7 @@ const CreateParty = () => {
 const RulesNote = ({ status }: { status: PartyStatus }) => (
   <p className="text-xs text-foreground-muted">
     A party has up to {status.limit} people, owner included, and you can be in one at a time. The target is {status.perMember} tasks for each member who
-    finished at least one task this week; each member&apos;s first {status.perMember} task completions since joining count towards it, and you need at
+    finished at least {status.minToClaim} tasks this week; each member&apos;s first {status.perMember} task completions since joining count towards it, and you need at
     least {status.minToClaim} of your own to claim the reward. The week resets on Monday 00:00 UTC. Members see names and this week&apos;s counts only.
   </p>
 );

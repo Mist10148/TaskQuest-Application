@@ -3765,21 +3765,19 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
             await assert.rejects(PA.claim(ids[idle]), { code: 'VALIDATION', message: /Finish at least 6 tasks yourself/ });
         }
 
-        // A spare account that finishes one task raises the target by a whole member's worth but adds one task of progress, and
-        // cannot claim: the owner is now short of the target. Nothing was claimed or paid.
+        // A spare account that finishes one task does not move the target or the progress (it has not done enough to claim), so it
+        // cannot block the owner. Nothing was claimed or paid.
         await finish(ids.b, 1);
         st = await PA.status(ids.own);
-        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET * 2);
-        assert.equal(st.progress, PARTY_QUEST.PER_MEMBER_TARGET + 1);
-        assert.equal(st.reached, false);
-        await assert.rejects(PA.claim(ids.own), { code: 'VALIDATION', message: /isn't finished/ });
+        assert.equal(st.target, PARTY_QUEST.PER_MEMBER_TARGET);
+        assert.equal(st.progress, PARTY_QUEST.PER_MEMBER_TARGET);
+        assert.equal(st.reached, true);
         assert.equal((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE source = 'party_quest' AND discord_id IN (?, ?, ?, ?)", [ids.own, ids.a, ids.b, ids.c]))[0].n, 0);
 
         // One member cannot carry the party: their share is capped at the per-member target.
         await finish(ids.own, 20);
         st = await PA.status(ids.own);
-        assert.equal(st.progress, PARTY_QUEST.PER_MEMBER_TARGET + 1, 'extra tasks beyond the share add nothing');
-        assert.equal(st.reached, false);
+        assert.equal(st.progress, PARTY_QUEST.PER_MEMBER_TARGET, 'extra tasks beyond the share add nothing');
 
         // A real team effort: b finishes the minimum share, a the rest; everybody who did half or more claims, the idle seat cannot.
         await finish(ids.b, PARTY_QUEST.MIN_OWN_TO_CLAIM - 1); // now 6 in total

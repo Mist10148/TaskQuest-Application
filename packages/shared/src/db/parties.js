@@ -261,11 +261,12 @@ async function quest(conn, party, now) {
             focus: await weeklyFocusMinutes(conn, r.discord_id, period, r.joined_at)
         });
     }
-    // The target grows only with the members who actually took part, so an idle seat or a spare account does not move it.
-    const active = members.filter((m) => m.count >= 1).length;
-    const target = PARTY_QUEST.PER_MEMBER_TARGET * Math.max(1, active);
+    // The target grows only with the members who took part for real (enough tasks to claim the reward themselves), so an idle seat,
+    // a spare account or one stray task does not move it, and such a member does not count toward the progress either.
+    const active = members.filter((m) => m.count >= PARTY_QUEST.MIN_OWN_TO_CLAIM);
+    const target = PARTY_QUEST.PER_MEMBER_TARGET * Math.max(1, active.length);
     // One person's contribution is capped at their own share, so a single member cannot carry the whole party.
-    const progress = members.reduce((n, m) => n + Math.min(m.count, PARTY_QUEST.PER_MEMBER_TARGET), 0);
+    const progress = active.reduce((n, m) => n + Math.min(m.count, PARTY_QUEST.PER_MEMBER_TARGET), 0);
     // The focus quest works the same way with minutes: the target grows with the members who focused, a share is capped.
     const focusing = members.filter((m) => m.focus >= 1).length;
     const focusTarget = PARTY_FOCUS_QUEST.PER_MEMBER_MINUTES * Math.max(1, focusing);

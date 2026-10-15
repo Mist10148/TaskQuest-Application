@@ -53,7 +53,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P6.5 Today screen
 - [ ] P6.6 Streak-at-risk reminder
 - [x] P6.7 Visual skill tree and next-unlock hints
-- [ ] P6.8 Kanban and calendar views
+- [x] P6.8 Kanban and calendar views
 - [ ] P6.9 Empty states, mobile gestures and bottom nav, accessibility pass
 - [ ] P6.10 Shared-list ownership transfer
 - [ ] P6.11 Party boards and extra party quests

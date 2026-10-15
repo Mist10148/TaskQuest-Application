@@ -15,6 +15,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Ownership transfer for shared lists.** The owner can hand a list to one of its members (a crown button in the Members dialog, `POST /api/lists/:id/transfer`); the old owner stays on it as a manager. It is refused when the new owner already has a quest with that name or would pass the quest or task limits.
 - **Phone ergonomics.** A bottom navigation bar on small screens (Today, Tasks, Focus, Home and a More button for the full menu) and swipe-right-to-complete on a task row (a long, mostly sideways swipe; the checkbox and keyboard work as before).
 - **Board and calendar views.** A quest can be shown as a list (as before), a **board** (columns by priority; complete a task from its circle) or a **calendar** (a month grid of due dates with the open count per day and the tasks of the picked day). The choice is remembered in the browser.
 - **A tiered skill tree and "Next unlocks".** The Skills page lays each tree out in tiers by how many prerequisites lead to a skill (columns on a wide screen, stacked with arrows on a phone). The dashboard has a card with the three achievements you are closest to and what is left of each.

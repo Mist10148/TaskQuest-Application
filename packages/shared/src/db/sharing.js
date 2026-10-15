@@ -322,4 +322,33 @@ async function leave(userId, listId) {
     });
 }
 
-module.exports = { findInvitee, invitePreview, notSent, invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };
+/**
+ * Hand a list to one of its members. The new owner gets the list (and the quest and task limits that come with owning it); the
+ * old owner stays on it as a manager. Only the owner can do it. Refused when the new owner already has a list with the same
+ * name or would go over the list or task limits, so nobody is ever pushed past a limit by a gift.
+ */
+async function transferOwnership(actorId, listId, memberKey) {
+    return withTransaction(async (conn) => {
+        const { list, isOwner } = await access.forList(conn, actorId, listId, 'manager', { lock: true });
+        if (!isOwner) throw errors.forbidden('Only the owner can hand this list over.');
+        const m = await memberByKey(conn, list.id, memberKey);
+        const next = m.discord_id;
+        const [[clash]] = await conn.query('SELECT id FROM lists WHERE discord_id = ? AND name = ?', [next, list.name]);
+        if (clash) throw errors.conflict('That person already owns a quest with this name. Rename one of them first.');
+        const [[lists]] = await conn.query('SELECT COUNT(*) AS n FROM lists WHERE discord_id = ?', [next]);
+        if (Number(lists.n) >= LIMITS.MAX_LISTS_PER_USER) throw errors.validation(`That person already owns the most quests allowed (${LIMITS.MAX_LISTS_PER_USER}).`);
+        const [[theirs]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [next]);
+        const [[here]] = await conn.query('SELECT COUNT(*) AS n FROM items WHERE list_id = ?', [list.id]);
+        if (Number(theirs.n) + Number(here.n) > LIMITS.MAX_ITEMS_PER_USER) throw errors.validation('That person would go over the task limit with this quest.');
+
+        const former = String(actorId);
+        await conn.query('UPDATE lists SET discord_id = ? WHERE id = ?', [next, list.id]);
+        // The new owner is no longer a member; their member-only reminder state goes with the row.
+        await dropMember(conn, list.id, next);
+        const key = crypto.randomBytes(6).toString('hex');
+        await conn.query("INSERT INTO list_members (list_id, discord_id, role, public_id, added_by) VALUES (?, ?, 'manager', ?, ?)", [list.id, former, key, next]);
+        return { listId: list.id, role: 'manager', memberKey: key };
+    });
+}
+
+module.exports = { transferOwnership, findInvitee, invitePreview, notSent, invite, listInvites, respond, revoke, listMembers, setRole, removeMember, leave };

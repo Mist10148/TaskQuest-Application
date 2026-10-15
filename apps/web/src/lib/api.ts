@@ -168,6 +168,7 @@ export const sharingApi = {
         patch<{ memberKey: string; role: ListRole }>(`/api/lists/${listId}/members/${memberKey}`, { role }),
     removeMember: (listId: number, memberKey: string) => del<{ success: boolean }>(`/api/lists/${listId}/members/${memberKey}`),
     leave: (listId: number) => post<{ success: boolean }>(`/api/lists/${listId}/leave`),
+    transfer: (listId: number, memberKey: string) => post<{ success: boolean; listId: number; role: ListRole; memberKey: string }>(`/api/lists/${listId}/transfer`, { memberKey }),
     myInvites: () => apiFetch<MyInvite[]>('/api/invites'),
     accept: (id: number) => post<InviteResponse>(`/api/invites/${id}/accept`),
     decline: (id: number) => post<InviteResponse>(`/api/invites/${id}/decline`),

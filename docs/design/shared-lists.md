@@ -88,7 +88,7 @@ Opt-in per list. Shared lists are excluded from a member's embeddings by default
 | XP farming through two cooperating accounts on a shared list | XP and caps are per actor; completion caps already bound it to 50 a day each |
 | Members see each other's names | Show only the stored display name, as the leaderboard does; never a Discord ID |
 | Removing a member while they have the list open | Every request re-checks access; the next call returns 404 |
-| Orphaned lists when the owner leaves | The owner cannot leave: they delete the list (ownership transfer is out of scope, [KNOWN_ISSUES #34](../KNOWN_ISSUES.md)) |
+| Orphaned lists when the owner leaves | The owner cannot leave: they delete the list or hand it to a member (`transferOwnership`, the old owner stays as a manager). |
 
 ## Open questions for the product owner
 

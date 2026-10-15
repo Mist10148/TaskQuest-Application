@@ -372,6 +372,14 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('POST', '/api/focus/finish', { cookie: alice, body: { sessionId: real.sessionId } })).status, 409);
     });
 
+    await t.test('ownership transfer endpoint validates its input', async () => {
+        assert.equal((await call('POST', '/api/lists/1/transfer', { body: { memberKey: 'abcdefabcdef' } })).status, 401);
+        assert.equal((await call('POST', '/api/lists/1/transfer', { cookie: mallory, body: {} })).status, 400);
+        assert.equal((await call('POST', '/api/lists/1/transfer', { cookie: mallory, body: { memberKey: 'not-a-key' } })).status, 400);
+        assert.equal((await call('POST', '/api/lists/999999/transfer', { cookie: mallory, body: { memberKey: 'abcdefabcdef' } })).status, 404, 'a list that is not yours does not exist');
+        assert.equal((await call('POST', '/api/lists/1/transfer', { cookie: mallory, body: { memberKey: 'abcdefabcdef' }, origin: 'https://evil.example' })).status, 403);
+    });
+
     await t.test('today endpoint', async () => {
         assert.equal((await call('GET', '/api/today')).status, 401);
         const today = await (await call('GET', '/api/today', { cookie: mallory })).json();

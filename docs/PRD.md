@@ -290,7 +290,6 @@ TaskQuest addresses this in three ways:
 | Priority | Item |
 |---|---|
 | Next | Run the AI evals against real Gemini and grow the golden sets. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
-| Later | Ownership transfer for shared lists |
 | Later | Party features beyond the weekly quest (party boards, more quests) |
 | Later | Push notifications for AI results |
 | Later | More component tests for the web app (the first set exists) |
@@ -298,6 +297,7 @@ TaskQuest addresses this in three ways:
 | Done | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |
 | Done | The class rebalance, five new classes and 96 skills; task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, the weekly review, the monthly boss, rotating quests and prestige; the cosmetics shop |
 | Done | CSV import, templates, task search, stats; per-task reminders; per-user days; optional web push |
+| Done | Ownership transfer for shared lists |
 | Done | Shared lists and parties ([shared-lists](design/shared-lists.md)); arcade anti-cheat by replay ([arcade-anti-cheat](design/arcade-anti-cheat.md)); Tailwind 4 ([tailwind-4-migration](design/tailwind-4-migration.md)); Playwright smoke tests |
 
 ## 12. Risks and assumptions

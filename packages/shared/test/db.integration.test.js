@@ -1212,6 +1212,51 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.today.getToday(Y)).streak.live, 0, 'a lapsed streak reads 0');
     });
 
+    await t.test('ownership transfer: the list moves, the old owner stays as a manager, and limits hold', async () => {
+        const O = '100000000000000911';
+        const N = '100000000000000912';
+        const X = '100000000000000913';
+        for (const id of [O, N, X]) await db.users.ensureUser(id);
+        const member = (listId, userId, role = 'editor') =>
+            db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, require('crypto').randomBytes(6).toString('hex')]);
+        const keyOf = async (listId, who) => (await db.sharing.listMembers(O, listId)).members.find((m) => m.name === who);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['newbie', N]);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['ownerboss', O]);
+
+        const { list } = await db.tasks.createList(O, { name: 'Handover' });
+        await db.tasks.addItem(O, list.id, { name: 'a task' });
+        await member(list.id, N);
+        const row = await keyOf(list.id, 'newbie');
+
+        // only the owner, and only to a member
+        await assert.rejects(db.sharing.transferOwnership(N, list.id, row.memberKey), { code: 'FORBIDDEN' });
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, 'abcdefabcdef'), { code: 'NOT_FOUND' });
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, 'owner'), { code: 'NOT_FOUND' });
+
+        // a clashing name blocks it
+        await db.tasks.createList(N, { name: 'Handover' });
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, row.memberKey), { code: 'CONFLICT' });
+        await db.query("UPDATE lists SET name = 'Mine' WHERE discord_id = ? AND name = 'Handover'", [N]);
+
+        const done = await db.sharing.transferOwnership(O, list.id, row.memberKey);
+        assert.equal(done.role, 'manager');
+        const owner = (await db.query('SELECT discord_id FROM lists WHERE id = ?', [list.id]))[0];
+        assert.equal(owner.discord_id, N, 'the list now belongs to the member');
+        const after = await db.sharing.listMembers(N, list.id);
+        assert.equal(after.isOwner, true);
+        assert.deepEqual(after.members.map((m) => [m.name, m.role, m.isOwner]), [['newbie', 'manager', true], ['ownerboss', 'manager', false]]);
+        // the old owner can still open it, as a manager, but can no longer hand it over or delete it
+        assert.equal((await db.sharing.listMembers(O, list.id)).role, 'manager');
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, (await db.sharing.listMembers(N, list.id)).members[1].memberKey), { code: 'FORBIDDEN' });
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ? AND discord_id = ?', [list.id, N]))[0].n, 0, 'the new owner is not also a member');
+
+        // it can go back
+        const back = (await db.sharing.listMembers(N, list.id)).members.find((m) => m.name === 'ownerboss');
+        await db.sharing.transferOwnership(N, list.id, back.memberKey);
+        assert.equal((await db.query('SELECT discord_id FROM lists WHERE id = ?', [list.id]))[0].discord_id, O);
+        void X;
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

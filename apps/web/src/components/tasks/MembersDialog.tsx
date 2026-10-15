@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, LogOut, Send, UserMinus, Users, X } from "lucide-react";
+import { Crown, Loader2, LogOut, Send, UserMinus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import type { InvitePreview, ListInvite, ListMember } from "@/lib/api";
 import { ApiError, INVITE_NEUTRAL_MESSAGE } from "@/lib/api";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { InviteConfirmDialog } from "@/components/feedback/InviteConfirmDialog";
-import { useInviteMember, useInvitePreview, useLeaveList, useListMembers, useRemoveMember, useRevokeInvite, useSetMemberRole } from "@/hooks/useApi";
+import { useInviteMember, useInvitePreview, useLeaveList, useListMembers, useRemoveMember, useRevokeInvite, useSetMemberRole, useTransferList } from "@/hooks/useApi";
 import {
   assignableRoles, canChangeRole, canLeaveList, canManageList, isAccessLost, remainingSlots, roleHint, roleLabel, rolesFor,
   type ListRole, type SharingFields,
@@ -47,6 +47,8 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   const previewInvite = useInvitePreview(listId);
   const setRole = useSetMemberRole(listId);
   const removeMember = useRemoveMember(listId);
+  const transfer = useTransferList(listId);
+  const [toOwn, setToOwn] = useState<ListMember | null>(null);
   const revoke = useRevokeInvite(listId);
   const leave = useLeaveList(listId);
 
@@ -163,6 +165,11 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
                           >
                             {rolesFor(me, m).map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                           </select>
+                          {data.isOwner && (
+                            <Button variant="ghost" size="sm" aria-label={`Make ${m.name ?? "member"} the owner`} title="Hand the quest over" onClick={() => setToOwn(m)}>
+                              <Crown className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" className="text-destructive-text hover:bg-destructive/10" aria-label={`Remove ${m.name ?? "member"}`} onClick={() => setToRemove(m)}>
                             <UserMinus className="h-4 w-4" />
                           </Button>
@@ -247,6 +254,17 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
         description={<>You will lose access to "{listName}" until someone invites you again.</>}
         confirmLabel="Leave"
         onConfirm={() => void doLeave()}
+      />
+      <ConfirmDialog
+        open={toOwn !== null}
+        onOpenChange={(o) => !o && setToOwn(null)}
+        title="Hand this quest over?"
+        description={<>{toOwn?.name ?? "This person"} becomes the owner of "{listName}" (they can delete it and invite managers). You stay on it as a manager.</>}
+        confirmLabel="Make owner"
+        onConfirm={() => {
+          if (toOwn) transfer.mutate(toOwn.memberKey, { onSuccess: () => toast.success(`${toOwn.name ?? "They"} now own "${listName}"`) });
+          setToOwn(null);
+        }}
       />
       <ConfirmDialog
         open={toRemove !== null}

@@ -337,6 +337,18 @@ export function useRemoveMember(listId: number) {
     });
 }
 
+export function useTransferList(listId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (memberKey: string) => sharingApi.transfer(listId, memberKey),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['lists'] });
+            refreshSharing(qc, listId);
+        },
+        onError: (error) => { showError(error); refreshSharing(qc, listId); },
+    });
+}
+
 export function useLeaveList(listId: number) {
     const qc = useQueryClient();
     return useMutation({

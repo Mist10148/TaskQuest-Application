@@ -128,6 +128,7 @@ All routes are 🔒. People are invited by their exact **Discord username** (the
 | PATCH | `/api/lists/:id/members/:memberKey` | `{role}` | `{memberKey, role}`. Managers only; only the owner makes or changes a manager. |
 | DELETE | `/api/lists/:id/members/:memberKey` | — | Remove a member (their personal reminder state goes with them). Managers only; only the owner removes a manager. Their next request on the list is `404`. |
 | POST | `/api/lists/:id/leave` | — | Leave a list you are a member of. `403` for the owner, who deletes the list instead. |
+| POST | `/api/lists/:id/transfer` | `{memberKey}` (a member key from the members list, 12 hex characters; strict) | Hand the list to one of its members: `{success, listId, role: "manager", memberKey}` (your new member key). The new owner gets the list, you stay on it as a manager. Owner only (`403`); `404` for an unknown member; `409` when the new owner already owns a quest with that name; `400` when they would go over the 200 quest or 5,000 task limit. |
 | GET | `/api/invites` | — | The invitations waiting for you: `[{id, listName, ownerName, invitedByName, role, createdAt, expiresAt}]`. |
 | POST | `/api/invites/:id/accept` | — | `{accepted:true, list:{id,name}, role}`. Only the invitee can answer (`404` otherwise); `409` when it is no longer open or has expired, `400` when the list is full. |
 | POST | `/api/invites/:id/decline` | — | `{accepted:false}` |

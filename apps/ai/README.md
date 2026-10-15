@@ -13,7 +13,7 @@ pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 ```
 
-It reads the repository-root `.env` (see the AI section of [`.env.example`](../../.env.example)). Minimum: `AI_INTERNAL_TOKEN` (32+ characters, same value as the web service), `GEMINI_API_KEY`, and the database variables. The schema comes from the Node migrations (`npm run db:migrate`, migration `003_ai`); this service never runs DDL.
+It reads the repository-root `.env` (see the AI section of [`.env.example`](../../.env.example)). Minimum: `AI_INTERNAL_TOKEN` (32+ characters, same value as the web service), `GEMINI_API_KEY`, and the database variables. The schema comes from the Node migrations (`npm run db:migrate`, the `ai_*` tables of `001_baseline`); this service never runs DDL.
 
 One-off jobs:
 
@@ -30,7 +30,7 @@ mypy
 pytest tests/unit tests/graphs tests/evals
 ```
 
-Tests are offline: fake chat models and embeddings, in-memory SQLite, and a mocked Express. Nothing calls Gemini. The Python code targets 3.12 (CI) and has also been run on 3.13.
+Tests are offline: fake chat models and embeddings, in-memory SQLite, and a mocked Express. Nothing calls Gemini. `pytest tests/postgres` runs the SQL against a real PostgreSQL with pgvector (set `AI_TEST_DB_URL=postgresql://...` to a scratch database migrated with `npm run db:migrate`; the `ai-postgres` CI job). The Python code targets 3.12 (CI) and has also been run on 3.13.
 
 ## Evals
 
@@ -57,13 +57,13 @@ app/
 ├── main.py               FastAPI app, health, request logging, reconcile loop
 ├── config.py             Settings (env vars)
 ├── deps.py               X-AI-Token and X-Discord-Id checks
-├── db/                   async SQLAlchemy engine; repo.py = scoped queries (every function takes discord_id)
-├── rag/                  chunking, embeddings, vector store, hybrid retriever, indexer, CLIs
+├── db/                   async SQLAlchemy engine (asyncpg, UTC sessions); repo.py = scoped queries (every function takes discord_id)
+├── rag/                  chunking, embeddings, vector store (EmbeddingStore: pgvector search in SQL), hybrid retriever, indexer, CLIs
 ├── chains/summarize.py   summarizer (3 modes, cache, id validation, map-reduce)
 ├── graphs/
 │   ├── prioritize.py     LangGraph: features -> LLM rank -> validate -> merge / fallback
 │   ├── chat.py           LangGraph agent: router, retrieval, tools, confirmation, memory
-│   └── checkpointer.py   SQL checkpoint saver (Postgres, SQLite in tests)
+│   └── checkpointer.py   SqlCheckpointSaver (Postgres, SQLite in tests)
 ├── tools/                chat tools (specs.py) and the Express /internal client (web_client.py)
 ├── chat_service.py       runs a turn and turns graph output into SSE events
 ├── threads.py            chat thread rows

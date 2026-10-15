@@ -11,7 +11,7 @@ How the TaskQuest AI service is put together, as built. **This is the authoritat
 5. [Prioritizer graph](#5-prioritizer-graph)
 6. [Chat graph](#6-chat-graph)
 7. [Discord conversation (converse)](#7-discord-conversation-converse)
-8. [Persistence: the MySQL checkpointer](#8-persistence-the-mysql-checkpointer)
+8. [Persistence: the SQL checkpointer](#8-persistence-the-sql-checkpointer)
 9. [Prompts and the persona](#9-prompts-and-the-persona)
 10. [Guardrails](#10-guardrails)
 11. [Request lifecycles](#11-request-lifecycles)
@@ -27,9 +27,9 @@ flowchart LR
     Browser -->|session cookie| Express[apps/server<br/>Express]
     Bot[apps/bot<br/>discord.js] -->|X-AI-Token + X-Discord-Id| AI
     Express -->|X-AI-Token + X-Discord-Id| AI[apps/ai<br/>FastAPI]
-    AI -->|read| MySQL[(MySQL 8)]
+    AI -->|read| PG[(PostgreSQL<br/>+ pgvector)]
     AI -->|writes only via /internal/*| Express
-    Express -->|db.tasks.*| MySQL
+    Express -->|db.tasks.*| PG
     AI --> Gemini[Google Gemini<br/>chat + embeddings]
 ```
 
@@ -49,7 +49,7 @@ flowchart LR
 | Discord conversation | The chat graph in read-only mode | `app/graphs/converse.py` |
 | Tools | `StructuredTool.from_function`, used only to describe tools to the model | `app/tools/specs.py` |
 | Retriever adapter | `BaseRetriever` / `Document` | `app/rag/retriever.py` (`TaskRetrieverLC`) |
-| Conversation memory | Custom `BaseCheckpointSaver` on MySQL | `app/graphs/checkpointer.py` |
+| Conversation memory | Custom `BaseCheckpointSaver` on Postgres (`SqlCheckpointSaver`) | `app/graphs/checkpointer.py` |
 | Tracing | LangSmith, if `LANGSMITH_API_KEY` is set | `app/observability.py` |
 
 The LangChain packages are pinned to the major versions CI tests against (`pyproject.toml`), because the checkpointer implements `langgraph-checkpoint`'s base class.
@@ -67,13 +67,13 @@ flowchart TB
         IH --> CH2[chunking:<br/>one chunk per week + XP]
         D[index_docs CLI] --> CH3[chunking:<br/>GAMEPLAY / COMMANDS docs]
         CH & CH2 & CH3 -->|hash changed?| EMB[Gemini embeddings<br/>768-d, retrieval_document]
-        EMB --> STORE[(ai_embeddings<br/>float32 BLOB)]
+        EMB --> STORE[(ai_embeddings<br/>vector 768)]
     end
     subgraph Retrieval
         Q[query] -->|retrieval_query| QV[query vector]
-        QV --> SEARCH[numpy cosine over the<br/>user's rows + docs, TTL cache]
+        QV --> SEARCH[pgvector cosine in SQL over the<br/>user's rows + docs, exact top-k]
         STORE --> SEARCH
-        SEARCH --> FRESH[re-read each hit<br/>from MySQL]
+        SEARCH --> FRESH[re-read each hit<br/>from the database]
         FRESH --> FILTER[status / category filters]
         FILTER --> SCORE[0.75 cosine + 0.15 keyword<br/>+ 0.10 urgency]
         SCORE --> TOPK[top k as &lt;task id=...&gt; blocks]
@@ -84,9 +84,9 @@ flowchart TB
 - **Only changed text is embedded.** Each chunk stores a SHA-256 `content_hash`. Unchanged chunks are only "touched" so the reconcile job stops flagging them.
 - **Staying fresh:** web writes and bot edits trigger a fire-and-forget `/internal/index`. The reconcile loop catches anything missed: changed lists, new completions or XP for history, and users who opted out, whose vectors are deleted. Toggling AI in settings re-indexes or purges straight away.
 - **Shared quests are never AI context.** A quest that anybody else belongs to (`list_members`) is excluded from every read in `apps/ai/app/db/repo.py` (`UNSHARED`), is never indexed or summarised, and its existing vectors are purged by the next reconcile, because its names and task titles can be written by other people and are untrusted.
-- **Retrieval reads fresh data.** Stored vectors only decide which quests are candidates. The text shown to the model is rebuilt from MySQL, so completion state is never stale.
+- **Retrieval reads fresh data.** Stored vectors only decide which quests are candidates. The text shown to the model is rebuilt from the database, so completion state is never stale.
 - **Filters:** a `status` or `category` filter drops doc chunks. History chunks count as finished work, so they appear only under `status="done"`.
-- **Vector store:** MySQL plus numpy, so there is no extra infrastructure. [AI_INTEGRATION.md §17](AI_INTEGRATION.md) lists when to move to a dedicated vector database.
+- **Vector store:** `EmbeddingStore` (`app/rag/store.py`) on a pgvector `vector(768)` column in the same Postgres database, so there is no extra infrastructure. Search is `ORDER BY embedding <=> query LIMIT k` in SQL, an exact top-k over the user's rows plus the global docs; there is deliberately no HNSW index, because an approximate index filtered to one user can return fewer than k rows. On SQLite (the offline tests) the same top-k runs in numpy over a TTL-cached matrix. [AI_INTEGRATION.md §17](AI_INTEGRATION.md) lists when to revisit this.
 
 ## 4. Summarizer (LCEL chain)
 
@@ -164,7 +164,7 @@ The bot answers @mentions, replies to its own messages and DMs, Zephyr-style (`a
   - A write call the model invents is answered with a refusal that points to `/ask` or the website.
 - **Guild channels are public:** the bot sends `public: true` when the message came from a server. The service then builds the graph with `public=True` and `prompt_name="converse_public_system"`: **no tools are bound** (every read tool exposes private quests), retrieval is limited to the `doc` source type, and a tool call the model invents anyway is answered with a refusal. Quest lookups therefore work only in DMs (and `/ask`, which replies ephemerally).
 - **Memory is per user per channel**, using thread id `uuid5("discord:<channel>:<user>")`. Zephyr shares memory across a channel; TaskQuest can't, because retrieval and tools read each user's private quests.
-- **Threads are saved with `source='discord'`** (migration 005), so they never appear in the web app's thread list. `/forget` deletes the thread and its checkpoints.
+- **Threads are saved with `source='discord'`**, so they never appear in the web app's thread list. `/forget` deletes the thread and its checkpoints.
 - **Images:** only `https` URLs on Discord's CDN are fetched, up to 4 MB, image types only. The bytes go to Gemini through the run config and are never written to the checkpoint.
 - **Output:**
   - The service returns one JSON reply.
@@ -172,17 +172,17 @@ The bot answers @mentions, replies to its own messages and DMs, Zephyr-style (`a
   - `/ai-format` switches to embeds.
   - Replies never ping anyone (`allowedMentions: { parse: [] }`).
 
-## 8. Persistence: the MySQL checkpointer
+## 8. Persistence: the SQL checkpointer
 
-`MySQLCheckpointSaver` implements the async half of `BaseCheckpointSaver`: `aget_tuple`, `alist`, `aput`, `aput_writes` and `adelete_thread`.
+`SqlCheckpointSaver` implements the async half of `BaseCheckpointSaver`: `aget_tuple`, `alist`, `aput`, `aput_writes` and `adelete_thread`.
 
 - **Tables:**
-  - `ai_checkpoints` holds one row per checkpoint, as a LONGBLOB serialized with LangGraph's serde.
+  - `ai_checkpoints` holds one row per checkpoint, as `BYTEA` serialized with LangGraph's serde.
   - `ai_checkpoint_writes` holds pending writes, including `__interrupt__`.
   - Both have a foreign key to `ai_chat_threads`, so every thread needs a row there.
 - **Checkpoint ids are time-ordered**, so the latest checkpoint is simply the greatest id.
-- **Special channels** (errors, interrupts, resume) overwrite their slot, as LangGraph expects; ordinary writes are insert-once.
-- **Concurrency:** LangGraph saves checkpoints and writes from concurrent tasks, so every `engine.begin()` must get its own connection. MySQL's pool does this. The SQLite test database uses a temporary file with `NullPool` for the same reason; a single shared in-memory connection lost interrupt writes.
+- **Special channels** (errors, interrupts, resume) overwrite their slot, as LangGraph expects; ordinary writes are insert-once. Both are `INSERT ... ON CONFLICT`, which Postgres and SQLite share.
+- **Concurrency:** LangGraph saves checkpoints and writes from concurrent tasks, so every `engine.begin()` must get its own connection. The asyncpg pool does this. The SQLite test database uses a temporary file with `NullPool` for the same reason; a single shared in-memory connection lost interrupt writes.
 
 ## 9. Prompts and the persona
 
@@ -211,8 +211,8 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 | Invented ids or XP | Ids are validated (summarizer and prioritizer retry, then drop unknown ids). XP is mentioned only when a tool result includes it. |
 | Unsafe content | Gemini `safety_settings` set explicitly (harassment blocks only high-probability content, so the snappy persona still works). Blocked replies become a friendly message. |
 | Runaway agents | `recursion_limit=40` and `MAX_TOOL_ITERATIONS`. |
-| Cost and opt-out | One shared dependency (`deps.require_ai`) guards chat, resume, converse, summary and prioritize. It rejects users with `users.ai_enabled = 0` (403 `AI_OPTED_OUT`) and **reserves one request atomically** (`INSERT ... ON DUPLICATE KEY UPDATE requests = requests + 1`, then a limit check inside the same transaction) before any work starts, so concurrent requests cannot all slip under the limit. Routes that reject a call before the model runs (404, 409, cache hit, provider failure) refund it. `require_ai` is a yield dependency, so a request that fails body validation (422) or raises before the response starts is refunded too; `AIAccess.refund()` is idempotent. Tokens are booked afterwards with `requests=0`, in a `finally` so a client that disconnects mid-stream still pays for what the model spent. |
-| Double clicks and races | Turns on one thread run under a per-thread `asyncio.Lock` (`app/locks.py`). A resume re-checks "a confirmation is pending" under that lock, so a second Approve never runs the write again. `POST /v1/chat` returns 409 while a confirmation is pending. Thread creation is `INSERT IGNORE`, so simultaneous first Discord messages do not collide. `summary` and `prioritize` use short database connections around the model call instead of holding one pooled connection for the whole LLM round trip. |
+| Cost and opt-out | One shared dependency (`deps.require_ai`) guards chat, resume, converse, summary and prioritize. It rejects users with `users.ai_enabled = 0` (403 `AI_OPTED_OUT`) and **reserves one request atomically** (`INSERT ... ON CONFLICT (discord_id, day, feature) DO UPDATE SET requests = ai_usage.requests + 1`, then a limit check inside the same transaction) before any work starts, so concurrent requests cannot all slip under the limit. Routes that reject a call before the model runs (404, 409, cache hit, provider failure) refund it. `require_ai` is a yield dependency, so a request that fails body validation (422) or raises before the response starts is refunded too; `AIAccess.refund()` is idempotent. Tokens are booked afterwards with `requests=0`, in a `finally` so a client that disconnects mid-stream still pays for what the model spent. |
+| Double clicks and races | Turns on one thread run under a per-thread `asyncio.Lock` (`app/locks.py`). A resume re-checks "a confirmation is pending" under that lock, so a second Approve never runs the write again. `POST /v1/chat` returns 409 while a confirmation is pending. Thread creation is `INSERT ... ON CONFLICT DO NOTHING`, so simultaneous first Discord messages do not collide. `summary` and `prioritize` use short database connections around the model call instead of holding one pooled connection for the whole LLM round trip. |
 | Confirm previews | The preview of every write tool (`create_list`, `add_item`, `update_item`, `break_down_task`, ...) lists every field that will be written, including each subtask name, due date, priority, tags, repeat and parent, so the user approves exactly what is written. |
 | Per-task fields | `add_item` and `update_item` take `due_date` (a real `YYYY-MM-DD` date), `priority` (`LOW`/`MEDIUM`/`HIGH`), `tags` (at most 5, 20 characters each, letters, digits, `-` and `_`) and `repeat` (`daily`/`weekly`/`monthly`, sent as `recurrence`); `add_item` also takes `parent_id` (a top-level subtask, one level only). The argument models forbid extra fields, and the server validates everything again with the shared rules. |
 | Break down a task | `break_down_task(item_id, subtasks)` takes 2 to 8 names and creates them under that subtask in one transaction (`POST /internal/items/:id/subtasks` → `db.tasks.addSubtasks`): all or none, one level deep, XP and the daily add cap as for any added task. The owner is the `discord_id` from graph state, never a tool argument, so a foreign or invented id is a not-found error. |
@@ -233,12 +233,12 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 |---|---|---|
 | `tests/unit`, `tests/graphs` | Chunking, store, retriever, summarizer, prioritizer, chat and converse graphs, tools, security and persona red-team, images | Temporary SQLite files and fake models (`tests/fakes.py`) |
 | `tests/evals` | Retrieval (50 queries), summary (with p95 latency and an optional `--judge`), prioritize golden sets | Offline in CI; `--live` with Gemini |
-| `tests/mysql` | Real schema, foreign keys, checkpointer round trip, usage and embeddings SQL | MySQL 8 with the Node migrations applied (CI job `ai-mysql`) |
+| `tests/postgres` | Real schema, foreign keys, checkpointer round trip, usage SQL, embeddings and pgvector search | PostgreSQL with pgvector and the Node migrations applied (`AI_TEST_DB_URL=postgresql://...`; CI job `ai-postgres` on `pgvector/pgvector:pg16`) |
 | `apps/bot/test/chat.test.js` | Mention, reply and DM handling, splitting, cooldown, opt-out, embeds | Node, with the AI client stubbed |
 
 ## 13. Design decisions
 
 - **One chat graph, configured two ways:** web chat and `/ask` are full mode; Discord conversation is read-only. Same nodes, same tests, same guardrails.
 - **Writes only through Express:** the AI service cannot drift from the game rules (XP, achievements, validation).
-- **Vectors in MySQL:** fine at TaskQuest's size (thousands of chunks per user at most) and needs nothing new to deploy.
+- **Vectors in Postgres (pgvector):** an exact search is fine at TaskQuest's size (thousands of chunks per user at most) and needs nothing new to deploy.
 - **Deterministic fallbacks everywhere:** the prioritizer baseline, the router default, retrieval falling back to keyword search, and a fixed message for blocked replies. A Gemini outage degrades the AI features without breaking them.

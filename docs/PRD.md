@@ -188,7 +188,7 @@ TaskQuest addresses this in three ways:
 | FR4 | Rewards are capped per day in the user's time zone: 10 list creations, 50 task creations and 50 task completions | Done |
 | FR5 | Free games (RPS, Hangman, arcade) share a cap of 500 XP per day in the user's time zone | Done |
 | FR6 | Game state is persisted in `game_sessions.game_data`, so games survive restarts | Done |
-| FR7 | Schema changes happen only through versioned migrations (001 to 022), and legacy databases are upgraded automatically | Done |
+| FR7 | Schema changes happen only through versioned migrations (a PostgreSQL baseline, `001_baseline`, then `002` onwards). The automatic upgrade of 3.x MySQL databases was removed with the move to PostgreSQL ([MIGRATION_POSTGRES](MIGRATION_POSTGRES.md)) | Done |
 | FR8 | Bot interactions that show XP or achievements are ephemeral | Done |
 | FR9 | The web app and API are served from one origin | Done |
 | FR10 | The bot exposes a health endpoint; the web app exposes `/api/health` | Done |
@@ -218,9 +218,9 @@ TaskQuest addresses this in three ways:
 | **Integrity** | Every purchase or payout runs in one database transaction with row locks. Concurrent clicks can't double-spend or double-pay; integration tests prove this. |
 | **Privacy** | Only the Discord ID, display name, username (for invitations) and avatar hash are stored. Other people see display names, never IDs. Names are escaped in DMs and embeds. |
 | **Performance** | List overview and leaderboard use single aggregate queries, with no N+1. Bot interactions defer within Discord's 3-second window. |
-| **Availability** | Sessions persist in MySQL, so they survive restarts and redeploys. Graceful SIGTERM handling. Background jobs never crash the process. |
-| **Portability** | MySQL 8 and MariaDB 10.4+. TLS with certificate verification for cloud databases. |
-| **Quality** | CI runs lint, typecheck, build, syntax checks, unit tests, a docs consistency test, integration tests on MySQL 8, Playwright browser tests, and a production dependency audit. |
+| **Availability** | Sessions persist in the database, so they survive restarts and redeploys. Graceful SIGTERM handling. Background jobs never crash the process. |
+| **Portability** | PostgreSQL 15+ with pgvector and citext (Supabase in production). TLS with certificate verification for cloud databases. |
+| **Quality** | CI runs lint, typecheck, build, syntax checks, unit tests, a docs consistency test, integration tests on PostgreSQL (pgvector), Playwright browser tests, and a production dependency audit. |
 | **Accessibility** | Keyboard-usable controls on the web (shortcuts, command palette, skip link, focus trap in the mobile drawer, visible focus), labelled icon buttons, `aria-live` status messages, WCAG AA text contrast in both themes (enforced by a test), a reduce-motion setting, and on-screen controls for touch play. |
 
 ## 8. Platform parity
@@ -270,7 +270,7 @@ TaskQuest addresses this in three ways:
 **Release 4.0 (in scope):**
 
 - The monorepo with the shared package.
-- A unified schema, with migrations from every legacy layout.
+- A unified schema, with migrations from every legacy layout (MySQL era; replaced by a PostgreSQL baseline since).
 - Server-authoritative games on both platforms.
 - An atomic XP economy with anti-farming limits.
 - Lifetime-XP levels.
@@ -281,7 +281,7 @@ TaskQuest addresses this in three ways:
 - CI and tests.
 - Consolidated documentation.
 
-**Improvement pass (unreleased, migrations 010 to 026):** the balance rework, ten new classes in all, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
+**Improvement pass (unreleased):** the balance rework, ten new classes in all, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
 
 **Out of scope:** the items listed under Later in the roadmap.
 
@@ -306,7 +306,7 @@ TaskQuest addresses this in three ways:
 |---|---|
 | A script can solve an arcade game offline and submit a valid recording | Replay verification, per-run caps, a 3 s cooldown and the shared daily cap bound the impact to at most 500 XP a day. |
 | Old deployments leaked secrets in git history | Fresh-history monorepo. Operators must rotate credentials ([SECURITY.md](../SECURITY.md#1-required-action-rotate-leaked-secrets)). |
-| Lifetime XP for pre-4.0 players is reconstructed | Migration 002 uses max(balance, the stored level's floor), so nobody loses a level. Spending before 4.0 isn't counted. |
+| Lifetime XP for pre-4.0 players is reconstructed | The MySQL-era legacy upgrade used max(balance, the stored level's floor), so nobody lost a level. Spending before 4.0 isn't counted. The PostgreSQL database started fresh, so it holds no such players. |
 | The level curve is linear, so level-scaled class effects keep growing | A steeper curve was rejected to protect veterans; prestige and the shop are the late-game sinks ([design/balance](design/balance.md)). |
 | Class balance rests on estimates, not live data | Rough ranking in [design/balance](design/balance.md); revisit with real XP history. |
 | Render free web services sleep | The bot should run as a paid worker; the web app tolerates cold starts. |
@@ -314,7 +314,7 @@ TaskQuest addresses this in three ways:
 | Invitation probing and spam | One neutral answer for every outcome the inviter must not learn, rate limits per account and address, 30 invitations a day, a decline cooldown and an opt-out. A patient inviter can still tell some cases apart ([SECURITY](../SECURITY.md#known-residual-risks)). |
 | Time zone hopping reopens daily caps | A zone change is limited to once every 24 hours (worth about 70 XP a day at most). |
 | Web push needs HTTPS, VAPID keys and real push services | Off by default; never replaces the Discord DM; delivery is untested against live push services ([KNOWN_ISSUES](KNOWN_ISSUES.md)). |
-| Migrations 011 and 012 were edited across branch commits before release | Development databases migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)). |
+| Supabase's pooler allows a limited number of clients | Use the session pooler and keep `DB_POOL_SIZE` small per service ([DEPLOYMENT](DEPLOYMENT.md#2-database)). |
 | Spare accounts could farm a party or shared list | Rewards need a member's own work since joining, XP stays with the actor, and the target counts only active members. |
 
 ## 13. Glossary

@@ -6,17 +6,23 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Upgrade notes
 
-- **Run the migrations.** `npm run db:migrate` (or just start the bot or the server) applies `010` to `026` in order; take a backup first. Do not point a database that was migrated at an intermediate commit of this branch at the release: migrations `011` and `012` were edited across commits before release, so reset such development databases ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)).
+- **The database is now PostgreSQL (Supabase), and it starts empty.** MySQL, MariaDB and TiDB are no longer supported, and nothing is copied from the old database: players link again on their first command or web login. Create a Supabase project, set `DB_URL` to its **Session pooler** URL (port 5432) with `DB_SSL=true`, and deploy; the single migration `001_baseline` runs on start. Follow [MIGRATION_POSTGRES.md](docs/MIGRATION_POSTGRES.md) for the runbook and rollback. Do not deploy this release against the old MySQL database: it can no longer talk to it.
 - **Re-register slash commands** (`npm run deploy:commands`): `/review`, `/prestige`, `/shop`, `/share`, `/invites`, `/members`, `/leave` and `/party` are new, and `/list` gained a Details button.
 - **New optional environment variables** for web push: `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` (set all three or none), plus `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_INTERNAL_URL`, `WEB_PUSH_INTERNAL_TOKEN` and `WEB_PUSH_TIMEOUT_MS`. Nothing changes while they are unset. See [DEPLOYMENT.md](docs/DEPLOYMENT.md#web-push-optional).
 - **Invite handles fill in over time.** Sharing lists and parties invites people by their exact Discord username (`users.discord_handle`, migration `021`). It is stored at each person's next web login or slash command, never backfilled, so a person who has not used TaskQuest since the upgrade cannot be invited yet.
 - **Open arcade tabs must be refreshed.** Arcade runs now carry a recorded input timeline; an old client gets a "refresh the page" error instead of XP.
-- **Upgrading from 3.x: try it on a copy first.** The old tables are converted to `utf8mb4_unicode_ci` while later migrations create tables with the server's default collation, which can make a foreign key to `users` fail on some servers. This is untested (CI only migrates fresh databases); see [OPERATIONS.md](docs/OPERATIONS.md#before-upgrading-a-database-from-a-3x-release) and known issue 48.
 - **Borrowed flat skills stop working.** Valor, Fortify, Arcane Study and Multishot now only work while their own class (Hero, Tank, Wizard, Archer) is equipped, so a player who bought them for another class loses that bonus. The skills stay owned; a tree reset (Skills page) refunds 75%. Nothing else about owned skills, classes or levels changes.
 - **Blackjack no longer takes class or skill bonuses**, so a Hero or Gambler earns less from it than before. Nobody's level drops: the level curve is unchanged.
 
 ### Added
 
+- **PostgreSQL on Supabase.** The bot, web server and AI service run on PostgreSQL with pgvector ([MIGRATION_POSTGRES](docs/MIGRATION_POSTGRES.md)):
+  - Node uses `pg` behind a small compatibility layer; the AI service uses `asyncpg`.
+  - The 26 MySQL migrations are squashed into one `001_baseline`.
+  - RAG search ranks embeddings in SQL (`vector(768)`, exact per-user cosine top-k) instead of loading them into numpy.
+  - CI runs on `pgvector/pgvector:pg16`.
+  - List, template and party names stay unique ignoring case, but accents now count ("Cafe" and "Café" are two lists).
+  - Times keep milliseconds.
 - **Documentation checks and a what's-new page.** `docs.test.js` now also checks that the numbers in every class description match `CLASS_RULES`, that the skill effects in GAMEPLAY use the numbers of the skill descriptions, and that the CLASS_GUIDE build tables are exactly what the balance simulator prints (it found two stale card texts: the Ranger's +2 XP per day early is 3, Holy Aura's +2 is 3). [WHATS_NEW](docs/WHATS_NEW.md) summarises 4.0 and the balance pass for players.
 - **An archive job and a class report.** `npm run archive -- --days 365 [--games] [--dry-run]` moves old XP transactions (and finished game sessions) to archive tables in batches. `xp_transactions.player_class` records the class a reward was earned in (migration `026_balance_data`), and `npm run xp-report` prints the real average XP per action by class. `npm run balance` prints the simulated balance tables.
 - **A streak-at-risk warning.** On the evening of the last day a streak of 3 or more days can be saved, the bot DMs (and sends a web push) once, for players with reminders and XP on. `users.streak_warned_day` (migration `025_streak_warnings`), `db.today.getStreakWarnings`.

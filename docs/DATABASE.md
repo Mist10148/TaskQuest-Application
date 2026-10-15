@@ -1,17 +1,16 @@
 # Database
 
-TaskQuest stores everything in one MySQL 8 or MariaDB 10.4+ database, which the bot and the web server share. The schema is owned by **versioned migrations** in [`packages/shared/src/db/migrations`](../packages/shared/src/db/migrations). Neither app changes the schema any other way.
+TaskQuest stores everything in one PostgreSQL database (Supabase in production; any Postgres 15+ with the `vector` and `citext` extensions locally), which the bot, the web server and the AI service share. The schema is owned by **versioned migrations** in [`packages/shared/src/db/migrations`](../packages/shared/src/db/migrations). Neither app changes the schema any other way. The move from MySQL/TiDB is described in [MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md).
 
 ## Contents
 
 1. [Migrations](#migrations)
-2. [Upgrading a legacy database](#upgrading-a-legacy-database)
-3. [Tables](#tables)
-4. [XP transaction sources](#xp-transaction-sources)
-5. [Game session states](#game-session-states)
-6. [Automation queries](#automation-queries)
-7. [Connection settings](#connection-settings)
-8. [Backups and maintenance](#backups-and-maintenance)
+2. [Tables](#tables)
+3. [XP transaction sources](#xp-transaction-sources)
+4. [Game session states](#game-session-states)
+5. [Automation queries](#automation-queries)
+6. [Connection settings](#connection-settings)
+7. [Backups and maintenance](#backups-and-maintenance)
 
 ---
 
@@ -24,68 +23,28 @@ npm run db:migrate          # reads DB_* from the environment / the root .env
 Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`, in which case they refuse to start if the schema is behind.
 
 - Applied migrations are recorded in `schema_migrations (id, applied_at)`.
-- A MySQL named lock (`taskquest_migrations`) stops two processes migrating at the same time.
-- Migrations are JavaScript, not raw SQL. They check `information_schema` before every change, so they are idempotent and work on both MySQL 8 and MariaDB. The two disagree on syntax such as `ADD COLUMN IF NOT EXISTS`.
+- A session-level advisory lock (`pg_try_advisory_lock(hashtext('taskquest_migrations'))`) stops two processes migrating at the same time. This is why `DB_URL` must use a session pooler, not a transaction pooler ([DEPLOYMENT](DEPLOYMENT.md#2-database)).
+- Each migration runs in its own transaction. Postgres DDL is transactional, so a failed migration leaves nothing half-applied.
+- Migrations are JavaScript, not raw SQL, so they can use idempotent helpers that check `information_schema` / `pg_indexes` in the current schema first.
 
 | Migration | Purpose |
 |---|---|
-| `001_initial_schema` | Creates every table for a fresh database (`CREATE TABLE IF NOT EXISTS`) |
-| `002_upgrade_legacy` | Brings databases from older releases up to the 001 schema (see below). Does nothing on a fresh database. |
-| `003_ai` | AI tables (embeddings, chat threads, checkpoints, usage, summary cache) and `users.ai_enabled` |
-| `004_lists_updated_at` | `lists.updated_at`, so list-only edits are re-indexed by the AI service |
-| `005_ai_thread_source` | `ai_chat_threads.source` (`web` or `discord`) |
-| `006_ai_chat_format` | `users.ai_chat_format` (how the bot formats AI replies) |
-| `007_item_fields` | Per-task `due_date`, `priority`, `tags`, `parent_id` (subtasks, self-referencing FK, cascade) and `recurrence` |
-| `008_user_prefs` | `users.timezone`, `reminder_hour`, `weekly_digest`, `last_digest_at`, `calendar_token` (unique), `streak_freezes`, `xp_spent` (backfilled from `xp_transactions`); `lists.remind_at` and `overdue_notified` |
-| `009_quest_claims` | `quest_claims`, the claim log that keeps a quest to one payout per period |
-| `010_quest_integrity` | `items.first_completed_at`, `first_completed_high`, `counts_for_quests` (what quests count) and `repeat_anchor_day` (monthly repeats keep their day) |
-| `011_class_rework` | Class rebalance and five new classes: `users.assassin_last_at` (Assassin decay), `gambler_streak` (Hot Hand), `assassin_bleed` (Bleed), `owns_monk` / `owns_artisan` / `owns_ranger` / `owns_necromancer` / `owns_paladin`, counters `monk_rhythm`, `monk_day`, `artisan_progress`, `necro_souls`, and `player_class` extended with MONK, ARTISAN, RANGER, NECROMANCER, PALADIN |
-| `012_xp_sources` | New XP sources: `lists.cleared_at` (a list pays the list-cleared bonus once), `users.last_chest_streak` (streak chests pay once per run), `items.habit_streak` (habit streaks), `items.first_completed_early` / `first_completed_overdue` (quest facts recorded at the first completion), `users.prestige` and `users.lifetime_xp_total` (backfilled from `lifetime_xp`), and the `focus_sessions` table |
-| `013_task_reminders` | `items.reminded_at` (the task's due-day DM went out) and `items.remind_at` (snooze); a new due date clears both |
-| `014_templates` | The `task_templates` table |
-| `015_timezone_days` | `users.timezone_changed_at` (throttles zone changes now that the zone sets the user's day) |
-| `016_cosmetics` | The `user_cosmetics` table and `users.equipped_title`, `equipped_frame`, `equipped_accent` |
-| `017_web_push` | The `push_subscriptions` table and `users.web_push` |
-| `018_list_members` | Shared lists: `list_members` (roles), `list_invites`, the per-member reminder tables `list_reminders` and `item_reminders`, and the actor columns `items.created_by`, `completed_by`, `first_completed_by` and `lists.cleared_by` (backfilled from the list owner) |
-| `019_parties` | `parties`, `party_members` (UNIQUE per user) and `party_invites` |
-| `020_due_date_set_at` | `items.due_date_set_at` (when the due date was set or last changed; backfilled from `created_at`). Overdue and early effects apply only to a date set at least 24 hours before the completion |
-| `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `users.accept_invites` (1 default; 0 refuses every invitation silently), `party_members.public_id` (opaque member key for removing a member, backfilled randomly), `items.rearm_count` / `rearm_day` and `lists.rearm_count` / `rearm_day` (how often today, UTC, a changed due date or deadline re-armed everyone's reminders; limited to 3 a day), `users.progress_reset_at` (set by a progress reset; quest, weekly review and party metrics ignore completions before it) |
-| `022_invite_responded_at` | `list_invites.responded_at` and `party_invites.responded_at`: when the invitee declined. The 7-day decline cooldown counts from it (older rows fall back to `created_at`) |
-| `023_new_classes` | Five more classes (Bard, Alchemist, Druid, Chronomancer, Warden): `users.owns_bard` / `owns_alchemist` / `owns_druid` / `owns_chronomancer` / `owns_warden`, counters `bard_recent` (list ids of the last completions) and `alchemist_mix` (priority bitmask of the current brew), and `player_class` extended with the new values |
-| `024_engagement` | New XP sources: `reflections` (one short note a day, unique per user and day), `weekly_goals` (the target a player sets for a week and when it was claimed) and `items.estimate_minutes` (the player's own estimate of a task's length) |
-| `025_streak_warnings` | `users.streak_warned_day`: the player's own day on which the bot last warned them that today is the last day to keep their streak (at most one warning a day) |
-| `026_balance_data` | `xp_transactions.player_class` (the class equipped when the XP was earned; NULL before this migration) and the empty `xp_transactions_archive` and `game_sessions_archive` tables |
+| `001_baseline` | Creates the whole schema (every table below, the `citext` and `vector` extensions) with `CREATE … IF NOT EXISTS`. It is the schema the 26 MySQL-era migrations ended at, squashed into one Postgres baseline; those files stay in git history. |
 
-The release that introduced migrations `010` to `026` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
+New migrations continue from `002`. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
 
-To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
-
-## Upgrading a legacy database
-
-Point TaskQuest 4.0 at your existing database and start it, or run `npm run db:migrate`. Migration `002_upgrade_legacy` handles all three historical layouts:
-
-| Source | What 002 does |
-|---|---|
-| Bot v3.8 runtime DDL (`database/db.js`) | Adds foreign keys with `ON DELETE CASCADE` and indexes. Adds missing columns. Removes items orphaned by deleted lists. |
-| Bot v3.5 `schema.sql` / `UPDATED_DATABASE_SCHEMA.sql` | Converts `xp_transactions.source` and `game_sessions.state` from `ENUM` to `VARCHAR`. Converts INT XP columns to BIGINT. Renames `game_sessions.started_at` to `created_at`. Adds `game_data`. Leaves the old `blackjack_hands` table in place but unused. |
-| Web v1.5 runtime ALTERs | Ensures `discord_username` and `discord_avatar` exist on both MySQL and MariaDB. |
-
-It also:
-
-- converts latin1 tables to `utf8mb4`, so emoji in names work. Legacy FKs are dropped first and recreated afterwards.
-- merges the web's `BUY_CLASS` achievement into the bot's `FIRST_CLASS`.
-- adds `users.lifetime_xp`, backfilled as `GREATEST(player_xp, (player_level - 1) * 100)`, so **no player's level drops**.
-- marks already-completed items as `xp_awarded`, so they can't be re-paid.
-- **refunds escrowed bets** of Blackjack hands left active by old code, then expires all old active sessions.
-- inserts placeholder `users` rows for any orphaned `discord_id`, so the foreign keys can be added.
-
-> Back up first (`mysqldump`). The upgrade has been tested against all three layouts on MariaDB 10.4 and in CI on MySQL 8.
-
-The historical scripts are kept in [`db/legacy/`](../db/legacy) for reference. **Do not run them.** `UPDATED_DATABASE_SCHEMA.sql` drops every table.
+The scripts in [`db/legacy/`](../db/legacy) are MySQL-era history, kept for reference. **Do not run them.**
 
 ## Tables
 
-All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `users(discord_id)` with `ON DELETE CASCADE`.
+Every per-user table has a foreign key to `users(discord_id)` with `ON DELETE CASCADE`, and every foreign key column that no other index leads with has its own index. Conventions of the baseline:
+
+- **Flags are `SMALLINT` 0/1**, not `BOOLEAN`: the code compares them with `= 1` / `= 0` and reads them as numbers (the pool sends a JS boolean as `1` / `0`).
+- **Former ENUMs are `VARCHAR` + `CHECK (col IN (…))`**, which is easier to extend than a Postgres enum type.
+- **Times are `TIMESTAMPTZ(3)`** (the precision of a JavaScript `Date`); dates are `DATE`.
+- **Primary keys** are `INTEGER GENERATED BY DEFAULT AS IDENTITY` (`BIGINT` for `ai_embeddings`).
+- **`updated_at` is never set implicitly** (there is no `ON UPDATE CURRENT_TIMESTAMP`): the queries that edit a row set `updated_at = CURRENT_TIMESTAMP` themselves.
+- **Names that must be unique ignoring case** (`lists.name`, `task_templates.name`, `parties.name`) are `CITEXT`: "Work" and "work" collide, but accents count ("Café" ≠ "Cafe"). Every other text column compares exactly.
 
 ### `users`
 
@@ -93,61 +52,61 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 |---|---|---|
 | `discord_id` | VARCHAR(32) PK | Discord snowflake |
 | `discord_username`, `discord_avatar` | VARCHAR(100) | The **display name** (global name, else username) and avatar hash, cached at web login and by the bot (at most hourly). Shown to other people, never searched |
-| `progress_reset_at` | DATETIME NULL | When the user last reset their progress; quests, the weekly review and the party quest count nothing from before it (tasks finished on other people's lists survive a reset) |
-| `accept_invites` | TINYINT(1) default 1 | 0: nobody can invite this account to a list or party; the inviter gets the neutral answer (Settings, `PATCH /api/user`) |
-| `discord_handle` | VARCHAR(40) utf8mb4_bin, UNIQUE | The Discord **username** (lowercase, unique on Discord): the only key a person can be invited by from the web app. A login that brings a handle clears it from any stale row that still held it. NULL until the person's next login or slash command |
+| `progress_reset_at` | TIMESTAMPTZ NULL | When the user last reset their progress; quests, the weekly review and the party quest count nothing from before it (tasks finished on other people's lists survive a reset) |
+| `accept_invites` | SMALLINT default 1 | 0: nobody can invite this account to a list or party; the inviter gets the neutral answer (Settings, `PATCH /api/user`) |
+| `discord_handle` | VARCHAR(40) UNIQUE (exact comparison) | The Discord **username** (lowercase, unique on Discord): the only key a person can be invited by from the web app. A login that brings a handle clears it from any stale row that still held it. NULL until the person's next login or slash command |
 | `player_xp` | BIGINT | Spendable balance |
 | `lifetime_xp` | BIGINT | XP earned since the last prestige. Drives the level. |
 | `lifetime_xp_total` | BIGINT | Total ever earned, never reset (kept in sync by `applyXP`). Drives the XP achievements and the lifetime leaderboard. |
 | `prestige` | INT | Times the player has prestiged (0–10); each adds +2% XP |
 | `last_chest_streak` | INT | Streak length of the last streak chest paid; a chest pays only above it, and a broken streak clears it |
 | `player_level` | BIGINT | ⌊lifetime_xp / 100⌋ + 1 (kept in sync by `applyXP`) |
-| `player_class` | ENUM(DEFAULT, HERO, GAMBLER, ASSASSIN, WIZARD, ARCHER, TANK, MONK, ARTISAN, RANGER, NECROMANCER, PALADIN) | Equipped class (the last five arrived with migration 011) |
-| `gamification_enabled`, `automation_enabled`, `auto_delete_old_lists` | BOOLEAN | Settings (default on) |
-| `streak_count`, `last_daily_claim`, `last_active_day` | INT / DATETIME / DATE | Daily reward |
-| `last_game_at` | DATETIME(3) | Free-game cooldown |
-| `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin`, `owns_bard`, `owns_alchemist`, `owns_druid`, `owns_chronomancer`, `owns_warden` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
+| `player_class` | VARCHAR(20) CHECK IN (DEFAULT, HERO, GAMBLER, ASSASSIN, WIZARD, ARCHER, TANK, MONK, ARTISAN, RANGER, NECROMANCER, PALADIN, BARD, ALCHEMIST, DRUID, CHRONOMANCER, WARDEN) | Equipped class |
+| `gamification_enabled`, `automation_enabled`, `auto_delete_old_lists` | SMALLINT | Settings (default on) |
+| `streak_count`, `last_daily_claim`, `last_active_day` | INT / TIMESTAMPTZ / DATE | Daily reward |
+| `last_game_at` | TIMESTAMPTZ(3) | Free-game cooldown |
+| `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin`, `owns_bard`, `owns_alchemist`, `owns_druid`, `owns_chronomancer`, `owns_warden` | SMALLINT | Class ownership (one column per purchasable class, named `owns_<class>`) |
 | `assassin_streak`, `assassin_stacks`, `wizard_counter`, `archer_streak`, `tank_stacks`, `gambler_streak`, `monk_rhythm`, `artisan_progress`, `necro_souls` | INT | Class counters, reset when switching class (`CLASS_COUNTER_RESET` in `db/progression.js`) |
 | `bard_recent` | VARCHAR(120) | Bard: the list ids of the last completed tasks, comma separated (newest last). Reset with the class counters. |
 | `alchemist_mix` | INT | Alchemist: bitmask of the priorities completed in the current brew (1 LOW, 2 MEDIUM, 4 HIGH). Reset with the class counters. |
-| `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 48 h (72 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
+| `assassin_last_at` | TIMESTAMPTZ NULL | Last Assassin action. After more than 48 h (72 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
 | `monk_day` | DATE NULL | Last day (in the user's time zone) the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
 | `assassin_bleed` | INT | Actions left with the Bleed bonus after a crit. Not tied to a class, so it survives a class switch; cleared by a progress reset. |
 | `total_lists_created`, `total_items_added`, `total_items_completed` | INT | Monotonic counters for achievements |
 | `skill_points` | INT | Legacy. Unused, kept for compatibility. |
 | `timezone` | VARCHAR(64) NULL | IANA zone (NULL = UTC), validated with `Intl`. Defines the user's day for daily caps, quests, the weekly review, stats and reminders. Changing it moves the day from then on (nothing is rewritten) and is limited to once per 24 hours. |
-| `timezone_changed_at` | DATETIME NULL | When the zone last changed (NULL: never set). Enforces the 24-hour limit. |
-| `reminder_hour` | TINYINT UNSIGNED, default 9 | Local hour reminders and the digest are sent |
-| `weekly_digest`, `last_digest_at` | BOOLEAN / TIMESTAMP | Opt-in Monday summary DM and when it last went out |
-| `calendar_token` | CHAR(32) NULL, unique | Secret of the calendar feed URL; NULL = feed off |
+| `timezone_changed_at` | TIMESTAMPTZ NULL | When the zone last changed (NULL: never set). Enforces the 24-hour limit. |
+| `reminder_hour` | SMALLINT, default 9 | Local hour reminders and the digest are sent |
+| `weekly_digest`, `last_digest_at` | SMALLINT / TIMESTAMPTZ | Opt-in Monday summary DM and when it last went out |
+| `calendar_token` | VARCHAR(32) NULL, unique | Secret of the calendar feed URL; NULL = feed off |
 | `streak_freezes` | INT | Bought freezes held (max 3) |
 | `equipped_title`, `equipped_frame`, `equipped_accent` | VARCHAR(40) NULL | The cosmetic (a key of `COSMETICS`) shown for each kind; cleared by a progress reset |
-| `web_push` | TINYINT(1), default 1 | Send reminders to this user's subscribed browsers too (needs web push configured) |
+| `web_push` | SMALLINT, default 1 | Send reminders to this user's subscribed browsers too (needs web push configured) |
 | `xp_spent` | BIGINT | XP ever spent on classes, skills, freezes and cosmetics (spending achievements) |
-| `ai_enabled`, `ai_chat_format` | TINYINT / VARCHAR(8) | AI opt-out and Discord reply format (migrations 003, 006) |
-| `created_at` | TIMESTAMP | |
+| `ai_enabled`, `ai_chat_format` | SMALLINT / VARCHAR(8) | AI opt-out and Discord reply format |
+| `created_at` | TIMESTAMPTZ | |
 
 Index: `(gamification_enabled, player_xp)` for the leaderboard.
 
 ### `lists`
 
-`id` PK · `discord_id` FK · `name` VARCHAR(100) · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` ENUM(LOW, MEDIUM, HIGH) · `deadline_notified` BOOLEAN · `overdue_notified` BOOLEAN · `remind_at` DATETIME (snooze: remind again at this time) · `cleared_at` DATETIME NULL (when the list-cleared bonus was paid; the Tidy Up quest counts it) · `cleared_by` VARCHAR(32) NULL (who was paid for clearing it; the Tidy Up quest counts that person) · `rearm_count` / `rearm_day` (re-arms of everybody's reminder by a changed deadline today; at most 3) · `created_at` · `updated_at` (auto-updated on list edits; added by migration `004_lists_updated_at`).
+`id` PK · `discord_id` FK · `name` CITEXT · `description` TEXT · `category` VARCHAR(50) · `deadline` DATE · `priority` VARCHAR CHECK (LOW, MEDIUM, HIGH) · `deadline_notified` SMALLINT · `overdue_notified` SMALLINT · `remind_at` TIMESTAMPTZ (snooze: remind again at this time) · `cleared_at` TIMESTAMPTZ NULL (when the list-cleared bonus was paid; the Tidy Up quest counts it) · `cleared_by` VARCHAR(32) NULL (who was paid for clearing it; the Tidy Up quest counts that person) · `rearm_count` / `rearm_day` (re-arms of everybody's reminder by a changed deadline today; at most 3) · `created_at` · `updated_at` (set by the queries that edit the list, so list-only edits are re-indexed by the AI service).
 
-`discord_id` is the **owner**. Unique key `(discord_id, name)`, index on `deadline`. Other people use a list through `list_members`; the rule for who may touch a list lives in `packages/shared/src/db/access.js` (owner, or a member with a role that is enough; anyone else gets NOT_FOUND).
+`discord_id` is the **owner**. Unique key `(discord_id, name)` (ignoring case, since `name` is CITEXT), index on `deadline`. Other people use a list through `list_members`; the rule for who may touch a list lives in `packages/shared/src/db/access.js` (owner, or a member with a role that is enough; anyone else gets NOT_FOUND).
 
 ### `items`
 
-`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` BOOLEAN · `xp_awarded` BOOLEAN (completion XP already paid) · `completed_at` DATETIME · `position` INT · `due_date` DATE · `due_date_set_at` DATETIME (when the date was set or changed; early and overdue effects need it at least 24 hours before the completion) · `priority` ENUM(LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` ENUM(daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` DATETIME and `first_completed_high` TINYINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `first_completed_early` / `first_completed_overdue` TINYINT NULL (whether that first completion was before / after the due date; NULL without a due date) · `habit_streak` INT (consecutive on-time completions of a repeating task, copied to each spawned copy) · `counts_for_quests` TINYINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` TINYINT (day of month a monthly repeat returns to) · `reminded_at` DATETIME (the due-day DM was sent) · `remind_at` DATETIME (snooze) · `rearm_count` / `rearm_day` (re-arms of everybody's reminder by a changed due date today; at most 3) · `created_by`, `completed_by`, `first_completed_by` VARCHAR(32) NULL (the **actor** of each event; quests, the weekly review, stats and the daily caps count a person's own actions, whoever owns the list; backfilled from the list owner by migration `018`; never sent to a client, which sees only `completed_by_name`) · `created_at` · `updated_at` (auto-updated).
+`id` PK · `list_id` FK → `lists(id)` CASCADE · `name` VARCHAR(200) · `description` TEXT · `completed` SMALLINT · `xp_awarded` SMALLINT (completion XP already paid) · `completed_at` TIMESTAMPTZ · `position` INT · `due_date` DATE · `due_date_set_at` TIMESTAMPTZ (when the date was set or changed; early and overdue effects need it at least 24 hours before the completion) · `priority` VARCHAR CHECK (LOW, MEDIUM, HIGH) · `tags` VARCHAR(255) (lower-case, comma separated, max 5) · `recurrence` VARCHAR CHECK (daily, weekly, monthly) · `parent_id` INT → `items(id)` CASCADE (subtask of; one level) · `first_completed_at` TIMESTAMPTZ and `first_completed_high` SMALLINT (set once, when completion XP is first paid; quests count these, never `completed_at`) · `first_completed_early` / `first_completed_overdue` SMALLINT NULL (whether that first completion was before / after the due date; NULL without a due date) · `habit_streak` INT (consecutive on-time completions of a repeating task, copied to each spawned copy) · `counts_for_quests` SMALLINT (0 for imported and auto-spawned recurring rows) · `repeat_anchor_day` SMALLINT (day of month a monthly repeat returns to) · `reminded_at` TIMESTAMPTZ (the due-day DM was sent) · `remind_at` TIMESTAMPTZ (snooze) · `rearm_count` / `rearm_day` (re-arms of everybody's reminder by a changed due date today; at most 3) · `created_by`, `completed_by`, `first_completed_by` VARCHAR(32) NULL (the **actor** of each event; quests, the weekly review, stats and the daily caps count a person's own actions, whoever owns the list; never sent to a client, which sees only `completed_by_name`) · `estimate_minutes` INT NULL (the player's own estimate of the task's length) · `created_at` · `updated_at` (set by the queries that edit the task).
 
 Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`, `(created_by, created_at)`, `(completed_by, completed_at)`, `(first_completed_by, first_completed_at)`. Positions are kept unique and contiguous (0..n-1) by `moveItem` / `reorderItems`. A row whose actor column is NULL (written by a script that skipped it) counts for its list's owner in every metric (`actorSql`).
 
 ### `list_members`
 
-`list_id` FK → `lists(id)` CASCADE · `discord_id` FK → `users` CASCADE · `role` ENUM(viewer, editor, manager) · `public_id` CHAR(12) UNIQUE (random; the opaque member key the API uses, so a Discord ID never reaches another member) · `added_by` · `created_at`. Primary key `(list_id, discord_id)`. The owner has **no row** (an implicit manager). At most 10 rows plus pending invitations per list (`LIMITS.MAX_LIST_MEMBERS`).
+`list_id` FK → `lists(id)` CASCADE · `discord_id` FK → `users` CASCADE · `role` VARCHAR CHECK (viewer, editor, manager) · `public_id` VARCHAR(12) UNIQUE (random; the opaque member key the API uses, so a Discord ID never reaches another member) · `added_by` · `created_at`. Primary key `(list_id, discord_id)`. The owner has **no row** (an implicit manager). At most 10 rows plus pending invitations per list (`LIMITS.MAX_LIST_MEMBERS`).
 
 ### `list_invites`
 
-`id` · `list_id` FK CASCADE · `invitee_discord_id` FK CASCADE · `role` · `invited_by` · `created_at` · `expires_at` DATETIME (7 days) · `status` ENUM(pending, accepted, declined, revoked). One live pending invitation per list and person is enforced by the service under the list's row lock (MariaDB has no partial unique index); an expired pending row is treated as not pending and is marked `revoked` when the person is invited again. Index `(invited_by, created_at)` serves the 30-invitations-a-day limit and the 7-day decline cooldown (the same inviter cannot invite the same person again within 7 days of a `declined` invitation).
+`id` · `list_id` FK CASCADE · `invitee_discord_id` FK CASCADE · `role` · `invited_by` · `created_at` · `expires_at` TIMESTAMPTZ (7 days) · `status` VARCHAR CHECK (pending, accepted, declined, revoked) · `responded_at` TIMESTAMPTZ (when the invitee declined). One live pending invitation per list and person is enforced by the service under the list's row lock; an expired pending row is treated as not pending and is marked `revoked` when the person is invited again. Index `(invited_by, created_at)` serves the 30-invitations-a-day limit and the 7-day decline cooldown (the same inviter cannot invite the same person again within 7 days of a `declined` invitation).
 
 ### `list_reminders` and `item_reminders`
 
@@ -155,7 +114,7 @@ A member's own reminder state, so each member is reminded once: `list_reminders(
 
 ### `parties`, `party_members`, `party_invites`
 
-`parties(id, name VARCHAR(40), owner_id FK, created_at)` with a unique key `(owner_id, name)`. `party_members(party_id FK CASCADE, discord_id FK CASCADE, joined_at, public_id CHAR(12) UNIQUE)` (`public_id` is the random opaque key the owner uses to remove a member; only completions made at or after `joined_at` count for the party), primary key `(party_id, discord_id)` plus **UNIQUE `(discord_id)`**: one party per user, enforced by the database; the owner is a member too (at most 6, `LIMITS.MAX_PARTY_MEMBERS`). `party_invites` mirrors `list_invites` without a role. The weekly party quest has no table of its own: progress is derived from `items.first_completed_by`, and a claim is a `quest_claims` row with `quest_key = 'PARTY_<partyId>'` and the UTC week's Monday as `period_start` (the service allows one `PARTY_` claim per person per week). A progress reset removes the user's memberships and invitations, and disbands a party they own.
+`parties(id, name CITEXT, owner_id FK, created_at)` with a unique key `(owner_id, name)`, ignoring case. `party_members(party_id FK CASCADE, discord_id FK CASCADE, joined_at, public_id VARCHAR(12) UNIQUE)` (`public_id` is the random opaque key the owner uses to remove a member; only completions made at or after `joined_at` count for the party), primary key `(party_id, discord_id)` plus **UNIQUE `(discord_id)`**: one party per user, enforced by the database; the owner is a member too (at most 6, `LIMITS.MAX_PARTY_MEMBERS`). `party_invites` mirrors `list_invites` without a role. The weekly party quest has no table of its own: progress is derived from `items.first_completed_by`, and a claim is a `quest_claims` row with `quest_key = 'PARTY_<partyId>'` and the UTC week's Monday as `period_start` (the service allows one `PARTY_` claim per person per week). A progress reset removes the user's memberships and invitations, and disbands a party they own.
 
 ### `achievements`
 
@@ -173,17 +132,21 @@ A member's own reminder state, so each member is reminded once: `list_reminders(
 | `game_type` | `blackjack`, `rps`, `hangman`, `snake`, `dino`, `invaders` |
 | `bet_amount` BIGINT | Escrowed bet. It doubles after a double down. |
 | `state` VARCHAR(20) | See [states](#game-session-states) |
-| `game_data` JSON | Engine state (deck/hands, word/guesses, arcade score). Never sent to clients raw. |
+| `game_data` JSONB | Engine state (deck/hands, word/guesses, arcade score). Never sent to clients raw. |
 | `payout` BIGINT | Gross XP returned to the player, so net = `payout − bet_amount` |
-| `created_at` TIMESTAMP(3), `ended_at` | |
+| `created_at` TIMESTAMPTZ(3), `ended_at` | |
 
 Indexes `(discord_id, state, game_type)` and `(state, created_at)`.
 
 ### `xp_transactions`
 
-`id` · `discord_id` FK · `amount` BIGINT (signed) · `source` VARCHAR(50) · `balance_before` · `balance_after` · `reference_id` (list, item or session ID) · `created_at`.
+`id` · `discord_id` FK · `amount` BIGINT (signed) · `source` VARCHAR(50) · `balance_before` · `balance_after` · `reference_id` (list, item or session ID) · `player_class` VARCHAR(20) NULL (the class equipped when the XP was earned) · `created_at`.
 
 Indexes `(discord_id, created_at)` and `(discord_id, source, created_at)`. The second one is used by the daily caps.
+
+### `xp_transactions_archive` and `game_sessions_archive`
+
+Where `npm run archive` moves old rows (see [Backups and maintenance](#backups-and-maintenance)). Explicit tables with the same columns and indexes as `xp_transactions` / `game_sessions`, but no foreign key, since an archived row may outlive its user. `id` is a plain `INT` primary key (the original id).
 
 ### `quest_claims`
 
@@ -193,11 +156,15 @@ The weekly review claim is stored here too, under `quest_key = 'WEEKLY_REVIEW'` 
 
 ### `focus_sessions`
 
-`id` · `discord_id` FK · `started_at` DATETIME · `minutes_planned` INT · `state` VARCHAR(12) (`active`, `finished`, `cancelled`, `expired`) · `finished_at` DATETIME · `minutes_credited` INT (what the server measured and credited) · `xp` INT (what was paid). Indexes `(discord_id, state)` and `(discord_id, finished_at)`. At most one row per user is `active`.
+`id` · `discord_id` FK · `started_at` TIMESTAMPTZ · `minutes_planned` INT · `state` VARCHAR(12) (`active`, `finished`, `cancelled`, `expired`) · `finished_at` TIMESTAMPTZ · `minutes_credited` INT (what the server measured and credited) · `xp` INT (what was paid). Indexes `(discord_id, state)` and `(discord_id, finished_at)`. At most one row per user is `active`.
+
+### `reflections` and `weekly_goals`
+
+`reflections(id, discord_id FK, day DATE, note VARCHAR(200), created_at)`: one short note a day, unique key `(discord_id, day)`. `weekly_goals(discord_id FK, week_key VARCHAR(10), target INT, claimed_at, created_at)`, primary key `(discord_id, week_key)`: the target a player sets for a week (`week_key` is the Monday, `YYYY-MM-DD` in the player's zone) and when its reward was paid.
 
 ### `task_templates`
 
-`id` · `discord_id` FK (cascade) · `name` VARCHAR(100) · `description` TEXT · `items` JSON (array of `{name, description?, priority?, tags?, recurrence?}`, at most 30; MariaDB stores it as text) · `created_at`. Unique key `(discord_id, name)`. At most 20 per user (`LIMITS.MAX_TEMPLATES_PER_USER`), enforced by the service under the user row lock. A progress reset deletes them with the quests. Applying a template uses the normal quest and task creation, so nothing about XP is stored here.
+`id` · `discord_id` FK (cascade) · `name` CITEXT · `description` TEXT · `items` JSONB (array of `{name, description?, priority?, tags?, recurrence?}`, at most 30) · `created_at`. Unique key `(discord_id, name)`, ignoring case. At most 20 per user (`LIMITS.MAX_TEMPLATES_PER_USER`), enforced by the service under the user row lock. A progress reset deletes them with the quests. Applying a template uses the normal quest and task creation, so nothing about XP is stored here.
 
 ### `user_cosmetics`
 
@@ -205,29 +172,29 @@ The weekly review claim is stored here too, under `quest_key = 'WEEKLY_REVIEW'` 
 
 ### `push_subscriptions`
 
-`id` · `discord_id` FK (cascade) · `endpoint` TEXT (the push service URL, at most 2048 characters) · `endpoint_hash` CHAR(64) (SHA-256 of the endpoint; the unique key, since a TEXT column cannot be indexed whole) · `p256dh`, `auth` VARCHAR(255) (the browser's keys) · `created_at` · `last_used_at`. Index `(discord_id)`. At most 10 per user, enforced by the service under the user row lock. A subscription that answers 404 or 410 when a push is sent is deleted.
+`id` · `discord_id` FK (cascade) · `endpoint` TEXT (the push service URL, at most 2048 characters) · `endpoint_hash` VARCHAR(64) (SHA-256 of the endpoint; the unique key, which keeps the index small) · `p256dh`, `auth` VARCHAR(255) (the browser's keys) · `created_at` · `last_used_at`. Index `(discord_id)`. At most 10 per user, enforced by the service under the user row lock. A subscription that answers 404 or 410 when a push is sent is deleted.
 
 ### `web_sessions`
 
-`session_id` VARCHAR(128) PK · `expires` INT UNSIGNED (unix seconds) · `data` MEDIUMTEXT (JSON). This holds web login sessions. Expired rows are purged every 15 minutes.
+`session_id` VARCHAR(128) PK · `expires` BIGINT (unix seconds, indexed) · `data` TEXT (JSON). This holds web login sessions (`DbSessionStore` in `apps/server/lib/sessionStore.js`). Expired rows are purged every 15 minutes.
 
-### AI tables (migration `003_ai`)
+### AI tables
 
 Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All user-owned rows cascade-delete with the user.
 
 | Table | Purpose |
 |---|---|
-| `ai_embeddings` | RAG vectors, one row per chunk: `discord_id` (NULL = global docs), `source_type` (`list`/`item`/`history`/`doc`), `source_id`, `list_id`, `content`, `content_hash` (SHA-256, skips unchanged text), `embedding` (float32 BLOB), `model`. Unique on `(source_type, source_id, model)`. |
-| `ai_chat_threads` | Chat conversations: `id` (UUID, also the LangGraph `thread_id`), `discord_id`, `title`, `source` (`web` for web chat threads, `discord` for per-user, per-channel Discord memory; migration 005). |
-| `ai_checkpoints`, `ai_checkpoint_writes` | LangGraph state snapshots per thread. |
+| `ai_embeddings` | RAG vectors, one row per chunk: `discord_id` (NULL = global docs), `source_type` (`list`/`item`/`history`/`doc`), `source_id`, `list_id`, `content`, `content_hash` (SHA-256, skips unchanged text), `embedding` (`vector(768)`, pgvector), `model`, `updated_at`. Unique on `(source_type, source_id, model)`. No approximate (HNSW) index: search is an exact top-k over the user's rows plus the global docs, `ORDER BY embedding <=> query` in SQL. |
+| `ai_chat_threads` | Chat conversations: `id` (UUID, also the LangGraph `thread_id`), `discord_id`, `title`, `source` (`web` for web chat threads, `discord` for per-user, per-channel Discord memory). |
+| `ai_checkpoints`, `ai_checkpoint_writes` | LangGraph state snapshots per thread (`BYTEA`), cascading with the thread. |
 | `ai_usage` | Daily per-user, per-feature request and token counts, used for quotas. |
-| `ai_summary_cache` | Cached summaries keyed by `(discord_id, scope_key)` with an input hash. |
+| `ai_summary_cache` | Cached summaries (`JSONB`) keyed by `(discord_id, scope_key)` with an input hash. |
 
-`users.ai_enabled` (TINYINT, default 1) lets a user opt out of AI features.
+`users.ai_enabled` (SMALLINT, default 1) lets a user opt out of AI features.
 
 ### `schema_migrations`
 
-`id` VARCHAR(100) PK · `applied_at`.
+`id` VARCHAR(100) PK · `applied_at` TIMESTAMPTZ(3). Created by the migration runner itself.
 
 ## XP transaction sources
 
@@ -245,7 +212,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | `blackjack_win`, `blackjack_blackjack` | + | Bet returned plus flat winnings (1:1, or 3:2 for a natural; no class or skill bonuses). Only the winnings count as lifetime XP |
 | `blackjack_push` | + | Bet returned on a push. Not lifetime XP. |
 | `class_purchase`, `skill_purchase`, `streak_freeze`, `cosmetic_purchase` | − | Spending (counted in `xp_spent`) |
-| *legacy* `blackjack_loss`, `blackjack_refund`, `task_complete`, `item_create`, `manual` | ± | Written by pre-4.0 versions (and by migration 002's refund of stuck hands); current code never writes them |
+| *legacy* `blackjack_loss`, `blackjack_refund`, `task_complete`, `item_create`, `manual` | ± | Written by pre-4.0 versions (and by the MySQL-era legacy upgrade's refund of stuck hands); current code never writes them |
 
 ## Game session states
 
@@ -257,21 +224,24 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 
 **Task reminders** (`tasks.getTaskReminderCandidates`): open tasks with their own `due_date` (due within the next day or the last 14 days and not yet `reminded_at`, or whose `remind_at` snooze has ended) for owners with `automation_enabled`. A task due on the same day as its list's `deadline` is left to the list reminder. `decideTaskReminder` in the bot applies the owner's zone and `reminder_hour`; `markTaskReminderSent` sets `reminded_at` and clears `remind_at`, and `snoozeTask` sets `remind_at`. Changing a task's due date clears both.
 
-**Old-list clean-up** (`tasks.cleanupOldLists`, 5 days by default). It deletes lists of users with `auto_delete_old_lists = TRUE` when the list has items, all completed, and the latest item change is more than 5 days old. Each list is locked and re-checked inside a transaction right before it is deleted, so a task added after the scan saves the list. Unfinished lists are never deleted, whatever their deadline. The function returns the deleted `{id, discord_id}` rows so the bot can drop their AI vectors.
+**Old-list clean-up** (`tasks.cleanupOldLists`, 5 days by default). It deletes lists of users with `auto_delete_old_lists = 1` when the list has items, all completed, and the latest item change is more than 5 days old. Each list is locked and re-checked inside a transaction right before it is deleted, so a task added after the scan saves the list. Unfinished lists are never deleted, whatever their deadline. The function returns the deleted `{id, discord_id}` rows so the bot can drop their AI vectors.
 
 ## Connection settings
 
 See [`packages/shared/src/db/pool.js`](../packages/shared/src/db/pool.js):
 
-- **Sessions run in UTC.** `timezone: 'Z'` plus `SET time_zone = '+00:00'` on every connection.
+- **Driver.** [`pg`](https://node-postgres.com) (node-postgres) behind a small compatibility layer that keeps the data layer's mysql2-era calling convention: `?` placeholders (rewritten to `$1, $2, …`, skipping quoted text and comments), `query()` resolving to `[rows, fields]`, and for writes a header `{ affectedRows, insertId }` where `insertId` is the `id` from a `RETURNING id` clause. Boolean parameters are sent as `1` / `0` (flags are `SMALLINT`).
+- **Sessions run in UTC.** Every new connection runs `SET TIME ZONE 'UTC'` (in an awaited `onConnect` hook, so a connection that cannot switch is dropped); `TIMESTAMPTZ` columns come back as JS `Date`s.
 - **Days are per user, not per session.** Sessions stay UTC, but every "today", week and month is a `[from, to)` pair of instants computed in JS from `users.timezone` (`packages/shared/src/tz.js`) and bound as parameters: daily caps and the focus count read `xp_transactions` / `focus_sessions` in that window, quest and review claims store the local date of the period start in `quest_claims.period_start`, and stats group 15-minute buckets into local days in JS. The weekly leaderboard is the exception: one global UTC week.
 - **DATE columns are strings.** They come back as `'YYYY-MM-DD'`, which avoids timezone day-shifts.
-- **Large BIGINTs stay exact.** `supportBigNumbers` is on, so values beyond 2^53 return as strings instead of losing precision.
+- **BIGINTs are numbers.** `COUNT(*)`, `SUM()` and `BIGINT` columns come back as JS numbers, or as strings beyond 2^53 instead of losing precision. `NUMERIC` is parsed with `parseFloat`; `JSONB` comes back parsed.
+- **Transactions.** `withTransaction(fn)` commits or rolls back, and retries a deadlock (`40P01`) or serialization failure (`40001`) on a fresh connection, up to 3 attempts. Postgres refuses every statement after a failed one inside a transaction, so code that catches an expected error there (a duplicate key to retry) wraps it in `savepoint(conn, fn)`. `isUniqueViolation(err)` (`23505`) and `isUndefinedTable(err)` (`42P01`) classify errors.
+- **Defaults.** Without `DB_URL`: `DB_HOST` `localhost`, `DB_PORT` `5432`, `DB_USER` `postgres`, `DB_NAME` `taskquest`; `DB_POOL_SIZE` 10. In production on Supabase, `DB_URL` is the **session pooler** URL (port 5432), never the transaction pooler (6543): migrations hold a session-level advisory lock and the AI service uses prepared statements ([DEPLOYMENT](DEPLOYMENT.md#2-database)).
 - **TLS applies to `DB_URL` too.** `DB_SSL=true` enables it, and `DB_SSL_CA` supplies a PEM bundle. Certificate verification stays on unless `DB_SSL_REJECT_UNAUTHORIZED=false`, which logs a warning.
 
 ## Backups and maintenance
 
-- Take a `mysqldump --single-transaction --routines taskquest` before upgrades.
+- Supabase takes daily backups of the production database. Before an upgrade, also take your own: `pg_dump -Fc "$DB_URL" -f taskquest.dump` (restore with `pg_restore --clean --if-exists -d "$DB_URL" taskquest.dump`). See [OPERATIONS](OPERATIONS.md#backups-and-restore).
 - `xp_transactions` grows without bound. `npm run archive -- --days 365` moves rows older than the window to `xp_transactions_archive` in batches (add `--dry-run` to see how many first, `--batch N` to change the batch size). Caps use today's rows, the history view the last 50 and the quests and review their own week or month, so a window of a year or more changes nothing you can see; stats charts that look back further than `--days` will not include archived XP.
 - `game_sessions` can be archived the same way with `--games` (finished sessions only, never an active one). The games played and won counts are counted from the sessions, so they drop by what moves: leave `--games` off unless you accept that.
-- `npm run xp-report -- --days 90` prints the average XP per reward by class and source from `xp_transactions.player_class`, the real data behind [design/balance.md](design/balance.md) (rows from before migration `026` show as UNKNOWN).
+- `npm run xp-report -- --days 90` prints the average XP per reward by class and source from `xp_transactions.player_class`, the real data behind [design/balance.md](design/balance.md) (rows with no recorded class show as UNKNOWN).

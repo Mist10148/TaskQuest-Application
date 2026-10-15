@@ -40,7 +40,7 @@ flowchart TB
         SVC["db services: users · tasks · access · sharing · parties · progression · quests · focus · review · stats · templates · transfer · cosmetics · push · games"]
         MIG["migrations"]
     end
-    DB[(MySQL 8 / MariaDB)]
+    DB[(PostgreSQL / Supabase)]
     DISCORD[(Discord API)]
 
     SPA -->|"same-origin /api, cookie tq.sid"| MW --> R --> SVC
@@ -61,7 +61,7 @@ flowchart TB
 | `apps/bot` | Node 22, CommonJS, discord.js 14 | Discord commands and components, rendering embeds, background jobs and a health endpoint. |
 | `packages/shared` | Node 22, CommonJS | Every rule, every SQL statement, migrations and the connection pool. |
 | `apps/ai` (optional) | Python 3.12, FastAPI | Private service for the summarizer, prioritizer and chat (Gemini, LangChain, LangGraph). Reads task data through scoped queries; changes tasks only by calling Express `/internal/*` after the user confirms. See [AI_INTEGRATION.md](AI_INTEGRATION.md). |
-| MySQL / MariaDB | — | The only state. There is no in-memory game or session state in either app. |
+| PostgreSQL (Supabase in production) | pgvector, citext | The only state. There is no in-memory game or session state in either app. |
 
 ## 2. The shared package
 
@@ -89,9 +89,9 @@ packages/shared/src
 ├── random.js        CSPRNG helpers (crypto.randomInt)
 ├── errors.js        TaskQuestError + factories
 └── db/
-    ├── pool.js      mysql2 pool (UTC, DATE as string, TLS), withTransaction (retries deadlock victims)
-    ├── migrate.js   runner + information_schema helpers
-    ├── migrations/  001 … 021 (initial schema, legacy upgrade, AI, task details, preferences, quests, class rework, XP sources, reminders, templates, time zone days, cosmetics, web push, shared lists, parties, sharing hardening)
+    ├── pool.js      pg (node-postgres) pool behind a mysql2-style layer (`?` placeholders, [rows] results, insertId via RETURNING id; UTC, DATE as string, TLS), withTransaction (retries deadlocks and serialization failures), savepoint
+    ├── migrate.js   runner (advisory lock, one transaction per migration) + information_schema helpers
+    ├── migrations/  001_baseline (the whole Postgres schema; new migrations continue from 002)
     ├── users.js     profile, settings, stats, leaderboard boards, weekly digest data, reset
     ├── progression.js  applyXP, rewardAction, awardFlat, achievements, daily and streak chests, streak freezes, classes, skills, prestige
     ├── access.js    the one rule for who may touch a list or task (owner, or a member with a sufficient role); everything else calls it
@@ -111,7 +111,7 @@ packages/shared/src
 
 **Rules are pure.** The `xp`, `achievements`, `tz`, `quests` and `games` modules do no I/O and take an injectable RNG or clock, so they are unit-tested deterministically.
 
-**Days are per user.** MySQL sessions stay in UTC, but every "today", week and month is a `[from, to)` pair of instants computed in JS from `users.timezone` (`tz.js`) and bound as query parameters: daily caps, quests, the weekly review, focus limits and stats all use it. The exceptions are the weekly leaderboard and the party quest, which use a single UTC week for everyone. Zone changes are limited to once every 24 hours.
+**Days are per user.** Database sessions stay in UTC, but every "today", week and month is a `[from, to)` pair of instants computed in JS from `users.timezone` (`tz.js`) and bound as query parameters: daily caps, quests, the weekly review, focus limits and stats all use it. The exceptions are the weekly leaderboard and the party quest, which use a single UTC week for everyone. Zone changes are limited to once every 24 hours.
 
 **Access rule.** A list belongs to one owner (`lists.discord_id`) and may be shared through `list_members` (viewer, editor, manager; the owner is an implicit manager). Nothing decides ownership on its own: `access.forList` / `forItem` load a list or task for a user at a minimum role, and `accessSql` is the fragment for queries over many lists. A stranger gets `NOT_FOUND`, never `FORBIDDEN`, so a list's existence does not leak; a member whose role is too weak gets `FORBIDDEN`. XP, caps, quests and stats always belong to the **actor**: `rewardAction` takes the acting user's locked row, and `items.created_by` / `completed_by` / `first_completed_by` record who did what. The AI service is untouched by sharing: `routes/internal.js` calls `db.tasks.asOwner.*`, which refuses a list the user merely belongs to. An automated test enumerates every exported function of `db.tasks`, `db.templates`, `db.transfer` and `db.quests` and proves a non-member gets `NOT_FOUND` and changes nothing; a new export must be classified there. Design record: [design/shared-lists.md](design/shared-lists.md).
 
@@ -125,7 +125,7 @@ packages/shared/src
 sequenceDiagram
     participant C as Client (bot or web)
     participant S as tasks.setItemCompleted
-    participant DB as MySQL
+    participant DB as Postgres
     C->>S: (discordId, itemId)
     S->>DB: BEGIN
     S->>DB: SELECT users ... FOR UPDATE
@@ -139,7 +139,7 @@ sequenceDiagram
         S->>S: calculateFinalXP(user, skills, 10, {priority})
         S->>DB: UPDATE users (xp, lifetime, level, class counters)
         S->>DB: INSERT xp_transactions
-        S->>DB: INSERT IGNORE achievements ...
+        S->>DB: INSERT achievements ... ON CONFLICT DO NOTHING
     end
     S->>DB: COMMIT
     S-->>C: { item, completed, xp, achievements }
@@ -165,7 +165,7 @@ Every XP change goes through `progression.applyXP(conn, user, amount, source, op
 
 Because the user row is locked for the whole operation, two concurrent requests for the same user run one after the other. A double-clicked "Buy class" charges once: the second request sees the ownership flag and fails with `CONFLICT`. A double-clicked "Stand" settles once: the second finds no active session. The integration tests check both cases.
 
-Achievement unlocks happen in the same transaction (`INSERT IGNORE` on the unique key), so a reward and its achievement are never split.
+Achievement unlocks happen in the same transaction (`ON CONFLICT DO NOTHING` on the unique key), so a reward and its achievement are never split.
 
 ## 5. Games
 
@@ -192,7 +192,7 @@ Achievement unlocks happen in the same transaction (`INSERT IGNORE` on the uniqu
 | Threat | Control |
 |---|---|
 | CSRF (e.g. hidden form posting to `/api/user/reset`) | `SameSite=Lax` cookie on a single origin. State-changing requests must carry an `Origin` or `Referer` matching `PUBLIC_URL`/`ALLOWED_ORIGINS`. Bodies must be `application/json`. Reset also needs `{"confirm":"RESET"}`. |
-| Session fixation / theft | `session.regenerate()` at login. `httpOnly`, `secure` in production, cookie name `tq.sid`, store in MySQL. |
+| Session fixation / theft | `session.regenerate()` at login. `httpOnly`, `secure` in production, cookie name `tq.sid`, store in the database (`web_sessions`, `DbSessionStore`). |
 | Login CSRF | OAuth `state` bound to the session and compared in constant time. |
 | IDOR | Access is decided in one place (`access.js`: ownership or a membership row with a sufficient role) and a stranger gets 404. Discord IDs of other people are never sent to a client (members are addressed by an opaque key, tasks expose display names). |
 | XSS / clickjacking | helmet CSP (`script-src 'self'`, `frame-ancestors 'none'`, `img-src 'self' cdn.discordapp.com`). React escapes output. |
@@ -238,7 +238,7 @@ All jobs run in the bot process. Each is wrapped so that a failure is logged and
 2. It pings the database and runs migrations.
 3. It starts the health endpoint on `$PORT` (200 when connected to Discord, 503 otherwise) and logs in.
 
-Migrations take a MySQL named lock (`GET_LOCK('taskquest_migrations')`), so the bot and server can start at the same moment safely.
+Migrations take a Postgres advisory lock (`pg_try_advisory_lock(hashtext('taskquest_migrations'))`, session-level, which is why Supabase is reached through its session pooler), so the bot and server can start at the same moment safely. Each migration runs in its own transaction.
 
 ## 10. AI service
 
@@ -246,10 +246,10 @@ The optional AI service keeps the same rules as everything else:
 
 - **Express is the only public entry.** It authenticates the session, rate-limits, validates with zod and forwards to the AI service with a shared secret (`X-AI-Token`) and the trusted Discord ID. The browser never talks to the AI service and never chooses whose data is read.
 - **One place for XP.** The AI never awards XP or edits task tables. Write tools call `POST/PATCH /internal/*` on Express, which runs the same `db.tasks.*` services as the public API, so XP, achievements and validation are identical.
-- **Confirmation before any change.** A write tool pauses the LangGraph run (`interrupt`); the UI shows a card; the change runs only when the user approves. Pending confirmations are checkpointed in MySQL, so they survive reloads and restarts.
+- **Confirmation before any change.** A write tool pauses the LangGraph run (`interrupt`); the UI shows a card; the change runs only when the user approves. Pending confirmations are checkpointed in Postgres, so they survive reloads and restarts.
 - **Scoped reads.** Every repository function takes `discord_id` (enforced by a unit test); `discord_id` is never a tool argument; extra tool arguments are rejected.
 - **Degrades gracefully.** The prioritizer falls back to a deterministic ranking when Gemini is unavailable or the quota is used. The app is healthy without the AI service.
-- **Schema stays in Node.** The AI tables come from migration `003_ai`; the Python service never runs DDL.
+- **Schema stays in Node.** The AI tables come from migration `001_baseline`; the Python service never runs DDL.
 
 The LangChain/LangGraph internals (RAG pipeline, graphs, checkpointer, persona, Discord conversation) are documented in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md).
 
@@ -267,4 +267,4 @@ The LangChain/LangGraph internals (RAG pipeline, graphs, checkpointer, persona, 
 | AI client, internal token, AI schemas | `apps/server/test/ai.test.js` against a stub AI service | No |
 | AI service | `apps/ai/tests`: chunking, vector store, indexer, summarizer, prioritizer paths, chat graph (routing, tools, confirmation, memory), checkpointer, red-team prompts. Offline, with fake models and in-memory SQLite. | No |
 
-Integration tests are skipped unless `TEST_DB_NAME` points at a throwaway database. CI provides a MySQL 8 service. See [CONTRIBUTING.md](../CONTRIBUTING.md#testing).
+Integration tests are skipped unless `TEST_DB_NAME` points at a throwaway database. CI provides a Postgres service (`pgvector/pgvector:pg16`). See [CONTRIBUTING.md](../CONTRIBUTING.md#testing).

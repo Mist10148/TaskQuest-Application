@@ -6,7 +6,7 @@ This document records the design for adding three AI features to TaskQuest, all 
 2. **AI Prioritizer**: ranks open quests and explains what to do next.
 3. **AI Chat**: a conversational assistant that knows the user's tasks (via RAG), can answer "how do I…" questions about TaskQuest, and can create or complete tasks after the user confirms.
 
-> Status: **implemented, phases 0–7**, including the Discord bot commands, plus Discord @mention chat with a persona (see [AI_ARCHITECTURE.md §7](AI_ARCHITECTURE.md#7-discord-conversation-converse)). It has been verified offline only (the live evals have not been run yet); see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The architecture as it stands today is in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). The sections below are the original design; where the code differs, *As built* says so.
+> Status: **implemented, phases 0–7**, including the Discord bot commands, plus Discord @mention chat with a persona (see [AI_ARCHITECTURE.md §7](AI_ARCHITECTURE.md#7-discord-conversation-converse)). It has been verified offline only (the live evals have not been run yet); see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The architecture as it stands today is in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). The sections below are the original design, written when TaskQuest ran on MySQL (TiDB in production); where the code differs, including the later move to PostgreSQL with pgvector ([MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md)), *As built* says so.
 
 > **Where to look.** This is the *design record*: goals, decisions and the reasoning behind them, written before and during the build.
 >
@@ -52,7 +52,10 @@ What differs from the plan below:
 |---|---|---|
 | Phase 6 (bot commands) | Optional | Built: `/summary`, `/prioritize`, `/ask`. The bot calls the AI service directly through `@taskquest/shared/ai` (it does not go through Express), checks `AI_ENABLED` and `users.ai_enabled` itself, and replies ephemerally. `/ask` starts a new thread per question; write actions show Approve/Cancel buttons (`ai_ok:` / `ai_no:` + thread id) that resume the paused graph. The web rate limiter does not apply; the daily quota does. |
 | Streaming | `astream_events` v2 | `graph.astream(stream_mode=["messages","updates"])`: tokens come from the `messages` stream, tool/source/confirm events from `updates`. Same SSE event names. |
-| Checkpointer | `metadata JSON` | `ai_checkpoints.metadata` is a typed binary blob and `type` columns were added (`ai_checkpoints`, `ai_checkpoint_writes`). Only the async API is implemented. |
+| Database | MySQL, SQLAlchemy Core + `aiomysql` | PostgreSQL (Supabase): SQLAlchemy Core (async) + `asyncpg`, with a `postgresql+asyncpg://` URL built from the same `DB_*` variables. Each connection runs in UTC with timestamptz/date codecs that keep the code's naive-UTC datetimes and ISO date strings. |
+| Vector store | BLOB vectors, numpy cosine in process (`MySQLNumpyStore`) | `EmbeddingStore` (`app/rag/store.py`): a `vector(768)` pgvector column, ranked in SQL with `ORDER BY embedding <=> query` as an exact top-k over the user's rows plus the global docs. No HNSW index (filtered to one user, an approximate index can return fewer than k rows). The numpy path remains for the SQLite tests. |
+| Checkpointer | `metadata JSON` | `SqlCheckpointSaver` (`app/graphs/checkpointer.py`). `ai_checkpoints.metadata` is a typed binary (`BYTEA`) value and `type` columns were added (`ai_checkpoints`, `ai_checkpoint_writes`). Only the async API is implemented. |
+| Schema | Migration `003_ai` | The AI tables are part of the PostgreSQL baseline `001_baseline` (the MySQL migrations were squashed). |
 | Prioritizer cache | Keyed by task-set hash | In-process 5-minute cache keyed by user and the exact feature table (so any edit invalidates it). Never caches fallback results. |
 | Prioritizer quota | 429 | When the daily quota is used, the prioritizer falls back to the deterministic ranking (`usedFallback: true`) instead of failing. Summary and chat return `429 AI_QUOTA`. |
 | `merge_scores` guard | LLM cannot bury overdue HIGH | Overdue HIGH-priority quests are pinned above all others, then ordered by the blended score. |
@@ -62,12 +65,12 @@ What differs from the plan below:
 | Title generation | Background cheap call | The thread title is the first message (truncated) immediately; a background call may replace it. |
 | Prioritize UI | Query invalidated by list mutations | Explicit "Prioritize my quests" click (every run costs quota); the result is cached for 5 minutes. |
 | Opt-out | `users.ai_enabled` column | Plus a Settings switch, an Express gate on `/api/ai/*`, and the AI service never embeds opted-out users (their vectors are deleted). |
-| CI | MySQL service + mypy | `ruff`, `mypy` (default strictness, `app/` only) and `pytest tests/unit tests/graphs tests/evals` over in-memory SQLite with fake models. No MySQL service. |
+| CI | MySQL service + mypy | `ruff`, `mypy` (default strictness, `app/` only) and `pytest tests/unit tests/graphs tests/evals` over in-memory SQLite with fake models, plus an `ai-postgres` job running `pytest tests/postgres` against `pgvector/pgvector:pg16` with the Node migrations applied. |
 | Evals | Retrieval, quality and injection suites | Built in `tests/evals`: a seeded fixture (`seed.json`), retrieval (30 queries; recall@5, MRR, cross-user leaks), summarizer (faithfulness, coverage of must-mention ids, forbidden ids) and prioritizer (top-3 agreement, valid ids) golden sets, plus the injection list. `python -m tests.evals.run` runs them offline with fake models (also in CI); `--live` uses Gemini and applies the §1 thresholds. Live results have not been recorded yet. There is no LLM-as-judge step. |
 | Auth for `/internal` | Token + body `discordId` | Same. It returns `404` when AI is disabled so the route is not discoverable. |
-| Reconcile job | `updated_at` of lists and items | Compares each list's embedding with `lists.updated_at` (migration `004_lists_updated_at`) and the newest subtask change. A list whose text did not change is marked as checked so it is not picked up again. |
+| Reconcile job | `updated_at` of lists and items | Compares each list's embedding with `lists.updated_at` (set explicitly by the queries that edit a list) and the newest subtask change. A list whose text did not change is marked as checked so it is not picked up again. |
 
-Code map: `apps/ai/app` (service), `apps/ai/tests/evals` (evals), `apps/server/{lib/aiClient.js,routes/ai.js,routes/internal.js}`, `apps/web/src/{components/ai,pages/Chat.tsx,hooks/useChat.ts}`, `apps/bot/{commands/ai.js,utils/aiFormat.js}`, `packages/shared/src/ai/client.js`, `packages/shared/src/db/migrations/{003_ai,004_lists_updated_at}.js`.
+Code map: `apps/ai/app` (service), `apps/ai/tests/evals` (evals), `apps/server/{lib/aiClient.js,routes/ai.js,routes/internal.js}`, `apps/web/src/{components/ai,pages/Chat.tsx,hooks/useChat.ts}`, `apps/bot/{commands/ai.js,utils/aiFormat.js}`, `packages/shared/src/ai/client.js`, `packages/shared/src/db/migrations/001_baseline.js`.
 
 ---
 
@@ -586,7 +589,7 @@ The service layout is documented next to the code, so it cannot drift: see the *
 
 ## 13. Configuration and deployment
 
-Configuration and deployment are documented in [DEPLOYMENT.md](DEPLOYMENT.md#ai-service-appsai-optional) (every variable, which service reads it, the Render blueprint) and in [`.env.example`](../.env.example). To run it locally, see the README's [optional AI service](../README.md#optional-the-ai-service) section. The AI service never runs DDL: its tables come from the Node migrations `003_ai` to `006_ai_chat_format`.
+Configuration and deployment are documented in [DEPLOYMENT.md](DEPLOYMENT.md#ai-service-appsai-optional) (every variable, which service reads it, the Render blueprint) and in [`.env.example`](../.env.example). To run it locally, see the README's [optional AI service](../README.md#optional-the-ai-service) section. The AI service never runs DDL: its tables come from the Node migration `001_baseline`.
 
 ---
 
@@ -634,8 +637,8 @@ Configuration and deployment are documented in [DEPLOYMENT.md](DEPLOYMENT.md#ai-
 
 ## 17. Open questions
 
-1. **Vector backend migration trigger.** At what size (total rows or per-user chunks) do we move off in-app cosine? Proposal: when p95 retrieval exceeds 150 ms or any user exceeds 10k chunks.
-2. **Item-level deadlines and priorities.** *Now built in the task model* (migration `007_item_fields`: due date, priority, tags, subtasks, recurrence). The chat tools (`add_item`, `update_item`) use them. Still open: item chunks for retrieval (`app/rag/chunking.py`) and the prioritizer's features ignore item-level due date, priority and tags ([KNOWN_ISSUES #38](KNOWN_ISSUES.md)).
+1. **Vector backend migration trigger.** *Resolved by the move to PostgreSQL:* vectors live in a pgvector column and search runs in SQL. Still open: when to add an approximate index (HNSW) that works with the per-user filter. Proposal: when p95 retrieval exceeds 150 ms or any user exceeds 10k chunks.
+2. **Item-level deadlines and priorities.** *Now built in the task model* (`items` columns: due date, priority, tags, subtasks, recurrence). The chat tools (`add_item`, `update_item`) use them. Still open: item chunks for retrieval (`app/rag/chunking.py`) and the prioritizer's features ignore item-level due date, priority and tags ([KNOWN_ISSUES #38](KNOWN_ISSUES.md)).
 3. **Language.** Should the assistant reply in the user's language? Gemini handles this well, but the eval sets are English-only.
 4. **Opt-out and data retention.** Opt-out lives on `users.ai_enabled`, and *Reset progress* now purges a user's vectors, chat threads and cached summaries (`POST /internal/forget` without a list). Still open: should chat threads also expire on their own (for example after 90 days)?
 5. **Proactive features.** *Built as a weekly digest*: an opt-in Monday DM (`/weekly`, `users.weekly_digest`) that appends the summarizer's weekly recap when AI is on. A daily digest remains open.

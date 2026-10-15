@@ -63,7 +63,7 @@ flowchart LR
         RULES[Game rules<br/>XP · classes · skills · games]
         SVC[Data services<br/>atomic XP · ownership · migrations]
     end
-    DB[(MySQL / MariaDB)]
+    DB[(PostgreSQL / Supabase)]
 
     D <-->|Gateway + interactions| BOT
     B <-->|HTTPS, same origin| API
@@ -90,7 +90,7 @@ TaskQuest-Application/
 │   └── ai/         Optional private AI service (Python, FastAPI, LangGraph)
 ├── packages/
 │   └── shared/     @taskquest/shared: rules, validation, DB services, migrations
-├── db/legacy/      Historical SQL scripts (do not run; see its README)
+├── db/legacy/      Historical MySQL-era SQL scripts (do not run; see its README)
 ├── docs/           Product, architecture, API, gameplay, player guides, deployment docs (index: docs/README.md)
 ├── scripts/        Repository tooling
 └── render.yaml     Render blueprint (web service, bot worker, optional AI service)
@@ -98,7 +98,7 @@ TaskQuest-Application/
 
 ## Quick start
 
-**Requirements:** Node.js 22+ and npm 10+, and a MySQL 8 or MariaDB 10.4+ database. XAMPP works for local development. You also need a Discord application from the [developer portal](https://discord.com/developers/applications).
+**Requirements:** Node.js 22+ and npm 10+, and a PostgreSQL 15+ database with the `vector` (pgvector) and `citext` extensions. Production uses Supabase; locally, the `pgvector/pgvector:pg16` Docker image works. You also need a Discord application from the [developer portal](https://discord.com/developers/applications).
 
 ```bash
 git clone https://github.com/Mist10148/TaskQuest-Application.git
@@ -106,7 +106,7 @@ cd TaskQuest-Application
 npm install
 ```
 
-1. **Create a database.** Use something like `CREATE DATABASE taskquest CHARACTER SET utf8mb4;`.
+1. **Create a database.** Use something like `CREATE DATABASE taskquest;` (the first migration enables `citext` and `vector` if your user may; otherwise run `CREATE EXTENSION` for both as an admin).
 2. **Configure.** One `.env` at the repository root is shared by the bot, the web server and the web build:
    ```bash
    cp .env.example .env
@@ -151,7 +151,7 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run dev:web` / `dev:server` / `dev:bot` | Run each app in watch mode |
 | `npm run build` | Build the web app into `apps/web/dist` |
 | `npm run start:server` / `start:bot` | Production start |
-| `npm run db:migrate` | Apply pending database migrations (001 to 026; both apps also do it on start) |
+| `npm run db:migrate` | Apply pending database migrations (`001_baseline` and any later ones; both apps also do it on start) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |
 | `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |
@@ -183,7 +183,8 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 | [docs/PLAYER_FAQ.md](docs/PLAYER_FAQ.md) | Streaks, freezes, reminders, time zone days, prestige, sharing and push, from the player's side |
 | [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) | How the AI service works: graphs, retrieval, tools, guardrails |
 | [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | The AI design record: goals, decisions, and how the build differs from the plan |
-| [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, and upgrading a legacy database |
+| [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, connection settings and backups |
+| [docs/MIGRATION_POSTGRES.md](docs/MIGRATION_POSTGRES.md) | The move from MySQL/TiDB to PostgreSQL on Supabase: decisions, type mapping, cutover runbook |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render, environment variables, Discord setup, operations |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Backups and restore, troubleshooting, and the first live Gemini run |
 | [docs/design/](docs/design/) | Design records for what was built: shared lists and parties, Tailwind 4, arcade anti-cheat, and the balance rationale |

@@ -32,10 +32,10 @@ This page explains why and how TaskQuest moved its database from MySQL (TiDB Clo
 | Area | Before | After |
 |---|---|---|
 | Node driver (`packages/shared`, `apps/server`) | `mysql2` | `pg` (node-postgres), behind a small compatibility layer in `packages/shared/src/db/pool.js` |
-| Python driver (`apps/ai`) | SQLAlchemy + `aiomysql` / `PyMySQL` | SQLAlchemy + `asyncpg`, `pgvector` |
+| Python driver (`apps/ai`) | SQLAlchemy + `aiomysql` / `PyMySQL` | SQLAlchemy + `asyncpg`, with codecs that keep naive-UTC datetimes and ISO date strings working (`apps/ai/app/db/pool.py`) |
 | Schema | 26 MySQL migrations | `001_baseline` in Postgres DDL |
 | Migration lock | `GET_LOCK('taskquest_migrations')` | `pg_advisory_lock` |
-| RAG search | BLOB embeddings, cosine similarity in numpy | `vector(768)` column, HNSW index, `ORDER BY embedding <=> :q` in SQL |
+| RAG search | BLOB embeddings, cosine similarity in numpy | `vector(768)` column, exact `ORDER BY embedding <=> :q` in SQL over the user's rows (numpy stays for the SQLite tests) |
 | CI services | `mysql:8.0` | `pgvector/pgvector:pg16` |
 | Backups | `mysqldump` | Supabase daily backups plus `pg_dump` |
 
@@ -45,7 +45,7 @@ There are about 740 queries in the Node code. To keep the change reviewable, the
 
 - **Placeholders.** Queries still use `?` placeholders. The layer rewrites them to `$1, $2, …`, skipping quoted strings, quoted identifiers and comments.
 - **Return values.** `conn.query()` and `pool.query()` still resolve to `[rows, fields]`.
-- **Write results.** For `INSERT` / `UPDATE` / `DELETE`, `rows` is a result header `{ affectedRows, insertId }`. As with mysql2, a write that returns rows gives the rows instead:
+- **Write results.** For `INSERT` / `UPDATE` / `DELETE`, `rows` is a result header `{ affectedRows, insertId, rows }`, with or without a `RETURNING` clause:
   - `affectedRows` is the Postgres `rowCount`.
   - `insertId` is the `id` of the first returned row. So an insert that needs the new id adds `RETURNING id` and reads `[{ insertId }]` as before.
 - **Booleans.** Boolean parameters are sent as `1` / `0`, because flag columns are `SMALLINT` (see below).
@@ -65,8 +65,7 @@ There are about 740 queries in the Node code. To keep the change reviewable, the
 | `BLOB` (embeddings) | `vector(768)` | Needs the `vector` extension |
 | `TEXT` / `MEDIUMTEXT` | `TEXT` | |
 | `CHAR(n)` | `VARCHAR(n)` | Avoids Postgres blank padding |
-| `DATETIME` / `TIMESTAMP` | `TIMESTAMPTZ` | Every session runs in UTC, as before |
-| `DATETIME(3)` / `TIMESTAMP(3)` | `TIMESTAMPTZ(3)` | |
+| `DATETIME` / `TIMESTAMP` (any precision) | `TIMESTAMPTZ(3)` | Millisecond precision, like a JavaScript `Date`, so a stored time reads back exactly; every session runs in UTC |
 | `DATE` | `DATE` | Still returned to JavaScript as a `'YYYY-MM-DD'` string |
 | `utf8mb4_unicode_ci` names that must be unique ignoring case | `CITEXT` | `lists.name`, `task_templates.name`, `parties.name` |
 | `utf8mb4_bin` | `VARCHAR` / `TEXT` | Postgres text comparison is already exact |
@@ -148,7 +147,7 @@ Because the database starts empty, the cutover is a configuration switch:
    - Set `DB_SSL=true`.
    - Clear `DB_SSL_CA`, unless you pinned the Supabase CA.
 3. **Deploy.** Push the migration commits to `main`, or redeploy if already pushed. Render auto-deploys web, bot, AI and the archive job.
-4. **Migrations run on start.** The first service to boot takes the advisory lock and runs `001_baseline`; the others wait and then see the schema is current. The AI service's build step indexes the help docs into `ai_embeddings`.
+4. **Migrations run on start.** The first service to boot takes the advisory lock and runs `001_baseline`; the others wait and then see the schema is current. The AI service's build step indexes the help docs into `ai_embeddings`. On the very first deploy that build can run before any table exists; it then skips without failing. Once the web service is up, redeploy the AI service (or run `python -m app.rag.index_docs` in its shell) to index the docs.
 5. **Players re-link.** Accounts are created again on the first bot command or web login. Progress from the TiDB database is not carried over.
 6. **Retire TiDB** once you are satisfied. Keep a final `mysqldump` of it if you want an archive.
 
@@ -173,9 +172,12 @@ Redeploy the last MySQL-era commit and set `DB_URL` back to the TiDB URL. Nothin
 
 ## Behaviour differences to know about
 
-- **Case-insensitive names.** Names that must be unique ignoring case (lists, templates, parties) use `citext`. Everything else compares exactly, as Postgres does. Task search uses `ILIKE`.
+- **Case-insensitive names.** Names that must be unique ignoring case (lists, templates, parties) use `citext`. Unlike MySQL's `utf8mb4_unicode_ci`, accents count: "Cafe" and "Café" can be two lists. Everything else compares exactly, as Postgres does. Task search uses `ILIKE`.
+- **Vector search is exact.** There is no HNSW index: filtered to one user, an approximate index can return fewer than k rows. The exact scan over a user's few thousand chunks is fast. If it ever is not, add an HNSW index with `hnsw.iterative_scan` (pgvector 0.8+).
+- **Timestamps keep milliseconds.** MySQL rounded most times to whole seconds; Postgres keeps what JavaScript sent, so elapsed-time checks (focus sessions, the daily claim window) are not off by a rounded second.
 - **`updated_at`.** It changes only when a query sets it (see [SQL rewrite rules](#sql-rewrite-rules)).
 - **`GREATEST` / `LEAST`.** In Postgres these ignore `NULL` arguments; MySQL returns `NULL`. The queries that use them either pass non-null values or wrap them in `COALESCE`.
 - **Strict typing.** Postgres does not compare a string with a number implicitly. The code passes numbers for numeric columns, and the compatibility layer turns booleans into `1` / `0`.
 - **Transactional DDL.** Each migration runs inside a transaction, so a failed migration leaves no half-applied schema.
+- **Failed statements abort the transaction.** Postgres refuses every statement after an error until the transaction ends, so code that catches a duplicate key inside a transaction and retries (the import's list names, a re-assigned Discord handle) wraps the attempt in `savepoint()`.
 - **No legacy upgrade path.** The MySQL-only `002_upgrade_legacy` migration and the [collation risk](OPERATIONS.md) it carried no longer apply.

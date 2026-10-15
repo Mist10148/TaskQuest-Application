@@ -1,7 +1,8 @@
 # Render Blueprint for TaskQuest (https://render.com/docs/blueprint-spec)
 #
-# Services share one MySQL database (bring your own: Aiven, PlanetScale,
-# Railway, TiDB, ...). Database migrations run automatically on startup.
+# Services share one PostgreSQL database (Supabase: create a project, then use
+# its Session pooler URL; docs/MIGRATION_POSTGRES.md). Database migrations run
+# automatically on startup.
 #
 #   taskquest-web  Express API + built React app on ONE origin (first-party cookies)
 #   taskquest-bot  Discord bot (long-lived gateway connection)
@@ -16,13 +17,13 @@
 envVarGroups:
   - name: taskquest-database
     envVars:
-      - key: DB_URL            # mysql://user:password@host:port/database
+      - key: DB_URL            # postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
         sync: false
       - key: DB_SSL
         value: "true"
       - key: DB_SSL_REJECT_UNAUTHORIZED
         value: "true"
-      - key: DB_SSL_CA         # optional: provider CA certificate (PEM contents)
+      - key: DB_SSL_CA         # optional: provider CA certificate (PEM contents); Supabase works without it
         sync: false
 
   # Optional AI features (docs/AI_INTEGRATION.md). Shared by web, bot and ai so

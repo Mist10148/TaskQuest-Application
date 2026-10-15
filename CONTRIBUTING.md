@@ -23,7 +23,7 @@ Use a **separate Discord application** for development, register commands to a t
 |---|---|
 | A number, rule, class, skill, achievement or game rule | `packages/shared/src` (`constants.js`, `xp.js`, `games/`) |
 | Anything that reads or writes the database | `packages/shared/src/db/*` services |
-| A schema change | A **new** migration, `packages/shared/src/db/migrations/00N_name.js` |
+| A schema change | A **new** migration, `packages/shared/src/db/migrations/00N_name.js` (after `001_baseline`, so from `002`) |
 | An HTTP endpoint | `apps/server/routes/*` + a zod schema in `lib/schemas.js` |
 | A Discord interaction | `apps/bot/commands/*` + `utils/ui.js` |
 | UI | `apps/web/src` (pages in `pages/`, feature components in `components/<feature>/`, shared logic in `lib/` and `hooks/`) |
@@ -36,7 +36,7 @@ Use a **separate Discord application** for development, register commands to a t
 - **Every query on user data is scoped by `discord_id`** in the SQL itself.
 - **Expected failures throw `TaskQuestError`** (`errors.validation()`, `errors.notFound()`, ...). Never show raw error messages to users.
 - **Never trust the client** for outcomes, payouts or prices.
-- **Never edit a released migration.** Add a new one, and make it idempotent with the `h.*IfMissing` helpers.
+- **Never edit a released migration.** Add a new one, and make it idempotent with the `h.*IfMissing` helpers. Write PostgreSQL: `ON CONFLICT` instead of `INSERT IGNORE`, `RETURNING id` when you need the new id, flags as `SMALLINT` 0/1, `CITEXT` for case-insensitive names ([DATABASE.md](docs/DATABASE.md), [MIGRATION_POSTGRES.md](docs/MIGRATION_POSTGRES.md#sql-rewrite-rules)).
 - **Date-only values stay strings.** Deadlines and due dates are `YYYY-MM-DD` with no zone. Compare and format them with `packages/shared/src/dates.js` (or `apps/web/src/lib/dates.ts`), never `new Date('2030-01-05')`, which is UTC midnight and shifts the day.
 - **Rewards need a cap.** Anything that pays XP for something a user can repeat cheaply must have a per-day limit (see `LIMITS` in `constants.js`) and a test that proves it.
 - **Update the docs** (`docs/GAMEPLAY.md`, `docs/XP_GUIDE.md`, `docs/API.md`, `docs/COMMANDS.md`, `docs/DATABASE.md`; the index is [docs/README.md](docs/README.md)) when behaviour changes, and add a line to `CHANGELOG.md`. `packages/shared/test/docs.test.js` fails when the tables in `docs/GAMEPLAY.md` (class costs, skills, quests, achievements, limits, cosmetics, prestige, arcade) disagree with `constants.js`; the code is the source of truth, so fix the document.
@@ -55,16 +55,15 @@ The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date he
 
 ### Integration tests
 
-The service, API and bot-flow tests run against a real database. They are skipped unless `TEST_DB_NAME` is set. **The target database is wiped**, so use a throwaway one:
+The service, API and bot-flow tests run against a real PostgreSQL database with the `vector` and `citext` extensions available. They are skipped unless `TEST_DB_NAME` is set. **The target database is wiped** (`DROP SCHEMA public CASCADE`), so use a throwaway one:
 
 ```bash
-mysql -uroot -e "CREATE DATABASE taskquest_test"
-TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=3306 TEST_DB_USER=root TEST_DB_PASSWORD= TEST_DB_NAME=taskquest_test npm test
+docker run -d --name tq-pg -p 5432:5432 -e POSTGRES_PASSWORD=pw pgvector/pgvector:pg16   # or any Postgres 15+ with pgvector
+psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE taskquest_test"
+TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=5432 TEST_DB_USER=postgres TEST_DB_PASSWORD=pw TEST_DB_NAME=taskquest_test npm test
 ```
 
-With XAMPP's MariaDB you can also start a disposable server with its own data directory on another port. CI runs the same suite against MySQL 8.
-
-On MariaDB 10.4 two of the web API tests (the prestige and cosmetics checks that read the leaderboard) fail even on an untouched checkout; they pass on MySQL 8, which CI uses. Trust CI for those two.
+CI runs the same suite against the `pgvector/pgvector:pg16` image.
 
 When fixing a bug, add a test that fails without the fix. Use the existing helpers: the injectable `rng` for rules, and `fake()` interactions for bot flows.
 
@@ -84,7 +83,7 @@ Then update the GAMEPLAY and CLASS_GUIDE text, [design/balance.md](docs/design/b
 `apps/web/e2e` holds a small Playwright suite (Chromium) that drives the built app against a real API and database. It is separate from `npm test` and runs in its own CI job. The seed script **wipes** its database (default `taskquest_e2e`, override with `E2E_DB_HOST`, `E2E_DB_PORT`, `E2E_DB_USER`, `E2E_DB_PASSWORD`, `E2E_DB_NAME`):
 
 ```bash
-mysql -uroot -e "CREATE DATABASE taskquest_e2e"
+psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE taskquest_e2e"
 (cd apps/web && npx playwright install chromium)   # once
 npm run build
 npm run test:e2e
@@ -106,7 +105,7 @@ pytest tests/unit tests/graphs tests/evals        # offline: fake models, in-mem
 python -m tests.evals.run                         # offline eval pipeline (also in CI)
 ```
 
-`pytest tests/mysql` runs the service's SQL against a real MySQL 8 with the Node migrations applied (the `ai-mysql` CI job: run `npm run db:migrate` against a scratch database first, then set `AI_TEST_DB_URL=mysql://user:pw@host:3306/db`). Nothing in the suite calls Gemini; the live runbook is in [docs/OPERATIONS.md](docs/OPERATIONS.md#first-live-gemini-run).
+`pytest tests/postgres` runs the service's SQL (asyncpg, pgvector search, `EmbeddingStore`, `SqlCheckpointSaver`) against a real Postgres with the Node migrations applied (the `ai-postgres` CI job: run `npm run db:migrate` against a scratch database first, then set `AI_TEST_DB_URL=postgresql://user:pw@host:5432/db`). Nothing in the suite calls Gemini; the live runbook is in [docs/OPERATIONS.md](docs/OPERATIONS.md#first-live-gemini-run).
 
 ### Trying the web app locally without Discord
 
@@ -128,5 +127,5 @@ Check the page you changed in **both themes**, at a phone width, and with the ke
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(bot): …`, `fix(shared): …`, `docs: …`, `test: …`, `chore(deploy): …`.
 - Keep commits focused, so one logical change per commit. A bug fix commit should contain the test that proves it.
-- PRs need green CI (lint, typecheck, build, tests on MySQL 8, audit) and updated docs if behaviour changed.
+- PRs need green CI (lint, typecheck, build, tests on PostgreSQL, audit) and updated docs if behaviour changed.
 - Never commit `.env` files, tokens or database dumps. If you leak a secret, rotate it immediately; deleting the commit is not enough.

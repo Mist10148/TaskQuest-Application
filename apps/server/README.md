@@ -1,6 +1,6 @@
 # @taskquest/server
 
-The Express API for the TaskQuest web app. It handles Discord OAuth2 login and MySQL-backed sessions, and serves
+The Express API for the TaskQuest web app. It handles Discord OAuth2 login and database-backed sessions, and serves
 the built web app in production.
 
 ```bash
@@ -15,7 +15,7 @@ npm test                # integration tests need TEST_DB_NAME (see CONTRIBUTING.
 | `app.js` | Express app factory and route mounting |
 | `config.js` | Environment parsing and validation |
 | `lib/security.js` | helmet/CSP, rate limits, CSRF origin check, session middleware |
-| `lib/sessionStore.js` | express-session store on the `web_sessions` table |
+| `lib/sessionStore.js` | `DbSessionStore`, the express-session store on the `web_sessions` table (Postgres) |
 | `lib/schemas.js` | zod request schemas |
 | `lib/push.js`, `lib/pushConfig.js` | Web push sending and the optional VAPID configuration |
 | `lib/aiClient.js`, `lib/http.js` | The AI service client and shared HTTP helpers |

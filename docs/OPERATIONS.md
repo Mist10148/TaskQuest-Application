@@ -27,33 +27,34 @@ Your `.env` / Render environment variables are **not** in the database. Keep the
 
 ### Take a backup
 
-A consistent snapshot without locking the tables (InnoDB):
+`pg_dump` takes a consistent snapshot without locking writers. Use a `pg_dump` at least as new as the server (Supabase runs Postgres 15+), and the same `DB_URL` the apps use (the Supabase session pooler works; TLS is negotiated automatically):
 
 ```bash
-mysqldump --single-transaction --routines --triggers --default-character-set=utf8mb4 \
-  -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p "$DB_NAME" \
-  | gzip > "taskquest-$(date -u +%Y%m%dT%H%MZ).sql.gz"
+pg_dump -Fc --no-owner --no-privileges "$DB_URL" -f "taskquest-$(date -u +%Y%m%dT%H%MZ).dump"
 ```
 
 - Run it before every upgrade and on a schedule (daily is a sensible default for a community bot).
 - Keep several generations (for example 7 daily, 4 weekly) and copy at least one **off the machine** that hosts the database.
-- Managed databases (Render, PlanetScale, RDS, ...) have their own snapshot feature. Use it, and still take a `mysqldump` before risky changes.
-- Cloud MySQL usually needs TLS: add `--ssl-mode=REQUIRED` (MySQL) or `--ssl` (MariaDB).
+- Supabase takes daily backups of the project (Database → Backups; how long they are kept, and point-in-time recovery, depend on the plan). Rely on them, and still take a `pg_dump` before risky changes, since a Supabase backup restores the whole project in place.
+- `-Fc` (custom format) is compressed and lets `pg_restore` pick tables; `--no-owner --no-privileges` makes the dump restorable under a different role.
 
-To exclude the bulky, rebuildable AI vectors, add `--ignore-table="$DB_NAME.ai_embeddings"` once per table.
+To exclude the bulky, rebuildable AI vectors' rows, add `--exclude-table-data=ai_embeddings` (repeat it per table).
 
 ### Restore
 
 Always restore into a **new, empty** database first and check it, rather than over the live one.
 
 ```bash
-mysql -u root -p -e "CREATE DATABASE taskquest_restore CHARACTER SET utf8mb4"
-gunzip -c taskquest-20300101T0300Z.sql.gz | mysql -u root -p taskquest_restore
+createdb taskquest_restore        # or a new Supabase project
+psql -d taskquest_restore -c 'CREATE EXTENSION IF NOT EXISTS citext; CREATE EXTENSION IF NOT EXISTS vector;'
+pg_restore --no-owner --no-privileges -d taskquest_restore taskquest-20300101T0300Z.dump
 ```
+
+The target needs the `citext` and `vector` (pgvector) extensions available. A plain-SQL dump (`pg_dump` without `-Fc`) is restored with `psql -d taskquest_restore -f dump.sql` instead.
 
 Then:
 
-1. Point a **staging** copy of the web server at it (`DB_NAME=taskquest_restore`) and run `npm run db:migrate`. If the dump is from an older release, this brings the schema up to date; if it is from the same release it prints "database schema is up to date".
+1. Point a **staging** copy of the web server at it (`DB_NAME=taskquest_restore`) and run `npm run db:migrate`. If the dump is from an older release, this brings the schema up to date; if it is from the same release it prints "database schema is up to date". (Dumps from the MySQL era cannot be restored into Postgres; see [MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md).)
 2. Sign in, check a player with lists, tasks and XP, and look at `SELECT COUNT(*) FROM users, lists, items`.
 3. When satisfied, switch production's `DB_NAME`/`DB_URL` to the restored database (or restore into the production name during a short maintenance window), restart the web service and the bot.
 
@@ -94,38 +95,27 @@ Start with the health checks: web `GET /api/health` (`{status:"ok", database:"co
 | Push notifications never arrive | Web push is off (the three `WEB_PUSH_*` VAPID variables unset), the site is not HTTPS, the bot has no `WEB_PUSH_INTERNAL_URL` or the shared token differs, or the browser's subscription expired (the server deletes it on a 404 or 410) | See [DEPLOYMENT.md](DEPLOYMENT.md#web-push-optional); check `GET /api/push/config` and that the user turned it on per browser in Settings. |
 | Calendar feed returns 404 | The token was rotated or turned off, or the URL was copied wrongly | Create a new address in Settings → Calendar feed and re-subscribe. |
 | Import fails with a 400 message | The file isn't a TaskQuest export (or a CSV with a header row), or breaks a limit (JSON: 100 lists, 500 tasks per list, 1000 in total, 1 MB; CSV: 1,000,000 characters; both: 200 lists and 5,000 tasks per account) | The message names the entry (for example `lists[3]: ... deadline`) or, for CSV, the file row. Fix it and retry; nothing is imported on error. |
-| "Could not acquire migration lock" at startup | Another process is migrating, or a crashed one left the named lock | Wait a minute; the lock dies with its connection. If it persists, restart the database connection pool (restart the service). |
+| "Could not acquire migration lock" at startup | Another process is migrating, or a crashed one left the advisory lock | Wait a minute; the lock dies with its session. If it persists, restart the service. On Supabase, `DB_URL` must be the **session** pooler (port 5432): through the transaction pooler (6543) the lock does not hold. |
 | Site works but is slow on the first request | Free hosting plans sleep when idle | Expected on Render's free tier; use a paid plan for the bot. |
 
 ### Useful queries
 
 ```sql
+SET TIME ZONE 'UTC';   -- the apps' sessions run in UTC; a psql session may not
+
 -- Who is close to a daily cap? Days are per user (users.timezone), so this UTC window is only an approximation;
 -- the real cap counts from each user's own local midnight.
 SELECT discord_id, COUNT(*) AS completions FROM xp_transactions
- WHERE source = 'item_complete' AND created_at >= UTC_DATE() GROUP BY discord_id ORDER BY completions DESC LIMIT 10;
+ WHERE source = 'item_complete' AND created_at >= CURRENT_DATE GROUP BY discord_id ORDER BY completions DESC LIMIT 10;
 
 -- Lists whose reminder is pending (owners only: members' state is in list_reminders; a deadline is a date, but whether
 -- it is due today depends on the owner's time zone, so the window is one day wide on purpose)
 SELECT id, discord_id, name, deadline FROM lists
- WHERE deadline_notified = 0 AND deadline <= UTC_DATE() + INTERVAL 1 DAY;
+ WHERE deadline_notified = 0 AND deadline <= CURRENT_DATE + 1;
 
 -- Applied migrations
 SELECT * FROM schema_migrations ORDER BY id;
 ```
-
-### Before upgrading a database from a 3.x release
-
-Migration `002_upgrade_legacy` converts the old tables to `utf8mb4_unicode_ci`, while the tables created by later migrations use the server's default `utf8mb4` collation. MySQL needs the two columns of a foreign key to share a collation, so on some servers a later migration (the first one that adds a foreign key to `users`, `009_quest_claims`) can stop with error 3780 or 1215. CI only migrates fresh databases and no upgraded 3.x database was available to test this, so it is **unverified**. Always upgrade a copy first (restore a backup into a scratch database, run `npm run db:migrate` against it) and, if you want to check before migrating, compare collations after migration `002` has run:
-
-```sql
-SELECT TABLE_NAME, COLUMN_NAME, COLLATION_NAME FROM information_schema.COLUMNS
- WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'discord_id' AND COLLATION_NAME IS NOT NULL
- ORDER BY COLLATION_NAME, TABLE_NAME;
--- More than one distinct COLLATION_NAME means the foreign keys to users.discord_id will not line up.
-```
-
-If the migration stops with one of those errors, restore the backup and open an issue with the output of that query; do not edit a migration that has shipped.
 
 ---
 

@@ -1,6 +1,6 @@
 # Deployment and operations
 
-TaskQuest runs as two processes sharing one MySQL-compatible database:
+TaskQuest runs as two processes sharing one PostgreSQL database:
 
 | Process | Start command | Needs |
 |---|---|---|
@@ -39,17 +39,34 @@ Use one Discord application for both the bot and web login.
 
 ## 2. Database
 
-TaskQuest needs MySQL 8.0+ or MariaDB 10.4+ with InnoDB and utf8mb4. Managed options that work include Aiven, Railway, PlanetScale-compatible MySQL, TiDB Cloud, and DigitalOcean.
+TaskQuest needs PostgreSQL 15+ with the `vector` (pgvector) and `citext` extensions. Production runs on **Supabase**; locally, any Postgres with pgvector works (the `pgvector/pgvector:pg16` Docker image is what CI uses). MySQL, MariaDB and TiDB are no longer supported; the move is described in [MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md).
+
+**Supabase.** Create a project in the region closest to your app hosts, enable `vector` and `citext` under Database → Extensions (the baseline migration also creates them, which the default `postgres` user may do), and copy the **Session pooler** connection string from Connect:
+
+```
+DB_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+DB_SSL=true
+```
+
+- Use the **session** pooler on port **5432**. It is reachable over IPv4 (Render has no IPv6), and it is session-level, so the migration advisory lock and the AI service's prepared statements work. The transaction pooler (port 6543) breaks both, and the direct host `db.<project-ref>.supabase.co` is IPv6-only.
+- Supabase certificates chain to a public root, so `DB_SSL_CA` can stay empty; to pin it, paste the CA from Database → Settings → SSL Configuration.
+- The free tier limits pooler clients. The web server, bot, AI service and archive job each open a pool, so keep `DB_POOL_SIZE` small (5 or lower per Node service).
+
+**Self-hosted Postgres.**
 
 ```sql
-CREATE DATABASE taskquest CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'taskquest'@'%' IDENTIFIED BY '<strong password>';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON taskquest.* TO 'taskquest'@'%';
+CREATE DATABASE taskquest;
+-- then, connected to taskquest:
+CREATE EXTENSION IF NOT EXISTS citext;
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE ROLE taskquest LOGIN PASSWORD '<strong password>';
+GRANT CONNECT, TEMPORARY ON DATABASE taskquest TO taskquest;
+GRANT USAGE, CREATE ON SCHEMA public TO taskquest;
 ```
 
 - **Migrations.** These run automatically when either app starts, or manually with `npm run db:migrate`.
-- **Least privilege.** If you prefer, run migrations with an admin user, then run the apps with `MIGRATE_ON_START=false` and a user that only has `SELECT, INSERT, UPDATE, DELETE`.
-- **TLS.** Cloud databases need TLS. Set `DB_SSL=true` and keep `DB_SSL_REJECT_UNAUTHORIZED=true`. If your provider uses a private CA (Aiven does), put its PEM certificate in `DB_SSL_CA`.
+- **Least privilege.** If you prefer, run migrations with an admin (owner) role, then run the apps with `MIGRATE_ON_START=false` and a role that has only data access: `GRANT USAGE ON SCHEMA public TO app; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app;` (identity columns use sequences). Re-run the grants after a migration adds tables, or set `ALTER DEFAULT PRIVILEGES` for the migrating role.
+- **TLS.** Cloud databases need TLS. Set `DB_SSL=true` and keep `DB_SSL_REJECT_UNAUTHORIZED=true`. If your provider uses a private CA, put its PEM certificate in `DB_SSL_CA`.
 
 ## 3. Environment variables
 
@@ -94,8 +111,8 @@ In production, set the variables in your host's dashboard instead. Because the b
 
 | Variable | Default | Description |
 |---|---|---|
-| `DB_URL` | — | `mysql://user:pass@host:port/db`. Takes precedence over the individual settings. |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | `localhost`, `3306`, `root`, empty, `taskquest` | Individual settings |
+| `DB_URL` | — | `postgresql://user:pass@host:port/db` (on Supabase, the session-pooler URL above). Takes precedence over the individual settings. |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | `localhost`, `5432`, `postgres`, empty, `taskquest` | Individual settings |
 | `DB_SSL` | `false` | `true` to enable TLS (also for `DB_URL`) |
 | `DB_SSL_REJECT_UNAUTHORIZED` | `true` | Verify certificates. Only disable for local testing. |
 | `DB_SSL_CA` | — | PEM CA certificate contents |
@@ -131,15 +148,15 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [A
 | `GEMINI_API_KEY` | ai | Google AI Studio key. Server-side only, never a `VITE_*` variable. |
 | `GEMINI_CHAT_MODEL`, `GEMINI_REASONING_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM` | ai | Model ids and embedding size (defaults: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-embedding-001`, `768`). **Check them against Google's current model list.** Changing the embedding model re-embeds everything automatically (vectors are stored with the model name). |
 | `AI_DAILY_REQUEST_LIMIT` | ai | Requests per user per UTC day across all features (default `100`) |
-| `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate MySQL user for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables. It never writes tasks directly. |
+| `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate Postgres role for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables (plus `USAGE` on the `ai_embeddings` id sequence). It never writes tasks directly. |
 | `LANGSMITH_API_KEY` | ai | Optional tracing |
 | `AI_RECONCILE_MINUTES` | ai | How often missed re-index calls are caught up (default `15`) |
 | `SUMMARY_MAP_REDUCE_CHARS` | ai | Summaries are made in parts above this input size (default `40000`) |
 | `MAX_TOOL_ITERATIONS` | ai | Tool rounds per chat turn (default `6`) |
-| `DB_POOL_SIZE` | ai | The AI service's own MySQL pool (default `5`; the Node apps default to `10`) |
+| `DB_POOL_SIZE` | ai | The AI service's own Postgres pool (SQLAlchemy + asyncpg; default `5`; the Node apps default to `10`) |
 | `LOG_LEVEL` | ai | AI service JSON log level (default `INFO`) |
 
-The AI service reads the same root `.env` as the other apps, plus the database variables above. It needs migrations `003_ai` to `006_ai_chat_format`, which the web service and the bot apply on startup.
+The AI service reads the same root `.env` as the other apps, plus the database variables above. It builds a `postgresql+asyncpg://` URL from them and needs the `ai_*` tables of `001_baseline`, which the web service and the bot apply on startup. The AI service never runs DDL.
 
 **Local run**
 
@@ -169,7 +186,7 @@ Browser notifications for reminders, **off unless all three VAPID values are set
 | `WEB_PUSH_INTERNAL_TOKEN` | web, bot | Shared secret, **at least 32 characters**, identical on both. Optional: it falls back to `AI_INTERNAL_TOKEN`, so with the AI token already shared you only need `WEB_PUSH_INTERNAL_URL`. Sent as the `X-AI-Token` header of `POST /internal/push` and checked in constant time. |
 | `WEB_PUSH_TIMEOUT_MS` | bot | How long the bot waits for the web server per push (default `5000`) |
 
-Users then turn it on per browser under **Settings → Push notifications**. The service worker (`/sw.js`) is only registered at that point, shows the notification, opens the right page on click and caches nothing. Push needs HTTPS (or `localhost`). Subscriptions are stored in `push_subscriptions` (migration `017_web_push`); dead ones are removed when the push service answers 404 or 410.
+Users then turn it on per browser under **Settings → Push notifications**. The service worker (`/sw.js`) is only registered at that point, shows the notification, opens the right page on click and caches nothing. Push needs HTTPS (or `localhost`). Subscriptions are stored in `push_subscriptions`; dead ones are removed when the push service answers 404 or 410.
 
 ## 4. Deploying on Render
 
@@ -177,7 +194,7 @@ The repository includes [`render.yaml`](../render.yaml).
 
 1. Push the repository to GitHub. In Render, choose **New → Blueprint** and select the repository.
 2. Fill in the prompted secrets:
-   - In the `taskquest-database` group: `DB_URL`, plus `DB_SSL_CA` if needed.
+   - In the `taskquest-database` group: `DB_URL` (the Supabase session-pooler URL, see §2), plus `DB_SSL_CA` if you pin the CA.
    - On `taskquest-web`: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `PUBLIC_URL`.
    - On `taskquest-bot`: `DISCORD_TOKEN`, `CLIENT_ID` and `WEB_APP_URL`.
    - `SESSION_SECRET` is generated for you.
@@ -211,17 +228,16 @@ Put the web server behind HTTPS (a reverse proxy or the platform's TLS). Set `TR
 If you ran `taskquest-botv2` (v3.x) and/or `taskquest-web_deploy` (v1.5):
 
 1. **Rotate secrets first.** See [SECURITY.md](../SECURITY.md#1-required-action-rotate-leaked-secrets).
-2. **Back up the database:** `mysqldump --single-transaction taskquest > backup.sql`.
-3. **Deploy 4.0** pointing at the same database. On first start, migration `002_upgrade_legacy` upgrades the schema in place. [DATABASE.md](DATABASE.md#upgrading-a-legacy-database) lists what it changes, including refunds of stuck Blackjack bets.
-4. **Replace the two old services** with the two from `render.yaml`. The web app is now served by the API itself:
+2. **Start on a new database.** The old repositories used MySQL. The in-place upgrade of a 3.x MySQL database (the MySQL-era `002_upgrade_legacy` migration) was removed with the move to PostgreSQL, so the current release cannot open an old database. Create a Postgres database (§2) and let the apps migrate it; players link again on their first bot command or web login. Keep a `mysqldump` of the old database if you want an archive.
+3. **Replace the two old services** with the two from `render.yaml`. The web app is now served by the API itself:
    - Delete the old static site.
    - Point your domain at `taskquest-web`.
    - Update the Discord OAuth redirect to `<PUBLIC_URL>/api/auth/callback`.
-5. **Re-run `deploy:commands`.** The `/list` command definition changed (its `name` option now has a length limit).
+4. **Re-run `deploy:commands`.** The `/list` command definition changed (its `name` option now has a length limit).
 
 Behaviour changes players may notice are listed in [CHANGELOG.md](../CHANGELOG.md#400---2026-10-08).
 
-**Upgrading to the improvement pass** (migrations `010` to `026`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
+**Moving a MySQL-era deployment (TiDB) to PostgreSQL**: follow the cutover runbook in [MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md#cutover-runbook). The Supabase database starts empty (no rows are copied), so it is a configuration switch: set `DB_URL` and `DB_SSL=true`, deploy, and the first service to start runs `001_baseline`. Then re-run `npm run deploy:commands` if the release added commands. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased).
 
 ## 7. Operations
 

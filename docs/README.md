@@ -22,7 +22,8 @@ Last verified against code: 15 October 2026 (2026-10-15), branch `main`.
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, the shared package and its modules, request flows, transactions, games, security design, jobs, tests |
 | [API.md](API.md) | Every REST endpoint with request and response shapes, errors and rate limits |
-| [DATABASE.md](DATABASE.md) | Migrations 001 to 026, every table and column, XP sources, connection settings, maintenance |
+| [DATABASE.md](DATABASE.md) | The PostgreSQL baseline migration, every table and column, XP sources, connection settings, maintenance |
+| [MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md) | The move from MySQL/TiDB to PostgreSQL on Supabase: decisions, type mapping, SQL rewrite rules, cutover runbook |
 | [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) | How the optional AI service is built: graphs, retrieval, tools, guardrails |
 | [AI_INTEGRATION.md](AI_INTEGRATION.md) | The AI design record: goals, decisions and how the build differs from the plan |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Local setup, where code belongs, tests (unit, integration, browser, AI), style |
@@ -31,7 +32,7 @@ Last verified against code: 15 October 2026 (2026-10-15), branch `main`.
 
 | Document | What it is |
 |---|---|
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Discord setup, database, every environment variable (including web push and AI), Render, upgrades |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Discord setup, database (Supabase), every environment variable (including web push and AI), Render, upgrades |
 | [OPERATIONS.md](OPERATIONS.md) | Backups and restore, troubleshooting, useful queries, the first live Gemini run |
 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | Known limitations and their workarounds |
 | [../SECURITY.md](../SECURITY.md) | Security model, fixed vulnerabilities, residual risks, secret rotation, reporting |

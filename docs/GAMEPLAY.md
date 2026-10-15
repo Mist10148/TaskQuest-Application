@@ -53,7 +53,7 @@ For every reward:
 3. final      = ⌊classXP × multiplier⌋ + Σ flat skill bonuses
                   (Valor, Fortify, Arcane Study, and on task completions Multishot,
                    Rally for HIGH priority, Anchor for recurring tasks)
-4. Hero Champion: ×2 if your level is a multiple of 5
+4. Hero Champion: ×2 if your level is a multiple of 5 (Hero equipped)
 5. Crit (Assassin Critical Hit): +50 % (or +100 % with Shadow Step); a crit arms Bleed
 6. Double Down skill: chance to ×2
 7. Jackpot skill: 1 % chance to ×10
@@ -111,8 +111,8 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 |---|---|---|---|---|
 | ⚔️ Valor | 3 | 100 | +10 flat XP | — |
 | ✨ Inspire | 2 | 150 | +8% XP | Valor |
-| 👑 Champion | 1 | 200 | ×2 XP while your level is a multiple of 5 | Inspire |
-| 🏆 Legendary | 1 | 300 | +25% XP | Champion |
+| 👑 Champion | 1 | 200 | ×2 XP while your level is a multiple of 5 *(class)* | Inspire |
+| 🏆 Legendary | 1 | 300 | +25% XP *(class)* | Champion |
 | 🛡️ Oath | 1 | 250 | Hero bonus becomes min(25 + level, 50), still capped at 3 × base *(class)* | Legendary |
 | 📣 Rally | 1 | 220 | +15 flat XP when you complete a HIGH priority task | Oath |
 

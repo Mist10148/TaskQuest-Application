@@ -72,8 +72,12 @@ test('skill bonuses are applied', () => {
     const r = shared.calculateFinalXP(user(), skills, 100, { rng: seq(0.99) });
     assert.equal(r.finalXP, 110 + 10);
 
-    const champ = shared.calculateFinalXP(user({ player_level: 5 }), [{ skill_id: 'hero_champion', skill_level: 1 }], 10, { rng: seq(0.99) });
-    assert.equal(champ.finalXP, 20);
+    // Champion and Legendary only work while the Hero is equipped
+    const champ = shared.calculateFinalXP(user({ player_class: 'HERO', player_level: 5 }), [{ skill_id: 'hero_champion', skill_level: 1 }], 10, { rng: seq(0.99) });
+    assert.equal(champ.finalXP, 2 * 35, 'Hero +25, then doubled');
+    const borrowed = [{ skill_id: 'hero_champion', skill_level: 1 }, { skill_id: 'hero_legend', skill_level: 1 }];
+    assert.equal(shared.calculateFinalXP(user({ player_level: 5 }), borrowed, 10, { rng: seq(0.99) }).finalXP, 10, 'a Default player does not get Champion or Legendary');
+    assert.equal(shared.calculateFinalXP(user({ player_class: 'MONK', player_level: 5 }), borrowed, 10, { rng: seq(0.99), now: 0 }).finalXP, shared.calculateFinalXP(user({ player_class: 'MONK', player_level: 5 }), [], 10, { rng: seq(0.99), now: 0 }).finalXP);
 
     const crit = shared.calculateFinalXP(
         user(),

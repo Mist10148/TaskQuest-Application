@@ -80,6 +80,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **Champion and Legendary only work while the Hero is equipped.** They were generic skills, so a Monk or Wizard that had bought the Hero tree doubled and boosted its already large output. Skills can now carry `classOnly: true` (`activeSkills` in `xp.js`). Valor and Inspire stay generic.
 - **Prestige now also pays +1 flat XP per prestige on every task completion** (up to +10), next to the +2% multiplier. The percentage alone rounded away on small rewards (a 10 XP task stayed 10 XP even after ten prestiges). `PRESTIGE.FLAT_PER_PRESTIGE`.
 - **The level curve stays linear on purpose.** A level is still 100 lifetime XP. A steeper curve was considered and rejected so that no veteran's level drops; the reasoning is in [design/balance.md](docs/design/balance.md).
 - **Blackjack** pays a flat 1:1 (3:2 for a natural) with no class or skill bonuses, because any larger payout made it a positive-expectation XP farm (see Fixed for the abandoned-hand rule).

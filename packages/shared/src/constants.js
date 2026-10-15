@@ -133,8 +133,8 @@ const SKILL_TREES = {
         skills: {
             hero_valor: { name: 'Valor', emoji: '⚔️', description: '+10 flat XP per action per level', maxLevel: 3, cost: 100, requires: null },
             hero_inspire: { name: 'Inspire', emoji: '✨', description: '+8% XP per level', maxLevel: 2, cost: 150, requires: 'hero_valor' },
-            hero_champion: { name: 'Champion', emoji: '👑', description: 'Double XP while your level is a multiple of 5', maxLevel: 1, cost: 200, requires: 'hero_inspire' },
-            hero_legend: { name: 'Legendary', emoji: '🏆', description: '+25% XP on every action', maxLevel: 1, cost: 300, requires: 'hero_champion' },
+            hero_champion: { name: 'Champion', emoji: '👑', description: 'Double XP while your level is a multiple of 5 (Hero)', maxLevel: 1, cost: 200, requires: 'hero_inspire', classOnly: true },
+            hero_legend: { name: 'Legendary', emoji: '🏆', description: '+25% XP on every action (Hero)', maxLevel: 1, cost: 300, requires: 'hero_champion', classOnly: true },
             hero_oath: { name: 'Oath', emoji: '🛡️', description: 'Hero bonus becomes min(25 + level, 50), still capped at 3× the base reward (Hero)', maxLevel: 1, cost: 250, requires: 'hero_legend' },
             hero_rally: { name: 'Rally', emoji: '📣', description: '+15 flat XP when you complete a HIGH priority task', maxLevel: 1, cost: 220, requires: 'hero_oath' }
         }

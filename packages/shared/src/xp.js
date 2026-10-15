@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { XP_PER_LEVEL, REWARDS, DAILY, SMALL_ACTION_CAP, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES, PRESTIGE, PRESTIGE_TITLES } = require('./constants');
+const { XP_PER_LEVEL, REWARDS, DAILY, SMALL_ACTION_CAP, SKILL_TREES, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES, PRESTIGE, PRESTIGE_TITLES } = require('./constants');
 const { secureRandom } = require('./random');
 const { daysBetween, todayInZone } = require('./dates');
 
@@ -102,6 +102,22 @@ function getSkillBonuses(userSkills) {
         dailySurprise: lvl('default_daily_surprise') > 0,
         paladinSanctuary: lvl('paladin_sanctuary') > 0
     };
+}
+
+/**
+ * The skills that work for this user: a skill flagged `classOnly` (Hero's Champion and Legendary) needs its own
+ * class equipped, so a Hero tree cannot double or boost the output of another, already strong class.
+ */
+function activeSkills(user, userSkills) {
+    const skills = toSkillMap(userSkills);
+    const dropped = [];
+    for (const [key, tree] of Object.entries(SKILL_TREES)) {
+        for (const [id, s] of Object.entries(tree.skills)) if (s.classOnly && user.player_class !== key) dropped.push(id);
+    }
+    if (!dropped.some((id) => skills.has(id))) return skills;
+    const kept = new Map(skills);
+    for (const id of dropped) kept.delete(id);
+    return kept;
 }
 
 /** Streak freeze limits: { max, cost }. Freeze Cache raises the cap and lowers the price. */
@@ -380,7 +396,7 @@ function tankStackCap(level, skills) {
 function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     const rng = opts.rng || secureRandom;
     const context = opts.context || {};
-    const skills = toSkillMap(userSkills);
+    const skills = activeSkills(user, userSkills);
     const lvl = (id) => skills.get(id) || 0;
     const level = Number(user.player_level) || 1;
 
@@ -560,6 +576,7 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 }
 
 module.exports = {
+    activeSkills,
     prestigeMultiplier,
     prestigeFlat,
     prestigeTitle,

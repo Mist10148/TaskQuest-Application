@@ -137,6 +137,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 ### Fixed
 
 - **Blackjack no longer mints lifetime XP.** Wins were credited to lifetime XP (level, prestige, XP achievements, the lifetime board) while losses never took any back, so about 40 hands at a 25% bet could reach the prestige level. Winnings now only change the balance.
+- **Broken documentation links** (`CHANGELOG.md#400` in DEPLOYMENT and KNOWN_ISSUES, a `../SECURITY.md` path in the shared-lists design note).
 - **Stale class text and docs.** The Assassin card said +7% per stack and the Tank card +6% with a "strong early" playstyle (the rules are +8% and +7%, and the Tank is weak early); XP_GUIDE said Champion "doubles" XP; the balance note gave the Wizard's Wisdom as level × 5.
 - **HIGH priority bonuses are capped at 3 a day.** Priority is the player's own label, so marking every task HIGH made the Paladin's Vow, the Hero's Rally, the Archer's Sniper and Crusade pay on everything. Only the first 3 HIGH first-completions of your day now count as HIGH for classes and skills; later ones are treated as medium. The Heavy Lifter quest is unchanged (`LIMITS.HIGH_BONUS_PER_DAY`).
 - **The Artisan is no longer punished for finishing lists.** Clearing a list kept nothing and paid +5 per progress, so in the model it earned less than never clearing. A clear now keeps half the progress (rounded down) and pays +8 per progress (`CLASS_RULES.ARTISAN.CLEAR_KEEP_PERCENT`, `CLEAR_XP_PER_PROGRESS`).

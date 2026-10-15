@@ -218,7 +218,7 @@ If you ran `taskquest-botv2` (v3.x) and/or `taskquest-web_deploy` (v1.5):
    - Update the Discord OAuth redirect to `<PUBLIC_URL>/api/auth/callback`.
 5. **Re-run `deploy:commands`.** The `/list` command definition changed (its `name` option now has a length limit).
 
-Behaviour changes players may notice are listed in [CHANGELOG.md](../CHANGELOG.md#400).
+Behaviour changes players may notice are listed in [CHANGELOG.md](../CHANGELOG.md#400---2026-10-08).
 
 **Upgrading to the improvement pass** (migrations `010` to `026`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
 

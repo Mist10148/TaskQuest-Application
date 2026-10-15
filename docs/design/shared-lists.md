@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | **Implemented** (shared lists, then minimal parties). See [Decisions and what was built](#decisions-and-what-was-built) |
 | **Why it was a design note first** | It changes the ownership model that every query in the system relies on. |
-| **Related** | [ARCHITECTURE §2](../ARCHITECTURE.md#2-the-shared-package), [SECURITY](../SECURITY.md), [PRD roadmap](../PRD.md#11-roadmap) |
+| **Related** | [ARCHITECTURE §2](../ARCHITECTURE.md#2-the-shared-package), [SECURITY](../../SECURITY.md), [PRD roadmap](../PRD.md#11-roadmap) |
 
 ## Problem
 

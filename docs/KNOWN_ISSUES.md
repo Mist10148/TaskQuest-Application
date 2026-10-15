@@ -1,6 +1,6 @@
 # Known issues and limitations
 
-This list covers what remains after the 4.0 merge and the improvement pass that followed it (balance rework, new XP sources, shared lists and parties, per-user days, anti-cheat replay). Rows from earlier versions that were fixed have been removed; their numbers are not reused, so the numbering has gaps (a number is a stable name other documents refer to). The 29 bot issues and 13 web issues documented before 4.0 are resolved too; see [CHANGELOG.md](../CHANGELOG.md#400) and [SECURITY.md](../SECURITY.md#3-vulnerabilities-fixed-in-40). Security-relevant residual risks are in [SECURITY.md](../SECURITY.md#known-residual-risks).
+This list covers what remains after the 4.0 merge and the improvement pass that followed it (balance rework, new XP sources, shared lists and parties, per-user days, anti-cheat replay). Rows from earlier versions that were fixed have been removed; their numbers are not reused, so the numbering has gaps (a number is a stable name other documents refer to). The 29 bot issues and 13 web issues documented before 4.0 are resolved too; see [CHANGELOG.md](../CHANGELOG.md#400---2026-10-08) and [SECURITY.md](../SECURITY.md#3-vulnerabilities-fixed-in-40). Security-relevant residual risks are in [SECURITY.md](../SECURITY.md#known-residual-risks).
 
 ## Limitations
 

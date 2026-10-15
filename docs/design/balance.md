@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Implemented as described; the open questions at the end are not decided |
+| **Status** | Implemented as described; the balance pass of October 2026 applied the changes marked "addressed" in the open questions |
 | **Scope** | The level curve, class and skill power, and the caps that bound them |
 | **Related** | [GAMEPLAY](../GAMEPLAY.md), [XP_GUIDE](../XP_GUIDE.md), [CLASS_GUIDE](../CLASS_GUIDE.md), `packages/shared/src/constants.js`, `packages/shared/src/xp.js` |
 
@@ -10,7 +10,7 @@ This note records why the numbers are what they are, how the class ranking was e
 
 ## Method
 
-Class power was estimated by running the shared `calculateFinalXP` for a task with 10 base XP, five completions a day on a 7-day daily streak, with a fixed random seed, and averaging the result after a warm-up (the figures in [CLASS_GUIDE](../CLASS_GUIDE.md)). "Multiplier" below is that average divided by the base of 10. It is a per-task view: flat bonuses ([XP_GUIDE](../XP_GUIDE.md)) are identical for every class and are not in it. A throwaway script produced the numbers; it is not part of the repository, so re-derive them with the same calls if the formulas change (the docs test only checks the constants, not these estimates).
+Class power was estimated by running the shared `calculateFinalXP` for a task with 10 base XP, five completions a day on a 7-day daily streak, with a fixed random seed, and averaging the result after a warm-up (the figures in [CLASS_GUIDE](../CLASS_GUIDE.md)). "Multiplier" below is that average divided by the base of 10. It is a per-task view: flat bonuses ([XP_GUIDE](../XP_GUIDE.md)) are identical for every class and are not in it. `scripts/balance-sim.js` (`npm run balance`) produces the numbers from `packages/shared/src/simulate.js`, and `packages/shared/test/balance.test.js` keeps every class inside the bands below, so a change that makes a class too strong or too weak fails a test. They are still estimates, not player data.
 
 ## The level curve stays linear
 

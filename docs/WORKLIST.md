@@ -60,7 +60,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P6.12 Archive job and XP-per-class report
 
 ## P7 Docs
-- [ ] P7.1 Index refresh, start-here pages, KNOWN_ISSUES split, CHANGELOG
+- [x] P7.1 Index refresh, start-here pages, KNOWN_ISSUES split, CHANGELOG
 
 ## P8 Blocked (not built, needs the outside world)
 - BLOCKED live Gemini evals (needs an API key)

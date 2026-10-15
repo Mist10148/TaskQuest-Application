@@ -1,6 +1,6 @@
 # Documentation index
 
-Last verified against code: 11 October 2026 (2026-10-11), branch `feat/improvement-pass-2`.
+Last verified against code: 15 October 2026 (2026-10-15), branch `main`.
 
 `packages/shared/test/docs.test.js` (run by `npm test`) checks the tables in GAMEPLAY.md against `packages/shared/src/constants.js`. The other documents are checked by hand: when you change behaviour, update the matching document in the same commit and add a line to the [CHANGELOG](../CHANGELOG.md).
 
@@ -8,6 +8,7 @@ Last verified against code: 11 October 2026 (2026-10-11), branch `feat/improveme
 
 | Document | What it is |
 |---|---|
+| [START_HERE.md](START_HERE.md) | A short path for players and one for contributors |
 | [XP_GUIDE.md](XP_GUIDE.md) | How XP is earned: every source with its amount, cap, modifiers and the order of calculation |
 | [CLASS_GUIDE.md](CLASS_GUIDE.md) | The seventeen classes: what each rewards, who it suits, example builds with computed XP, pitfalls |
 | [PLAYER_FAQ.md](PLAYER_FAQ.md) | Streaks, freezes, XP off, reminders, time zone days, prestige, sharing, import and export, push, Blackjack |

@@ -97,6 +97,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **Documentation structure.** A [START_HERE](docs/START_HERE.md) page for players and contributors, [KNOWN_ISSUES](docs/KNOWN_ISSUES.md) split into limitations and by-design decisions (numbers kept), a balance-change workflow in CONTRIBUTING, and the docs index refreshed.
 - **Balance pass 2: the weak classes are lifted.**
   - Tank: shield cap `min(15, 5 + level ÷ 3)` (was 3), +7% per stack (was +4%), Fortify costs 70 XP (was 95).
   - Assassin: +8% per stack (was +5%), the streak survives 48 hours (was 36; Night Owl 72, was 48).

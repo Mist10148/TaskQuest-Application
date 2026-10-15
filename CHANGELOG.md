@@ -15,6 +15,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Phone ergonomics.** A bottom navigation bar on small screens (Today, Tasks, Focus, Home and a More button for the full menu) and swipe-right-to-complete on a task row (a long, mostly sideways swipe; the checkbox and keyboard work as before).
 - **Board and calendar views.** A quest can be shown as a list (as before), a **board** (columns by priority; complete a task from its circle) or a **calendar** (a month grid of due dates with the open count per day and the tasks of the picked day). The choice is remembered in the browser.
 - **A tiered skill tree and "Next unlocks".** The Skills page lays each tree out in tiers by how many prerequisites lead to a skill (columns on a wide screen, stacked with arrows on a phone). The dashboard has a card with the three achievements you are closest to and what is left of each.
 - **A clearer XP toast and an Undo button.** The "Task done" toast lists each part of the reward on its own line (base, class and skill parts, every bonus), and carries an **Undo** button for a few seconds that un-checks the task again (the XP stays paid and finishing it again pays nothing, as always).

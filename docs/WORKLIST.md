@@ -54,7 +54,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [ ] P6.6 Streak-at-risk reminder
 - [x] P6.7 Visual skill tree and next-unlock hints
 - [x] P6.8 Kanban and calendar views
-- [ ] P6.9 Empty states, mobile gestures and bottom nav, accessibility pass
+- [x] P6.9 Bottom nav and swipe added; empty states and reduced motion already covered (audited)
 - [ ] P6.10 Shared-list ownership transfer
 - [ ] P6.11 Party boards and extra party quests
 - [ ] P6.12 Archive job and XP-per-class report

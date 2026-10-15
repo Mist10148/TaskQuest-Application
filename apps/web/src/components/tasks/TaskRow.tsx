@@ -2,6 +2,8 @@ import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Lis
 import type { Item, Priority } from "@/lib/api";
 import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { useRef, useState } from "react";
+import { swipeAction, swipeOffset } from "@/lib/swipe";
 
 const DOT: Record<string, string> = { HIGH: "bg-red-500", MEDIUM: "bg-yellow-500", LOW: "bg-blue-500" };
 
@@ -46,9 +48,34 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
   const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
   const overdue = !completed && isPastDeadline(item.due_date);
 
+  // Touch: swipe a task to the right to complete it (the checkbox and the keyboard still work as before).
+  const swipeable = !readOnly && !completed && !selectMode;
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const [offset, setOffset] = useState(0);
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (swipeable) touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!touch.current) return;
+    setOffset(swipeOffset(e.touches[0].clientX - touch.current.x, e.touches[0].clientY - touch.current.y));
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    setOffset(0);
+    if (!start) return;
+    const end = e.changedTouches[0];
+    if (swipeAction(end.clientX - start.x, end.clientY - start.y) === "complete") onToggle(item.id);
+  };
+
   return (
     <div
       data-task-row
+      onTouchStart={swipeable ? onTouchStart : undefined}
+      onTouchMove={swipeable ? onTouchMove : undefined}
+      onTouchEnd={swipeable ? onTouchEnd : undefined}
+      onTouchCancel={swipeable ? () => { touch.current = null; setOffset(0); } : undefined}
+      style={offset ? { transform: `translateX(${offset}px)` } : undefined}
       onDragOver={drag ? (e) => drag.onDragOver(e, item.id) : undefined}
       onDragLeave={drag?.onDragLeave}
       onDrop={drag ? (e) => drag.onDrop(e, item.id) : undefined}

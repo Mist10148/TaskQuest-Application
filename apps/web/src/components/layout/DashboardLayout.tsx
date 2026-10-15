@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useAuth, getAvatarUrl } from "@/contexts/AuthContext";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { AI_NAV_ITEM, NAV_ITEMS } from "@/components/layout/navItems";
 import { openCommandPalette } from "@/lib/commands";
 import { PrestigeTag } from "@/components/game/PrestigeTag";
@@ -196,8 +197,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       <OnboardingTour />
 
       <main id="main" tabIndex={-1} className="flex-1 min-h-screen w-full min-w-0 focus:outline-hidden">
-        <div className="pt-18 lg:pt-4 pb-4 px-4 lg:px-8">{children}</div>
+        <div className="pt-18 lg:pt-4 pb-20 lg:pb-4 px-4 lg:px-8">{children}</div>
       </main>
+      <MobileBottomNav onMore={() => setMenuOpen(true)} />
     </div>
   );
 };

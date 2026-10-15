@@ -80,7 +80,7 @@ const CLASSES = {
         name: 'Ranger',
         emoji: '🧭',
         cost: 600,
-        description: 'Deadline Hunter: finishing a task with a due date early pays 10% of the base XP plus 2 XP per day early (up to 7 days); due today pays 25% of the base; overdue pays nothing. Every other action gives +5 XP.',
+        description: 'Deadline Hunter: finishing a task with a due date early pays 10% of the base XP plus 3 XP per day early (up to 7 days); due today pays 25% of the base; overdue pays nothing. Every other action gives +5 XP.',
         playstyle: 'Rewards planning ahead and finishing before the deadline.'
     },
     NECROMANCER: {
@@ -301,7 +301,7 @@ const SKILL_TREES = {
         emoji: '⚜️',
         description: 'Oaths, high priorities and a forgiving streak',
         skills: {
-            paladin_aura: { name: 'Holy Aura', emoji: '✨', description: '+2 XP on every action per level (Paladin)', maxLevel: 3, cost: 140, requires: null },
+            paladin_aura: { name: 'Holy Aura', emoji: '✨', description: '+3 XP on every action per level (Paladin)', maxLevel: 3, cost: 140, requires: null },
             paladin_smite: { name: 'Smite', emoji: '⚔️', description: 'The HIGH priority Vow bonus is +25% larger per level (Paladin)', maxLevel: 2, cost: 210, requires: 'paladin_aura' },
             paladin_crusade: { name: 'Crusade', emoji: '📯', description: '+20% XP when you complete a HIGH priority task (Paladin)', maxLevel: 1, cost: 290, requires: 'paladin_smite' },
             paladin_sanctuary: { name: 'Sanctuary', emoji: '🏛️', description: 'Your daily streak survives two missed days (a claim up to 3 days after the last one) (Paladin)', maxLevel: 1, cost: 350, requires: 'paladin_crusade' },

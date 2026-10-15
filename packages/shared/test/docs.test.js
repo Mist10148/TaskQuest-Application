@@ -423,3 +423,58 @@ test('GAMEPLAY §7 blackjack and arcade numbers match BLACKJACK_CONFIG and ARCAD
     if (C.HANGMAN_CONFIG.LIVES !== 6 || !/6 lives/.test(body)) problems.push(`§7 Hangman should say ${C.HANGMAN_CONFIG.LIVES} lives`);
     check('The games section', problems);
 });
+
+// ─── Class and skill text, and the class guide's computed tables ─────────────
+
+/** Numbers of a description, without thousands separators handling (descriptions never have them). */
+const numbersOf = (str) => (String(str).match(/\d+(?:\.\d+)?/g) || []).map(Number);
+
+test('class descriptions in constants.js carry the numbers of CLASS_RULES', () => {
+    // The class cards in the bot and web app show these texts, so a number that drifted from the rules misleads players.
+    const must = {
+        HERO: ['FLAT', 'MAX_BASE_MULTIPLE'], GAMBLER: ['BONUS_BASE_MULTIPLE', 'BONUS_FLAT'], ASSASSIN: ['STACK_PERCENT', 'MAX_STACKS', 'DECAY_HOURS'],
+        WIZARD: ['WISDOM_PER_LEVEL'], ARCHER: ['MAX_HIT_CHANCE', 'STREAK_PERCENT'], TANK: ['STACK_PERCENT', 'CAP_MAX', 'CAP_BASE'],
+        MONK: ['MAX_RHYTHM', 'PERCENT_PER_DAY', 'FLAT_PER_DAY'], ARTISAN: ['MAX_PROGRESS', 'XP_PER_PROGRESS', 'CLEAR_XP_PER_PROGRESS', 'MIN_LIST_SIZE'],
+        RANGER: ['EARLY_PERCENT_PER_DAY', 'EARLY_FLAT_PER_DAY', 'MAX_EARLY_DAYS', 'DUE_TODAY_PERCENT', 'OTHER_FLAT'],
+        NECROMANCER: ['REVIVE_PERCENT', 'REVIVE_XP_PER_OVERDUE_DAY', 'REVIVE_OVERDUE_CAP', 'MAX_SOULS', 'HARVEST_EVERY', 'SOUL_PERCENT'],
+        PALADIN: ['HIGH_FLAT', 'OTHER_FLAT'], BARD: ['WINDOW', 'PERCENT_PER_STEP', 'FLAT_PER_STEP', 'OTHER_FLAT'],
+        ALCHEMIST: ['BREW_PERCENT', 'BREW_FLAT', 'STEP_FLAT', 'OTHER_FLAT'], DRUID: ['PERCENT_PER_STEP', 'FLAT_PER_STEP', 'STREAK_CAP', 'OTHER_FLAT'],
+        CHRONOMANCER: ['WINDOW_MINUTES', 'WINDOW_COMPLETIONS', 'PERCENT', 'FLAT', 'OTHER_FLAT'], WARDEN: ['PERCENT_PER_MEMBER', 'FLAT_PER_MEMBER', 'MEMBER_CAP', 'OTHER_FLAT']
+    };
+    for (const [cls, keys] of Object.entries(must)) {
+        const found = numbersOf(C.CLASSES[cls].description);
+        for (const key of keys) assert.ok(found.includes(C.CLASS_RULES[cls][key]), `${cls}: CLASS_RULES.${key} is ${C.CLASS_RULES[cls][key]} but the description says: ${C.CLASSES[cls].description}`);
+    }
+});
+
+test('the skill effects in GAMEPLAY.md use the numbers of the skill descriptions in constants.js', () => {
+    const problems = [];
+    for (const tree of Object.values(C.SKILL_TREES)) {
+        for (const skill of Object.values(tree.skills)) {
+            const row = lines.find((l) => l.startsWith('|') && l.includes(skill.name) && /\|\s*\d+\s*\|\s*\d+\s*\|/.test(l));
+            if (!row) {
+                problems.push(`${skill.name}: no row in ${DOC}`);
+                continue;
+            }
+            const doc = numbersOf(row.split('|')[4]);
+            const code = numbersOf(skill.description);
+            // Wording differs ("a gap of 2 days", "1 for every 20 tasks"), so one list of numbers may hold the other, never disagree.
+            const contains = (a, b) => b.every((n) => a.includes(n));
+            if (!contains(doc, code) && !contains(code, doc)) problems.push(`${skill.name}: GAMEPLAY says [${doc}] but constants.js says [${code}] (${skill.description})`);
+        }
+    }
+    assert.deepEqual(problems, []);
+});
+
+test('the build tables in CLASS_GUIDE.md are what the balance simulator computes', () => {
+    const sim = require('../../../scripts/balance-sim');
+    const guide = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'docs', 'CLASS_GUIDE.md'), 'utf8').replace(/\r\n/g, '\n');
+    for (const cls of sim.PURCHASABLE) {
+        const start = guide.indexOf(`## ${C.CLASSES[cls].name} (`);
+        assert.ok(start >= 0, `${cls}: no section in CLASS_GUIDE.md`);
+        const next = guide.indexOf('\n## ', start + 3);
+        const have = guide.slice(start, next < 0 ? undefined : next).split('\n').filter((l) => l.startsWith('|'));
+        const want = sim.buildTable(cls).split('\n');
+        assert.deepEqual(have.slice(0, want.length), want, `${cls}: run "node scripts/balance-sim.js --markdown" and paste its table into docs/CLASS_GUIDE.md`);
+    }
+});

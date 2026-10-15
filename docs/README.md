@@ -20,7 +20,7 @@ Last verified against code: 11 October 2026 (2026-10-11), branch `feat/improveme
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, the shared package and its modules, request flows, transactions, games, security design, jobs, tests |
 | [API.md](API.md) | Every REST endpoint with request and response shapes, errors and rate limits |
-| [DATABASE.md](DATABASE.md) | Migrations 001 to 022, every table and column, XP sources, connection settings, maintenance |
+| [DATABASE.md](DATABASE.md) | Migrations 001 to 023, every table and column, XP sources, connection settings, maintenance |
 | [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) | How the optional AI service is built: graphs, retrieval, tools, guardrails |
 | [AI_INTEGRATION.md](AI_INTEGRATION.md) | The AI design record: goals, decisions and how the build differs from the plan |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Local setup, where code belongs, tests (unit, integration, browser, AI), style |

@@ -27,7 +27,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P3.2 Three new Default skills
 
 ## P4 New classes
-- [ ] P4.0 Migration and shared plumbing for new classes
+- [x] P4.0 Migration and shared plumbing for new classes
 - [ ] P4.1 Bard
 - [ ] P4.2 Alchemist
 - [ ] P4.3 Druid

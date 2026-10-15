@@ -32,10 +32,11 @@ const UPDATABLE_COLUMNS = new Set([
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
     'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes',
     'owns_monk', 'monk_rhythm', 'monk_day', 'owns_artisan', 'artisan_progress', 'owns_ranger', 'owns_necromancer', 'owns_paladin', 'necro_souls',
+    'owns_bard', 'owns_alchemist', 'owns_druid', 'owns_chronomancer', 'owns_warden', 'bard_recent', 'alchemist_mix',
     'last_chest_streak'
 ]);
 
-const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, artisan_progress: 0, necro_souls: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
+const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, artisan_progress: 0, necro_souls: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0, bard_recent: '', alchemist_mix: 0 };
 
 /** Persist column updates on a locked user and mirror them on the object. */
 async function updateUserColumns(conn, user, updates) {

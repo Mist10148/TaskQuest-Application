@@ -70,7 +70,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
         const users = await cols('users');
-        for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent']) {
+        for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent', 'owns_bard', 'owns_warden', 'bard_recent', 'alchemist_mix']) {
             assert.ok(users.includes(c), `users.${c}`);
         }
         assert.ok((await cols('lists')).includes('remind_at'));

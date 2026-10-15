@@ -6,7 +6,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Upgrade notes
 
-- **Run the migrations.** `npm run db:migrate` (or just start the bot or the server) applies `010` to `022` in order; take a backup first. Do not point a database that was migrated at an intermediate commit of this branch at the release: migrations `011` and `012` were edited across commits before release, so reset such development databases ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)).
+- **Run the migrations.** `npm run db:migrate` (or just start the bot or the server) applies `010` to `023` in order; take a backup first. Do not point a database that was migrated at an intermediate commit of this branch at the release: migrations `011` and `012` were edited across commits before release, so reset such development databases ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)).
 - **Re-register slash commands** (`npm run deploy:commands`): `/review`, `/prestige`, `/shop`, `/share`, `/invites`, `/members`, `/leave` and `/party` are new, and `/list` gained a Details button.
 - **New optional environment variables** for web push: `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` (set all three or none), plus `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_INTERNAL_URL`, `WEB_PUSH_INTERNAL_TOKEN` and `WEB_PUSH_TIMEOUT_MS`. Nothing changes while they are unset. See [DEPLOYMENT.md](docs/DEPLOYMENT.md#web-push-optional).
 - **Invite handles fill in over time.** Sharing lists and parties invites people by their exact Discord username (`users.discord_handle`, migration `021`). It is stored at each person's next web login or slash command, never backfilled, so a person who has not used TaskQuest since the upgrade cannot be invited yet.

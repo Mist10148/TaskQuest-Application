@@ -51,8 +51,9 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `020_due_date_set_at` | `items.due_date_set_at` (when the due date was set or last changed; backfilled from `created_at`). Overdue and early effects apply only to a date set at least 24 hours before the completion |
 | `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `users.accept_invites` (1 default; 0 refuses every invitation silently), `party_members.public_id` (opaque member key for removing a member, backfilled randomly), `items.rearm_count` / `rearm_day` and `lists.rearm_count` / `rearm_day` (how often today, UTC, a changed due date or deadline re-armed everyone's reminders; limited to 3 a day), `users.progress_reset_at` (set by a progress reset; quest, weekly review and party metrics ignore completions before it) |
 | `022_invite_responded_at` | `list_invites.responded_at` and `party_invites.responded_at`: when the invitee declined. The 7-day decline cooldown counts from it (older rows fall back to `created_at`) |
+| `023_new_classes` | Five more classes (Bard, Alchemist, Druid, Chronomancer, Warden): `users.owns_bard` / `owns_alchemist` / `owns_druid` / `owns_chronomancer` / `owns_warden`, counters `bard_recent` (list ids of the last completions) and `alchemist_mix` (priority bitmask of the current brew), and `player_class` extended with the new values |
 
-The release that introduced migrations `010` to `022` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
+The release that introduced migrations `010` to `023` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -102,8 +103,10 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 | `gamification_enabled`, `automation_enabled`, `auto_delete_old_lists` | BOOLEAN | Settings (default on) |
 | `streak_count`, `last_daily_claim`, `last_active_day` | INT / DATETIME / DATE | Daily reward |
 | `last_game_at` | DATETIME(3) | Free-game cooldown |
-| `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
+| `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin`, `owns_bard`, `owns_alchemist`, `owns_druid`, `owns_chronomancer`, `owns_warden` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
 | `assassin_streak`, `assassin_stacks`, `wizard_counter`, `archer_streak`, `tank_stacks`, `gambler_streak`, `monk_rhythm`, `artisan_progress`, `necro_souls` | INT | Class counters, reset when switching class (`CLASS_COUNTER_RESET` in `db/progression.js`) |
+| `bard_recent` | VARCHAR(120) | Bard: the list ids of the last completed tasks, comma separated (newest last). Reset with the class counters. |
+| `alchemist_mix` | INT | Alchemist: bitmask of the priorities completed in the current brew (1 LOW, 2 MEDIUM, 4 HIGH). Reset with the class counters. |
 | `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 48 h (72 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
 | `monk_day` | DATE NULL | Last day (in the user's time zone) the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
 | `assassin_bleed` | INT | Actions left with the Bleed bonus after a crit. Not tied to a class, so it survives a class switch; cleared by a progress reset. |

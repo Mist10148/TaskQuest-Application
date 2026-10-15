@@ -596,7 +596,24 @@ async function completionContext(conn, item, user, now = new Date()) {
         );
         if (Number(high.n) > LIMITS.HIGH_BONUS_PER_DAY) priority = 'MEDIUM';
     }
+    // The newer classes read a little more of the world; the queries run only for the class that needs them.
+    const extra = {};
+    if (user.player_class === 'CHRONOMANCER') {
+        const [[focus]] = await conn.query("SELECT finished_at FROM focus_sessions WHERE discord_id = ? AND state = 'finished' ORDER BY finished_at DESC LIMIT 1", [user.discord_id]);
+        if (focus && focus.finished_at) {
+            const [[since]] = await conn.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete' AND created_at >= ?", [user.discord_id, focus.finished_at]);
+            extra.afterFocus = { minutes: Math.floor((now.getTime() - new Date(focus.finished_at).getTime()) / 60000), completions: Number(since.n) };
+        }
+    }
+    if (user.player_class === 'WARDEN') {
+        const [[members]] = await conn.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [item.list_id]);
+        extra.sharedMembers = Number(members.n);
+    }
     return {
+        ...extra,
+        listId: item.list_id,
+        habitStreak: Number(item.habit_streak) || 0,
+        recurrence: item.recurrence || null,
         priority,
         recurring: Boolean(item.recurrence),
         today,

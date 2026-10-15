@@ -8,7 +8,7 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { lockUser, progressFloor } = require('./users');
-const { awardFlat, requireGamification, unlockAchievements } = require('./progression');
+const { awardFlat, claimedSince, requireGamification, unlockAchievements } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS, WEEKLY_REVIEW_KEY, WEEKLY_XP_SOURCES } = require('../constants');
 const { questPeriod } = require('../quests');
@@ -76,6 +76,7 @@ async function claimReview(discordId, now = new Date()) {
         requireGamification(user);
         const s = await reviewState(conn, user, now);
         if (s.completed < LIMITS.WEEKLY_REVIEW_MIN_COMPLETED) throw errors.validation('Finish at least one task this week to claim your review.');
+        if (await claimedSince(conn, user.discord_id, WEEKLY_REVIEW_KEY, s.period.startsAt)) throw errors.conflict("You already claimed this week's review.");
         const [res] = await conn.query('INSERT IGNORE INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?)', [
             user.discord_id,
             WEEKLY_REVIEW_KEY,

@@ -9,7 +9,7 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { lockUser, progressFloor } = require('./users');
-const { applyXP, requireGamification, unlockAchievements, userZone } = require('./progression');
+const { applyXP, claimedSince, requireGamification, unlockAchievements, userZone } = require('./progression');
 const { errors } = require('../errors');
 const { QUESTS, ROTATING_QUESTS } = require('../constants');
 const { questPeriod, activeRotatingQuest } = require('../quests');
@@ -133,6 +133,8 @@ async function claimQuest(discordId, rawKey, now = new Date()) {
         const progress = await metricProgress(conn, user.discord_id, quest.metric, period.startsAt, period.endsAt);
         if (progress < quest.target) throw errors.validation(`${quest.name} isn't finished yet (${progress}/${quest.target}).`);
 
+        // Changing time zone moves the period boundaries and its key; the claim must still pay once per real period.
+        if (await claimedSince(conn, user.discord_id, key, period.startsAt)) throw errors.conflict(`You already claimed ${quest.name} this ${PERIOD_NOUN[quest.period]}.`);
         const [res] = await conn.query('INSERT IGNORE INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?)', [
             user.discord_id,
             key,

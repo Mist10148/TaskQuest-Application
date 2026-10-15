@@ -308,7 +308,7 @@ A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price i
 
 ## 5b. Quests
 
-Daily, weekly and monthly quests, with periods in **your** time zone (daily: your day; weekly: Monday 00:00 to Monday 00:00 your time; monthly: the 1st to the 1st). The rotating weekly quest is picked by your local ISO week. Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers).
+Daily, weekly and monthly quests, with periods in **your** time zone (daily: your day; weekly: Monday 00:00 to Monday 00:00 your time; monthly: the 1st to the 1st). The rotating weekly quest is picked by your local ISO week. Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers). A quest or the weekly review pays once per real period: a claim made earlier in the current period blocks another one even if a time zone change gave the period a different start date.
 
 | Quest | Period | Goal | Reward |
 |---|---|---|---|

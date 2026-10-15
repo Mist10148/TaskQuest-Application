@@ -137,6 +137,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Quests and the weekly review could be claimed twice after a time zone change.** Claims were keyed by the period's local start date, and a different zone can give the same real week another key. A claim now also checks the time of the last claim of that quest (`claimedSince` in `db/progression.js`).
 - **Blackjack no longer mints lifetime XP.** Wins were credited to lifetime XP (level, prestige, XP achievements, the lifetime board) while losses never took any back, so about 40 hands at a 25% bet could reach the prestige level. Winnings now only change the balance.
 - **Broken documentation links** (`CHANGELOG.md#400` in DEPLOYMENT and KNOWN_ISSUES, a `../SECURITY.md` path in the shared-lists design note).
 - **Stale class text and docs.** The Assassin card said +7% per stack and the Tank card +6% with a "strong early" playstyle (the rules are +8% and +7%, and the Tank is weak early); XP_GUIDE said Champion "doubles" XP; the balance note gave the Wizard's Wisdom as level × 5.

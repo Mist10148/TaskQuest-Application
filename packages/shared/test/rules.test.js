@@ -946,3 +946,19 @@ test('the generic percentage skills are limited to MAX_PERCENT_BONUS together; p
     const assassin = user({ player_class: 'ASSASSIN', assassin_stacks: 9, assassin_streak: 20, assassin_last_at: new Date(night) });
     assert.equal(run(assassin, [sk('assassin_execute'), ...all]), Math.floor(180 * (1 + cap / 100 + 1)));
 });
+
+test('a time zone change cannot open a second claim for the same real week', async () => {
+    const { questPeriod } = shared;
+    // 2026-10-19 06:00Z: Etc/GMT+12 is still in the week of Oct 12, Pacific/Kiritimati already in the week of Oct 19 (hours apart).
+    const claimedAt = new Date('2026-10-19T06:00:00Z');
+    const west = questPeriod('weekly', claimedAt, 'Etc/GMT+12');
+    const later = new Date('2026-10-20T06:00:00Z');
+    const east = questPeriod('weekly', later, 'Pacific/Kiritimati');
+    assert.notEqual(west.start, east.start, 'the two zones key the week differently, so the unique key alone would let both claims through');
+    assert.ok(claimedAt >= east.startsAt, "but the first claim lies inside the second zone's week");
+    const rows = [{ claimed_at: claimedAt }];
+    const conn = { query: async (sql, params) => [[rows.find((r) => r.claimed_at >= params[2]) ? { x: 1 } : undefined]] };
+    const { claimedSince } = require('../src/db/progression');
+    assert.equal(await claimedSince(conn, '1', 'WEEKLY_COMPLETE_15', east.startsAt), true);
+    assert.equal(await claimedSince(conn, '1', 'WEEKLY_COMPLETE_15', new Date('2026-10-25T10:00:00Z')), false, 'a claim from before the period does not count');
+});

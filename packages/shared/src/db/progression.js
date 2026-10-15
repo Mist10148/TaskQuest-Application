@@ -513,7 +513,17 @@ async function respecSkills(discordId, treeKey) {
     });
 }
 
+/**
+ * Whether the user already claimed `questKey` at or after `since`. A claim is keyed by the period's local start date, and a time zone change
+ * re-keys the period (the same real week can have two keys), so the unique key alone cannot stop a second claim: this checks the real time.
+ */
+async function claimedSince(conn, discordId, questKey, since) {
+    const [[row]] = await conn.query('SELECT 1 AS x FROM quest_claims WHERE discord_id = ? AND quest_key = ? AND claimed_at >= ? LIMIT 1', [String(discordId), questKey, since]);
+    return Boolean(row);
+}
+
 module.exports = {
+    claimedSince,
     respecSkills,
     applyXP,
     rewardAction,

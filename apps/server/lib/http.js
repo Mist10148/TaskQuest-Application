@@ -41,6 +41,10 @@ export function errorHandler(err, req, res, next) {
     if (err?.type === 'entity.too.large') {
         return res.status(413).json({ error: 'Request body too large', code: 'VALIDATION' });
     }
+    // Other client mistakes the body parser reports (unsupported encoding or charset, aborted or mis-sized request): their own 4xx, not a 500.
+    if (Number.isInteger(err?.status) && err.status >= 400 && err.status < 500 && err.expose) {
+        return res.status(err.status).json({ error: err.status === 415 ? 'Unsupported content encoding or charset' : 'Bad request', code: 'VALIDATION' });
+    }
     console.error(`[${req.method} ${req.originalUrl}]`, err);
     res.status(500).json({ error: 'Internal server error', code: 'INTERNAL' });
 }

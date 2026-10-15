@@ -12,8 +12,12 @@ import config from '../config.js';
 
 const key = () => crypto.createHash('sha256').update(`avatar-token:${config.sessionSecret}`).digest();
 
+/**
+ * The token for an ID is stable: the IV is derived from the ID itself (a keyed hash), so the same player always gets the same URL and
+ * browsers and CDNs can cache the image. Reusing an IV is only unsafe for different plaintexts; here the plaintext is the same too.
+ */
 export function sealId(discordId) {
-    const iv = crypto.randomBytes(12);
+    const iv = crypto.createHmac('sha256', key()).update(`iv:${discordId}`).digest().subarray(0, 12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key(), iv);
     const body = Buffer.concat([cipher.update(String(discordId), 'utf8'), cipher.final()]);
     return Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64url');

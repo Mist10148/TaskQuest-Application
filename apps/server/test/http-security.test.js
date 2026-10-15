@@ -98,3 +98,44 @@ test('requireAuth, uid and asyncRoute', async () => {
     })({}, {}, (e) => (received = e));
     assert.equal(received.message, 'async failure');
 });
+
+test('errorHandler: body-parser client errors are 4xx JSON, not 500', () => {
+    for (const [status, type] of [[415, 'encoding.unsupported'], [415, 'charset.unsupported'], [400, 'request.aborted'], [400, 'request.size.invalid']]) {
+        const res = fakeRes();
+        errorHandler(Object.assign(new Error('x'), { status, type, expose: true }), { method: 'POST', originalUrl: '/api/x' }, res, () => {});
+        assert.equal(res.statusCode, status, type);
+        assert.equal(res.body.code, 'VALIDATION');
+    }
+    const res = fakeRes();
+    const logged = [];
+    const original = console.error;
+    console.error = (...a) => logged.push(a);
+    try {
+        errorHandler(new Error('boom'), { method: 'GET', originalUrl: '/api/x' }, res, () => {});
+    } finally {
+        console.error = original;
+    }
+    assert.equal(res.statusCode, 500, 'a real server error is still a 500');
+    assert.equal(logged.length, 1);
+});
+
+test('rate-limit keys: IPv6 clients share one key per /64, IPv4 and mapped addresses are unchanged', async () => {
+    const { ipKey } = await import('../lib/security.js');
+    assert.equal(ipKey('203.0.113.7'), '203.0.113.7');
+    assert.equal(ipKey('::ffff:203.0.113.7'), '203.0.113.7');
+    assert.equal(ipKey('2001:db8:1:2:aaaa:bbbb:cccc:dddd'), ipKey('2001:db8:1:2:1::9'), 'the same /64');
+    assert.equal(ipKey('2001:db8:1:2::1'), '2001:0db8:0001:0002::/64');
+    assert.notEqual(ipKey('2001:db8:1:3::1'), ipKey('2001:db8:1:2::1'), 'another /64');
+    assert.equal(ipKey('::1'), '0000:0000:0000:0000::/64');
+    assert.equal(ipKey(undefined), '');
+});
+
+test('production config: a non-https public address fails, a missing proxy warns, local http is allowed', async () => {
+    const { productionProblems } = await import('../config.js');
+    assert.deepEqual(productionProblems({ isProduction: false, publicUrl: 'http://x', trustProxy: false }), { problems: [], warnings: [] });
+    assert.equal(productionProblems({ isProduction: true, publicUrl: 'http://app.example.com', trustProxy: 1 }).problems.length, 1);
+    assert.equal(productionProblems({ isProduction: true, publicUrl: 'https://app.example.com', trustProxy: 1 }).problems.length, 0);
+    assert.equal(productionProblems({ isProduction: true, publicUrl: 'http://localhost:3001', trustProxy: 1 }).problems.length, 0);
+    assert.equal(productionProblems({ isProduction: true, publicUrl: 'https://app.example.com', trustProxy: 0 }).warnings.length, 1);
+    assert.equal(productionProblems({ isProduction: true, publicUrl: 'https://app.example.com', trustProxy: '10.0.0.0/8' }).warnings.length, 0);
+});

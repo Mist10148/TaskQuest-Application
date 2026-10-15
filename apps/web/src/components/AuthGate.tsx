@@ -8,6 +8,7 @@ const LOGIN_ERRORS: Record<string, string> = {
   token_failed: "Discord rejected the login. Please try again.",
   profile_failed: "Could not read your Discord profile.",
   session_failed: "Could not start your session. Please try again.",
+  rate_limited: "Too many login attempts from your network. Please wait a few minutes and try again.",
 };
 
 /**

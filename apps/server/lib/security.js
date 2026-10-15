@@ -43,11 +43,36 @@ const limiterDefaults = {
         res.status(options.statusCode).json({ error: 'Too many requests, please slow down.', code: 'RATE_LIMITED' })
 };
 
+/**
+ * The rate-limit key of a client address. An IPv6 client usually controls a whole /64, so one address per request would never hit a
+ * per-address limit: IPv6 is keyed by its /64 prefix, and an IPv4-mapped IPv6 address by its IPv4 part.
+ */
+export function ipKey(ip) {
+    const text = String(ip || '');
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(text);
+    if (mapped) return mapped[1];
+    if (!text.includes(':')) return text;
+    const [head, tail = ''] = text.split('::');
+    const left = head ? head.split(':') : [];
+    const right = tail ? tail.split(':') : [];
+    const groups = text.includes('::') ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right] : left;
+    return `${groups.slice(0, 4).map((g) => g.toLowerCase().padStart(4, '0')).join(':')}::/64`;
+}
+
 /** Keyed by user when logged in, otherwise by IP. */
-const keyByUser = (req) => (req.session?.user?.discordId ? `user:${req.session.user.discordId}` : `ip:${req.ip}`);
+const keyByUser = (req) => (req.session?.user?.discordId ? `user:${req.session.user.discordId}` : `ip:${ipKey(req.ip)}`);
 
 export const apiLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 900, keyGenerator: keyByUser });
-export const authLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 30 });
+/** Starting a login and finishing it are separate limits (30 each per 15 minutes per client), so one login costs one of each. */
+export const authLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 30, keyGenerator: (req) => `ip:${ipKey(req.ip)}` });
+/** The OAuth callback is a browser navigation: a refusal sends the person back to the login page with a message, not a JSON error. */
+export const authCallbackLimiter = rateLimit({
+    ...limiterDefaults,
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    keyGenerator: (req) => `ip:${ipKey(req.ip)}`,
+    handler: (req, res) => res.redirect(`${config.publicUrl}/?error=rate_limited`)
+});
 export const gameLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 1000, limit: 90, keyGenerator: keyByUser });
 
 export const aiLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 1000, limit: 20, keyGenerator: keyByUser });
@@ -59,7 +84,7 @@ export const inviteLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 *
  * The same lookups, limited per client address as well: one person with many accounts (or a script behind one signed-in account)
  * cannot probe for names faster than a single account could. Both limiters apply to the invite routes.
  */
-export const inviteIpLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 60, keyGenerator: (req) => `ip:${req.ip}` });
+export const inviteIpLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 60, keyGenerator: (req) => `ip:${ipKey(req.ip)}` });
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 

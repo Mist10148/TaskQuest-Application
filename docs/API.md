@@ -22,7 +22,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | 503 | `AI_DISABLED` / `AI_UNAVAILABLE` | AI is not enabled on this server; the AI service is down or timed out |
 | 500 | `INTERNAL` | Bug. Details are logged server-side only. |
 
-- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 per 15 min per IP. `/api/games/*`: 90 per minute. `/api/ai/*`: 20 per minute per user (plus a daily per-user request quota enforced by the AI service).
+- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 starts (`/api/auth/discord`) and 30 callbacks per 15 min per client address (IPv6 clients are counted per /64; the callback answers a limit with a redirect to `?error=rate_limited`). `/api/games/*`: 90 per minute. `/api/ai/*`: 20 per minute per user (plus a daily per-user request quota enforced by the AI service).
 - **Reward fields.** Actions that can grant XP return `xpResult` and `newAchievements`:
 
 ```jsonc
@@ -50,7 +50,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/auth/discord` | — | Redirects to Discord (`scope=identify`, random `state`). |
-| GET | `/api/auth/callback` | — | OAuth callback. On success it regenerates the session and redirects to `PUBLIC_URL/dashboard`. On failure it redirects to `PUBLIC_URL/?error=<access_denied\|invalid_state\|token_failed\|profile_failed\|session_failed>`. |
+| GET | `/api/auth/callback` | — | OAuth callback. On success it regenerates the session and redirects to `PUBLIC_URL/dashboard`. On failure it redirects to `PUBLIC_URL/?error=<access_denied\|invalid_state\|token_failed\|profile_failed\|session_failed\|rate_limited>`. |
 | GET | `/api/auth/me` | 🔒 | `{ discord:{discordId,username,globalName,avatar}, user, lists:{total}, items:{total,completed}, achievements:<count>, games:{played,won,lost,draws}, skills:[...], freezeLimits:{COST,MAX}, userAchievements:[{achievement_key,unlocked_at}], features:{ai, aiAvailable} }`. `features.ai` is true when the server has AI on and the user has not opted out; `aiAvailable` is the server-wide flag. |
 | POST | `/api/auth/logout` | — | Destroys the session, clears the cookie. `{success:true}` |
 

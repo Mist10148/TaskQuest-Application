@@ -61,6 +61,22 @@ const config = {
     }
 };
 
+/**
+ * Production settings that make logins silently fail: the session cookie is `Secure` in production, so the public address must be
+ * https (localhost excepted, for trying a production build locally), and Express must be told it sits behind a TLS proxy.
+ * @returns {{ problems: string[], warnings: string[] }}
+ */
+export function productionProblems({ isProduction: prod, publicUrl: url, trustProxy: proxy }) {
+    const problems = [];
+    const warnings = [];
+    if (!prod) return { problems, warnings };
+    if (url && !/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url)) {
+        problems.push(`PUBLIC_URL must start with https:// in production (got "${url}"): the session cookie is Secure and would never be sent.`);
+    }
+    if (!proxy) warnings.push('TRUST_PROXY is off in production: behind a TLS-terminating proxy the Secure session cookie is not sent and every user shares one rate-limit bucket. Leave it unset (1 hop) or set the hop count.');
+    return { problems, warnings };
+}
+
 /** Throws with a list of every problem found. */
 export function validateConfig() {
     const problems = [];
@@ -82,6 +98,10 @@ export function validateConfig() {
     }
 
     if (trustProxy.error) problems.push(trustProxy.error);
+
+    const prod = productionProblems(config);
+    problems.push(...prod.problems);
+    for (const w of prod.warnings) console.warn(`⚠️  ${w}`);
 
     problems.push(...pushConfigProblems(config.push));
 

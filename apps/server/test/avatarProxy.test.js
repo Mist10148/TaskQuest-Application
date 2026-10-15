@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 process.env.SESSION_SECRET = 'x'.repeat(40);
 const { sealId, openId } = await import('../lib/avatarProxy.js');
 
-test('avatar tokens round-trip and do not contain the Discord ID', () => {
+test('avatar tokens round-trip, are stable and do not contain the Discord ID', () => {
     const id = '123456789012345678';
     const token = sealId(id);
     assert.ok(!token.includes(id));
     assert.equal(openId(token), id);
-    assert.notEqual(sealId(id), token, 'random IV');
+    assert.equal(sealId(id), token, 'stable per ID, so the avatar URL can be cached');
+    assert.notEqual(sealId('123456789012345679'), token, 'different IDs give different tokens');
 });
 
 test('forged, truncated and garbage tokens are rejected', () => {

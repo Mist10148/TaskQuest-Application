@@ -26,7 +26,7 @@ import statsRouter from './routes/stats.js';
 import calendarRouter from './routes/calendar.js';
 import aiRouter from './routes/ai.js';
 import internalRouter, { requireInternalToken } from './routes/internal.js';
-import { securityHeaders, sessionMiddleware, csrfProtection, apiLimiter, authLimiter, gameLimiter, aiLimiter } from './lib/security.js';
+import { securityHeaders, sessionMiddleware, csrfProtection, apiLimiter, authLimiter, authCallbackLimiter, gameLimiter, aiLimiter } from './lib/security.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.resolve(__dirname, '../web/dist');
@@ -65,7 +65,8 @@ export function createApp() {
     app.use((req, res, next) => (hasLargeBody(req) ? next() : smallJson(req, res, next)));
     app.use(sessionMiddleware(SESSION_COOKIE));
     app.use('/api', apiLimiter, csrfProtection);
-    app.use(['/api/auth/discord', '/api/auth/callback'], authLimiter);
+    app.use('/api/auth/discord', authLimiter);
+    app.use('/api/auth/callback', authCallbackLimiter);
     app.use('/api/games', gameLimiter);
     for (const { prefix, limit } of LARGE_BODIES) app.use(prefix, requireAuth, express.json({ limit }));
 

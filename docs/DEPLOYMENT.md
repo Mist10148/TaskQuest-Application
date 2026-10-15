@@ -67,13 +67,13 @@ In production, set the variables in your host's dashboard instead. Because the b
 |---|---|---|---|
 | `NODE_ENV` | prod | `development` | `production` enables secure cookies, HSTS, static serving and the strict config checks |
 | `SERVER_PORT` / `PORT` | | `3001` | Listen port (`SERVER_PORT` wins) |
-| `PUBLIC_URL` | prod | `http://localhost:8080` in dev | The origin users open. Used for OAuth redirects and CSRF origin checks. |
+| `PUBLIC_URL` | prod | `http://localhost:8080` in dev | The origin users open. Used for OAuth redirects and CSRF origin checks. In production it must start with `https://` (the session cookie is `Secure`); startup refuses anything else except `localhost`. |
 | `ALLOWED_ORIGINS` | | — | Extra comma-separated origins allowed to make write requests |
 | `SESSION_SECRET` | prod | random per run in dev | ≥ 32 characters. `openssl rand -base64 48` |
 | `DISCORD_CLIENT_ID` | ✓ | — | Application ID |
 | `DISCORD_CLIENT_SECRET` | ✓ | — | OAuth2 client secret |
 | `DISCORD_REDIRECT_URI` | | `${PUBLIC_URL}/api/auth/callback` | Override only if it differs |
-| `TRUST_PROXY` | | `1` in prod, `0` in dev | Proxies in front of the server: a hop count (`1`), `true`, `false` or a comma-separated subnet list. Anything else stops startup. Affects secure cookies and rate-limit IPs |
+| `TRUST_PROXY` | | `1` in prod, `0` in dev | Proxies in front of the server: a hop count (`1`), `true`, `false` or a comma-separated subnet list. Anything else stops startup. Affects secure cookies and rate-limit IPs. In production an explicit `false` or `0` logs a warning, because behind a TLS proxy the session cookie is then never sent. |
 | `SERVE_FRONTEND` | | `true` in prod | Serve `apps/web/dist` |
 | `MIGRATE_ON_START` | | `true` | Set `false` to only verify the schema |
 | `DB_*` | ✓ | — | See below |

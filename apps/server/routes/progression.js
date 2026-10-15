@@ -37,7 +37,7 @@ classesRouter.get(
     asyncRoute(async (req, res) => {
         const { key: raw } = parse(keyParam, req.params);
         const key = String(raw).toUpperCase();
-        if (!CLASSES[key]) return res.status(404).json({ error: 'No such class.' });
+        if (!CLASSES[key]) return res.status(404).json({ error: 'No such class.', code: 'NOT_FOUND' });
         const q = parse(previewQuery, req.query);
         const user = await db.users.ensureUser(uid(req));
         const level = q.level || Number(user.player_level) || 1;

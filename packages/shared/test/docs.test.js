@@ -388,6 +388,10 @@ test('GAMEPLAY §5h party quest numbers match PARTY_QUEST and the party size', (
     for (const n of [P.PER_MEMBER_TARGET, P.MIN_OWN_TO_CLAIM, P.REWARD, C.LIMITS.MAX_PARTY_MEMBERS]) {
         if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5h should mention ${n}`);
     }
+    const F = C.PARTY_FOCUS_QUEST;
+    for (const n of [F.PER_MEMBER_MINUTES, F.MIN_OWN_MINUTES, F.REWARD]) {
+        if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5h should mention the focus quest number ${n}`);
+    }
     if (P.MIN_OWN_TO_CLAIM * 2 !== P.PER_MEMBER_TARGET) problems.push('§5h says the claim needs half the per-member target, but MIN_OWN_TO_CLAIM is not half of PER_MEMBER_TARGET');
     check('The party section', problems);
 });

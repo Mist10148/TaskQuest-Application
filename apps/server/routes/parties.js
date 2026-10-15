@@ -82,6 +82,14 @@ router.post(
     })
 );
 
+router.post(
+    '/focus/claim',
+    asyncRoute(async (req, res) => {
+        const r = await db.parties.claimFocus(uid(req));
+        res.json({ success: true, ...r, newAchievements: r.achievements });
+    })
+);
+
 // The owner removes a member, addressed by the opaque member key from the status.
 router.delete(
     '/members/:memberKey',

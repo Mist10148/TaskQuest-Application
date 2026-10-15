@@ -58,10 +58,22 @@ function render(st) {
             `**Party quest:** finish ${st.perMember} tasks per active member together this week (at least ${st.minToClaim} of your own to claim) · +${st.reward} XP each\n${bar(st.progress, st.target)} ${state}\n\n${lines.join('\n')}`
         )
         .setFooter({ text: 'The week runs Monday to Monday in UTC for everyone. Only the first completion of a task counts.' });
+    if (st.board && st.board.length > 1) {
+        embed.addFields({
+            name: 'This week\'s board',
+            value: st.board.map((r) => `${r.rank}. **${escapeDiscord(r.name, { max: 80 }) || 'Unknown'}**${r.isYou ? ' (you)' : ''} · ${r.count} tasks · ${r.focusMinutes} min`).join('\n').slice(0, 1000)
+        });
+    }
+    const fq = st.focusQuest;
+    if (fq) {
+        const fstate = fq.claimed ? '✅ claimed' : fq.claimable ? '🎁 ready to claim!' : fq.reached ? `done, but you need ${fq.minToClaim} focus minutes of your own (you have ${fq.yourMinutes})` : `${fq.progress}/${fq.target} min`;
+        embed.addFields({ name: `⏱️ Focus together · +${fq.reward} XP each`, value: `${bar(fq.progress, fq.target)} ${fstate}` });
+    }
     if (st.invites.length) embed.addFields({ name: 'Waiting for an answer', value: st.invites.map((i) => escapeDiscord(i.inviteeName, { max: 80 }) || 'Unknown').join(', ').slice(0, 1000) });
-    const components = st.claimable
-        ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('party_claim').setLabel('Claim reward').setEmoji('🎁').setStyle(ButtonStyle.Success))]
-        : [];
+    const buttons = [];
+    if (st.claimable) buttons.push(new ButtonBuilder().setCustomId('party_claim').setLabel('Claim reward').setEmoji('🎁').setStyle(ButtonStyle.Success));
+    if (fq && fq.claimable) buttons.push(new ButtonBuilder().setCustomId('party_claim_focus').setLabel('Claim focus reward').setEmoji('⏱️').setStyle(ButtonStyle.Success));
+    const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
     return { embeds: [embed], components };
 }
 
@@ -160,6 +172,13 @@ async function handleButton(interaction) {
             const r = await parties.claim(interaction.user.id);
             await interaction.editReply(render(await parties.status(interaction.user.id)));
             await interaction.followUp({ embeds: [ui.success('Party reward claimed', `+${r.xp} XP. Balance: ${Number(r.balance).toLocaleString()} XP.`)], ...EPHEMERAL });
+            return await sendRewards(interaction, { achievements: r.achievements });
+        }
+        if (id === 'party_claim_focus') {
+            await interaction.deferUpdate();
+            const r = await parties.claimFocus(interaction.user.id);
+            await interaction.editReply(render(await parties.status(interaction.user.id)));
+            await interaction.followUp({ embeds: [ui.success('Party focus reward claimed', `+${r.xp} XP. Balance: ${Number(r.balance).toLocaleString()} XP.`)], ...EPHEMERAL });
             return await sendRewards(interaction, { achievements: r.achievements });
         }
         if (id === 'party_disband_no') return await interaction.update({ embeds: [ui.info('Cancelled', 'The party stays.')], components: [] });

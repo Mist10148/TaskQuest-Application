@@ -26,7 +26,7 @@ const { actorSql } = require('./access');
 const { findInvitee, invitePreview, notSent } = require('./sharing');
 const { errors, TaskQuestError } = require('../errors');
 const v = require('../validation');
-const { LIMITS, PARTY_QUEST } = require('../constants');
+const { LIMITS, PARTY_QUEST, PARTY_FOCUS_QUEST } = require('../constants');
 const { questPeriod } = require('../quests');
 
 const DAY_MS = 86400e3;
@@ -235,6 +235,15 @@ async function weeklyCount(conn, discordId, period, joinedAt) {
     return Number(row.n);
 }
 
+/** Finished focus minutes the person logged in the window, only since they joined the party. */
+async function weeklyFocusMinutes(conn, discordId, period, joinedAt) {
+    const [[row]] = await conn.query(
+        "SELECT COALESCE(SUM(minutes_credited), 0) AS n FROM focus_sessions WHERE discord_id = ? AND state = 'finished' AND finished_at >= ? AND finished_at < ? AND finished_at >= ?",
+        [discordId, await progressFloor(conn, discordId, period.startsAt), period.endsAt, joinedAt]
+    );
+    return Number(row.n);
+}
+
 async function quest(conn, party, now) {
     const period = questPeriod('weekly', now, null); // one UTC week for the whole party
     const [rows] = await conn.query(
@@ -243,13 +252,25 @@ async function quest(conn, party, now) {
         [party.id, party.owner_id]
     );
     const members = [];
-    for (const r of rows) members.push({ discord_id: String(r.discord_id), memberKey: r.public_id, name: r.discord_username, count: await weeklyCount(conn, r.discord_id, period, r.joined_at) });
+    for (const r of rows) {
+        members.push({
+            discord_id: String(r.discord_id),
+            memberKey: r.public_id,
+            name: r.discord_username,
+            count: await weeklyCount(conn, r.discord_id, period, r.joined_at),
+            focus: await weeklyFocusMinutes(conn, r.discord_id, period, r.joined_at)
+        });
+    }
     // The target grows only with the members who actually took part, so an idle seat or a spare account does not move it.
     const active = members.filter((m) => m.count >= 1).length;
     const target = PARTY_QUEST.PER_MEMBER_TARGET * Math.max(1, active);
     // One person's contribution is capped at their own share, so a single member cannot carry the whole party.
     const progress = members.reduce((n, m) => n + Math.min(m.count, PARTY_QUEST.PER_MEMBER_TARGET), 0);
-    return { period, members, target, progress };
+    // The focus quest works the same way with minutes: the target grows with the members who focused, a share is capped.
+    const focusing = members.filter((m) => m.focus >= 1).length;
+    const focusTarget = PARTY_FOCUS_QUEST.PER_MEMBER_MINUTES * Math.max(1, focusing);
+    const focusProgress = members.reduce((n, m) => n + Math.min(m.focus, PARTY_FOCUS_QUEST.PER_MEMBER_MINUTES), 0);
+    return { period, members, target, progress, focusTarget, focusProgress };
 }
 
 /**
@@ -270,6 +291,14 @@ async function status(userId, now = new Date()) {
         const reached = q.progress >= q.target;
         const mine = q.members.find((m) => m.discord_id === me);
         const yourCount = mine ? mine.count : 0;
+        const yourMinutes = mine ? mine.focus : 0;
+        const [[focusClaim]] = await conn.query('SELECT 1 AS x FROM quest_claims WHERE discord_id = ? AND LEFT(quest_key, 11) = ? AND period_start = ?', [me, PARTY_FOCUS_QUEST.KEY_PREFIX, q.period.start]);
+        const focusReached = q.focusProgress >= q.focusTarget;
+        // The board: this week's finished tasks and focus minutes, best first (ties by minutes, then in the order people joined).
+        const board = q.members
+            .map((m, index) => ({ memberKey: m.memberKey, name: m.name, count: m.count, focusMinutes: m.focus, isYou: m.discord_id === me, isOwner: m.discord_id === String(party.owner_id), index }))
+            .sort((a, b) => b.count - a.count || b.focusMinutes - a.focusMinutes || a.index - b.index)
+            .map(({ index, ...rest }, rank) => ({ rank: rank + 1, ...rest }));
         let invites = [];
         if (isOwner) {
             const [rows] = await conn.query(
@@ -294,7 +323,19 @@ async function status(userId, now = new Date()) {
             limit: LIMITS.MAX_PARTY_MEMBERS,
             reached,
             claimed: Boolean(claim) || Boolean(anyClaim),
-            claimable: reached && yourCount >= PARTY_QUEST.MIN_OWN_TO_CLAIM && !claim && !anyClaim && Boolean(user && user.gamification_enabled)
+            claimable: reached && yourCount >= PARTY_QUEST.MIN_OWN_TO_CLAIM && !claim && !anyClaim && Boolean(user && user.gamification_enabled),
+            board,
+            focusQuest: {
+                target: q.focusTarget,
+                progress: q.focusProgress,
+                reward: PARTY_FOCUS_QUEST.REWARD,
+                minToClaim: PARTY_FOCUS_QUEST.MIN_OWN_MINUTES,
+                perMember: PARTY_FOCUS_QUEST.PER_MEMBER_MINUTES,
+                yourMinutes,
+                reached: focusReached,
+                claimed: Boolean(focusClaim),
+                claimable: focusReached && yourMinutes >= PARTY_FOCUS_QUEST.MIN_OWN_MINUTES && !focusClaim && Boolean(user && user.gamification_enabled)
+            }
         };
     } finally {
         conn.release();
@@ -337,4 +378,40 @@ async function claim(userId, now = new Date()) {
     });
 }
 
-module.exports = { create, invite, listInvites, respond, revoke, leave, kick, disband, status, claim };
+/** Claim this week's party focus reward: flat XP, once per person per week. */
+async function claimFocus(userId, now = new Date()) {
+    return withTransaction(async (conn) => {
+        const user = await lockUser(conn, userId);
+        requireGamification(user);
+        const party = await myParty(conn, user.discord_id);
+        if (!party) throw errors.notFound('You are not in a party.');
+        const q = await quest(conn, party, now);
+        if (q.focusProgress < q.focusTarget) throw errors.validation(`The party focus quest isn't finished yet (${q.focusProgress}/${q.focusTarget} minutes).`);
+        const own = q.members.find((m) => m.discord_id === String(user.discord_id));
+        if (!own || own.focus < PARTY_FOCUS_QUEST.MIN_OWN_MINUTES) {
+            throw errors.validation(`Focus at least ${PARTY_FOCUS_QUEST.MIN_OWN_MINUTES} minutes yourself since joining this party this week to claim its reward (you have ${own ? own.focus : 0}).`);
+        }
+        const [[already]] = await conn.query('SELECT 1 AS x FROM quest_claims WHERE discord_id = ? AND LEFT(quest_key, 11) = ? AND period_start = ?', [user.discord_id, PARTY_FOCUS_QUEST.KEY_PREFIX, q.period.start]);
+        if (already) throw errors.conflict('You already claimed a party focus reward this week.');
+        const [res] = await conn.query('INSERT IGNORE INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?)', [
+            user.discord_id,
+            `${PARTY_FOCUS_QUEST.KEY_PREFIX}${party.id}`,
+            q.period.start,
+            PARTY_FOCUS_QUEST.REWARD
+        ]);
+        if (res.affectedRows !== 1) throw errors.conflict("You already claimed this week's party focus reward.");
+        const previousLevel = Number(user.player_level);
+        const paid = await awardFlat(conn, user, 'party_quest', PARTY_FOCUS_QUEST.REWARD, { referenceId: res.insertId });
+        const achievements = await unlockAchievements(conn, user);
+        return {
+            weekStart: q.period.start,
+            xp: paid ? paid.xp : 0,
+            balance: Number(user.player_xp),
+            level: Number(user.player_level),
+            leveledUp: Number(user.player_level) > previousLevel,
+            achievements
+        };
+    });
+}
+
+module.exports = { claimFocus, create, invite, listInvites, respond, revoke, leave, kick, disband, status, claim };

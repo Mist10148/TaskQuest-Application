@@ -1257,6 +1257,50 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         void X;
     });
 
+    await t.test('party board and the focus quest: minutes together, a board, one claim a week each', async () => {
+        const P = '100000000000000921';
+        const Q = '100000000000000922';
+        for (const id of [P, Q]) await db.users.ensureUser(id);
+        await db.query("UPDATE users SET discord_username = 'pia' WHERE discord_id = ?", [P]);
+        await db.query("UPDATE users SET discord_username = 'quinn' WHERE discord_id = ?", [Q]);
+        await db.query("INSERT INTO parties (name, owner_id) VALUES ('Deep Work', ?)", [P]);
+        const party = (await db.query("SELECT id FROM parties WHERE owner_id = ? AND name = 'Deep Work'", [P]))[0];
+        await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?), (?, ?)', [party.id, P, party.id, Q]);
+        const focus = (id, minutes) =>
+            db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP(), ?, 'finished', UTC_TIMESTAMP(), ?, 0)", [id, minutes, minutes]);
+
+        const none = (await db.parties.status(P)).focusQuest;
+        assert.deepEqual([none.progress, none.target, none.reached, none.claimable], [0, 60, false, false]);
+        await focus(P, 60);
+        await focus(Q, 30);
+        const some = await db.parties.status(P);
+        assert.deepEqual([some.focusQuest.progress, some.focusQuest.target, some.focusQuest.yourMinutes], [90, 120, 60], 'two members focused, so the target is 2 x 60');
+        await assert.rejects(db.parties.claimFocus(P), { code: 'VALIDATION' }, 'not there yet');
+
+        // a task finished by Q puts Q on top of the board on tasks, then minutes break ties
+        const { list } = await db.tasks.createList(Q, { name: 'Board' });
+        await db.tasks.setItemCompleted(Q, (await db.tasks.addItem(Q, list.id, { name: 'one' })).item.id);
+        const board = (await db.parties.status(P)).board;
+        assert.deepEqual(board.map((r) => [r.rank, r.name, r.count, r.focusMinutes, r.isYou]), [[1, 'quinn', 1, 30, false], [2, 'pia', 0, 60, true]]);
+
+        await focus(Q, 30);
+        const done = (await db.parties.status(Q)).focusQuest;
+        assert.deepEqual([done.progress, done.reached, done.claimable, done.reward, done.minToClaim], [120, true, true, 40, 20]);
+        assert.equal((await db.parties.claimFocus(P)).xp, 40);
+        await assert.rejects(db.parties.claimFocus(P), { code: 'CONFLICT' });
+        assert.equal((await db.parties.status(P)).focusQuest.claimed, true);
+        assert.equal((await db.parties.claimFocus(Q)).xp, 40);
+        assert.equal((await db.parties.status(Q)).claimed, false, 'the task quest is separate and still open');
+
+        // someone with under 20 minutes of their own cannot claim
+        const S = '100000000000000923';
+        await db.users.ensureUser(S);
+        await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?)', [party.id, S]);
+        await focus(S, 5);
+        await focus(P, 60);
+        await assert.rejects(db.parties.claimFocus(S), { code: 'VALIDATION' });
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

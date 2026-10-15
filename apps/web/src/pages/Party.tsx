@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, CheckCircle2, Crown, Gift, Loader2, LogOut, Mail, Send, Shield, Trash2, UserMinus, X } from "lucide-react";
+import { Check, CheckCircle2, Crown, Gift, Loader2, LogOut, Mail, Send, Shield, Timer, Trash2, UserMinus, X } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
@@ -8,7 +8,7 @@ import { InviteConfirmDialog } from "@/components/feedback/InviteConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  useClaimParty, useCreateParty, useDisbandParty, useInvitePartyPreview, useInviteToParty, useKickPartyMember, useLeaveParty, useParty, useRespondToPartyInvite, useRevokePartyInvite,
+  useClaimParty, useClaimPartyFocus, useCreateParty, useDisbandParty, useInvitePartyPreview, useInviteToParty, useKickPartyMember, useLeaveParty, useParty, useRespondToPartyInvite, useRevokePartyInvite,
 } from "@/hooks/useApi";
 import { useCountdown } from "@/hooks/useCountdown";
 import { formatLongCountdown } from "@/lib/countdown";
@@ -172,6 +172,7 @@ const InviteForm = ({ seats, partyName }: { seats: number; partyName: string }) 
 
 const PartyCard = ({ status }: { status: PartyStatus }) => {
   const claim = useClaimParty();
+  const claimFocus = useClaimPartyFocus();
   const revoke = useRevokePartyInvite();
   const leave = useLeaveParty();
   const kick = useKickPartyMember();
@@ -234,6 +235,61 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
           Week of {shortDate(status.weekStart)} · resets in {formatLongCountdown(left)} (Monday 00:00 UTC)
         </p>
       </section>
+
+      {status.focusQuest && (
+        <section aria-label="Weekly party focus quest" className="rounded-xl border border-border bg-card p-4 sm:p-6" data-testid="party-focus">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-heading text-lg font-semibold"><Timer className="h-5 w-5 text-primary-text" aria-hidden /> Focus together</h2>
+            <p className="text-sm text-foreground-muted">Reward: +{status.focusQuest.reward} XP each</p>
+          </div>
+          <div className="mt-3">
+            <div className="mb-1 flex justify-between text-sm">
+              <span className="font-medium">{status.focusQuest.progress} / {status.focusQuest.target} minutes</span>
+              <span className="text-foreground-muted">{progressPercent(status.focusQuest.progress, status.focusQuest.target)}%</span>
+            </div>
+            <div role="progressbar" aria-label="Party focus quest progress" aria-valuemin={0} aria-valuemax={status.focusQuest.target} aria-valuenow={Math.min(status.focusQuest.progress, status.focusQuest.target)} className="h-3 overflow-hidden rounded-full bg-background-secondary">
+              <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progressPercent(status.focusQuest.progress, status.focusQuest.target)}%` }} />
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-foreground-muted">
+            {status.focusQuest.claimed
+              ? "You claimed this week's focus reward."
+              : status.focusQuest.claimable
+                ? "Target reached! Claim your reward before the week resets."
+                : status.focusQuest.reached
+                  ? `Target reached, but you need ${status.focusQuest.minToClaim} focus minutes of your own to claim (you have ${status.focusQuest.yourMinutes}).`
+                  : `Start focus sessions: every member who focuses adds ${status.focusQuest.perMember} minutes to the target.`}
+          </p>
+          <div className="mt-3">
+            {status.focusQuest.claimed ? (
+              <p className="inline-flex items-center gap-2 font-medium text-success" role="status"><CheckCircle2 className="h-5 w-5" aria-hidden /> Claimed</p>
+            ) : (
+              <Button className="gap-2" disabled={!status.focusQuest.claimable || claimFocus.isPending} onClick={() => claimFocus.mutate()}>
+                {claimFocus.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Gift className="h-4 w-4" aria-hidden />}
+                Claim focus reward
+              </Button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {status.board && status.board.length > 1 && (
+        <section aria-label="Party board" className="rounded-xl border border-border bg-card p-4 sm:p-6" data-testid="party-board">
+          <h2 className="mb-3 font-heading text-sm font-semibold">This week's board</h2>
+          <ol className="divide-y divide-border rounded-lg border border-border">
+            {status.board.map((row) => (
+              <li key={row.memberKey} className="flex items-center gap-3 p-3">
+                <span className="w-6 text-center font-heading font-bold text-foreground-muted" aria-label={`Rank ${row.rank}`}>{row.rank}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {row.name ?? "Unknown adventurer"}
+                  {row.isYou && <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary-text">You</span>}
+                </span>
+                <span className="text-sm text-foreground-muted">{row.count} tasks · {row.focusMinutes} min</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       <section aria-label="Party members" className="rounded-xl border border-border bg-card p-4 sm:p-6">
         <h2 className="mb-3 font-heading text-sm font-semibold">

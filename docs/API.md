@@ -141,7 +141,7 @@ All routes are 🔒. A user is in at most one party (up to 6 people, the owner i
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, minToClaim, yourCount, target, progress, reward, members:[{memberKey, name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. |
+| GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, minToClaim, yourCount, target, progress, reward, members:[{memberKey, name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. `board: [{rank, memberKey, name, count, focusMinutes, isYou, isOwner}]` (this week's tasks and focus minutes, best first) and `focusQuest: {target, progress, reward, minToClaim, perMember, yourMinutes, reached, claimed, claimable}` are part of the party object. |
 | POST | `/api/parties` | `{name (1–40)}` | `201` the new party in the shape above. `409` if you are already in one. |
 | POST | `/api/parties/invites` | `{username, dryRun?}` | Like the list invite: `200 {message}`, the same neutral message, whether or not anything was sent (unknown username, invitations off, declined this owner within 7 days, already in a party), and with `dryRun: true` `200 {name, avatarUrl}` (or nulls) and nobody is invited. Owner only (`403`); `409` for someone already invited, `400` when the party is full (6, pending invitations included). The invitee sees it in `GET /api/parties`. |
 | DELETE | `/api/parties/invites/:id` | — | Withdraw a pending invitation (owner). |
@@ -151,6 +151,7 @@ All routes are 🔒. A user is in at most one party (up to 6 people, the owner i
 | DELETE | `/api/parties/members/:memberKey` | — | Owner only: remove a member, addressed by the opaque `memberKey` from the status. `403` for a non-owner, `400` for yourself (disband instead), `404` for an unknown key or someone who is not in your party. |
 | DELETE | `/api/parties` | — | Disband the party for everyone (owner only). |
 | POST | `/api/parties/claim` | — | `{success:true, weekStart, xp, balance, level, leveledUp, newAchievements}`. Flat +60 XP, once per person per week; `400` while the quest is unfinished or you have not finished at least `minToClaim` (6) tasks yourself since joining, `409` if you already claimed a party reward this week, `403` when XP is off. |
+| POST 🔒 | `/api/parties/focus/claim` | — | Claim the party focus quest reward: `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. +40 XP once a week; `400` until the party has focused its target minutes or when you have under 20 focus minutes of your own; `409` once claimed; `403` when XP is off; `404` without a party. |
 
 The party quest is described in [GAMEPLAY](GAMEPLAY.md#5h-parties).
 

@@ -445,6 +445,8 @@ A party is a group of up to **6** people (the owner included) with one shared **
 | Reward | **+60 XP** (flat, no class or skill modifiers) for **every member who finished at least 6 tasks themselves** (half of 12) since joining, claimed by each of them once the goal is reached (`/party status` → Claim, or the web Party page) |
 | Once a week | One party reward per person per week, whichever party it came from, so leaving and joining another party cannot pay twice (the claim is a `quest_claims` row with key `PARTY_<partyId>`) |
 
+**The board and the focus quest.** The party also has a **board**: this week's finished tasks and focus minutes for every member, best first (ties by minutes). And a second weekly quest, **Focus together**: the members' finished [focus](#5d-focus-sessions) minutes this week (since they joined, at most **60** counted per member) must reach **60 minutes for every member who focused at all**; each member who focused at least **20 minutes** themselves claims **+40 XP** (flat) once a week (a `quest_claims` row with the key `PARTYFOCUS_<partyId>`, so the task quest above and this one are separate claims). `/party status` shows both, with a second Claim button; the web Party page has a "Focus together" card and the board.
+
 The target uses the members who have finished a task at the time you look or claim, so the goal grows when someone starts taking part and shrinks when someone leaves or is removed. The owner can remove a member (`/party kick`, the web Party page). A person with XP turned off sees the quest but cannot claim.
 
 ## 6. Achievements

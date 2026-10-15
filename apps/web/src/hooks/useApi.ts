@@ -730,6 +730,23 @@ export function useClaimParty() {
     });
 }
 
+export function useClaimPartyFocus() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: partyApi.claimFocus,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            void qc.invalidateQueries({ queryKey: ['parties'] });
+            celebrate(result.leveledUp ? 'level' : 'quest');
+            toast.success(`⏱️ Party focus quest claimed +${result.xp} XP!`, {
+                description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
+            });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
+    });
+}
+
 // ─── Prestige ────────────────────────────────────────────────────────────────
 
 export function usePrestigeStatus() {

@@ -214,6 +214,33 @@ export interface PartyStatus {
     reached: boolean;
     claimed: boolean;
     claimable: boolean;
+    /** This week's tasks and focus minutes per member, best first. */
+    board?: PartyBoardRow[];
+    /** The second weekly party quest: focus minutes together. */
+    focusQuest?: PartyFocusQuest;
+}
+
+export interface PartyBoardRow {
+    rank: number;
+    memberKey: string;
+    name: string | null;
+    count: number;
+    focusMinutes: number;
+    isYou: boolean;
+    isOwner: boolean;
+}
+
+export interface PartyFocusQuest {
+    target: number;
+    progress: number;
+    reward: number;
+    /** Minutes you must focus yourself (since joining, this week) before you may claim. */
+    minToClaim: number;
+    perMember: number;
+    yourMinutes: number;
+    reached: boolean;
+    claimed: boolean;
+    claimable: boolean;
 }
 
 export interface MyPartyInvite {
@@ -251,6 +278,7 @@ export const partyApi = {
     kick: (memberKey: string) => del<{ success: boolean }>(`/api/parties/members/${memberKey}`),
     disband: () => del<{ success: boolean }>('/api/parties'),
     claim: () => post<PartyClaimResult>('/api/parties/claim'),
+    claimFocus: () => post<PartyClaimResult>('/api/parties/focus/claim'),
 };
 
 export const questsApi = {

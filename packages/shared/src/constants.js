@@ -720,6 +720,13 @@ const LIST_ROLES = ['viewer', 'editor', 'manager'];
  */
 const PARTY_QUEST = { PER_MEMBER_TARGET: 12, MIN_OWN_TO_CLAIM: 6, REWARD: 60, KEY_PREFIX: 'PARTY_' };
 
+/**
+ * The party focus quest: the second weekly party quest. Members' finished focus minutes this week (since they joined, at most
+ * PER_MEMBER_MINUTES each counted) must reach PER_MEMBER_MINUTES for every member who focused at all; each member with at least
+ * MIN_OWN_MINUTES of their own claims REWARD once a week (a quest_claims row with the key PARTYFOCUS_<partyId>).
+ */
+const PARTY_FOCUS_QUEST = { PER_MEMBER_MINUTES: 60, MIN_OWN_MINUTES: 20, REWARD: 40, KEY_PREFIX: 'PARTYFOCUS_' };
+
 /** What every invite call answers when it did not (or did) send anything for a reason the inviter must not learn: nobody, someone who does not take invitations, a recent decline. */
 const INVITE_NEUTRAL_MESSAGE = 'If that person can be invited, they have been sent an invitation.';
 
@@ -822,6 +829,7 @@ module.exports = {
     LIMITS,
     LIST_ROLES,
     PARTY_QUEST,
+    PARTY_FOCUS_QUEST,
     INVITE_NEUTRAL_MESSAGE,
     DAILY,
     TEXT_LIMITS,

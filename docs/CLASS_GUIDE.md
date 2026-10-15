@@ -146,7 +146,7 @@ Favourable mix: every third task is three days overdue.
 
 ## Paladin (750 XP)
 
-**Rewards:** completing a HIGH priority task pays +100% of the base plus 10; every other action +5. Your daily streak always has the 72-hour Streak Shield window for free (96 hours with Sanctuary). **Suits:** people who really separate the important tasks, and who sometimes miss a day. **Pitfalls:** the priority is your own label: tagging everything HIGH works and is not checked, which empties the idea; the most expensive class.
+**Rewards:** completing a HIGH priority task pays +100% of the base plus 10; every other action +5. Your daily streak always has the Streak Shield window for free (one missed day forgiven, two with Sanctuary). **Suits:** people who really separate the important tasks, and who sometimes miss a day. **Pitfalls:** the priority is your own label: tagging everything HIGH works and is not checked, which empties the idea; the most expensive class.
 
 Favourable mix: every second task is HIGH priority.
 

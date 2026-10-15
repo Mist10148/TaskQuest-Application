@@ -498,11 +498,19 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
  *         | { eligible: true, newStreak, streakBroken, streakPreserved, freezeUsed, streakBonus,
  *             skillDailyBonus, xp: object, totalXP: number }}
  */
-/** How long after a claim the streak survives: 48 h, 72 h with Streak Shield or as a Paladin, 96 h with Sanctuary. */
-function streakWindowMs(user, bonuses) {
+/**
+ * How many calendar days (the user's own) may pass between two claims for the streak to continue: 1 (every day),
+ * 2 with Streak Shield or as a Paladin (one missed day is forgiven), 3 with Sanctuary (two).
+ */
+function streakWindowDays(user, bonuses) {
     const paladin = user.player_class === 'PALADIN';
-    if (paladin && bonuses.paladinSanctuary) return DAILY.SANCTUARY_STREAK_WINDOW_MS;
-    return bonuses.streakShield || paladin ? DAILY.SHIELDED_STREAK_WINDOW_MS : DAILY.STREAK_WINDOW_MS;
+    if (paladin && bonuses.paladinSanctuary) return DAILY.SANCTUARY_STREAK_DAYS;
+    return bonuses.streakShield || paladin ? DAILY.SHIELDED_STREAK_DAYS : DAILY.STREAK_DAYS;
+}
+
+/** Calendar days between the day of the last claim and the day of `nowMs`, both in the user's zone. */
+function claimGapDays(user, lastMs, nowMs) {
+    return daysBetween(todayInZone(user.timezone, new Date(lastMs)), todayInZone(user.timezone, new Date(nowMs)));
 }
 
 /**
@@ -516,7 +524,7 @@ function liveStreak(user, skills, now = Date.now()) {
     if (!last) return count; // no claim on record to measure a gap from
     const bonuses = getSkillBonuses(skills);
     const at = now === undefined || now === null ? Date.now() : new Date(now).getTime();
-    return bonuses.streakUnstoppable || at - last <= streakWindowMs(user, bonuses) ? count : 0;
+    return bonuses.streakUnstoppable || claimGapDays(user, last, at) <= streakWindowDays(user, bonuses) ? count : 0;
 }
 
 function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
@@ -530,16 +538,17 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 
     const bonuses = getSkillBonuses(userSkills);
     // Paladins always get the Shield window; Sanctuary stretches it further.
-    const window = streakWindowMs(user, bonuses);
+    const windowDays = streakWindowDays(user, bonuses);
+    const gapDays = lastClaim ? claimGapDays(user, lastClaim, now) : 0;
 
     let newStreak = 1;
     let streakBroken = false;
     let streakPreserved = false;
     let freezeUsed = false;
     let freezesUsed = 0;
-    // One freeze covers one missed day: every started 24 h past the window needs its own.
-    const missedDays = lastClaim ? Math.max(1, Math.ceil((since - window) / DAILY.COOLDOWN_MS)) : 0;
-    if (lastClaim && since <= window) {
+    // One freeze covers one missed day: every calendar day past the window needs its own.
+    const missedDays = lastClaim ? Math.max(1, gapDays - windowDays) : 0;
+    if (lastClaim && gapDays <= windowDays) {
         newStreak = streak + 1;
     } else if (lastClaim && bonuses.streakUnstoppable) {
         newStreak = streak + 1;

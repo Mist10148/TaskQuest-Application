@@ -16,11 +16,11 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 ## Streaks and freezes
 
-**How does the daily streak work?** Claim your daily reward (`/daily` or the dashboard) at least once every 24 hours and at most 48 hours after the last claim to keep the streak going. Claim sooner than 24 hours and you are told how long to wait. Each streak day adds 5 XP to the reward (up to +50), and the claims that reach 7, 14 and 30 days also pay a chest of +100, +250 and +600 XP, once per streak run.
+**How does the daily streak work?** Claim your daily reward (`/daily` or the dashboard) on consecutive days (your own calendar days) to keep the streak going. You can claim again 24 hours after the last claim, and you are told how long to wait if it is sooner. Each streak day adds 5 XP to the reward (up to +50), and the claims that reach 7, 14 and 30 days also pay a chest of +100, +250 and +600 XP, once per streak run.
 
-**I missed a day. Is my streak gone?** Probably, unless something protects it. In order: the Tank's *Unstoppable* skill (free, always), a longer window (the *Streak Shield* skill or the Paladin class: 72 hours; Paladin with Sanctuary: 96), then a **streak freeze**. A freeze costs 150 XP (120 with *Freeze Cache*, which also lets you hold 5 instead of 3) and is used automatically at your next claim, only when a streak of 2 or more days would otherwise break. One freeze covers one missed day, so a longer gap needs one freeze per day. Buy one with `/freeze` or on your profile before you need it.
+**I missed a day. Is my streak gone?** Probably, unless something protects it. In order: the Tank's *Unstoppable* skill (free, always), a longer window (the *Streak Shield* skill or the Paladin class forgive one missed day; Paladin with Sanctuary forgives two), then a **streak freeze**. A freeze costs 150 XP (120 with *Freeze Cache*, which also lets you hold 5 instead of 3) and is used automatically at your next claim, only when a streak of 2 or more days would otherwise break. One freeze covers one missed day, so a longer gap needs one freeze per day. Buy one with `/freeze` or on your profile before you need it.
 
-**Is the streak tied to midnight?** No. The 24-hour cooldown and the 48-hour window are rolling clocks from your last claim, not calendar days.
+**Is the streak tied to midnight?** Yes, to your own midnight (your time zone setting): the streak needs a claim on each calendar day. The 24-hour cooldown between two claims is still counted from your last claim.
 
 **Does the Monk's Rhythm or the Assassin's streak work the same way?** No, they are class counters: Rhythm counts consecutive days of yours on which you finished a rewarded action, and the Assassin's streak resets after 36 hours (48 with Night Owl) without one.
 

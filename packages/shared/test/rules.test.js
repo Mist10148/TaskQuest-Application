@@ -211,17 +211,19 @@ test('task detail validation: tags, repeat and due date', () => {
 
 test('daily reward: one freeze covers one missed day, a longer gap needs one per day', () => {
     const now = Date.parse('2030-01-10T12:00:00Z');
-    const gap = (hours, freezes) =>
-        shared.calculateDailyReward(user({ last_daily_claim: new Date(now - hours * 3600e3), streak_count: 9, streak_freezes: freezes }), [], now);
+    // The streak is counted in the user's calendar days: `days` is how many days ago the last claim was.
+    const gap = (days, freezes) =>
+        shared.calculateDailyReward(user({ last_daily_claim: new Date(now - days * 24 * 3600e3), streak_count: 9, streak_freezes: freezes }), [], now);
 
-    const one = gap(60, 3); // 12 h past the 48 h window: one missed day
+    const one = gap(2, 3); // yesterday was skipped: one missed day
     assert.deepEqual([one.freezeUsed, one.freezesUsed, one.newStreak], [true, 1, 10]);
-    assert.equal(gap(72, 3).freezesUsed, 1, 'exactly 24 h past the window is still one day');
-    assert.equal(gap(73, 3).freezesUsed, 2);
+    assert.equal(gap(1, 3).freezeUsed, false, 'claiming the next day needs no freeze');
+    assert.equal(gap(3, 3).freezesUsed, 2);
+    assert.equal(gap(4, 3).freezesUsed, 3);
 
-    const months = gap(24 * 60, 3); // two months away: three freezes cannot bridge it
+    const months = gap(60, 3); // two months away: three freezes cannot bridge it
     assert.deepEqual([months.freezeUsed, months.streakBroken, months.newStreak], [false, true, 1]);
-    assert.equal(gap(100, 1).freezeUsed, false, 'one freeze is not enough for a 2-day gap');
+    assert.equal(gap(3, 1).freezeUsed, false, 'one freeze is not enough for two missed days');
 });
 
 test('liveStreak reads 0 once a streak has lapsed, and Momentum follows it', () => {
@@ -724,30 +726,30 @@ test('Paladin Crusade: +20% XP on HIGH completions (Paladin only)', () => {
     assert.equal(run('DEFAULT', high), 100, 'Crusade needs the Paladin equipped');
 });
 
-test('Paladin passive and Sanctuary: the daily streak window is 72h for free, 96h with Sanctuary', () => {
+test('Paladin passive and Sanctuary: one missed day is forgiven for free, two with Sanctuary', () => {
     const now = Date.parse('2030-01-10T12:00:00Z');
-    const claim = (hours, player_class, skills = [], extra = {}) =>
-        shared.calculateDailyReward(user({ player_class, last_daily_claim: new Date(now - hours * 3600e3), streak_count: 9, ...extra }), skills, now, { rng: seq(0.99) });
-    // [label, hours since the last claim, class, skills, streak survives]
+    const claim = (days, player_class, skills = [], extra = {}) =>
+        shared.calculateDailyReward(user({ player_class, last_daily_claim: new Date(now - days * 24 * 3600e3), streak_count: 9, ...extra }), skills, now, { rng: seq(0.99) });
+    // [label, calendar days since the last claim, class, skills, streak survives]
     const cases = [
-        ['paladin at 47h', 47, 'PALADIN', [], true],
-        ['paladin at 71h', 71, 'PALADIN', [], true],
-        ['paladin at 73h', 73, 'PALADIN', [], false],
-        ['default at 60h', 60, 'DEFAULT', [], false],
-        ['default with the shield skill at 60h', 60, 'DEFAULT', [sk('default_streak_shield')], true],
-        ['sanctuary at 95h', 95, 'PALADIN', [sk('paladin_sanctuary')], true],
-        ['sanctuary at 97h', 97, 'PALADIN', [sk('paladin_sanctuary')], false],
-        ['sanctuary is a Paladin effect only', 80, 'DEFAULT', [sk('paladin_sanctuary')], false]
+        ['paladin the next day', 1, 'PALADIN', [], true],
+        ['paladin after one missed day', 2, 'PALADIN', [], true],
+        ['paladin after two missed days', 3, 'PALADIN', [], false],
+        ['default after one missed day', 2, 'DEFAULT', [], false],
+        ['default with the shield skill after one missed day', 2, 'DEFAULT', [sk('default_streak_shield')], true],
+        ['sanctuary after two missed days', 3, 'PALADIN', [sk('paladin_sanctuary')], true],
+        ['sanctuary after three missed days', 4, 'PALADIN', [sk('paladin_sanctuary')], false],
+        ['sanctuary is a Paladin effect only', 3, 'DEFAULT', [sk('paladin_sanctuary')], false]
     ];
-    for (const [label, hours, cls, skills, survives] of cases) {
-        const r = claim(hours, cls, skills);
+    for (const [label, days, cls, skills, survives] of cases) {
+        const r = claim(days, cls, skills);
         assert.equal(r.newStreak, survives ? 10 : 1, label);
     }
     // a bought freeze still rescues a streak beyond the Paladin window
-    assert.equal(claim(100, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, '28 h past the window is two missed days: one freeze is not enough');
-    assert.equal(claim(100, 'PALADIN', [], { streak_freezes: 2 }).freezeUsed, true);
-    assert.equal(claim(80, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, true);
-    assert.equal(claim(60, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, 'no freeze is spent while the window holds');
+    assert.equal(claim(4, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, 'two days past the window: one freeze is not enough');
+    assert.equal(claim(4, 'PALADIN', [], { streak_freezes: 2 }).freezeUsed, true);
+    assert.equal(claim(3, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, true);
+    assert.equal(claim(2, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, 'no freeze is spent while the window holds');
 });
 
 test('Paladin tree: four chained skills', () => {

@@ -13,8 +13,8 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P1.2 Prestige bonus no longer rounds away
 - [x] P1.3 Artisan keeps half its progress on a clear, clear bonus 5 -> 8
 - [x] P1.4 Cap HIGH-priority bonuses at 3 completions a day
-- [ ] P1.5 Hero's generic skills (Champion, Legendary, Valor, Inspire) become class-only
-- [ ] P1.6 Daily claim by calendar day (KNOWN_ISSUES #37); check Sniper list-priority resolution
+- [x] P1.5 Champion and Legendary class-only (Valor, Inspire stay generic)
+- [x] P1.6 Daily streak by calendar day; Sniper list priority verified (completionContext already resolves it)
 - [ ] P1.7 Lint warnings (7)
 
 ## P2 Balance pass (existing classes)

@@ -83,7 +83,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🛠️ **Artisan** | 650 | **Project** (max 10). Every action adds 1 progress and pays +2 XP per progress. Completing the last open task of a list that has at least 3 tasks finishes the project: +8 XP per progress on top, then half of the progress is kept (rounded down). Repeating tasks and subtasks never count as the last task. |
 | 🧭 **Ranger** | 600 | **Deadline Hunter.** (The due date must be at least 24 hours old; a freshly set date counts as no due date.) Completing a task with a due date *early* by d days (up to 7) pays ⌊base × 10% × d⌋ + 2 × d. *Due today* pays ⌊base × 25%⌋. *Overdue* pays nothing. Every other action (including completing a task with no due date) pays +3. No counter. |
 | 💀 **Necromancer** | 600 | **Revive.** (The due date must be at least 24 hours old, or the task is not overdue for this purpose.) Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 5%⌋ to *every* action (counted after the new soul). Souls do not decay. |
-| ⚜️ **Paladin** | 750 | **Vow.** Completing a HIGH priority task pays base + 10; every other action pays +5. Passive: your daily streak always has the Streak Shield window (72 hours) for free, including on the streak leaderboard. |
+| ⚜️ **Paladin** | 750 | **Vow.** Completing a HIGH priority task pays base + 10; every other action pays +5. Passive: your daily streak always has the Streak Shield window (one missed day forgiven) for free, including on the streak leaderboard. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
@@ -100,7 +100,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 |---|---|---|---|---|
 | 📚 Quick Learner | 3 | 50 | +5% XP | — |
 | 🌅 Early Bird | 2 | 75 | +10 daily-reward XP | Quick Learner |
-| 🛡️ Streak Shield | 1 | 100 | The daily streak survives a missed day (72h window instead of 48h) | Early Bird |
+| 🛡️ Streak Shield | 1 | 100 | The daily streak survives a missed day (a claim up to 2 days after the last one still continues it) | Early Bird |
 | 🔥 Momentum | 3 | 70 | +0.5% XP for each day of your current daily streak, counting up to 10 days (max +15% at level 3) | Quick Learner |
 | 🧊 Freeze Cache | 1 | 120 | Hold 5 streak freezes instead of 3, and each costs 120 XP instead of 150 | Streak Shield |
 | 🎁 Daily Surprise | 1 | 140 | The daily reward has a 15% chance to add +50 XP | Freeze Cache |
@@ -214,7 +214,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | ✨ Holy Aura | 3 | 140 | +2 XP on every action, per level *(class)* | — |
 | ⚔️ Smite | 2 | 210 | The HIGH priority Vow bonus is +25% larger per level *(class)* | Holy Aura |
 | 📯 Crusade | 1 | 290 | +20% XP when you complete a HIGH priority task *(class)* | Smite |
-| 🏛️ Sanctuary | 1 | 350 | Your daily streak survives two missed days (96h window) *(class)* | Crusade |
+| 🏛️ Sanctuary | 1 | 350 | Your daily streak survives two missed days (a claim up to 3 days after the last one) *(class)* | Crusade |
 
 There are 62 skills in 12 trees (Default plus the eleven classes).
 
@@ -222,8 +222,8 @@ There are 62 skills in 12 trees (Default plus the eleven classes).
 
 - **Cooldown:** 24 hours from your last claim.
 - **Streak:**
-  - Claiming within 48 hours of the last claim continues the streak.
-  - With Streak Shield (or as a Paladin), the window is 72 hours. Paladin with Sanctuary: 96 hours.
+  - The streak counts **your calendar days** (your time zone): claiming on the day after your last claim continues it. Claiming at least 24 hours after the last claim is still required.
+  - With Streak Shield (or as a Paladin), one missed day is forgiven (a claim up to 2 days after the last one continues the streak). Paladin with Sanctuary: two missed days (3 days).
   - With Unstoppable, the streak always continues.
   - Otherwise the streak resets to 1.
 - **XP** = class and skill modifiers applied to 100 (Momentum uses your streak before this claim), plus min((streak − 1) × 5, 50), plus Early Bird (10 per level), plus Daily Surprise (15% chance of +50).
@@ -235,7 +235,7 @@ The leaderboard defaults to **lifetime XP** (the never-reset total, so buying a 
 
 ### Streak freeze
 
-A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price is 120 XP and you can hold 5. It is used automatically when you claim your daily reward after a gap that would otherwise reset a streak of 2 or more days. **One freeze covers one missed day**: every started 24 hours past your streak window (48 hours, 72 with protection, 96 with Sanctuary) costs one freeze, so a long absence needs several and a months-old streak cannot be saved. Momentum and the streak leaderboard count a streak that has lapsed (and not yet been claimed over) as 0. Order of protection: Unstoppable (free, always) first, then the longer window (Streak Shield, Paladin, Sanctuary), then a freeze. A freeze never gets spent while your streak is alive or when the streak is 1.
+A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price is 120 XP and you can hold 5. It is used automatically when you claim your daily reward after a gap that would otherwise reset a streak of 2 or more days. **One freeze covers one missed day**: every calendar day past your streak window (1 day, 2 with protection, 3 with Sanctuary) costs one freeze, so a long absence needs several and a months-old streak cannot be saved. Momentum and the streak leaderboard count a streak that has lapsed (and not yet been claimed over) as 0. Order of protection: Unstoppable (free, always) first, then the longer window (Streak Shield, Paladin, Sanctuary), then a freeze. A freeze never gets spent while your streak is alive or when the streak is 1.
 
 ## 5b. Quests
 
@@ -423,7 +423,7 @@ The simulations use a fixed time step (Snake 10 steps a second, Dino Runner and 
 
 ### Your day
 
-Every "per day" below, the quests, the weekly review and the Stats page use **your** time zone (`/timezone` or web Settings; UTC until you set one): a day starts at 00:00 local time, a week on Monday 00:00 and a month on the 1st. A daylight-saving day is 23 or 25 hours long. Two players can therefore reset at different moments, and the daily reward is **not** tied to the calendar: its 24-hour cooldown and streak windows are rolling clocks. Nothing is rewritten when you move: past XP keeps its instant, and from the change on the new zone decides what "today" is, so a change can move the start of today's window (and re-open or close a cap for a few hours). To stop zone-hopping from resetting caps, **a zone change is allowed once every 24 hours** (the first change, and saving the same zone, are always allowed). The one exception is the weekly leaderboard, which is global and always starts its week Monday 00:00 UTC.
+Every "per day" below, the quests, the weekly review and the Stats page use **your** time zone (`/timezone` or web Settings; UTC until you set one): a day starts at 00:00 local time, a week on Monday 00:00 and a month on the 1st. A daylight-saving day is 23 or 25 hours long. Two players can therefore reset at different moments, and the daily reward follows your calendar days for the streak (claim on consecutive days; a missed day needs protection) while its 24-hour cooldown is still a rolling clock. Nothing is rewritten when you move: past XP keeps its instant, and from the change on the new zone decides what "today" is, so a change can move the start of today's window (and re-open or close a cap for a few hours). To stop zone-hopping from resetting caps, **a zone change is allowed once every 24 hours** (the first change, and saving the same zone, are always allowed). The one exception is the weekly leaderboard, which is global and always starts its week Monday 00:00 UTC.
 
 | Limit | Value |
 |---|---|

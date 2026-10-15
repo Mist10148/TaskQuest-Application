@@ -267,9 +267,11 @@ test('GAMEPLAY §5c bonus sources match REWARDS, LIMITS and STREAK_CHESTS', () =
 test('GAMEPLAY §5 daily reward, chests and streak freezes match DAILY and STREAK_FREEZE', () => {
     const daily = section(/^5\. Daily reward/).join('\n');
     const problems = [];
-    const hours = (ms) => ms / 3600e3;
-    for (const n of [hours(C.DAILY.COOLDOWN_MS), hours(C.DAILY.STREAK_WINDOW_MS), hours(C.DAILY.SHIELDED_STREAK_WINDOW_MS), hours(C.DAILY.SANCTUARY_STREAK_WINDOW_MS)]) {
-        if (!new RegExp(`\\b${n}\\s*(?:-| )?hours?\\b`).test(daily)) problems.push(`§5 should mention a ${n} hour window or cooldown`);
+    const cooldown = C.DAILY.COOLDOWN_MS / 3600e3;
+    if (!new RegExp(`\\b${cooldown}\\s*(?:-| )?hours?\\b`).test(daily)) problems.push(`§5 should mention a ${cooldown} hour cooldown`);
+    // The streak window is counted in calendar days: Streak Shield (one missed day) and Sanctuary (two).
+    for (const n of [C.DAILY.SHIELDED_STREAK_DAYS, C.DAILY.SANCTUARY_STREAK_DAYS]) {
+        if (!new RegExp(`\\b${n}\\s*days?\\b`).test(daily)) problems.push(`§5 should mention a streak window of ${n} days`);
     }
     const streak = rowOfText(daily, /\*\*XP\*\*/);
     if (!streak || !numbers(streak).includes(C.REWARDS.DAILY_STREAK_MAX_BONUS) || !numbers(streak).includes(C.REWARDS.DAILY_STREAK_STEP)) {

@@ -94,7 +94,7 @@ const CLASSES = {
         name: 'Paladin',
         emoji: '⚜️',
         cost: 750,
-        description: 'Vow: completing a HIGH priority task pays +100% of the base XP plus 10; every other action gives +5 XP. Your daily streak always has the Streak Shield window (72 hours) for free.',
+        description: 'Vow: completing a HIGH priority task pays +100% of the base XP plus 10; every other action gives +5 XP. Your daily streak always has the Streak Shield window (one missed day forgiven) for free.',
         playstyle: 'Rewards taking on the hard tasks, and forgives a missed day.'
     }
 };
@@ -120,7 +120,7 @@ const SKILL_TREES = {
         skills: {
             default_xp_boost: { name: 'Quick Learner', emoji: '📚', description: '+5% XP from all actions per level', maxLevel: 3, cost: 50, requires: null },
             default_daily_boost: { name: 'Early Bird', emoji: '🌅', description: '+10 daily reward XP per level', maxLevel: 2, cost: 75, requires: 'default_xp_boost' },
-            default_streak_shield: { name: 'Streak Shield', emoji: '🛡️', description: 'Your daily streak survives one missed day (72h window instead of 48h)', maxLevel: 1, cost: 100, requires: 'default_daily_boost' },
+            default_streak_shield: { name: 'Streak Shield', emoji: '🛡️', description: 'Your daily streak survives one missed day (a claim up to 2 days after the last one still continues it)', maxLevel: 1, cost: 100, requires: 'default_daily_boost' },
             default_momentum: { name: 'Momentum', emoji: '🔥', description: '+0.5% XP per level for each day of your current daily streak (counted up to 10 days, so +15% at level 3)', maxLevel: 3, cost: 70, requires: 'default_xp_boost' },
             default_freeze_cache: { name: 'Freeze Cache', emoji: '🧊', description: 'Hold 5 streak freezes instead of 3, and each costs 120 XP instead of 150', maxLevel: 1, cost: 120, requires: 'default_streak_shield' },
             default_daily_surprise: { name: 'Daily Surprise', emoji: '🎁', description: 'Your daily reward has a 15% chance to add +50 XP', maxLevel: 1, cost: 140, requires: 'default_freeze_cache' }
@@ -256,7 +256,7 @@ const SKILL_TREES = {
             paladin_aura: { name: 'Holy Aura', emoji: '✨', description: '+2 XP on every action per level (Paladin)', maxLevel: 3, cost: 140, requires: null },
             paladin_smite: { name: 'Smite', emoji: '⚔️', description: 'The HIGH priority Vow bonus is +25% larger per level (Paladin)', maxLevel: 2, cost: 210, requires: 'paladin_aura' },
             paladin_crusade: { name: 'Crusade', emoji: '📯', description: '+20% XP when you complete a HIGH priority task (Paladin)', maxLevel: 1, cost: 290, requires: 'paladin_smite' },
-            paladin_sanctuary: { name: 'Sanctuary', emoji: '🏛️', description: 'Your daily streak survives two missed days (96h window) (Paladin)', maxLevel: 1, cost: 350, requires: 'paladin_crusade' }
+            paladin_sanctuary: { name: 'Sanctuary', emoji: '🏛️', description: 'Your daily streak survives two missed days (a claim up to 3 days after the last one) (Paladin)', maxLevel: 1, cost: 350, requires: 'paladin_crusade' }
         }
     }
 };
@@ -561,7 +561,15 @@ const DAILY = {
     STREAK_WINDOW_MS: 48 * 60 * 60 * 1000,
     SHIELDED_STREAK_WINDOW_MS: 72 * 60 * 60 * 1000,
     /** Paladin with the Sanctuary skill. */
-    SANCTUARY_STREAK_WINDOW_MS: 96 * 60 * 60 * 1000
+    SANCTUARY_STREAK_WINDOW_MS: 96 * 60 * 60 * 1000,
+    /**
+     * The streak continues while claims are at most this many of the user's calendar days apart: every day, one
+     * missed day forgiven (Streak Shield, Paladin), two (Sanctuary). The *_MS windows above are the equivalent
+     * rolling windows the streak leaderboard still uses (it may show a lapsed streak for up to a day).
+     */
+    STREAK_DAYS: 1,
+    SHIELDED_STREAK_DAYS: 2,
+    SANCTUARY_STREAK_DAYS: 3
 };
 
 /** Maximum lengths, matching the database column sizes. */

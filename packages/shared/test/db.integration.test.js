@@ -1308,8 +1308,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('streak chests: 7, 14 and 30 pay once per streak run, and a reset streak can earn them again', async () => {
         const U = '100000000000000111';
         await db.users.ensureUser(U);
-        const setStreak = (streak, hoursAgo = 25) =>
-            db.query('UPDATE users SET streak_count = ?, last_daily_claim = UTC_TIMESTAMP() - INTERVAL ? HOUR WHERE discord_id = ?', [streak, hoursAgo, U]);
+        // The streak counts calendar days, so rewind by whole days (a fixed number of hours would depend on the time of day).
+        const setStreak = (streak, daysAgo = 1) =>
+            db.query('UPDATE users SET streak_count = ?, last_daily_claim = UTC_TIMESTAMP() - INTERVAL ? DAY WHERE discord_id = ?', [streak, daysAgo, U]);
 
         await setStreak(5);
         const six = await db.progression.claimDaily(U);
@@ -1335,7 +1336,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await sumSource(U, 'streak_chest'), 950);
 
         // Break the streak (no freeze), then climb to 7 again: a new run, a new chest.
-        await setStreak(30, 100);
+        await setStreak(30, 5);
         const broken = await db.progression.claimDaily(U);
         assert.equal(broken.streak, 1);
         assert.equal(Number((await db.users.getUser(U)).last_chest_streak), 0);

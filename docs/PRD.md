@@ -132,7 +132,7 @@ TaskQuest addresses this in three ways:
 | ID | Story | Acceptance criteria | Status |
 |---|---|---|---|
 | US-P1 | Earn XP for creating lists, adding tasks and completing tasks | 10, 5 and 10 base XP. Daily caps apply (10 lists, 50 additions, 50 completions). Completion XP is paid once per task. | Done |
-| US-P2 | Claim a daily reward with a streak bonus | 100 base XP, plus 5 per streak day (max +50), plus skill bonus. 24h cooldown. A 48h window keeps the streak. | Done |
+| US-P2 | Claim a daily reward with a streak bonus | 100 base XP, plus 5 per streak day (max +50), plus skill bonus. 24h cooldown. A claim on consecutive calendar days keeps the streak. | Done |
 | US-P3 | Level up from lifetime XP | Level = ⌊lifetime XP / 100⌋ + 1. Spending XP never lowers your level. | Done |
 | US-P4 | Buy and equip classes | The purchase is atomic, so a double click can't charge twice. Switching class resets class counters. Twelve classes: Default plus eleven. | Done |
 | US-P5 | Unlock and level skills | The tree must be owned and the prerequisite unlocked. Cost is charged per level. 62 skills; every skill has a working effect. | Done |

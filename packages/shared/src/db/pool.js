@@ -45,7 +45,10 @@ function buildConfig(env = process.env) {
     const config = {
         max: parseInt(env.DB_POOL_SIZE, 10) || 10,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 15000
+        connectionTimeoutMillis: 15000,
+        // Date logic assumes UTC sessions, so a connection that cannot switch is dropped rather than used.
+        // (Set per connection rather than as a startup option, which connection poolers may not pass on.)
+        onConnect: (client) => client.query("SET TIME ZONE 'UTC'")
     };
 
     if (env.DB_URL) {
@@ -218,11 +221,6 @@ class Pool {
         this.pg = new pg.Pool(config);
         // An idle client that loses its connection must not crash the process.
         this.pg.on('error', (err) => console.error('Database connection error:', err.message));
-        // Date logic assumes UTC sessions. A client runs its queries in order, so this runs before any other.
-        // (Set per connection rather than as a startup option, which connection poolers may not pass on.)
-        this.pg.on('connect', (client) => {
-            client.query("SET TIME ZONE 'UTC'").catch((err) => console.error('Could not set the session time zone to UTC:', err.message));
-        });
     }
 
     query(sql, params) {

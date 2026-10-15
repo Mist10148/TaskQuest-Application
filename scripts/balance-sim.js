@@ -47,7 +47,7 @@ function perAction(cls, o = {}) {
     const { level = 6, tree = 'none', action = 'item_complete', base = 10, mix = 'plain', perDay = 5, days = 60 } = o;
     const rng = rngFor(7);
     const skills = tree === 'full' ? fullTree(cls).rows : [];
-    const user = { player_class: cls, player_level: level, timezone: 'UTC', streak_count: 7, last_daily_claim: null };
+    const user = { player_class: cls, player_level: level, timezone: 'UTC', streak_count: 7, last_daily_claim: null, total_items_completed: 0 };
     const start = Date.parse('2026-01-01T09:00:00Z');
     let sum = 0;
     let n = 0;
@@ -63,6 +63,7 @@ function perAction(cls, o = {}) {
             if (mix === 'list' && i === perDay - 1) context.listCleared = true;
             const r = calculateFinalXP(user, skills, base, { context, rng, now });
             Object.assign(user, r.userUpdates);
+            if (action === 'item_complete') user.total_items_completed = (user.total_items_completed || 0) + 1;
             if (d >= 10) {
                 sum += r.finalXP;
                 n++;

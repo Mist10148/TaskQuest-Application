@@ -198,7 +198,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
             if (streak >= 3) {
                 const stacks = Math.min(CLASS_RULES.ASSASSIN.MAX_STACKS, prevStacks + 1);
                 userUpdates.assassin_stacks = stacks;
-                const bonusXP = Math.floor((baseXP * 5 * stacks) / 100);
+                const bonusXP = Math.floor((baseXP * CLASS_RULES.ASSASSIN.STACK_PERCENT * stacks) / 100);
                 finalXP = baseXP + bonusXP;
                 bonusInfo = { type: 'ASSASSIN', details: `🗡️ Stack ${stacks}/10 +${bonusXP}`, classBonus: bonusXP };
             } else {
@@ -264,7 +264,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const cap = tankStackCap(level, skills);
             const stacks = Math.min(cap, (Number(user.tank_stacks) || 0) + (lvl('tank_bulwark') ? CLASS_RULES.TANK.BULWARK_STACKS : 1));
             userUpdates.tank_stacks = stacks;
-            const total = Math.floor((baseXP * stacks * 4) / 100) + Math.floor(stacks / 2);
+            const total = Math.floor((baseXP * stacks * CLASS_RULES.TANK.STACK_PERCENT) / 100) + Math.floor(stacks / 2);
             finalXP = baseXP + total;
             bonusInfo = { type: 'TANK', details: `🛡️ Shield x${stacks} +${total}`, classBonus: total };
             break;
@@ -298,7 +298,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const a = CLASS_RULES.ARTISAN;
             const cap = a.MAX_PROGRESS + lvl('artisan_blueprint') * a.BLUEPRINT_CAP;
             const progress = Math.min(cap, Math.max(0, Number(user.artisan_progress) || 0) + (lvl('artisan_assembly') ? a.ASSEMBLY_STEP : 1));
-            let bonus = progress * (a.XP_PER_PROGRESS + lvl('artisan_toolkit') * a.TOOLKIT_XP_PER_PROGRESS);
+            let bonus = Math.floor(progress * (a.XP_PER_PROGRESS + lvl('artisan_toolkit') * a.TOOLKIT_XP_PER_PROGRESS));
             const cleared = context.action === 'item_complete' && context.listCleared === true;
             if (cleared) {
                 const clear = progress * a.CLEAR_XP_PER_PROGRESS;
@@ -342,8 +342,11 @@ function calculateClassXP(user, baseXP, opts = {}) {
         case 'NECROMANCER': {
             const n = CLASS_RULES.NECROMANCER;
             const revive = context.action === 'item_complete' && Number(context.overdueDays) > 0;
+            // Every Nth task completed binds a soul on its own, so the class works without a backlog.
+            const done = Number(user.total_items_completed) || 0;
+            const harvest = context.action === 'item_complete' && done > 0 && done % n.HARVEST_EVERY === 0;
             const cap = n.MAX_SOULS + (lvl('necro_jar') ? n.JAR_SOULS : 0);
-            const souls = Math.min(cap, Math.max(0, Number(user.necro_souls) || 0) + (revive ? 1 : 0));
+            const souls = Math.min(cap, Math.max(0, Number(user.necro_souls) || 0) + (revive ? 1 : 0) + (harvest ? 1 : 0));
             userUpdates.necro_souls = souls;
             const soulBonus = Math.floor((baseXP * souls * (n.SOUL_PERCENT + lvl('necro_siphon') * n.SIPHON_PERCENT)) / 100);
             let reviveBonus = 0;

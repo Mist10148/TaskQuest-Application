@@ -58,7 +58,7 @@ At a level that is not a multiple of 5 the full tree gives 86 and 93 instead of 
 
 ## Assassin (400 XP)
 
-**Rewards:** each action extends a streak; from the 3rd it adds a stack (max 10) worth +5% each. **Suits:** people who finish tasks in bursts several times a day. **Pitfalls:** after more than 36 hours without a rewarded action (48 with Night Owl) the streak and stacks reset, and a plain 5-per-day routine tops out at +50%. The big numbers come from Execute (+100% at 10 stacks) and critical hits in the full tree.
+**Rewards:** each action extends a streak; from the 3rd it adds a stack (max 10) worth +8% each. **Suits:** people who finish tasks in bursts several times a day. **Pitfalls:** after more than 48 hours without a rewarded action (72 with Night Owl) the streak and stacks reset, and a plain 5-per-day routine tops out at +80%. The big numbers come from Execute (+100% at 10 stacks) and critical hits in the full tree.
 
 | Build | Skills (in order) | Skill cost | Average XP for a plain task, level 5 / 15 / 30 |
 |---|---|---|---|

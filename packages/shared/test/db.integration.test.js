@@ -873,13 +873,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const A = '100000000000000201';
         await db.users.ensureUser(A);
         await db.query(
-            "UPDATE users SET player_class = 'ASSASSIN', assassin_streak = 6, assassin_stacks = 7, assassin_last_at = NOW() - INTERVAL 40 HOUR WHERE discord_id = ?",
+            "UPDATE users SET player_class = 'ASSASSIN', assassin_streak = 6, assassin_stacks = 7, assassin_last_at = NOW() - INTERVAL 50 HOUR WHERE discord_id = ?",
             [A]
         );
         const { list } = await db.tasks.createList(A, { name: 'Decay' });
         const row = async () => (await db.query('SELECT assassin_streak, assassin_stacks, assassin_last_at FROM users WHERE discord_id = ?', [A]))[0];
         const after = await row();
-        assert.equal(after.assassin_streak, 1, 'the 40h-old streak restarted with this action');
+        assert.equal(after.assassin_streak, 1, 'the 50h-old streak restarted with this action');
         assert.equal(after.assassin_stacks, 0);
         assert.ok(Date.now() - new Date(after.assassin_last_at).getTime() < 60_000);
         await db.tasks.addItem(A, list.id, { name: 'Another' });
@@ -1003,8 +1003,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.setItemCompleted(R, ids[1]);
         const last = await db.tasks.setItemCompleted(R, ids[2]);
         assert.equal(last.xp.bonusInfo.type, 'ARTISAN_CLEAR');
-        // list create + 3 adds + 3 completions = 7 progress: 7 * 2 + 7 * 8
-        assert.equal(last.xp.bonusInfo.classBonus, 14 + 56);
+        // list create + 3 adds + 3 completions = 7 progress: 7 * 2 + 7 * 6
+        assert.equal(last.xp.bonusInfo.classBonus, 14 + 42);
         u = await db.users.getUser(R);
         assert.equal(Number(u.artisan_progress), 3, 'a finished project keeps half of its progress');
 
@@ -1049,7 +1049,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const make = async (name, due_date) => ageDue((await db.tasks.addItem(G, list.id, { name, due_date })).item.id);
         const early = await db.tasks.setItemCompleted(G, await make('early', day(3)));
         assert.equal(early.xp.bonusInfo.type, 'RANGER_EARLY');
-        assert.equal(early.xp.bonusInfo.classBonus, 3 + 6, '3 days early on a 10 XP task');
+        assert.equal(early.xp.bonusInfo.classBonus, 3 + 9, '3 days early on a 10 XP task');
         const today = await db.tasks.setItemCompleted(G, await make('today', day(0)));
         assert.equal(today.xp.bonusInfo.type, 'RANGER_DUE');
         assert.equal(today.xp.bonusInfo.classBonus, 2);
@@ -1114,7 +1114,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const vow = await db.tasks.setItemCompleted(P, hard);
         assert.equal(vow.xp.bonusInfo.type, 'PALADIN_VOW');
         assert.equal(vow.xp.bonusInfo.classBonus, 20);
-        assert.equal((await db.tasks.setItemCompleted(P, easy)).xp.bonusInfo.classBonus, 5);
+        assert.equal((await db.tasks.setItemCompleted(P, easy)).xp.bonusInfo.classBonus, 8);
 
         // only the first 3 HIGH completions of the day count as HIGH: the 4th pays like any other task
         const more = [];

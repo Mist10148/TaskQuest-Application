@@ -38,7 +38,7 @@ const CLASSES = {
         name: 'Assassin',
         emoji: '🗡️',
         cost: 400,
-        description: 'From the 3rd consecutive action, gain one stack per action (max 10). Each stack adds +5% XP. Stacks reset when you change class or after 36 hours without acting.',
+        description: 'From the 3rd consecutive action, gain one stack per action (max 10). Each stack adds +7% XP. Stacks reset when you change class or after 48 hours without acting.',
         playstyle: 'Rewards long, uninterrupted streaks of activity.'
     },
     WIZARD: {
@@ -59,7 +59,7 @@ const CLASSES = {
         name: 'Tank',
         emoji: '🛡️',
         cost: 500,
-        description: 'Every action adds a shield stack (cap = min(15, 3 + level ÷ 3), plus Absorb). Each stack adds +4% XP plus +1 XP per two stacks.',
+        description: 'Every action adds a shield stack (cap = min(15, 5 + level ÷ 3), plus Absorb). Each stack adds +6% XP plus +1 XP per two stacks.',
         playstyle: 'Strong early, steady momentum.'
     },
     MONK: {
@@ -73,28 +73,28 @@ const CLASSES = {
         name: 'Artisan',
         emoji: '🛠️',
         cost: 650,
-        description: 'Project: every action adds 1 progress (max 10) and pays +2 XP per progress. Finishing the last open task of a list that has at least 3 tasks completes the project: +8 XP per progress, and half of the progress is kept.',
+        description: 'Project: every action adds 1 progress (max 10) and pays +2 XP per progress. Finishing the last open task of a list that has at least 3 tasks completes the project: +6 XP per progress, and half of the progress is kept.',
         playstyle: 'Rewards steady work and finishing whole lists.'
     },
     RANGER: {
         name: 'Ranger',
         emoji: '🧭',
         cost: 600,
-        description: 'Deadline Hunter: finishing a task with a due date early pays 10% of the base XP plus 2 XP per day early (up to 7 days); due today pays 25% of the base; overdue pays nothing. Every other action gives +3 XP.',
+        description: 'Deadline Hunter: finishing a task with a due date early pays 10% of the base XP plus 2 XP per day early (up to 7 days); due today pays 25% of the base; overdue pays nothing. Every other action gives +5 XP.',
         playstyle: 'Rewards planning ahead and finishing before the deadline.'
     },
     NECROMANCER: {
         name: 'Necromancer',
         emoji: '💀',
         cost: 600,
-        description: 'Revive: completing an overdue task pays +150% of the base XP plus 3 XP per day overdue (max 30) and binds a soul (max 5). Every soul adds +5% of the base XP to every action.',
+        description: 'Revive: completing an overdue task pays +150% of the base XP plus 3 XP per day overdue (max 30) and binds a soul (max 5). Every 10th task you complete also binds a soul, and every soul adds +8% of the base XP to every action.',
         playstyle: 'Turns neglected tasks into power.'
     },
     PALADIN: {
         name: 'Paladin',
         emoji: '⚜️',
-        cost: 750,
-        description: 'Vow: completing a HIGH priority task pays +100% of the base XP plus 10; every other action gives +5 XP. Your daily streak always has the Streak Shield window (one missed day forgiven) for free.',
+        cost: 600,
+        description: 'Vow: completing a HIGH priority task pays +100% of the base XP plus 10; every other action gives +8 XP. Your daily streak always has the Streak Shield window (one missed day forgiven) for free.',
         playstyle: 'Rewards taking on the hard tasks, and forgives a missed day.'
     }
 };
@@ -161,7 +161,7 @@ const SKILL_TREES = {
             assassin_critical: { name: 'Critical Hit', emoji: '🎯', description: '+10% chance per level to crit for +50% XP', maxLevel: 2, cost: 130, requires: 'assassin_swift' },
             assassin_shadow: { name: 'Shadow Step', emoji: '🌑', description: 'Critical hits grant +100% XP instead of +50%', maxLevel: 1, cost: 180, requires: 'assassin_critical' },
             assassin_execute: { name: 'Execute', emoji: '☠️', description: '+100% XP while at 10/10 Assassin stacks', maxLevel: 1, cost: 280, requires: 'assassin_shadow' },
-            assassin_nightowl: { name: 'Night Owl', emoji: '🌙', description: 'Your Assassin streak survives 48 hours of inactivity instead of 36 (Assassin)', maxLevel: 1, cost: 200, requires: 'assassin_execute' },
+            assassin_nightowl: { name: 'Night Owl', emoji: '🌙', description: 'Your Assassin streak survives 72 hours of inactivity instead of 48 (Assassin)', maxLevel: 1, cost: 200, requires: 'assassin_execute' },
             assassin_bleed: { name: 'Bleed', emoji: '🩸', description: 'After a critical hit your next 3 actions get +20% XP', maxLevel: 1, cost: 240, requires: 'assassin_nightowl' }
         }
     },
@@ -196,7 +196,7 @@ const SKILL_TREES = {
         emoji: '🛡️',
         description: 'Slow but unstoppable momentum',
         skills: {
-            tank_fortify: { name: 'Fortify', emoji: '🧱', description: '+5 flat XP per action per level', maxLevel: 3, cost: 95, requires: null },
+            tank_fortify: { name: 'Fortify', emoji: '🧱', description: '+5 flat XP per action per level', maxLevel: 3, cost: 70, requires: null },
             tank_absorb: { name: 'Absorb', emoji: '💪', description: '+2 Tank max shield stacks per level', maxLevel: 2, cost: 145, requires: 'tank_fortify' },
             tank_revenge: { name: 'Revenge', emoji: '⚡', description: '+10% XP per level while at max shield stacks', maxLevel: 2, cost: 200, requires: 'tank_absorb' },
             tank_unstoppable: { name: 'Unstoppable', emoji: '🚀', description: 'Your daily streak never resets; a missed day only pauses it', maxLevel: 1, cost: 320, requires: 'tank_revenge' },
@@ -220,7 +220,7 @@ const SKILL_TREES = {
         emoji: '🛠️',
         description: 'Craft projects and finish lists',
         skills: {
-            artisan_toolkit: { name: 'Toolkit', emoji: '🔧', description: '+1 XP per progress on every action, per level (Artisan)', maxLevel: 3, cost: 130, requires: null },
+            artisan_toolkit: { name: 'Toolkit', emoji: '🔧', description: '+0.5 XP per progress on every action, per level (Artisan)', maxLevel: 3, cost: 130, requires: null },
             artisan_blueprint: { name: 'Blueprint', emoji: '📐', description: 'Maximum progress +3 per level (10 → 16) (Artisan)', maxLevel: 2, cost: 190, requires: 'artisan_toolkit' },
             artisan_assembly: { name: 'Assembly Line', emoji: '🏭', description: 'Each action adds 2 progress instead of 1 (Artisan)', maxLevel: 1, cost: 280, requires: 'artisan_blueprint' },
             artisan_masterwork: { name: 'Masterwork', emoji: '🏆', description: 'Completing a project pays +50% more (Artisan)', maxLevel: 1, cost: 360, requires: 'artisan_assembly' }
@@ -425,14 +425,14 @@ const STREAK_FREEZE_CACHE = { COST: 120, MAX: 5 };
 const CLASS_RULES = {
     HERO: { FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15, CHAMPION_MULTIPLIER: 1.5, LEGEND_PERCENT: 15 },
     GAMBLER: { BONUS_BASE_MULTIPLE: 2, BONUS_FLAT: 40, LOSS_CHANCE: 0.2, MIN_LOSS_CHANCE: 0.05, INSURANCE_FLOOR: 0.6, HOT_HAND_STREAK: 3 },
-    ASSASSIN: { DECAY_HOURS: 36, NIGHT_OWL_DECAY_HOURS: 48, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
+    ASSASSIN: { DECAY_HOURS: 48, NIGHT_OWL_DECAY_HOURS: 72, STACK_PERCENT: 8, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
     WIZARD: { WISDOM_PER_LEVEL: 2, OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
     ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97, STREAK_PERCENT: 6, HIT_FLAT: 2, HEADSHOT_BASE_MULTIPLE: 1.5, HEADSHOT_PER_STREAK: 2, PERFECT_CHANCE: 0.03, PERFECT_BASE_MULTIPLE: 3, PERFECT_PER_STREAK: 6 },
-    TANK: { CAP_MAX: 15, CAP_BASE: 3, CAP_LEVELS_PER_STACK: 3, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
-    PALADIN: { HIGH_FLAT: 10, OTHER_FLAT: 5, AURA_FLAT: 2, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
-    NECROMANCER: { MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 5, SIPHON_PERCENT: 2, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
-    RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 2, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 3, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
-    ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 8, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
+    TANK: { CAP_MAX: 15, CAP_BASE: 5, CAP_LEVELS_PER_STACK: 3, STACK_PERCENT: 7, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    PALADIN: { HIGH_FLAT: 10, OTHER_FLAT: 8, AURA_FLAT: 3, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
+    NECROMANCER: { MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 8, SIPHON_PERCENT: 2, HARVEST_EVERY: 10, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
+    RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 3, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 5, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
+    ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 6, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 0.5, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
     MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 }
 };
 

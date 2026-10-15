@@ -43,14 +43,14 @@ test('class mechanics', () => {
 
     const assassin = shared.calculateClassXP(user({ player_class: 'ASSASSIN', assassin_streak: 2, assassin_stacks: 9 }), 100);
     assert.equal(assassin.userUpdates.assassin_stacks, 10);
-    assert.equal(assassin.finalXP, 150);
+    assert.equal(assassin.finalXP, 180);
 
     const wizard = shared.calculateClassXP(user({ player_class: 'WIZARD', player_level: 4, wizard_counter: 4 }), base);
     assert.equal(wizard.finalXP, 10 + 4 * 2 * 2, 'burst on 5th action');
     assert.equal(wizard.userUpdates.wizard_counter, 0);
 
     const tank = shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: 99 }), 100);
-    assert.equal(tank.userUpdates.tank_stacks, 13, 'stack cap is min(15, 3 + level / 3)');
+    assert.equal(tank.userUpdates.tank_stacks, 15, 'stack cap is min(15, 5 + level / 3)');
 
     const miss = shared.calculateClassXP(user({ player_class: 'ARCHER', archer_streak: 5 }), base, { rng: seq(0.99) });
     assert.equal(miss.userUpdates.archer_streak, 3);
@@ -301,25 +301,24 @@ test('Hero flat bonus is min(25, base x 3)', () => {
     }
 });
 
-test('Tank stack cap is min(15, 3 + floor(level / 3)) + 2 per Absorb', () => {
+test('Tank stack cap is min(15, 5 + floor(level / 3)) + 2 per Absorb', () => {
     // [level, absorb levels, expected cap]
-    const cases = [[1, 0, 3], [3, 0, 4], [8, 0, 5], [30, 0, 13], [36, 0, 15], [90, 0, 15], [1, 1, 5], [1, 2, 7], [12, 2, 11], [90, 2, 19]];
+    const cases = [[1, 0, 5], [3, 0, 6], [8, 0, 7], [18, 0, 11], [30, 0, 15], [90, 0, 15], [1, 1, 7], [1, 2, 9], [12, 2, 13], [90, 2, 19]];
     for (const [level, absorb, cap] of cases) {
         const skills = absorb ? [{ skill_id: 'tank_absorb', skill_level: absorb }] : [];
-        // level 30 gives 3 + 10 = 13 (the 15 ceiling is only hit from level 36)
-        assert.equal(shared.tankStackCap(level, skills), level === 30 ? 13 : cap, `level ${level} absorb ${absorb}`);
+        assert.equal(shared.tankStackCap(level, skills), cap, `level ${level} absorb ${absorb}`);
         const r = shared.calculateClassXP(user({ player_class: 'TANK', player_level: level, tank_stacks: 99 }), 100, { skills });
         assert.equal(r.userUpdates.tank_stacks, shared.tankStackCap(level, skills), 'stacks are clamped to the cap');
     }
 });
 
-test('Assassin streak and stacks decay after 36 hours idle and every action stamps assassin_last_at', () => {
+test('Assassin streak and stacks decay after 48 hours idle and every action stamps assassin_last_at', () => {
     const base = { player_class: 'ASSASSIN', assassin_streak: 6, assassin_stacks: 7 };
     // [label, last action, expected streak, expected stacks, expected type]
     const cases = [
-        ['inside the window', hoursAgo(35), 7, 8, 'ASSASSIN'],
-        ['exactly 36h is still alive', hoursAgo(36), 7, 8, 'ASSASSIN'],
-        ['past the window', hoursAgo(37), 1, 0, 'ASSASSIN_BUILDING'],
+        ['inside the window', hoursAgo(47), 7, 8, 'ASSASSIN'],
+        ['exactly 48h is still alive', hoursAgo(48), 7, 8, 'ASSASSIN'],
+        ['past the window', hoursAgo(49), 1, 0, 'ASSASSIN_BUILDING'],
         ['never acted before', null, 7, 8, 'ASSASSIN']
     ];
     for (const [label, last, streak, stacks, type] of cases) {
@@ -330,7 +329,7 @@ test('Assassin streak and stacks decay after 36 hours idle and every action stam
         assert.equal(r.userUpdates.assassin_last_at.getTime(), NOW, label);
     }
     // A decayed streak restarts at the Swift Strike boost, not at the old value.
-    const swift = shared.calculateClassXP(user({ ...base, assassin_last_at: hoursAgo(40) }), 100, {
+    const swift = shared.calculateClassXP(user({ ...base, assassin_last_at: hoursAgo(50) }), 100, {
         now: NOW,
         skills: [{ skill_id: 'assassin_swift', skill_level: 2 }]
     });
@@ -448,10 +447,10 @@ test('Gambler Hot Hand: three lucky rolls in a row guard the next one', () => {
     assert.equal(roll(2).userUpdates.gambler_streak, 0);
 });
 
-test('Assassin Night Owl: decay window is 48h', () => {
+test('Assassin Night Owl: decay window is 72h', () => {
     const base = { player_class: 'ASSASSIN', assassin_streak: 5, assassin_stacks: 5 };
     // [hours idle, skills, expected streak after the action]
-    const cases = [[40, [], 1], [40, [sk('assassin_nightowl')], 6], [48, [sk('assassin_nightowl')], 6], [49, [sk('assassin_nightowl')], 1]];
+    const cases = [[60, [], 1], [60, [sk('assassin_nightowl')], 6], [72, [sk('assassin_nightowl')], 6], [73, [sk('assassin_nightowl')], 1]];
     for (const [hours, skills, streak] of cases) {
         const r = shared.calculateClassXP(user({ ...base, assassin_last_at: hoursAgo(hours) }), 100, { now: NOW, skills });
         assert.equal(r.userUpdates.assassin_streak, streak, `${hours}h`);
@@ -519,7 +518,7 @@ test('Tank Bulwark (+2 stacks per action) and Anchor (+8 XP on recurring tasks)'
     const tank = (stacks, skills = []) => shared.calculateClassXP(user({ player_class: 'TANK', player_level: 30, tank_stacks: stacks }), 100, { skills });
     assert.equal(tank(0).userUpdates.tank_stacks, 1);
     assert.equal(tank(0, [sk('tank_bulwark')]).userUpdates.tank_stacks, 2);
-    assert.equal(tank(12, [sk('tank_bulwark')]).userUpdates.tank_stacks, 13, 'still clamped to the cap (13 at level 30)');
+    assert.equal(tank(14, [sk('tank_bulwark')]).userUpdates.tank_stacks, 15, 'still clamped to the cap (15 at level 30)');
 
     const cases = [
         [{ action: 'item_complete', recurring: true }, 18],
@@ -570,7 +569,7 @@ test('Monk tree: four skills in a chain, each with an implemented effect', () =>
 
 // ─── Artisan ─────────────────────────────────────────────────────────────────
 
-test('Artisan Project: +1 progress and +2 XP per progress per action; a cleared list pays +8 per progress and keeps half', () => {
+test('Artisan Project: +1 progress and +2 XP per progress per action; a cleared list pays +6 per progress and keeps half', () => {
     const artisan = (progress) => user({ player_class: 'ARTISAN', artisan_progress: progress });
     const done = { action: 'item_complete', listCleared: true };
     const plain = { action: 'item_complete', listCleared: false };
@@ -579,15 +578,15 @@ test('Artisan Project: +1 progress and +2 XP per progress per action; a cleared 
         ['first action', 0, plain, [], 10, 1, 2],
         ['mid project', 4, plain, [], 10, 5, 10],
         ['capped at 10', 10, plain, [], 10, 10, 20],
-        ['list cleared pays 8 per progress and keeps half', 4, done, [], 10, 2, 10 + 40],
+        ['list cleared pays 6 per progress and keeps half', 4, done, [], 10, 2, 10 + 30],
         ['the flag only counts on a completion', 4, { action: 'item_add', listCleared: true }, [], 10, 5, 10],
-        ['Toolkit adds 1 per progress per level', 4, plain, [sk('artisan_toolkit', 2)], 10, 5, 5 * 4],
+        ['Toolkit adds 0.5 per progress per level', 4, plain, [sk('artisan_toolkit', 2)], 10, 5, 5 * 3],
         ['Blueprint raises the cap by 3 per level', 10, plain, [sk('artisan_blueprint', 2)], 10, 11, 22],
         ['Blueprint cap at 16', 16, plain, [sk('artisan_blueprint', 2)], 10, 16, 32],
         ['Assembly Line adds 2 progress per action', 4, plain, [sk('artisan_assembly')], 10, 6, 12],
         ['Assembly Line stops at the cap', 9, plain, [sk('artisan_assembly')], 10, 10, 20],
-        ['Masterwork pays 50% more on a clear', 4, done, [sk('artisan_masterwork')], 10, 2, 10 + 60],
-        ['clear after Assembly + Masterwork', 5, done, [sk('artisan_assembly'), sk('artisan_masterwork')], 10, 3, 14 + 84]
+        ['Masterwork pays 50% more on a clear', 4, done, [sk('artisan_masterwork')], 10, 2, 10 + 45],
+        ['clear after Assembly + Masterwork', 5, done, [sk('artisan_assembly'), sk('artisan_masterwork')], 10, 3, 14 + 63]
     ];
     for (const [label, progress, context, skills, base, expectedProgress, expectedBonus] of cases) {
         const r = shared.calculateClassXP(artisan(progress), base, { skills, context });
@@ -612,23 +611,23 @@ test('Ranger Deadline Hunter: early, on the day, overdue and non-deadline action
     const complete = (dueDate) => ({ action: 'item_complete', today: '2030-01-10', dueDate });
     // [label, context, skills, base, expected type, expected bonus]
     const cases = [
-        ['1 day early', complete('2030-01-11'), [], 10, 'RANGER_EARLY', 1 + 2],
-        ['3 days early', complete('2030-01-13'), [], 10, 'RANGER_EARLY', 3 + 6],
-        ['7 days early', complete('2030-01-17'), [], 10, 'RANGER_EARLY', 7 + 14],
-        ['capped at 7 days early', complete('2030-03-01'), [], 10, 'RANGER_EARLY', 7 + 14],
-        ['percentage scales with base', complete('2030-01-12'), [], 100, 'RANGER_EARLY', 20 + 4],
+        ['1 day early', complete('2030-01-11'), [], 10, 'RANGER_EARLY', 1 + 3],
+        ['3 days early', complete('2030-01-13'), [], 10, 'RANGER_EARLY', 3 + 9],
+        ['7 days early', complete('2030-01-17'), [], 10, 'RANGER_EARLY', 7 + 21],
+        ['capped at 7 days early', complete('2030-03-01'), [], 10, 'RANGER_EARLY', 7 + 21],
+        ['percentage scales with base', complete('2030-01-12'), [], 100, 'RANGER_EARLY', 20 + 6],
         ['due today pays 25% of base', complete('2030-01-10'), [], 100, 'RANGER_DUE', 25],
         ['due today rounds down', complete('2030-01-10'), [], 10, 'RANGER_DUE', 2],
         ['overdue pays nothing', complete('2030-01-09'), [], 100, 'RANGER_LATE', 0],
-        ['no due date is a flat +3', { action: 'item_complete', today: '2030-01-10', dueDate: null }, [], 10, 'RANGER', 3],
-        ['other actions are a flat +3', { action: 'item_add', dueDate: '2030-01-13' }, [], 10, 'RANGER', 3],
-        ['Scout: +2 per early day per level', complete('2030-01-13'), [sk('ranger_scout', 2)], 10, 'RANGER_EARLY', 3 + 6 + 12],
-        ['Long Sight: cap 10 days', complete('2030-03-01'), [sk('ranger_longsight')], 10, 'RANGER_EARLY', 10 + 20],
+        ['no due date is a flat +5', { action: 'item_complete', today: '2030-01-10', dueDate: null }, [], 10, 'RANGER', 5],
+        ['other actions are a flat +5', { action: 'item_add', dueDate: '2030-01-13' }, [], 10, 'RANGER', 5],
+        ['Scout: +2 per early day per level', complete('2030-01-13'), [sk('ranger_scout', 2)], 10, 'RANGER_EARLY', 3 + 9 + 12],
+        ['Long Sight: cap 10 days', complete('2030-03-01'), [sk('ranger_longsight')], 10, 'RANGER_EARLY', 10 + 30],
         ['Bullseye: +10 on the day', complete('2030-01-10'), [sk('ranger_bullseye')], 100, 'RANGER_DUE', 35],
-        ['Bullseye does not touch early completions', complete('2030-01-11'), [sk('ranger_bullseye')], 10, 'RANGER_EARLY', 3],
+        ['Bullseye does not touch early completions', complete('2030-01-11'), [sk('ranger_bullseye')], 10, 'RANGER_EARLY', 4],
         ['Second Wind: overdue pays half of due-today', complete('2030-01-09'), [sk('ranger_secondwind')], 100, 'RANGER_LATE', 12],
         ['Second Wind includes Bullseye in the half', complete('2030-01-09'), [sk('ranger_secondwind'), sk('ranger_bullseye')], 100, 'RANGER_LATE', 17],
-        ['Second Wind does nothing early', complete('2030-01-11'), [sk('ranger_secondwind')], 10, 'RANGER_EARLY', 3]
+        ['Second Wind does nothing early', complete('2030-01-11'), [sk('ranger_secondwind')], 10, 'RANGER_EARLY', 4]
     ];
     for (const [label, context, skills, base, type, bonus] of cases) {
         const r = shared.calculateClassXP(ranger, base, { context, skills });
@@ -639,7 +638,7 @@ test('Ranger Deadline Hunter: early, on the day, overdue and non-deadline action
     // with no context.today the clock decides
     const viaNow = shared.calculateClassXP(ranger, 10, { now: NOW, context: { action: 'item_complete', dueDate: '2030-01-12' } });
     assert.equal(viaNow.bonusInfo.type, 'RANGER_EARLY');
-    assert.equal(viaNow.bonusInfo.classBonus, 2 + 4);
+    assert.equal(viaNow.bonusInfo.classBonus, 2 + 6);
 });
 
 test('Ranger tree: four chained skills and no counter column needed', () => {
@@ -660,18 +659,18 @@ test('Necromancer Revive: overdue completions pay and bind souls; souls boost ev
     const cases = [
         ['not overdue, no souls', 0, plain, [], 10, 0, 0],
         ['revive 1 day overdue', 0, revive(1), [], 10, 1, 15 + 3],
-        ['revive 3 days overdue, 2nd soul adds 5% of base', 1, revive(3), [], 100, 2, 150 + 9 + 10],
+        ['revive 3 days overdue, 2nd soul adds 8% of base', 1, revive(3), [], 100, 2, 150 + 9 + 16],
         ['overdue days are capped at 30 XP', 0, revive(40), [], 10, 1, 15 + 30],
-        ['souls are capped at 5', 5, revive(2), [], 100, 5, 150 + 6 + 25],
-        ['souls boost a normal action too', 3, plain, [], 100, 3, 15],
-        ['souls boost non-completions', 4, { action: 'item_add' }, [], 100, 4, 20],
+        ['souls are capped at 5', 5, revive(2), [], 100, 5, 150 + 6 + 40],
+        ['souls boost a normal action too', 3, plain, [], 100, 3, 24],
+        ['souls boost non-completions', 4, { action: 'item_add' }, [], 100, 4, 32],
         ['small base rounds the soul bonus down', 2, plain, [], 10, 2, 1],
-        ['Siphon: +2% per soul per level', 3, plain, [sk('necro_siphon', 2)], 100, 3, 27],
-        ['Soul Jar: cap 8', 5, revive(2), [sk('necro_jar')], 100, 6, 150 + 6 + 30],
-        ['Soul Jar: still capped at 8', 8, revive(2), [sk('necro_jar')], 100, 8, 150 + 6 + 40],
-        ['Dark Ritual: revive +50%', 0, revive(2), [sk('necro_ritual')], 100, 1, Math.floor(156 * 1.5) + 5],
-        ['Lichdom: +3 per soul on a revive', 2, revive(2), [sk('necro_lich')], 100, 3, 156 + 15 + 9],
-        ['Lichdom does nothing without a revive', 2, plain, [sk('necro_lich')], 100, 2, 10]
+        ['Siphon: +2% per soul per level', 3, plain, [sk('necro_siphon', 2)], 100, 3, 36],
+        ['Soul Jar: cap 8', 5, revive(2), [sk('necro_jar')], 100, 6, 150 + 6 + 48],
+        ['Soul Jar: still capped at 8', 8, revive(2), [sk('necro_jar')], 100, 8, 150 + 6 + 64],
+        ['Dark Ritual: revive +50%', 0, revive(2), [sk('necro_ritual')], 100, 1, Math.floor(156 * 1.5) + 8],
+        ['Lichdom: +3 per soul on a revive', 2, revive(2), [sk('necro_lich')], 100, 3, 156 + 24 + 9],
+        ['Lichdom does nothing without a revive', 2, plain, [sk('necro_lich')], 100, 2, 16]
     ];
     for (const [label, souls, context, skills, base, expectedSouls, expectedBonus] of cases) {
         const r = shared.calculateClassXP(necro(souls), base, { context, skills });
@@ -679,6 +678,13 @@ test('Necromancer Revive: overdue completions pay and bind souls; souls boost ev
         assert.equal(r.bonusInfo.classBonus, expectedBonus, `${label}: bonus`);
         assert.equal(r.finalXP, base + expectedBonus, `${label}: final`);
     }
+    // every 10th completed task binds a soul without a backlog
+    const harvest = (done) => shared.calculateClassXP(user({ player_class: 'NECROMANCER', necro_souls: 0, total_items_completed: done }), 100, { context: plain });
+    assert.equal(harvest(10).userUpdates.necro_souls, 1);
+    assert.equal(harvest(9).userUpdates.necro_souls, 0);
+    assert.equal(harvest(20).userUpdates.necro_souls, 1);
+    const added = shared.calculateClassXP(user({ player_class: 'NECROMANCER', necro_souls: 0, total_items_completed: 10 }), 100, { context: { action: 'item_add' } });
+    assert.equal(added.userUpdates.necro_souls, 0, 'only completions harvest');
     assert.equal(shared.calculateClassXP(necro(0), 10, { context: revive(1) }).bonusInfo.type, 'NECROMANCER_REVIVE');
     assert.equal(shared.calculateClassXP(necro(0), 10, { context: plain }).bonusInfo.type, 'NECROMANCER');
 });
@@ -692,22 +698,22 @@ test('Necromancer tree: four chained skills', () => {
 
 // ─── Paladin ─────────────────────────────────────────────────────────────────
 
-test('Paladin Vow: HIGH priority completions pay base + 10, everything else +5', () => {
+test('Paladin Vow: HIGH priority completions pay base + 10, everything else +8', () => {
     const paladin = user({ player_class: 'PALADIN' });
     const high = { action: 'item_complete', priority: 'HIGH' };
     // [label, context, skills, base, expected type, expected bonus]
     const cases = [
         ['HIGH completion', high, [], 10, 'PALADIN_VOW', 10 + 10],
         ['HIGH completion scales with base', high, [], 50, 'PALADIN_VOW', 60],
-        ['MEDIUM completion', { action: 'item_complete', priority: 'MEDIUM' }, [], 10, 'PALADIN', 5],
-        ['HIGH but not a completion', { action: 'item_add', priority: 'HIGH' }, [], 10, 'PALADIN', 5],
-        ['no context', undefined, [], 10, 'PALADIN', 5],
-        ['Holy Aura: +2 per level on everything', { action: 'item_add' }, [sk('paladin_aura', 3)], 10, 'PALADIN', 5 + 6],
-        ['Holy Aura on a Vow', high, [sk('paladin_aura', 2)], 10, 'PALADIN_VOW', 20 + 4],
+        ['MEDIUM completion', { action: 'item_complete', priority: 'MEDIUM' }, [], 10, 'PALADIN', 8],
+        ['HIGH but not a completion', { action: 'item_add', priority: 'HIGH' }, [], 10, 'PALADIN', 8],
+        ['no context', undefined, [], 10, 'PALADIN', 8],
+        ['Holy Aura: +3 per level on everything', { action: 'item_add' }, [sk('paladin_aura', 3)], 10, 'PALADIN', 8 + 9],
+        ['Holy Aura on a Vow', high, [sk('paladin_aura', 2)], 10, 'PALADIN_VOW', 20 + 6],
         ['Smite 1: Vow +25%', high, [sk('paladin_smite', 1)], 10, 'PALADIN_VOW', 25],
         ['Smite 2: Vow +50%', high, [sk('paladin_smite', 2)], 10, 'PALADIN_VOW', 30],
-        ['Smite does not touch the +5', { action: 'item_add' }, [sk('paladin_smite', 2)], 10, 'PALADIN', 5],
-        ['Smite then Aura (aura is flat)', high, [sk('paladin_smite', 2), sk('paladin_aura', 1)], 10, 'PALADIN_VOW', 32]
+        ['Smite does not touch the +8', { action: 'item_add' }, [sk('paladin_smite', 2)], 10, 'PALADIN', 8],
+        ['Smite then Aura (aura is flat)', high, [sk('paladin_smite', 2), sk('paladin_aura', 1)], 10, 'PALADIN_VOW', 33]
     ];
     for (const [label, context, skills, base, type, bonus] of cases) {
         const r = shared.calculateClassXP(paladin, base, { context, skills });
@@ -722,7 +728,7 @@ test('Paladin Crusade: +20% XP on HIGH completions (Paladin only)', () => {
     const crusade = [sk('paladin_crusade')];
     const run = (player_class, context) => shared.calculateFinalXP(user({ player_class }), crusade, 100, { rng: seq(0.99), context }).finalXP;
     assert.equal(run('PALADIN', high), Math.floor(210 * 1.2), 'base 100 + Vow 110, x1.2');
-    assert.equal(run('PALADIN', { action: 'item_complete', priority: 'LOW' }), Math.floor(105 * 1), 'not HIGH: no Crusade');
+    assert.equal(run('PALADIN', { action: 'item_complete', priority: 'LOW' }), 108, 'not HIGH: no Crusade');
     assert.equal(run('DEFAULT', high), 100, 'Crusade needs the Paladin equipped');
 });
 
@@ -756,7 +762,7 @@ test('Paladin tree: four chained skills', () => {
     const ids = Object.keys(shared.SKILL_TREES.PALADIN.skills);
     assert.deepEqual(ids, ['paladin_aura', 'paladin_smite', 'paladin_crusade', 'paladin_sanctuary']);
     assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'paladin_aura', 'paladin_smite', 'paladin_crusade']);
-    assert.equal(shared.CLASSES.PALADIN.cost, 750);
+    assert.equal(shared.CLASSES.PALADIN.cost, 600);
 });
 
 test('bonus XP sources: every task bonus is labelled, counted on the weekly board and capped', () => {

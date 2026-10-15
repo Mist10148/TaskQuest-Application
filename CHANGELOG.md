@@ -80,6 +80,13 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **Balance pass 2: the weak classes are lifted.**
+  - Tank: shield cap `min(15, 5 + level ÷ 3)` (was 3), +7% per stack (was +4%), Fortify costs 70 XP (was 95).
+  - Assassin: +8% per stack (was +5%), the streak survives 48 hours (was 36; Night Owl 72, was 48).
+  - Paladin: 600 XP (was 750), +8 on non-HIGH actions (was +5), Holy Aura +3 per level (was +2).
+  - Ranger: +5 on other actions (was +3) and +3 XP per day early (was +2).
+  - Necromancer: souls add +8% (was +5%) and every 10th completed task binds a soul, so the class works without a backlog.
+  - Artisan: Toolkit +0.5 per progress (was +1) and a clear pays +6 per progress (was +8, after the fix above).
 - **Balance pass 1: the strongest classes are reined in** (numbers re-derived with `scripts/balance-sim.js`; see [design/balance.md](docs/design/balance.md)).
   - Monk: 2% of the base per Rhythm day (was 3%), Steady Breath +0.5 per day (was +1), Inner Focus +15% per level (was +25%), Discipline +2 Rhythm (was +4). A full-tree Monk was about 12× the base, now about 6×.
   - Wizard: Wisdom is level × 2 (was × 5). A level-29 full tree was 31× the base, now about 14×.

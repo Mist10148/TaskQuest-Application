@@ -104,7 +104,7 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 | `last_game_at` | DATETIME(3) | Free-game cooldown |
 | `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
 | `assassin_streak`, `assassin_stacks`, `wizard_counter`, `archer_streak`, `tank_stacks`, `gambler_streak`, `monk_rhythm`, `artisan_progress`, `necro_souls` | INT | Class counters, reset when switching class (`CLASS_COUNTER_RESET` in `db/progression.js`) |
-| `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 36 h (48 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
+| `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 48 h (72 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
 | `monk_day` | DATE NULL | Last day (in the user's time zone) the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
 | `assassin_bleed` | INT | Actions left with the Bleed bonus after a crit. Not tied to a class, so it survives a class switch; cleared by a progress reset. |
 | `total_lists_created`, `total_items_added`, `total_items_completed` | INT | Monotonic counters for achievements |

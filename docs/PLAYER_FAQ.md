@@ -22,7 +22,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 **Is the streak tied to midnight?** Yes, to your own midnight (your time zone setting): the streak needs a claim on each calendar day. The 24-hour cooldown between two claims is still counted from your last claim.
 
-**Does the Monk's Rhythm or the Assassin's streak work the same way?** No, they are class counters: Rhythm counts consecutive days of yours on which you finished a rewarded action, and the Assassin's streak resets after 36 hours (48 with Night Owl) without one.
+**Does the Monk's Rhythm or the Assassin's streak work the same way?** No, they are class counters: Rhythm counts consecutive days of yours on which you finished a rewarded action, and the Assassin's streak resets after 48 hours (72 with Night Owl) without one.
 
 ## Turning XP off
 

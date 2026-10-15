@@ -296,13 +296,13 @@ Once per week of yours (Monday to Monday in your time zone) you can claim **+40 
 
 ## 5f. Prestige
 
-At **level 30** you can prestige (`POST /api/user/prestige` with `{"confirm":"PRESTIGE"}`, at most 10 times). It **resets** your balance, level (back to 1), class (back to Default), class ownership, skills, class counters and streak freezes. It **keeps** your achievements, quest claims, tasks, daily streak and spending history. Each prestige adds a permanent **+2% XP multiplier** (up to +20%) to class-modified XP and gives you a title:
+At **level 30** you can prestige (`POST /api/user/prestige` with `{"confirm":"PRESTIGE"}`, at most 10 times). It **resets** your balance, level (back to 1), class (back to Default), class ownership, skills, class counters and streak freezes. It **keeps** your achievements, quest claims, tasks, daily streak and spending history. Each prestige adds a permanent **+2% XP multiplier** (up to +20%) to class-modified XP, **+1 flat XP on every task completion** (up to +10) and gives you a title:
 
 | Prestiges | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Title | Veteran | Seasoned | Champion | Elite | Master | Grandmaster | Legend | Mythic | Ascendant | Eternal |
 
-Level comes from `lifetime_xp`, so prestige resets it; the never-reset `lifetime_xp_total` feeds the XP achievements and the lifetime leaderboard, so neither moves. The multiplier is added to your other multipliers, so on small amounts the extra XP rounds down (10 base XP stays 10 until about +5%).
+Level comes from `lifetime_xp`, so prestige resets it; the never-reset `lifetime_xp_total` feeds the XP achievements and the lifetime leaderboard, so neither moves. The multiplier is added to your other multipliers, so on small amounts the extra XP rounds down (10 base XP stays 10 until about +5%); the flat +1 per prestige is why a prestige is felt on a plain task too.
 
 ## 5g. Cosmetics (the shop)
 

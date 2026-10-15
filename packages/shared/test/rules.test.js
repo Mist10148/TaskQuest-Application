@@ -831,10 +831,15 @@ test('quest rotation: ISO week numbers pick one of four weekly quests', () => {
 test('prestige: +2% XP per prestige (max 10) in the final multiplier, and a title per step', () => {
     const base = (prestige) => shared.calculateFinalXP(user({ prestige }), [], 100, { context: { action: 'item_complete' }, rng: () => 0.99 }).finalXP;
     assert.equal(base(0), 100);
-    assert.equal(base(1), 102);
-    assert.equal(base(5), 110);
-    assert.equal(base(10), 120);
-    assert.equal(base(25), 120, 'capped at 10 prestiges');
+    assert.equal(base(1), 103, '+2% and +1 flat');
+    assert.equal(base(5), 115);
+    assert.equal(base(10), 130);
+    assert.equal(base(25), 130, 'capped at 10 prestiges');
+    // The percentage alone rounds away on a small reward; the flat part does not.
+    const small = (prestige, action) => shared.calculateFinalXP(user({ prestige }), [], 10, { context: { action }, rng: () => 0.99 }).finalXP;
+    assert.equal(small(1, 'item_complete'), 11);
+    assert.equal(small(10, 'item_complete'), 22);
+    assert.equal(small(10, 'item_add'), 12, 'only task completions get the flat part: this is just the 20%');
     assert.equal(shared.prestigeMultiplier({ prestige: 3 }), 0.06);
     assert.equal(shared.prestigeTitle(0), '');
     assert.equal(shared.prestigeTitle(1), 'Veteran');

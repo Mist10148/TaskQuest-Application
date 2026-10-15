@@ -35,6 +35,12 @@ function prestigeMultiplier(user) {
     return (n * PRESTIGE.BONUS_PERCENT) / 100;
 }
 
+/** Flat XP per task completion from prestige: the percentage alone rounds away on small amounts. */
+function prestigeFlat(user) {
+    const n = Math.min(PRESTIGE.MAX, Math.max(0, Number(user && user.prestige) || 0));
+    return n * PRESTIGE.FLAT_PER_PRESTIGE;
+}
+
 /** The title for a number of prestiges ('' for none). */
 function prestigeTitle(prestige) {
     const n = Math.min(PRESTIGE.MAX, Math.max(0, Math.trunc(Number(prestige)) || 0));
@@ -411,6 +417,7 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
         flat += lvl('archer_multishot') * 5;
         if (context.priority === 'HIGH') flat += bonuses.rallyXP;
         if (context.recurring) flat += bonuses.anchorXP;
+        flat += prestigeFlat(user);
     }
 
     // The epsilon keeps 100 * 1.15 (114.99999999999999 in floats) from losing a whole XP.
@@ -554,6 +561,7 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 
 module.exports = {
     prestigeMultiplier,
+    prestigeFlat,
     prestigeTitle,
     levelFromXP,
     levelProgress,

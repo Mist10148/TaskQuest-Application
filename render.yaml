@@ -5,6 +5,7 @@
 #
 #   taskquest-web  Express API + built React app on ONE origin (first-party cookies)
 #   taskquest-bot  Discord bot (long-lived gateway connection)
+#   taskquest-archive  weekly cron job that moves XP rows older than a year to the archive table
 #
 # After the first deploy:
 #   1. Set PUBLIC_URL to the web service URL (e.g. https://taskquest-web.onrender.com)
@@ -87,6 +88,23 @@ services:
         value: "false"          # set to "true" once taskquest-ai is running
       - key: AI_SERVICE_URL     # internal host of the private service, e.g. http://taskquest-ai:10000
         sync: false
+
+  # Weekly housekeeping: xp_transactions grows without bound, so rows older than a year are moved to xp_transactions_archive
+  # (finished game sessions are kept: archiving them lowers the games played and won counts). Cron jobs need a paid plan on Render.
+  # Check what it would do first with: npm run archive -- --days 365 --dry-run
+  - type: cron
+    name: taskquest-archive
+    runtime: node
+    plan: starter
+    schedule: "0 3 * * 0"       # Sundays 03:00 UTC
+    buildCommand: npm ci --omit=dev
+    startCommand: npm run archive -- --days 365
+    envVars:
+      - fromGroup: taskquest-database
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
 
   # Private AI service (Gemini + LangChain + LangGraph). Reachable only from the
   # other Render services, never from the internet. Needs a paid plan.

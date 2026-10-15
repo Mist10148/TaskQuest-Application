@@ -117,6 +117,13 @@ const CLASSES = {
         cost: 600,
         description: 'Habits: finishing a repeating task pays 6% of the base XP plus 2 XP per step of its habit streak (up to 10 steps). Every other action gives +3 XP.',
         playstyle: 'Rewards steady habits.'
+    },
+    CHRONOMANCER: {
+        name: 'Chronomancer',
+        emoji: '⏳',
+        cost: 650,
+        description: 'Flow: the first 3 tasks you complete within 30 minutes after finishing a focus session pay +100% of the base XP plus 5. Every other action gives +2 XP.',
+        playstyle: 'Rewards finishing tasks right after a focus session.'
     }
 };
 
@@ -326,6 +333,17 @@ const SKILL_TREES = {
             druid_seasons: { name: 'Seasons', emoji: '🍂', description: 'Weekly and monthly habits count their streak twice (Druid)', maxLevel: 1, cost: 260, requires: 'druid_bloom' },
             druid_grove: { name: 'Grove', emoji: '🌳', description: 'Every other action pays +3 XP more (Druid)', maxLevel: 1, cost: 300, requires: 'druid_seasons' }
         }
+    },
+    CHRONOMANCER: {
+        name: 'Chronomancer',
+        emoji: '⏳',
+        description: 'Focus and flow',
+        skills: {
+            chrono_hourglass: { name: 'Hourglass', emoji: '⌛', description: '+5 XP on tasks completed in the flow, per level (Chronomancer)', maxLevel: 3, cost: 110, requires: null },
+            chrono_dilation: { name: 'Time Dilation', emoji: '🕰️', description: 'The flow lasts 45 minutes after a focus session instead of 30 (Chronomancer)', maxLevel: 1, cost: 200, requires: 'chrono_hourglass' },
+            chrono_echo: { name: 'Echo', emoji: '🔔', description: 'The flow covers 5 tasks instead of 3 (Chronomancer)', maxLevel: 1, cost: 260, requires: 'chrono_dilation' },
+            chrono_surge: { name: 'Temporal Surge', emoji: '⚡', description: '+25% Chronomancer bonus when the task is also your first of the day (Chronomancer)', maxLevel: 1, cost: 300, requires: 'chrono_echo' }
+        }
     }
 };
 
@@ -504,7 +522,8 @@ const CLASS_RULES = {
     MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 },
     BARD: { WINDOW: 5, HARMONY_WINDOW: 7, PERCENT_PER_STEP: 4, FLAT_PER_STEP: 3, OTHER_FLAT: 2, ENCORE_PER_STEP: 1, CRESCENDO_PERCENT: 25 },
     ALCHEMIST: { STEP_FLAT: 2, BREW_PERCENT: 150, BREW_FLAT: 15, OTHER_FLAT: 2, CATALYST_FLAT: 5, ELIXIR_STEP: 2, TRANSMUTE_PERCENT: 50 },
-    DRUID: { STREAK_CAP: 10, BLOOM_CAP_EXTRA: 5, PERCENT_PER_STEP: 6, FLAT_PER_STEP: 2, OTHER_FLAT: 3, ROOTS_PER_STEP: 1, SEASONS_MULTIPLIER: 2, GROVE_FLAT: 3 }
+    DRUID: { STREAK_CAP: 10, BLOOM_CAP_EXTRA: 5, PERCENT_PER_STEP: 6, FLAT_PER_STEP: 2, OTHER_FLAT: 3, ROOTS_PER_STEP: 1, SEASONS_MULTIPLIER: 2, GROVE_FLAT: 3 },
+    CHRONOMANCER: { WINDOW_MINUTES: 30, DILATION_MINUTES: 45, WINDOW_COMPLETIONS: 3, ECHO_COMPLETIONS: 5, PERCENT: 100, FLAT: 5, OTHER_FLAT: 2, HOURGLASS_FLAT: 5, SURGE_PERCENT: 25 }
 };
 
 /**

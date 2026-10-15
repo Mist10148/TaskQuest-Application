@@ -31,7 +31,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P4.1 Bard
 - [x] P4.2 Alchemist
 - [x] P4.3 Druid
-- [ ] P4.4 Chronomancer
+- [x] P4.4 Chronomancer
 - [ ] P4.5 Warden
 
 ## P5 New XP sources

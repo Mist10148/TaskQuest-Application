@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun, Music, FlaskConical, Leaf } from "lucide-react";
+import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun, Music, FlaskConical, Leaf, Hourglass } from "lucide-react";
 
 export type PlayerClass = 
   | "DEFAULT" 
@@ -14,6 +14,7 @@ export type PlayerClass =
   | "RANGER"
   | "NECROMANCER"
   | "PALADIN"
+  | "CHRONOMANCER"
   | "DRUID"
   | "ALCHEMIST"
   | "BARD";
@@ -169,6 +170,15 @@ const classConfig: Record<PlayerClass, {
     bgClass: "bg-class-druid/10",
     borderClass: "border-class-druid",
     description: "Rewards steady habits",
+  },
+  CHRONOMANCER: {
+    name: "Chronomancer",
+    icon: Hourglass,
+    emoji: "⏳",
+    colorClass: "text-class-chronomancer",
+    bgClass: "bg-class-chronomancer/10",
+    borderClass: "border-class-chronomancer",
+    description: "Rewards finishing tasks after a focus session",
   },
 };
 

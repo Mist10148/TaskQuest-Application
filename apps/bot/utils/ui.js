@@ -31,7 +31,7 @@ const COLORS = {
     // Class Colors
     DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6, ASSASSIN: 0x2C3E50,
     WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C,
-    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1, DRUID: 0x7CB342, ALCHEMIST: 0x00B894, BARD: 0xE91E8C,
+    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1, CHRONOMANCER: 0x6C5CE7, DRUID: 0x7CB342, ALCHEMIST: 0x00B894, BARD: 0xE91E8C,
     
     // Skill Colors
     skill: 0x9B59B6, locked: 0x2C3E50, unlocked: 0x27AE60
@@ -976,7 +976,7 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     
     const rows = [];
     
-    // Jump straight to any class (15 classes fit one select menu, the limit is 25).
+    // Jump straight to any class (16 classes fit one select menu, the limit is 25).
     rows.push(classSelectMenu(CLASSES, user, classKey));
     
     // Navigation row: Previous / Class Count / Next

@@ -457,6 +457,23 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'CHRONOMANCER': {
+            const c = CLASS_RULES.CHRONOMANCER;
+            const focus = context.action === 'item_complete' ? context.afterFocus : null;
+            const minutes = lvl('chrono_dilation') ? c.DILATION_MINUTES : c.WINDOW_MINUTES;
+            const slots = lvl('chrono_echo') ? c.ECHO_COMPLETIONS : c.WINDOW_COMPLETIONS;
+            if (focus && focus.minutes >= 0 && focus.minutes <= minutes && focus.completions < slots) {
+                let bonus = Math.floor((baseXP * c.PERCENT) / 100) + c.FLAT + lvl('chrono_hourglass') * c.HOURGLASS_FLAT;
+                if (lvl('chrono_surge') && context.firstOfDay) bonus = Math.floor((bonus * (100 + c.SURGE_PERCENT)) / 100);
+                finalXP = baseXP + bonus;
+                bonusInfo = { type: 'CHRONOMANCER_FLOW', details: `⏳ In the flow ${focus.completions + 1}/${slots} +${bonus}`, classBonus: bonus };
+                break;
+            }
+            finalXP = baseXP + c.OTHER_FLAT;
+            bonusInfo = { type: 'CHRONOMANCER', details: `⏳ Chronomancer +${c.OTHER_FLAT}`, classBonus: c.OTHER_FLAT };
+            break;
+        }
+
         default:
             break;
     }

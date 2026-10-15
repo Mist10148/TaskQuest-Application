@@ -87,6 +87,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 🎵 **Bard** | 600 | **Variety.** Completing a task remembers its list; among your last 5 completions, every list beyond the first adds ⌊base × 4%⌋ + 3 XP (a medley of up to 4 steps). Other actions, and a medley of one list, pay +2. The counter is `bard_recent`. |
 | ⚗️ **Alchemist** | 650 | **Brew.** Completing a task adds its priority to the brew (`alchemist_mix`) and pays +2 XP per ingredient in it. Completing the third different priority finishes the brew: ⌊base × 150%⌋ + 15, and the brew starts over. Other actions pay +2. A task with no priority counts as MEDIUM. |
 | 🌿 **Druid** | 600 | **Habits.** Completing a repeating task pays ⌊base × 6%⌋ × steps + 2 per step of its habit streak (up to 10 steps; the streak is the one shown on the task and kept by [habit streaks](#5c-bonus-xp-sources)), at least +3. Every other action pays +3. |
+| ⏳ **Chronomancer** | 650 | **Flow.** The first 3 tasks you complete within 30 minutes after a [focus session](#5d-focus-sessions) finished (finished, not cancelled or expired) pay +100% of the base XP and 5 more. Every other action pays +2. The window comes from your last finished focus session; nothing is stored on your account. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
@@ -260,7 +261,16 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🍂 Seasons | 1 | 260 | Weekly and monthly habits count their streak twice *(class)* | Bloom |
 | 🌳 Grove | 1 | 300 | Every other action pays +3 XP more *(class)* | Seasons |
 
-There are 88 skills in 15 trees (Default plus the eleven classes).
+### ⏳ Chronomancer
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| ⌛ Hourglass | 3 | 110 | +5 XP on tasks completed in the flow, per level *(class)* | — |
+| 🕰️ Time Dilation | 1 | 200 | The flow lasts 45 minutes after a focus session instead of 30 *(class)* | Hourglass |
+| 🔔 Echo | 1 | 260 | The flow covers 5 tasks instead of 3 *(class)* | Time Dilation |
+| ⚡ Temporal Surge | 1 | 300 | +25% Chronomancer bonus when the task is also your first of the day *(class)* | Echo |
+
+There are 92 skills in 16 trees (Default plus the eleven classes).
 
 ## 5. Daily reward
 

@@ -14,7 +14,7 @@ const { calculateFinalXP, CLASSES, SKILL_TREES } = require('../packages/shared/s
 const PURCHASABLE = Object.keys(CLASSES).filter((k) => k !== 'DEFAULT');
 const MIXES = ['plain', 'high', 'early', 'overdue', 'list', 'variety', 'rotate', 'habit', 'focus', 'shared'];
 /** The mix each class is built for. */
-const FAVOURABLE = { DRUID: 'habit', ALCHEMIST: 'rotate', BARD: 'variety', HERO: 'high', ARCHER: 'high', PALADIN: 'high', RANGER: 'early', NECROMANCER: 'overdue', ARTISAN: 'list' };
+const FAVOURABLE = { CHRONOMANCER: 'focus', DRUID: 'habit', ALCHEMIST: 'rotate', BARD: 'variety', HERO: 'high', ARCHER: 'high', PALADIN: 'high', RANGER: 'early', NECROMANCER: 'overdue', ARTISAN: 'list' };
 
 function rngFor(seed) {
     let a = seed | 0;
@@ -111,7 +111,8 @@ const STARTER = {
     PALADIN: [['paladin_aura', 3]],
     BARD: [['bard_encore', 3]],
     ALCHEMIST: [['alch_catalyst', 3]],
-    DRUID: [['druid_roots', 3]]
+    DRUID: [['druid_roots', 3]],
+    CHRONOMANCER: [['chrono_hourglass', 3]]
 };
 
 /** XP of one task for an arbitrary skill list (rows of { skill_id, skill_level }). */

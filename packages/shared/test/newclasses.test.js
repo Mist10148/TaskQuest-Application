@@ -119,3 +119,36 @@ test('Druid habits: repeating tasks pay for their habit streak, everything else 
 test('Druid tree: four chained skills', () => {
     checkTree('DRUID', ['druid_roots', 'druid_bloom', 'druid_seasons', 'druid_grove'], 600);
 });
+
+// ─── Chronomancer ────────────────────────────────────────────────────────────
+
+test('Chronomancer flow: the first 3 tasks within 30 minutes of a focus session pay +100% and 5', () => {
+    const chrono = user({ player_class: 'CHRONOMANCER' });
+    const done = (minutes, completions, extra = {}) => ({ action: 'item_complete', afterFocus: { minutes, completions }, ...extra });
+    // [label, context, skills, expected type, expected bonus]
+    const cases = [
+        ['no focus session', { action: 'item_complete' }, [], 'CHRONOMANCER', 2],
+        ['right after a session', done(0, 0), [], 'CHRONOMANCER_FLOW', 15],
+        ['30 minutes is still in the flow', done(30, 2), [], 'CHRONOMANCER_FLOW', 15],
+        ['31 minutes is too late', done(31, 0), [], 'CHRONOMANCER', 2],
+        ['the 4th task is out of the flow', done(5, 3), [], 'CHRONOMANCER', 2],
+        ['other actions', { action: 'item_add', afterFocus: { minutes: 1, completions: 0 } }, [], 'CHRONOMANCER', 2],
+        ['Hourglass: +5 per level', done(5, 0), [sk('chrono_hourglass', 3)], 'CHRONOMANCER_FLOW', 30],
+        ['Time Dilation: 45 minutes', done(45, 0), [sk('chrono_dilation')], 'CHRONOMANCER_FLOW', 15],
+        ['Time Dilation: 46 is too late', done(46, 0), [sk('chrono_dilation')], 'CHRONOMANCER', 2],
+        ['Echo: 5 tasks', done(5, 4), [sk('chrono_echo')], 'CHRONOMANCER_FLOW', 15],
+        ['Echo: the 6th is out', done(5, 5), [sk('chrono_echo')], 'CHRONOMANCER', 2],
+        ['Temporal Surge on the first task of the day', done(5, 0, { firstOfDay: true }), [sk('chrono_surge')], 'CHRONOMANCER_FLOW', 18],
+        ['Temporal Surge later in the day', done(5, 0, { firstOfDay: false }), [sk('chrono_surge')], 'CHRONOMANCER_FLOW', 15]
+    ];
+    for (const [label, context, skills, type, bonus] of cases) {
+        const r = calc(chrono, 10, skills, context);
+        assert.equal(r.bonusInfo.type, type, `${label}: type`);
+        assert.equal(r.bonusInfo.classBonus, bonus, `${label}: bonus`);
+        assert.equal(r.finalXP, 10 + bonus, `${label}: final`);
+    }
+});
+
+test('Chronomancer tree: four chained skills', () => {
+    checkTree('CHRONOMANCER', ['chrono_hourglass', 'chrono_dilation', 'chrono_echo', 'chrono_surge'], 650);
+});

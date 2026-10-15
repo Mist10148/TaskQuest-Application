@@ -1,6 +1,6 @@
 # Choosing a class
 
-Fifteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
+Sixteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
 
 ## How to read the numbers
 
@@ -34,6 +34,7 @@ A bare Default player gets exactly the base. Every class beats it, by very diffe
 | juggle many lists | Bard |
 | use all three priorities | Alchemist |
 | keep daily or weekly routines | Druid |
+| work in focus sessions | Chronomancer |
 
 ## Hero (500 XP)
 
@@ -194,6 +195,18 @@ Favourable mix: every task is a daily habit with an 8 step streak.
 | No skills | - | 0 | 13 / 13 / 13 | 30 / 30 / 30 |
 | Starter | Roots ×3 | 330 | 13 / 13 / 13 | 54 / 54 / 54 |
 | Full tree | Roots ×3, Bloom, Seasons, Grove | 1090 | 16 / 16 / 16 | 54 / 54 / 54 |
+
+## Chronomancer (650 XP)
+
+**Rewards:** the first 3 tasks you complete within 30 minutes after a finished focus session pay +100% of the base plus 5; every other action pays +2. **Suits:** people who work in focus sessions (the Focus page or the API). **Pitfalls:** with no focus session the class pays only +2; a session needs at least 10 minutes to count as finished; the flow covers 3 tasks, however many you finish (Echo makes it 5).
+
+Favourable mix: a focus session finished just before the first three tasks of every day.
+
+| Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
+|---|---|---|---|---|
+| No skills | - | 0 | 12 / 12 / 12 | 20 / 20 / 20 |
+| Starter | Hourglass ×3 | 330 | 12 / 12 / 12 | 29 / 29 / 29 |
+| Full tree | Hourglass ×3, Time Dilation, Echo, Temporal Surge | 1090 | 12 / 12 / 12 | 41 / 41 / 41 |
 
 ## Changing your mind
 

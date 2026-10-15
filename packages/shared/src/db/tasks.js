@@ -11,7 +11,7 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
-const { rewardAction, unlockAchievements, awardFlat, countToday } = require('./progression');
+const { rewardAction, unlockAchievements, awardFlat, countToday, dayWindow } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS, BONUS_LABELS, HABIT_PERIOD_DAYS } = require('../constants');
 const v = require('../validation');
@@ -586,8 +586,18 @@ async function completionContext(conn, item, user, now = new Date()) {
     // A list that was cleared once never counts as cleared again (same rule as the list_cleared XP), so re-opening it
     // by adding or un-checking a task and finishing it again cannot repeat the Artisan's project bonus.
     const [[marked]] = await conn.query('SELECT cleared_at FROM lists WHERE id = ?', [item.list_id]);
+    // HIGH is the player's own label, so only the first few HIGH completions of the day count as HIGH for classes and skills.
+    let priority = item.priority || item.list_priority;
+    if (priority === 'HIGH') {
+        const { from, to } = await dayWindow(conn, user, now);
+        const [[high]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM items WHERE first_completed_by = ? AND first_completed_high = 1 AND first_completed_at >= ? AND first_completed_at < ?',
+            [user.discord_id, from, to]
+        );
+        if (Number(high.n) > LIMITS.HIGH_BONUS_PER_DAY) priority = 'MEDIUM';
+    }
     return {
-        priority: item.priority || item.list_priority,
+        priority,
         recurring: Boolean(item.recurrence),
         today,
         dueDate,

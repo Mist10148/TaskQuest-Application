@@ -430,6 +430,7 @@ Every "per day" below, the quests, the weekly review and the Stats page use **yo
 | Rewarded list creations per day | 10 |
 | Rewarded task additions per day | 50 |
 | Rewarded task completions per day | 50 (and once per task, ever) |
+| HIGH priority completions that count as HIGH per day | 3 (Vow, Rally, Sniper and Crusade; the Heavy Lifter quest only needs one) |
 | Streak freezes held | 3 (5 with Freeze Cache) |
 | Quest claims | Once per quest per period (daily, weekly or monthly) |
 | First-of-day bonus | Once per day |

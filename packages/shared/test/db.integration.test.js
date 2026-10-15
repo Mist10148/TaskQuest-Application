@@ -1116,6 +1116,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(vow.xp.bonusInfo.classBonus, 20);
         assert.equal((await db.tasks.setItemCompleted(P, easy)).xp.bonusInfo.classBonus, 5);
 
+        // only the first 3 HIGH completions of the day count as HIGH: the 4th pays like any other task
+        const more = [];
+        for (const name of ['h2', 'h3', 'h4']) more.push((await db.tasks.addItem(P, list.id, { name, priority: 'high' })).item.id);
+        assert.equal((await db.tasks.setItemCompleted(P, more[0])).xp.bonusInfo.type, 'PALADIN_VOW');
+        assert.equal((await db.tasks.setItemCompleted(P, more[1])).xp.bonusInfo.type, 'PALADIN_VOW');
+        assert.equal((await db.tasks.setItemCompleted(P, more[2])).xp.bonusInfo.type, 'PALADIN', 'the 4th HIGH of the day is not a Vow');
+
         // streak board: a Paladin 60h after the last claim still has a live streak, a Default player does not
         const P2 = '100000000000000211';
         await db.users.ensureUser(P2);

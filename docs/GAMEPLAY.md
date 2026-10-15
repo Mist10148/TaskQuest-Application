@@ -88,6 +88,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | ⚗️ **Alchemist** | 650 | **Brew.** Completing a task adds its priority to the brew (`alchemist_mix`) and pays +2 XP per ingredient in it. Completing the third different priority finishes the brew: ⌊base × 150%⌋ + 15, and the brew starts over. Other actions pay +2. A task with no priority counts as MEDIUM. |
 | 🌿 **Druid** | 600 | **Habits.** Completing a repeating task pays ⌊base × 6%⌋ × steps + 2 per step of its habit streak (up to 10 steps; the streak is the one shown on the task and kept by [habit streaks](#5c-bonus-xp-sources)), at least +3. Every other action pays +3. |
 | ⏳ **Chronomancer** | 650 | **Flow.** The first 3 tasks you complete within 30 minutes after a [focus session](#5d-focus-sessions) finished (finished, not cancelled or expired) pay +100% of the base XP and 5 more. Every other action pays +2. The window comes from your last finished focus session; nothing is stored on your account. |
+| 🤝 **Warden** | 600 | **Guard.** Completing a task on a [shared list](#5h-parties) pays ⌊base × 10% × n⌋ + 2 × n XP, where n is the number of other people on that list (up to 5; members and the owner count, you do not). Every other action, and tasks on lists nobody shares, pay +2. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
@@ -270,7 +271,16 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🔔 Echo | 1 | 260 | The flow covers 5 tasks instead of 3 *(class)* | Time Dilation |
 | ⚡ Temporal Surge | 1 | 300 | +25% Chronomancer bonus when the task is also your first of the day *(class)* | Echo |
 
-There are 92 skills in 16 trees (Default plus the eleven classes).
+### 🤝 Warden
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🔦 Beacon | 3 | 110 | +2 XP per person on the list for tasks finished on a shared list, per level *(class)* | — |
+| 🏰 Shield Wall | 1 | 200 | Up to 8 people on the list count instead of 5 *(class)* | Beacon |
+| 🥁 Rally Cry | 1 | 260 | +25% Warden bonus on lists with 3 or more other people *(class)* | Shield Wall |
+| 🏮 Vigil | 1 | 300 | +15 XP when your completion clears a shared list *(class)* | Rally Cry |
+
+There are 96 skills in 17 trees (Default plus the sixteen classes).
 
 ## 5. Daily reward
 

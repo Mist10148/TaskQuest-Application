@@ -124,6 +124,13 @@ const CLASSES = {
         cost: 650,
         description: 'Flow: the first 3 tasks you complete within 30 minutes after finishing a focus session pay +100% of the base XP plus 5. Every other action gives +2 XP.',
         playstyle: 'Rewards finishing tasks right after a focus session.'
+    },
+    WARDEN: {
+        name: 'Warden',
+        emoji: '🤝',
+        cost: 600,
+        description: 'Guard: finishing a task on a shared list pays 10% of the base XP plus 2 XP for every other person on that list (up to 5). Every other action gives +2 XP.',
+        playstyle: 'Rewards working together on shared lists.'
     }
 };
 
@@ -344,6 +351,17 @@ const SKILL_TREES = {
             chrono_echo: { name: 'Echo', emoji: '🔔', description: 'The flow covers 5 tasks instead of 3 (Chronomancer)', maxLevel: 1, cost: 260, requires: 'chrono_dilation' },
             chrono_surge: { name: 'Temporal Surge', emoji: '⚡', description: '+25% Chronomancer bonus when the task is also your first of the day (Chronomancer)', maxLevel: 1, cost: 300, requires: 'chrono_echo' }
         }
+    },
+    WARDEN: {
+        name: 'Warden',
+        emoji: '🤝',
+        description: 'Shared lists and parties',
+        skills: {
+            warden_beacon: { name: 'Beacon', emoji: '🔦', description: '+2 XP per person on the list for tasks finished on a shared list, per level (Warden)', maxLevel: 3, cost: 110, requires: null },
+            warden_wall: { name: 'Shield Wall', emoji: '🏰', description: 'Up to 8 people on the list count instead of 5 (Warden)', maxLevel: 1, cost: 200, requires: 'warden_beacon' },
+            warden_rally: { name: 'Rally Cry', emoji: '🥁', description: '+25% Warden bonus on lists with 3 or more other people (Warden)', maxLevel: 1, cost: 260, requires: 'warden_wall' },
+            warden_vigil: { name: 'Vigil', emoji: '🏮', description: '+15 XP when your completion clears a shared list (Warden)', maxLevel: 1, cost: 300, requires: 'warden_rally' }
+        }
     }
 };
 
@@ -523,7 +541,8 @@ const CLASS_RULES = {
     BARD: { WINDOW: 5, HARMONY_WINDOW: 7, PERCENT_PER_STEP: 4, FLAT_PER_STEP: 3, OTHER_FLAT: 2, ENCORE_PER_STEP: 1, CRESCENDO_PERCENT: 25 },
     ALCHEMIST: { STEP_FLAT: 2, BREW_PERCENT: 150, BREW_FLAT: 15, OTHER_FLAT: 2, CATALYST_FLAT: 5, ELIXIR_STEP: 2, TRANSMUTE_PERCENT: 50 },
     DRUID: { STREAK_CAP: 10, BLOOM_CAP_EXTRA: 5, PERCENT_PER_STEP: 6, FLAT_PER_STEP: 2, OTHER_FLAT: 3, ROOTS_PER_STEP: 1, SEASONS_MULTIPLIER: 2, GROVE_FLAT: 3 },
-    CHRONOMANCER: { WINDOW_MINUTES: 30, DILATION_MINUTES: 45, WINDOW_COMPLETIONS: 3, ECHO_COMPLETIONS: 5, PERCENT: 100, FLAT: 5, OTHER_FLAT: 2, HOURGLASS_FLAT: 5, SURGE_PERCENT: 25 }
+    CHRONOMANCER: { WINDOW_MINUTES: 30, DILATION_MINUTES: 45, WINDOW_COMPLETIONS: 3, ECHO_COMPLETIONS: 5, PERCENT: 100, FLAT: 5, OTHER_FLAT: 2, HOURGLASS_FLAT: 5, SURGE_PERCENT: 25 },
+    WARDEN: { MEMBER_CAP: 5, WALL_EXTRA: 3, PERCENT_PER_MEMBER: 10, FLAT_PER_MEMBER: 2, OTHER_FLAT: 2, BEACON_PER_MEMBER: 2, RALLY_PERCENT: 25, RALLY_MEMBERS: 3, VIGIL_XP: 15 }
 };
 
 /**

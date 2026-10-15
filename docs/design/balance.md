@@ -42,6 +42,11 @@ Average multiplier on a 10 base XP task, from the simulation described above.
 | Ranger (600) | 1.5 | 2.2 (3 days early) | 4.0 |
 | Necromancer (600) | 1.4 | 2.4 (every third task overdue) | 5.1 |
 | Paladin (600) | 1.8 | 2.5 (every second task HIGH) | 4.7 |
+| Bard (600) | 1.2 | 2.3 (five lists in rotation) | 3.9 |
+| Alchemist (650) | 1.2 | 2.2 (LOW, MEDIUM, HIGH in rotation) | 3.8 |
+| Druid (600) | 1.3 | 3.0 (daily habits, 8 step streak) | 5.4 |
+| Chronomancer (650) | 1.2 | 2.0 (after a focus session) | 4.1 |
+| Warden (600) | 1.2 | 1.9 (lists shared with 3 people) | 4.3 |
 
 Assumptions behind it:
 

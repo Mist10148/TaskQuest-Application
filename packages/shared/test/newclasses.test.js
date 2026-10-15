@@ -152,3 +152,47 @@ test('Chronomancer flow: the first 3 tasks within 30 minutes of a focus session 
 test('Chronomancer tree: four chained skills', () => {
     checkTree('CHRONOMANCER', ['chrono_hourglass', 'chrono_dilation', 'chrono_echo', 'chrono_surge'], 650);
 });
+
+// ─── Warden ──────────────────────────────────────────────────────────────────
+
+test('Warden guard: tasks on a shared list pay for the people on it', () => {
+    const warden = user({ player_class: 'WARDEN' });
+    const done = (sharedMembers, extra = {}) => ({ action: 'item_complete', sharedMembers, ...extra });
+    // [label, context, skills, expected type, expected bonus]
+    const cases = [
+        ['a list nobody else is on', done(0), [], 'WARDEN', 2],
+        ['one other person', done(1), [], 'WARDEN_SHARED', 1 + 2],
+        ['three other people', done(3), [], 'WARDEN_SHARED', 3 + 6],
+        ['the count stops at 5', done(9), [], 'WARDEN_SHARED', 5 + 10],
+        ['other actions', { action: 'item_add', sharedMembers: 4 }, [], 'WARDEN', 2],
+        ['Beacon: +2 per person per level', done(3), [sk('warden_beacon', 2)], 'WARDEN_SHARED', 3 + 3 * 6],
+        ['Shield Wall: up to 8 people', done(9), [sk('warden_wall')], 'WARDEN_SHARED', 8 + 16],
+        ['Rally Cry: +25% with 3 or more people', done(3), [sk('warden_rally')], 'WARDEN_SHARED', Math.floor(9 * 1.25)],
+        ['Rally Cry: nothing with 2 people', done(2), [sk('warden_rally')], 'WARDEN_SHARED', 2 + 4],
+        ['Vigil: +15 when the list is cleared', done(2, { listCleared: true }), [sk('warden_vigil')], 'WARDEN_SHARED', 2 + 4 + 15],
+        ['Vigil does nothing on a solo list', done(0, { listCleared: true }), [sk('warden_vigil')], 'WARDEN', 2]
+    ];
+    for (const [label, context, skills, type, bonus] of cases) {
+        const r = calc(warden, 10, skills, context);
+        assert.equal(r.bonusInfo.type, type, `${label}: type`);
+        assert.equal(r.bonusInfo.classBonus, bonus, `${label}: bonus`);
+        assert.equal(r.finalXP, 10 + bonus, `${label}: final`);
+    }
+});
+
+test('Warden tree: four chained skills', () => {
+    checkTree('WARDEN', ['warden_beacon', 'warden_wall', 'warden_rally', 'warden_vigil'], 600);
+});
+
+test('every class is wired end to end: ownership column, tree, rules and a colour', () => {
+    const { CLASS_KEYS, SKILL_TREES, CLASSES } = shared;
+    assert.equal(CLASS_KEYS.length, 17);
+    for (const key of CLASS_KEYS) {
+        assert.ok(CLASSES[key].emoji && CLASSES[key].description && CLASSES[key].playstyle, key);
+        assert.ok(SKILL_TREES[key], `${key} has a skill tree`);
+        if (key !== 'DEFAULT') {
+            assert.ok(shared.CLASS_RULES[key], `${key} has rules`);
+            assert.ok(shared.classOwnershipColumn(key), `${key} has an ownership column`);
+        }
+    }
+});

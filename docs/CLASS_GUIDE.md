@@ -1,6 +1,6 @@
 # Choosing a class
 
-Sixteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
+Seventeen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
 
 ## How to read the numbers
 
@@ -35,6 +35,7 @@ A bare Default player gets exactly the base. Every class beats it, by very diffe
 | use all three priorities | Alchemist |
 | keep daily or weekly routines | Druid |
 | work in focus sessions | Chronomancer |
+| share lists with others | Warden |
 
 ## Hero (500 XP)
 
@@ -207,6 +208,18 @@ Favourable mix: a focus session finished just before the first three tasks of ev
 | No skills | - | 0 | 12 / 12 / 12 | 20 / 20 / 20 |
 | Starter | Hourglass ×3 | 330 | 12 / 12 / 12 | 29 / 29 / 29 |
 | Full tree | Hourglass ×3, Time Dilation, Echo, Temporal Surge | 1090 | 12 / 12 / 12 | 41 / 41 / 41 |
+
+## Warden (600 XP)
+
+**Rewards:** finishing a task on a shared list pays 10% of the base plus 2 XP for every other person on that list (up to 5); every other action pays +2. **Suits:** people who share lists with a partner, a team or a household. **Pitfalls:** a list nobody else is on pays only +2; shared lists are not part of exports or templates; clearing the list pays the person who finished its last task, not the whole group.
+
+Favourable mix: every task is on a list shared with three other people.
+
+| Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
+|---|---|---|---|---|
+| No skills | - | 0 | 12 / 12 / 12 | 19 / 19 / 19 |
+| Starter | Beacon ×3 | 330 | 12 / 12 / 12 | 37 / 37 / 37 |
+| Full tree | Beacon ×3, Shield Wall, Rally Cry, Vigil | 1090 | 12 / 12 / 12 | 43 / 43 / 43 |
 
 ## Changing your mind
 

@@ -474,6 +474,24 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'WARDEN': {
+            const w = CLASS_RULES.WARDEN;
+            const people = context.action === 'item_complete' ? Math.max(0, Number(context.sharedMembers) || 0) : 0;
+            if (people > 0) {
+                const counted = Math.min(people, w.MEMBER_CAP + (lvl('warden_wall') ? w.WALL_EXTRA : 0));
+                let bonus = Math.floor((baseXP * w.PERCENT_PER_MEMBER * counted) / 100) + counted * (w.FLAT_PER_MEMBER + lvl('warden_beacon') * w.BEACON_PER_MEMBER);
+                if (lvl('warden_rally') && people >= w.RALLY_MEMBERS) bonus = Math.floor((bonus * (100 + w.RALLY_PERCENT)) / 100);
+                if (lvl('warden_vigil') && context.listCleared) bonus += w.VIGIL_XP;
+                bonus = Math.max(w.OTHER_FLAT, bonus);
+                finalXP = baseXP + bonus;
+                bonusInfo = { type: 'WARDEN_SHARED', details: `🤝 Shared with ${people} +${bonus}`, classBonus: bonus };
+                break;
+            }
+            finalXP = baseXP + w.OTHER_FLAT;
+            bonusInfo = { type: 'WARDEN', details: `🤝 Warden +${w.OTHER_FLAT}`, classBonus: w.OTHER_FLAT };
+            break;
+        }
+
         default:
             break;
     }

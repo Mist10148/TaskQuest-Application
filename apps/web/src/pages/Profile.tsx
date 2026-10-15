@@ -31,6 +31,7 @@ const CLASS_INFO: Record<string, { name: string; emoji: string }> = {
   RANGER: { name: 'Ranger', emoji: '🧭' },
   NECROMANCER: { name: 'Necromancer', emoji: '💀' },
   PALADIN: { name: 'Paladin', emoji: '⚜️' },
+  WARDEN: { name: 'Warden', emoji: '🤝' },
   CHRONOMANCER: { name: 'Chronomancer', emoji: '⏳' },
   DRUID: { name: 'Druid', emoji: '🌿' },
   ALCHEMIST: { name: 'Alchemist', emoji: '⚗️' },

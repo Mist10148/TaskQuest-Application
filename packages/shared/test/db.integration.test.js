@@ -886,6 +886,81 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await row()).assassin_streak, 2, 'inside the window it keeps building');
     });
 
+    await t.test('the five newer classes: buy, earn through the real task flow, and the counters reset', async () => {
+        const mk = async (id, cls) => {
+            await db.users.ensureUser(id);
+            await setXP(id, 1000);
+            await db.progression.buyClass(id, cls);
+            return id;
+        };
+        const add = async (id, listId, extra = {}) => (await db.tasks.addItem(id, listId, { name: 'task', ...extra })).item.id;
+
+        // Bard: tasks from different lists build a medley that is stored on the account
+        const B = await mk('100000000000000301', 'Bard');
+        assert.equal((await db.users.getUser(B)).player_class, 'BARD');
+        const lists = [];
+        for (const n of [1, 2, 3]) lists.push((await db.tasks.createList(B, { name: `Stage ${n}` })).list);
+        for (const l of lists) await db.tasks.setItemCompleted(B, await add(B, l.id));
+        assert.equal((await db.users.getUser(B)).bard_recent.split(',').length, 3);
+        const fourth = await db.tasks.setItemCompleted(B, await add(B, lists[0].id));
+        assert.equal(fourth.xp.bonusInfo.type, 'BARD_MEDLEY');
+        assert.equal(fourth.xp.bonusInfo.classBonus, 6, 'three different lists: two steps of 3');
+        await db.progression.equipClass(B, 'DEFAULT');
+        assert.equal((await db.users.getUser(B)).bard_recent, '', 'switching class clears the medley');
+
+        // Alchemist: LOW, MEDIUM and HIGH finish a brew
+        const A = await mk('100000000000000302', 'Alchemist');
+        const { list: lab } = await db.tasks.createList(A, { name: 'Lab' });
+        const low = await db.tasks.setItemCompleted(A, await add(A, lab.id, { priority: 'low' }));
+        assert.equal(low.xp.bonusInfo.classBonus, 2);
+        const mid = await db.tasks.setItemCompleted(A, await add(A, lab.id, { priority: 'medium' }));
+        assert.equal(mid.xp.bonusInfo.classBonus, 4);
+        assert.equal(Number((await db.users.getUser(A)).alchemist_mix), 3);
+        const brew = await db.tasks.setItemCompleted(A, await add(A, lab.id, { priority: 'high' }));
+        assert.equal(brew.xp.bonusInfo.type, 'ALCHEMIST_BREW');
+        assert.equal(brew.xp.bonusInfo.classBonus, 30);
+        assert.equal(Number((await db.users.getUser(A)).alchemist_mix), 0, 'the brew starts over');
+
+        // Druid: a repeating task is a habit, a plain task is not
+        const D = await mk('100000000000000303', 'Druid');
+        const { list: grove } = await db.tasks.createList(D, { name: 'Grove' });
+        const habit = await db.tasks.setItemCompleted(D, await add(D, grove.id, { recurrence: 'daily' }));
+        assert.equal(habit.xp.bonusInfo.type, 'DRUID_HABIT');
+        const plain = await db.tasks.setItemCompleted(D, await add(D, grove.id));
+        assert.equal(plain.xp.bonusInfo.type, 'DRUID');
+
+        // Chronomancer: the first three tasks after a finished focus session are in the flow
+        const C = await mk('100000000000000304', 'Chronomancer');
+        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP() - INTERVAL 30 MINUTE, 25, 'finished', UTC_TIMESTAMP() - INTERVAL 5 MINUTE, 25, 15)", [C]);
+        const { list: clock } = await db.tasks.createList(C, { name: 'Clock' });
+        const types = [];
+        for (let i = 0; i < 4; i++) types.push((await db.tasks.setItemCompleted(C, await add(C, clock.id))).xp.bonusInfo.type);
+        assert.deepEqual(types, ['CHRONOMANCER_FLOW', 'CHRONOMANCER_FLOW', 'CHRONOMANCER_FLOW', 'CHRONOMANCER'], 'the flow covers three tasks');
+
+        // Warden: people on the list make the bonus
+        const W = await mk('100000000000000305', 'Warden');
+        const friends = ['100000000000000306', '100000000000000307'];
+        for (const f of friends) await db.users.ensureUser(f);
+        const { list: hall } = await db.tasks.createList(W, { name: 'Hall' });
+        const solo = await db.tasks.setItemCompleted(W, await add(W, hall.id));
+        assert.equal(solo.xp.bonusInfo.type, 'WARDEN', 'nobody else on the list');
+        for (const f of friends) await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [hall.id, f, 'editor', require('crypto').randomBytes(6).toString('hex')]);
+        const together = await db.tasks.setItemCompleted(W, await add(W, hall.id));
+        assert.equal(together.xp.bonusInfo.type, 'WARDEN_SHARED');
+        assert.equal(together.xp.bonusInfo.classBonus, 2 + 4, 'two people: 10% of 10 twice, and 2 each');
+
+        // a full progress reset clears the new ownership flags and counters
+        await db.query("UPDATE users SET bard_recent = '1,2', alchemist_mix = 5 WHERE discord_id IN (?, ?)", [B, A]);
+        for (const id of [B, A, D, C, W]) await db.users.resetProgress(id);
+        for (const [id, col] of [[B, 'owns_bard'], [A, 'owns_alchemist'], [D, 'owns_druid'], [C, 'owns_chronomancer'], [W, 'owns_warden']]) {
+            const u = await db.users.getUser(id);
+            assert.equal(Number(u[col]), 0, col);
+            assert.equal(u.player_class, 'DEFAULT');
+            assert.equal(u.bard_recent, '');
+            assert.equal(Number(u.alchemist_mix), 0);
+        }
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);

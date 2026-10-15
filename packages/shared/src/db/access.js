@@ -58,7 +58,7 @@ async function forList(conn, discordId, listId, min = 'viewer', { lock = false }
     const [[row]] = await conn.query(
         `SELECT l.*, l.discord_id AS owner_id, m.role AS member_role
          FROM lists l LEFT JOIN list_members m ON m.list_id = l.id AND m.discord_id = ?
-         WHERE l.id = ? AND (l.discord_id = ? OR m.discord_id IS NOT NULL)${lock ? ' FOR UPDATE' : ''}`,
+         WHERE l.id = ? AND (l.discord_id = ? OR m.discord_id IS NOT NULL)${lock ? ' FOR UPDATE OF l' : ''}`,
         [me, id.value, me]
     );
     const { role, isOwner } = decide(row, me, min, 'List not found.');
@@ -84,7 +84,7 @@ async function forItem(conn, discordId, itemId, min = 'viewer', { lock = false }
         `SELECT i.*, l.name AS list_name, l.priority AS list_priority, l.discord_id AS owner_id, m.role AS member_role
          FROM items i JOIN lists l ON l.id = i.list_id
          LEFT JOIN list_members m ON m.list_id = l.id AND m.discord_id = ?
-         WHERE i.id = ? AND (l.discord_id = ? OR m.discord_id IS NOT NULL)${lock ? ' FOR UPDATE' : ''}`,
+         WHERE i.id = ? AND (l.discord_id = ? OR m.discord_id IS NOT NULL)${lock ? ' FOR UPDATE OF i, l' : ''}`,
         [me, id.value, me]
     );
     const { role, isOwner } = decide(row, me, min, 'Task not found.');

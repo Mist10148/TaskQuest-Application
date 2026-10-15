@@ -27,7 +27,7 @@ const LIST_SORTS = {
     name: ['l.name'],
     deadline: ['l.deadline IS NULL', 'l.deadline'],
     category: ['l.category IS NULL', 'l.category'],
-    priority: ["FIELD(l.priority, 'LOW', 'MEDIUM', 'HIGH') = 0", "FIELD(l.priority, 'LOW', 'MEDIUM', 'HIGH')"]
+    priority: ['l.priority IS NULL', "CASE l.priority WHEN 'LOW' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'HIGH' THEN 3 END"]
 };
 const ITEM_SORTS = { position: ['i.position'], name: ['i.name'], completed: ['i.completed'], created_at: ['i.created_at'] };
 
@@ -90,7 +90,7 @@ function shapeList(row, me) {
  * The columns that describe how a list is shared with `me`. The owner is an implicit manager; member_count
  * counts people (the owner plus members). owner_name is a display name only.
  */
-const SHARE_COLUMNS = `IF(l.discord_id = ?, 'manager', me.role) AS role,
+const SHARE_COLUMNS = `CASE WHEN l.discord_id = ? THEN 'manager' ELSE me.role END AS role,
         (l.discord_id = ?) AS is_owner,
         ou.discord_username AS owner_name,
         1 + (SELECT COUNT(*) FROM list_members cm WHERE cm.list_id = l.id) AS member_count`;
@@ -178,7 +178,7 @@ async function createListIn(conn, discordId, fields) {
     let insertId;
     try {
         const [res] = await conn.query(
-            'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
             [user.discord_id, fields.name, fields.description, fields.category, fields.priority, fields.deadline]
         );
         insertId = res.insertId;
@@ -224,7 +224,7 @@ async function updateList(discordId, listId, input) {
             const rearm = keys.includes('deadline') && rearmAllowed(list, String(list.deadline || '').slice(0, 10) !== (fields.deadline || ''));
             const sets = { ...fields, ...(rearm ? { deadline_notified: 0, overdue_notified: 0, remind_at: null, ...rearm } : {}) };
             const cols = Object.keys(sets);
-            await conn.query(`UPDATE lists SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => sets[k]), id]);
+            await conn.query(`UPDATE lists SET ${cols.map((k) => `${k} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...cols.map((k) => sets[k]), id]);
             if (rearm) await conn.query('DELETE FROM list_reminders WHERE list_id = ?', [id]);
         });
     } catch (err) {
@@ -248,7 +248,7 @@ async function deleteList(discordId, listId) {
 const SEARCH_LIMIT = 50;
 const SEARCH_SCOPES = ['lists', 'tasks', 'all'];
 
-/** A LIKE pattern that matches the (trimmed, length-capped) query literally, % and _ included. */
+/** A LIKE pattern that matches the (trimmed, length-capped) query literally, % and _ included. Matched with ILIKE: case does not matter. */
 const likeTerm = (query) => `%${v.escapeLike(v.cleanText(query).slice(0, 100))}%`;
 
 async function searchLists(discordId, query) {
@@ -256,7 +256,7 @@ async function searchLists(discordId, query) {
     const acc = access.accessSql('l', discordId);
     const rows = await run(
         `SELECT l.* FROM lists l WHERE ${acc.sql}
-           AND (l.name LIKE ? ESCAPE '\\\\' OR l.category LIKE ? ESCAPE '\\\\' OR l.description LIKE ? ESCAPE '\\\\')
+           AND (l.name ILIKE ? ESCAPE '\\' OR l.category ILIKE ? ESCAPE '\\' OR l.description ILIKE ? ESCAPE '\\')
          ORDER BY l.name
          LIMIT ${SEARCH_LIMIT * 2}`,
         [...acc.params, term, term, term]
@@ -271,7 +271,7 @@ async function searchItems(discordId, query) {
     const rows = await run(
         `SELECT i.id, i.name, i.description, i.completed, i.parent_id, i.due_date, i.list_id, l.name AS list_name
          FROM items i JOIN lists l ON l.id = i.list_id
-         WHERE ${acc.sql} AND (i.name LIKE ? ESCAPE '\\\\' OR i.description LIKE ? ESCAPE '\\\\')
+         WHERE ${acc.sql} AND (i.name ILIKE ? ESCAPE '\\' OR i.description ILIKE ? ESCAPE '\\')
          ORDER BY i.completed, l.name, i.position, i.id
          LIMIT ${SEARCH_LIMIT}`,
         [...acc.params, term, term]
@@ -415,7 +415,7 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
     const [res] = await conn.query(
         `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         [lid, name, description, Number(pos.next), extras.due_date, extras.due_date ? new Date() : null, extras.priority, extras.tags, extras.recurrence, extras.estimate_minutes, parentId, user.discord_id]
     );
     await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
@@ -466,7 +466,7 @@ async function updateItem(discordId, itemId, input) {
                 Object.assign(fields, rearm);
                 cols = [...cols, 'reminded_at', 'remind_at', 'rearm_count', 'rearm_day'];
             }
-            await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
+            await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
             if (rearm) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
         });
     }
@@ -479,7 +479,7 @@ async function updateItem(discordId, itemId, input) {
 /** Rewrite a list's positions as 0..n-1 in the given item-id order (inside a transaction). */
 async function writePositions(conn, orderedIds) {
     for (let i = 0; i < orderedIds.length; i++) {
-        await conn.query('UPDATE items SET position = ? WHERE id = ?', [i, orderedIds[i]]);
+        await conn.query('UPDATE items SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND position <> ?', [i, orderedIds[i], i]);
     }
 }
 
@@ -555,7 +555,7 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0, isOwner = 
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
     const [res] = await conn.query(
         `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) RETURNING id`,
         [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
@@ -584,7 +584,7 @@ async function completionContext(conn, item, user, now = new Date()) {
     const today = todayInZone(user.timezone);
     let dueDate = trustedDueDate(item, now);
     const [[counts]] = await conn.query(
-        'SELECT COUNT(*) AS total, COALESCE(SUM(completed = 0), 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
+        'SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE completed = 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
         [item.list_id]
     );
     // A list that was cleared once never counts as cleared again (same rule as the list_cleared XP), so re-opening it
@@ -661,7 +661,7 @@ async function completionBonuses(conn, user, item, ctx) {
 
     if (ctx.listCleared) {
         // Marking the list first makes the payout once per list; the daily limit still applies on top.
-        const [mark] = await conn.query('UPDATE lists SET cleared_at = ?, cleared_by = ?, updated_at = updated_at WHERE id = ? AND cleared_at IS NULL', [new Date(), user.discord_id, item.list_id]);
+        const [mark] = await conn.query('UPDATE lists SET cleared_at = ?, cleared_by = ? WHERE id = ? AND cleared_at IS NULL', [new Date(), user.discord_id, item.list_id]);
         if (mark.affectedRows === 1 && (await countToday(conn, user, 'list_cleared')) < LIMITS.LIST_CLEARED_PER_DAY) {
             await pay('list_cleared', REWARDS.LIST_CLEARED, { referenceId: item.list_id });
         }
@@ -715,7 +715,7 @@ async function setItemCompleted(discordId, itemId, completed) {
         const now = new Date();
         // Re-sending the state an item is already in changes nothing: it must not re-attribute the completion or move its time.
         if (target !== Boolean(item.completed)) {
-            await conn.query('UPDATE items SET completed = ?, completed_at = ?, completed_by = ? WHERE id = ?', [target ? 1 : 0, target ? now : null, target ? user.discord_id : null, id]);
+            await conn.query('UPDATE items SET completed = ?, completed_at = ?, completed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [target ? 1 : 0, target ? now : null, target ? user.discord_id : null, id]);
         }
 
         let xp = null;
@@ -727,7 +727,7 @@ async function setItemCompleted(discordId, itemId, completed) {
             const dueOn = trustedDueDate(item, now);
             const todayLocal = todayInZone(user.timezone);
             await conn.query(
-                `UPDATE items SET xp_awarded = TRUE, first_completed_at = ?, first_completed_by = ?, first_completed_high = ?,
+                `UPDATE items SET xp_awarded = 1, first_completed_at = ?, first_completed_by = ?, first_completed_high = ?,
                         first_completed_early = ?, first_completed_overdue = ? WHERE id = ?`,
                 [now, user.discord_id, (item.priority || item.list_priority) === 'HIGH' ? 1 : 0, dueOn ? (dueOn > todayLocal ? 1 : 0) : null, dueOn ? (dueOn < todayLocal ? 1 : 0) : null, id]
             );
@@ -784,7 +784,7 @@ async function swapItemPositions(discordId, itemIdA, itemIdB) {
 async function getListsDueOn(date) {
     return run(
         `SELECT l.* FROM lists l JOIN users u ON u.discord_id = l.discord_id
-         WHERE l.deadline = ? AND l.deadline_notified = FALSE AND u.automation_enabled = TRUE`,
+         WHERE l.deadline = ? AND l.deadline_notified = 0 AND u.automation_enabled = 1`,
         [date]
     );
 }
@@ -808,10 +808,10 @@ async function getReminderCandidates(now = new Date()) {
     const owners = await run(
         `SELECT l.*, l.discord_id AS owner_id, u.timezone, u.reminder_hour, ${counts}
          FROM lists l JOIN users u ON u.discord_id = l.discord_id
-         WHERE u.automation_enabled = TRUE AND (
+         WHERE u.automation_enabled = 1 AND (
              (l.remind_at IS NOT NULL AND l.remind_at <= ?)
              OR (l.deadline IS NOT NULL AND l.deadline >= ? AND l.deadline <= ?
-                 AND (l.deadline_notified = FALSE OR l.overdue_notified = FALSE))
+                 AND (l.deadline_notified = 0 OR l.overdue_notified = 0))
          )`,
         [now, day(-14), day(1)]
     );
@@ -823,7 +823,7 @@ async function getReminderCandidates(now = new Date()) {
          JOIN lists l ON l.id = m.list_id
          JOIN users u ON u.discord_id = m.discord_id
          LEFT JOIN list_reminders r ON r.list_id = m.list_id AND r.discord_id = m.discord_id
-         WHERE u.automation_enabled = TRUE AND (
+         WHERE u.automation_enabled = 1 AND (
              (r.remind_at IS NOT NULL AND r.remind_at <= ?)
              OR (l.deadline IS NOT NULL AND l.deadline >= ? AND l.deadline <= ?
                  AND (COALESCE(r.deadline_notified, 0) = 0 OR COALESCE(r.overdue_notified, 0) = 0))
@@ -843,7 +843,7 @@ async function getReminderCandidates(now = new Date()) {
 }
 
 /**
- * Record that a reminder went out. `kind`: 'due' | 'overdue' | 'snooze'. Keeps updated_at: it is not an edit.
+ * Record that a reminder went out. `kind`: 'due' | 'overdue' | 'snooze'. Leaves updated_at alone: it is not an edit.
  * `late`: the deadline day is over; `pastDeadline`: the deadline is today or earlier.
  * `recipientId`: who it went to. A member's state is kept apart (list_reminders); the owner's stays on the list.
  */
@@ -860,18 +860,18 @@ async function markReminderSent(listId, kind, { late = false, pastDeadline = lat
     if (recipientId !== undefined && owner && String(owner.discord_id) !== String(recipientId)) {
         await run(
             `INSERT INTO list_reminders (list_id, discord_id, deadline_notified, overdue_notified, remind_at) VALUES (?, ?, ?, ?, NULL)
-             ON DUPLICATE KEY UPDATE deadline_notified = GREATEST(deadline_notified, VALUES(deadline_notified)),
-                 overdue_notified = GREATEST(overdue_notified, VALUES(overdue_notified)),
-                 remind_at = IF(? = 1, NULL, remind_at)`,
+             ON CONFLICT (list_id, discord_id) DO UPDATE SET deadline_notified = GREATEST(list_reminders.deadline_notified, EXCLUDED.deadline_notified),
+                 overdue_notified = GREATEST(list_reminders.overdue_notified, EXCLUDED.overdue_notified),
+                 remind_at = CASE WHEN ?::int = 1 THEN NULL ELSE list_reminders.remind_at END`,
             [listId, String(recipientId), flags.deadline ? 1 : 0, flags.overdue ? 1 : 0, flags.clearSnooze ? 1 : 0]
         );
         return;
     }
     const sets = [];
-    if (flags.deadline) sets.push('deadline_notified = TRUE');
-    if (flags.overdue) sets.push('overdue_notified = TRUE');
+    if (flags.deadline) sets.push('deadline_notified = 1');
+    if (flags.overdue) sets.push('overdue_notified = 1');
     if (flags.clearSnooze) sets.push('remind_at = NULL');
-    await run(`UPDATE lists SET ${sets.join(', ')}, updated_at = updated_at WHERE id = ?`, [listId]);
+    await run(`UPDATE lists SET ${sets.join(', ')} WHERE id = ?`, [listId]);
 }
 
 /** Remind the user (owner or member) about a list again at `until`. Each person's snooze is their own. */
@@ -880,10 +880,10 @@ async function snoozeList(discordId, listId, until) {
     await withTransaction(async (conn) => {
         const { isOwner } = await access.forList(conn, discordId, id, 'viewer', { lock: true });
         if (isOwner) {
-            await conn.query('UPDATE lists SET remind_at = ?, updated_at = updated_at WHERE id = ?', [until, id]);
+            await conn.query('UPDATE lists SET remind_at = ? WHERE id = ?', [until, id]);
         } else {
             await conn.query(
-                'INSERT INTO list_reminders (list_id, discord_id, remind_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE remind_at = VALUES(remind_at)',
+                'INSERT INTO list_reminders (list_id, discord_id, remind_at) VALUES (?, ?, ?) ON CONFLICT (list_id, discord_id) DO UPDATE SET remind_at = EXCLUDED.remind_at',
                 [id, String(discordId), until]
             );
         }
@@ -905,7 +905,7 @@ async function getTaskReminderCandidates(now = new Date()) {
         `SELECT i.id, i.name, i.list_id, i.due_date, i.priority, i.remind_at, i.reminded_at, i.parent_id,
                 l.name AS list_name, l.discord_id, l.discord_id AS owner_id, u.timezone, u.reminder_hour
          FROM items i JOIN lists l ON l.id = i.list_id JOIN users u ON u.discord_id = l.discord_id
-         WHERE u.automation_enabled = TRUE AND i.completed = FALSE AND i.due_date IS NOT NULL AND (
+         WHERE u.automation_enabled = 1 AND i.completed = 0 AND i.due_date IS NOT NULL AND (
              (i.remind_at IS NOT NULL AND i.remind_at <= ?)
              OR (i.reminded_at IS NULL AND i.remind_at IS NULL AND i.due_date >= ? AND i.due_date <= ?
                  AND (l.deadline IS NULL OR l.deadline <> i.due_date))
@@ -920,7 +920,7 @@ async function getTaskReminderCandidates(now = new Date()) {
          JOIN items i ON i.list_id = l.id
          JOIN users u ON u.discord_id = m.discord_id
          LEFT JOIN item_reminders r ON r.item_id = i.id AND r.discord_id = m.discord_id
-         WHERE u.automation_enabled = TRUE AND i.completed = FALSE AND i.due_date IS NOT NULL AND (
+         WHERE u.automation_enabled = 1 AND i.completed = 0 AND i.due_date IS NOT NULL AND (
              (r.remind_at IS NOT NULL AND r.remind_at <= ?)
              OR (r.reminded_at IS NULL AND r.remind_at IS NULL AND i.due_date >= ? AND i.due_date <= ?
                  AND (l.deadline IS NULL OR l.deadline <> i.due_date))
@@ -937,14 +937,14 @@ async function markTaskReminderSent(itemId, now = new Date(), recipientId) {
         if (row && String(row.discord_id) !== String(recipientId)) {
             await run(
                 `INSERT INTO item_reminders (item_id, discord_id, reminded_at, remind_at) VALUES (?, ?, ?, NULL)
-                 ON DUPLICATE KEY UPDATE reminded_at = VALUES(reminded_at), remind_at = NULL`,
+                 ON CONFLICT (item_id, discord_id) DO UPDATE SET reminded_at = EXCLUDED.reminded_at, remind_at = NULL`,
                 [itemId, String(recipientId), now]
             );
             return;
         }
     }
-    // Keep updated_at: a reminder going out is not an edit (it would re-trigger the AI reindex and the cleanup timer).
-    await run('UPDATE items SET reminded_at = ?, remind_at = NULL, updated_at = updated_at WHERE id = ?', [now, itemId]);
+    // Leaves updated_at alone: a reminder going out is not an edit (it would re-trigger the AI reindex and the cleanup timer).
+    await run('UPDATE items SET reminded_at = ?, remind_at = NULL WHERE id = ?', [now, itemId]);
 }
 
 /** Remind the user (owner or member) about a task again at `until`. */
@@ -953,10 +953,10 @@ async function snoozeTask(discordId, itemId, until) {
     await withTransaction(async (conn) => {
         const { isOwner } = await access.forItem(conn, discordId, id, 'viewer', { lock: true });
         if (isOwner) {
-            await conn.query('UPDATE items SET remind_at = ?, updated_at = updated_at WHERE id = ?', [until, id]);
+            await conn.query('UPDATE items SET remind_at = ? WHERE id = ?', [until, id]);
         } else {
             await conn.query(
-                'INSERT INTO item_reminders (item_id, discord_id, remind_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE remind_at = VALUES(remind_at)',
+                'INSERT INTO item_reminders (item_id, discord_id, remind_at) VALUES (?, ?, ?) ON CONFLICT (item_id, discord_id) DO UPDATE SET remind_at = EXCLUDED.remind_at',
                 [id, String(discordId), until]
             );
         }
@@ -965,8 +965,8 @@ async function snoozeTask(discordId, itemId, until) {
 }
 
 async function markDeadlineNotified(listId) {
-    // Keep updated_at: a reminder being sent is not an edit of the list.
-    await run('UPDATE lists SET deadline_notified = TRUE, updated_at = updated_at WHERE id = ?', [listId]);
+    // Leaves updated_at alone: a reminder being sent is not an edit of the list.
+    await run('UPDATE lists SET deadline_notified = 1 WHERE id = ?', [listId]);
 }
 
 /**
@@ -977,8 +977,8 @@ async function markDeadlineNotified(listId) {
  * @returns {Promise<Array<{ id: number, discord_id: string }>>} the lists that were deleted
  */
 async function cleanupOldLists(days = 5, { onCandidates } = {}) {
-    const eligible = `u.auto_delete_old_lists = TRUE
-         AND s.total > 0 AND s.done = s.total AND s.last_change < (UTC_TIMESTAMP() - INTERVAL ? DAY)
+    const eligible = `u.auto_delete_old_lists = 1
+         AND s.total > 0 AND s.done = s.total AND s.last_change < (CURRENT_TIMESTAMP - make_interval(days => ?))
          AND NOT EXISTS (SELECT 1 FROM list_members sm WHERE sm.list_id = l.id)`;
     const from = `FROM lists l
          JOIN users u ON u.discord_id = l.discord_id

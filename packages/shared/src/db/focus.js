@@ -77,7 +77,7 @@ async function startFocus(discordId, minutes, now = new Date()) {
             throw errors.conflict(`You have already finished ${LIMITS.FOCUS_SESSIONS_PER_DAY} focus sessions today.`);
         }
         await conn.query("UPDATE focus_sessions SET state = 'cancelled', finished_at = ? WHERE discord_id = ? AND state = 'active'", [now, user.discord_id]);
-        const [res] = await conn.query('INSERT INTO focus_sessions (discord_id, started_at, minutes_planned) VALUES (?, ?, ?)', [user.discord_id, now, planned]);
+        const [res] = await conn.query('INSERT INTO focus_sessions (discord_id, started_at, minutes_planned) VALUES (?, ?, ?) RETURNING id', [user.discord_id, now, planned]);
         const [[row]] = await conn.query('SELECT * FROM focus_sessions WHERE id = ?', [res.insertId]);
         return view(row);
     });

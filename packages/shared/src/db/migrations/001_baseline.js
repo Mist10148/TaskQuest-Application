@@ -7,7 +7,7 @@
  * Conventions:
  *   flags are SMALLINT 0/1 (the code compares them with = 1 and reads them as numbers)
  *   former ENUMs are VARCHAR with a CHECK, which is easier to extend than a Postgres enum type
- *   times are TIMESTAMPTZ in whole seconds, or (3) where MySQL kept milliseconds; sessions run in UTC
+ *   times are TIMESTAMPTZ(3), the precision of a JavaScript Date, so a stored time reads back exactly; sessions run in UTC
  *   names a user must keep unique ignoring case (lists, templates, parties) are CITEXT
  *   nothing updates updated_at implicitly: the queries that edit a row set it themselves
  *   Postgres does not index a foreign key's column on its own, so every one that no other index leads with gets one
@@ -55,13 +55,13 @@ const STATEMENTS = [
         streak_warned_day DATE DEFAULT NULL,
         last_chest_streak INT NOT NULL DEFAULT 0,
         last_active_day DATE DEFAULT NULL,
-        last_daily_claim TIMESTAMPTZ(0) DEFAULT NULL,
+        last_daily_claim TIMESTAMPTZ(3) DEFAULT NULL,
         last_game_at TIMESTAMPTZ(3) DEFAULT NULL,
         ${OWNED_CLASSES.map((c) => `owns_${c} SMALLINT NOT NULL DEFAULT 0,`).join('\n        ')}
         assassin_streak INT NOT NULL DEFAULT 0,
         assassin_stacks INT NOT NULL DEFAULT 0,
         assassin_bleed INT NOT NULL DEFAULT 0,
-        assassin_last_at TIMESTAMPTZ(0) DEFAULT NULL,
+        assassin_last_at TIMESTAMPTZ(3) DEFAULT NULL,
         gambler_streak INT NOT NULL DEFAULT 0,
         wizard_counter INT NOT NULL DEFAULT 0,
         archer_streak INT NOT NULL DEFAULT 0,
@@ -77,16 +77,16 @@ const STATEMENTS = [
         total_lists_created INT NOT NULL DEFAULT 0,
         skill_points INT NOT NULL DEFAULT 0,
         timezone VARCHAR(64) DEFAULT NULL,
-        timezone_changed_at TIMESTAMPTZ(0) DEFAULT NULL,
+        timezone_changed_at TIMESTAMPTZ(3) DEFAULT NULL,
         reminder_hour SMALLINT NOT NULL DEFAULT 9,
         weekly_digest SMALLINT NOT NULL DEFAULT 0,
-        last_digest_at TIMESTAMPTZ(0) DEFAULT NULL,
+        last_digest_at TIMESTAMPTZ(3) DEFAULT NULL,
         calendar_token VARCHAR(32) DEFAULT NULL,
         equipped_title VARCHAR(40) DEFAULT NULL,
         equipped_frame VARCHAR(40) DEFAULT NULL,
         equipped_accent VARCHAR(40) DEFAULT NULL,
-        progress_reset_at TIMESTAMPTZ(0) DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        progress_reset_at TIMESTAMPTZ(3) DEFAULT NULL,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_users_discord_handle UNIQUE (discord_handle),
         CONSTRAINT uq_users_calendar_token UNIQUE (calendar_token)
     )`,
@@ -102,13 +102,13 @@ const STATEMENTS = [
         priority VARCHAR(6) DEFAULT NULL CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH')),
         deadline_notified SMALLINT NOT NULL DEFAULT 0,
         overdue_notified SMALLINT NOT NULL DEFAULT 0,
-        remind_at TIMESTAMPTZ(0) DEFAULT NULL,
+        remind_at TIMESTAMPTZ(3) DEFAULT NULL,
         rearm_count SMALLINT NOT NULL DEFAULT 0,
         rearm_day DATE DEFAULT NULL,
-        cleared_at TIMESTAMPTZ(0) DEFAULT NULL,
+        cleared_at TIMESTAMPTZ(3) DEFAULT NULL,
         cleared_by VARCHAR(32) DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_user_list UNIQUE (discord_id, name)
     )`,
     'CREATE INDEX IF NOT EXISTS idx_lists_deadline ON lists (deadline)',
@@ -121,7 +121,7 @@ const STATEMENTS = [
         description TEXT DEFAULT NULL,
         position INT NOT NULL DEFAULT 0,
         due_date DATE DEFAULT NULL,
-        due_date_set_at TIMESTAMPTZ(0) DEFAULT NULL,
+        due_date_set_at TIMESTAMPTZ(3) DEFAULT NULL,
         priority VARCHAR(6) DEFAULT NULL CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH')),
         tags VARCHAR(255) DEFAULT NULL,
         recurrence VARCHAR(7) DEFAULT NULL CHECK (recurrence IN ('daily', 'weekly', 'monthly')),
@@ -129,22 +129,22 @@ const STATEMENTS = [
         habit_streak INT NOT NULL DEFAULT 0,
         estimate_minutes INT DEFAULT NULL,
         completed SMALLINT NOT NULL DEFAULT 0,
-        completed_at TIMESTAMPTZ(0) DEFAULT NULL,
+        completed_at TIMESTAMPTZ(3) DEFAULT NULL,
         completed_by VARCHAR(32) DEFAULT NULL,
         xp_awarded SMALLINT NOT NULL DEFAULT 0,
         counts_for_quests SMALLINT NOT NULL DEFAULT 1,
-        first_completed_at TIMESTAMPTZ(0) DEFAULT NULL,
+        first_completed_at TIMESTAMPTZ(3) DEFAULT NULL,
         first_completed_by VARCHAR(32) DEFAULT NULL,
         first_completed_high SMALLINT DEFAULT NULL,
         first_completed_early SMALLINT DEFAULT NULL,
         first_completed_overdue SMALLINT DEFAULT NULL,
-        reminded_at TIMESTAMPTZ(0) DEFAULT NULL,
-        remind_at TIMESTAMPTZ(0) DEFAULT NULL,
+        reminded_at TIMESTAMPTZ(3) DEFAULT NULL,
+        remind_at TIMESTAMPTZ(3) DEFAULT NULL,
         rearm_count SMALLINT NOT NULL DEFAULT 0,
         rearm_day DATE DEFAULT NULL,
         created_by VARCHAR(32) DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
     'CREATE INDEX IF NOT EXISTS idx_items_list ON items (list_id, position)',
     'CREATE INDEX IF NOT EXISTS idx_items_parent ON items (parent_id)',
@@ -157,7 +157,7 @@ const STATEMENTS = [
         id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         achievement_key VARCHAR(50) NOT NULL,
-        unlocked_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        unlocked_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_achievement UNIQUE (discord_id, achievement_key)
     )`,
 
@@ -166,7 +166,7 @@ const STATEMENTS = [
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         skill_id VARCHAR(50) NOT NULL,
         skill_level INT NOT NULL DEFAULT 1,
-        unlocked_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        unlocked_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_skill UNIQUE (discord_id, skill_id)
     )`,
 
@@ -179,7 +179,7 @@ const STATEMENTS = [
         game_data JSONB DEFAULT NULL,
         payout BIGINT NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-        ended_at TIMESTAMPTZ(0) DEFAULT NULL
+        ended_at TIMESTAMPTZ(3) DEFAULT NULL
     )`,
     'CREATE INDEX IF NOT EXISTS idx_sessions_user_state ON game_sessions (discord_id, state, game_type)',
     'CREATE INDEX IF NOT EXISTS idx_sessions_state_created ON game_sessions (state, created_at)',
@@ -193,7 +193,7 @@ const STATEMENTS = [
         balance_after BIGINT NOT NULL DEFAULT 0,
         reference_id INT DEFAULT NULL,
         player_class VARCHAR(20) DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
     'CREATE INDEX IF NOT EXISTS idx_xp_user_created ON xp_transactions (discord_id, created_at)',
     'CREATE INDEX IF NOT EXISTS idx_xp_user_source_created ON xp_transactions (discord_id, source, created_at)',
@@ -208,7 +208,7 @@ const STATEMENTS = [
         balance_after BIGINT NOT NULL DEFAULT 0,
         reference_id INT DEFAULT NULL,
         player_class VARCHAR(20) DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
     'CREATE INDEX IF NOT EXISTS idx_xp_archive_user_created ON xp_transactions_archive (discord_id, created_at)',
     'CREATE INDEX IF NOT EXISTS idx_xp_archive_user_source_created ON xp_transactions_archive (discord_id, source, created_at)',
@@ -222,7 +222,7 @@ const STATEMENTS = [
         game_data JSONB DEFAULT NULL,
         payout BIGINT NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-        ended_at TIMESTAMPTZ(0) DEFAULT NULL
+        ended_at TIMESTAMPTZ(3) DEFAULT NULL
     )`,
     'CREATE INDEX IF NOT EXISTS idx_sessions_archive_user_state ON game_sessions_archive (discord_id, state, game_type)',
     'CREATE INDEX IF NOT EXISTS idx_sessions_archive_state_created ON game_sessions_archive (state, created_at)',
@@ -248,7 +248,7 @@ const STATEMENTS = [
         content_hash VARCHAR(64) NOT NULL,
         embedding vector(${EMBED_DIM}) NOT NULL,
         model VARCHAR(100) NOT NULL,
-        updated_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT uq_ai_emb_source UNIQUE (source_type, source_id, model)
     )`,
     'CREATE INDEX IF NOT EXISTS idx_ai_emb_user ON ai_embeddings (discord_id, source_type)',
@@ -260,8 +260,8 @@ const STATEMENTS = [
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         title VARCHAR(120) NOT NULL DEFAULT 'New chat',
         source VARCHAR(16) NOT NULL DEFAULT 'web',
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
     'CREATE INDEX IF NOT EXISTS idx_ai_threads_user ON ai_chat_threads (discord_id, updated_at)',
 
@@ -273,7 +273,7 @@ const STATEMENTS = [
         type VARCHAR(32) DEFAULT NULL,
         checkpoint BYTEA NOT NULL,
         metadata BYTEA DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
     )`,
 
@@ -304,7 +304,7 @@ const STATEMENTS = [
         scope_key VARCHAR(100) NOT NULL,
         input_hash VARCHAR(64) NOT NULL,
         summary_json JSONB NOT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (discord_id, scope_key)
     )`,
 
@@ -317,17 +317,17 @@ const STATEMENTS = [
         quest_key VARCHAR(50) NOT NULL,
         period_start DATE NOT NULL,
         reward_xp INT NOT NULL DEFAULT 0,
-        claimed_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        claimed_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT uq_quest_claim UNIQUE (discord_id, quest_key, period_start)
     )`,
 
     `CREATE TABLE IF NOT EXISTS focus_sessions (
         id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
-        started_at TIMESTAMPTZ(0) NOT NULL,
+        started_at TIMESTAMPTZ(3) NOT NULL,
         minutes_planned INT NOT NULL,
         state VARCHAR(12) NOT NULL DEFAULT 'active',
-        finished_at TIMESTAMPTZ(0) DEFAULT NULL,
+        finished_at TIMESTAMPTZ(3) DEFAULT NULL,
         minutes_credited INT DEFAULT NULL,
         xp INT NOT NULL DEFAULT 0
     )`,
@@ -341,7 +341,7 @@ const STATEMENTS = [
         name CITEXT NOT NULL,
         description TEXT DEFAULT NULL,
         items JSONB NOT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_user_template UNIQUE (discord_id, name)
     )`,
 
@@ -349,7 +349,7 @@ const STATEMENTS = [
         id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         cosmetic_id VARCHAR(40) NOT NULL,
-        acquired_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        acquired_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_user_cosmetic UNIQUE (discord_id, cosmetic_id)
     )`,
 
@@ -361,8 +361,8 @@ const STATEMENTS = [
         endpoint_hash VARCHAR(64) NOT NULL,
         p256dh VARCHAR(255) NOT NULL,
         auth VARCHAR(255) NOT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        last_used_at TIMESTAMPTZ(0) DEFAULT NULL,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_used_at TIMESTAMPTZ(3) DEFAULT NULL,
         CONSTRAINT unique_push_endpoint UNIQUE (endpoint_hash)
     )`,
     'CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions (discord_id)',
@@ -375,7 +375,7 @@ const STATEMENTS = [
         role VARCHAR(7) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'editor', 'manager')),
         public_id VARCHAR(12) NOT NULL,
         added_by VARCHAR(32) DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (list_id, discord_id),
         CONSTRAINT unique_list_member_public UNIQUE (public_id)
     )`,
@@ -388,9 +388,9 @@ const STATEMENTS = [
         role VARCHAR(7) NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer', 'editor', 'manager')),
         invited_by VARCHAR(32) NOT NULL,
         status VARCHAR(8) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'revoked')),
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMPTZ(0) NOT NULL,
-        responded_at TIMESTAMPTZ(0) DEFAULT NULL
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMPTZ(3) NOT NULL,
+        responded_at TIMESTAMPTZ(3) DEFAULT NULL
     )`,
     'CREATE INDEX IF NOT EXISTS idx_list_invites_invitee ON list_invites (invitee_discord_id, status)',
     'CREATE INDEX IF NOT EXISTS idx_list_invites_list ON list_invites (list_id, status)',
@@ -402,7 +402,7 @@ const STATEMENTS = [
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         deadline_notified SMALLINT NOT NULL DEFAULT 0,
         overdue_notified SMALLINT NOT NULL DEFAULT 0,
-        remind_at TIMESTAMPTZ(0) DEFAULT NULL,
+        remind_at TIMESTAMPTZ(3) DEFAULT NULL,
         PRIMARY KEY (list_id, discord_id)
     )`,
     'CREATE INDEX IF NOT EXISTS idx_list_reminders_user ON list_reminders (discord_id)',
@@ -410,8 +410,8 @@ const STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS item_reminders (
         item_id INT NOT NULL REFERENCES items (id) ON DELETE CASCADE,
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
-        reminded_at TIMESTAMPTZ(0) DEFAULT NULL,
-        remind_at TIMESTAMPTZ(0) DEFAULT NULL,
+        reminded_at TIMESTAMPTZ(3) DEFAULT NULL,
+        remind_at TIMESTAMPTZ(3) DEFAULT NULL,
         PRIMARY KEY (item_id, discord_id)
     )`,
     'CREATE INDEX IF NOT EXISTS idx_item_reminders_user ON item_reminders (discord_id)',
@@ -422,7 +422,7 @@ const STATEMENTS = [
         id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
         name CITEXT NOT NULL,
         owner_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_party_owner_name UNIQUE (owner_id, name)
     )`,
 
@@ -430,7 +430,7 @@ const STATEMENTS = [
         party_id INT NOT NULL REFERENCES parties (id) ON DELETE CASCADE,
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         public_id VARCHAR(12) DEFAULT NULL,
-        joined_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        joined_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (party_id, discord_id),
         CONSTRAINT unique_party_member_user UNIQUE (discord_id),
         CONSTRAINT unique_party_member_public UNIQUE (public_id)
@@ -442,9 +442,9 @@ const STATEMENTS = [
         invitee_discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         invited_by VARCHAR(32) NOT NULL,
         status VARCHAR(8) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'revoked')),
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMPTZ(0) NOT NULL,
-        responded_at TIMESTAMPTZ(0) DEFAULT NULL
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMPTZ(3) NOT NULL,
+        responded_at TIMESTAMPTZ(3) DEFAULT NULL
     )`,
     'CREATE INDEX IF NOT EXISTS idx_party_invites_invitee ON party_invites (invitee_discord_id, status)',
     'CREATE INDEX IF NOT EXISTS idx_party_invites_party ON party_invites (party_id, status)',
@@ -457,7 +457,7 @@ const STATEMENTS = [
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         day DATE NOT NULL,
         note VARCHAR(200) NOT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT unique_reflection_day UNIQUE (discord_id, day)
     )`,
 
@@ -466,8 +466,8 @@ const STATEMENTS = [
         discord_id VARCHAR(32) NOT NULL REFERENCES users (discord_id) ON DELETE CASCADE,
         week_key VARCHAR(10) NOT NULL,
         target INT NOT NULL,
-        claimed_at TIMESTAMPTZ(0) DEFAULT NULL,
-        created_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        claimed_at TIMESTAMPTZ(3) DEFAULT NULL,
+        created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (discord_id, week_key)
     )`
 ];

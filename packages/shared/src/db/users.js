@@ -41,7 +41,7 @@ async function ensureUser(discordId, profile, conn) {
             run(
                 conn,
                 `INSERT INTO users (discord_id, discord_username, discord_avatar${withHandle ? ', discord_handle' : ''}) VALUES (?, ?, ?${withHandle ? ', ?' : ''})
-                 ON DUPLICATE KEY UPDATE discord_username = VALUES(discord_username), discord_avatar = VALUES(discord_avatar)${withHandle ? ', discord_handle = VALUES(discord_handle)' : ''}`,
+                 ON CONFLICT (discord_id) DO UPDATE SET discord_username = EXCLUDED.discord_username, discord_avatar = EXCLUDED.discord_avatar${withHandle ? ', discord_handle = EXCLUDED.discord_handle' : ''}`,
                 [id, profile.username ? String(profile.username).slice(0, 100) : null, profile.avatar ? String(profile.avatar).slice(0, 100) : null, ...(withHandle ? [handle] : [])]
             );
         if (withHandle) {
@@ -57,7 +57,7 @@ async function ensureUser(discordId, profile, conn) {
             }
         } else await upsert();
     } else {
-        await run(conn, 'INSERT IGNORE INTO users (discord_id) VALUES (?)', [id]);
+        await run(conn, 'INSERT INTO users (discord_id) VALUES (?) ON CONFLICT DO NOTHING', [id]);
     }
     return getUser(id, conn);
 }
@@ -65,11 +65,10 @@ async function ensureUser(discordId, profile, conn) {
 /** Lock (and create if missing) a user row inside a transaction. */
 async function lockUser(conn, discordId) {
     const id = String(discordId);
-    // Lock first: an INSERT IGNORE on an existing row takes a shared lock, and two requests that
-    // each hold one and then want the exclusive lock deadlock (a double click on a purchase).
+    // Lock first, and only insert a row that is missing: the common case then takes the one exclusive lock it needs.
     const [existing] = await conn.query('SELECT * FROM users WHERE discord_id = ? FOR UPDATE', [id]);
     if (existing[0]) return existing[0];
-    await conn.query('INSERT IGNORE INTO users (discord_id) VALUES (?)', [id]);
+    await conn.query('INSERT INTO users (discord_id) VALUES (?) ON CONFLICT DO NOTHING', [id]);
     const [rows] = await conn.query('SELECT * FROM users WHERE discord_id = ? FOR UPDATE', [id]);
     return rows[0];
 }
@@ -139,7 +138,7 @@ async function setAiChatFormat(discordId, format) {
 async function toggleSetting(discordId, key) {
     if (!SETTINGS.includes(key)) throw new Error(`Unknown setting ${key}`);
     await ensureUser(discordId);
-    await run(null, `UPDATE users SET ${key} = NOT ${key} WHERE discord_id = ?`, [String(discordId)]);
+    await run(null, `UPDATE users SET ${key} = 1 - ${key} WHERE discord_id = ?`, [String(discordId)]);
     return Boolean((await getUser(discordId))[key]);
 }
 
@@ -155,9 +154,9 @@ async function getGameCounts(discordId, conn) {
     const [row] = await run(
         conn,
         `SELECT COUNT(*) AS played,
-                COALESCE(SUM(state IN ('won','blackjack')), 0) AS won,
-                COALESCE(SUM(state = 'lost'), 0) AS lost,
-                COALESCE(SUM(state = 'push'), 0) AS draws
+                COUNT(*) FILTER (WHERE state IN ('won','blackjack')) AS won,
+                COUNT(*) FILTER (WHERE state = 'lost') AS lost,
+                COUNT(*) FILTER (WHERE state = 'push') AS draws
          FROM game_sessions WHERE discord_id = ? AND state IN ('won','blackjack','lost','push')`,
         [String(discordId)]
     );
@@ -221,10 +220,10 @@ function scoreSql(by, now = new Date()) {
                     WHEN u.last_daily_claim IS NULL THEN 0
                     WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'tank_unstoppable') THEN u.streak_count
                     WHEN u.player_class = 'PALADIN' AND u.last_daily_claim >= (CASE
-                        WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'paladin_sanctuary') THEN ? ELSE ? END)
+                        WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'paladin_sanctuary') THEN ?::timestamptz ELSE ?::timestamptz END)
                         THEN u.streak_count
                     WHEN u.last_daily_claim >= (CASE
-                        WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'default_streak_shield') THEN ? ELSE ? END)
+                        WHEN EXISTS (SELECT 1 FROM user_skills k WHERE k.discord_id = u.discord_id AND k.skill_id = 'default_streak_shield') THEN ?::timestamptz ELSE ?::timestamptz END)
                         THEN u.streak_count
                     ELSE 0 END)`,
                 params: [
@@ -260,7 +259,7 @@ async function getLeaderboard(limit = 10, { by = 'lifetime', playerClass, now } 
     const n = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
     const board = LEADERBOARDS.includes(by) ? by : 'lifetime';
     const score = scoreSql(board, now);
-    const where = ['u.gamification_enabled = TRUE'];
+    const where = ['u.gamification_enabled = 1'];
     const params = [...score.params];
     if (playerClass) {
         where.push('u.player_class = ?');
@@ -268,25 +267,36 @@ async function getLeaderboard(limit = 10, { by = 'lifetime', playerClass, now } 
     }
     const rows = await run(
         null,
-        `SELECT u.discord_id, u.discord_username, u.discord_avatar, u.player_xp, u.lifetime_xp, GREATEST(u.lifetime_xp_total, u.lifetime_xp) AS lifetime_xp_total, u.prestige, u.player_level,
-                u.player_class, u.streak_count, u.total_items_completed, u.equipped_title, u.equipped_frame, u.equipped_accent,
-                ${score.sql} AS score,
-                (SELECT COUNT(*) FROM game_sessions g
-                  WHERE g.discord_id = u.discord_id AND g.state IN ('won','blackjack','lost','push')) AS games_played
-         FROM users u
-         WHERE ${where.join(' AND ')}
-         ${board === 'weekly' || board === 'streak' ? 'HAVING score > 0' : ''}
-         ORDER BY score DESC, GREATEST(u.lifetime_xp_total, u.lifetime_xp) DESC, u.discord_id
+        `SELECT * FROM (
+             SELECT u.discord_id, u.discord_username, u.discord_avatar, u.player_xp, u.lifetime_xp, GREATEST(u.lifetime_xp_total, u.lifetime_xp) AS lifetime_xp_total, u.prestige, u.player_level,
+                    u.player_class, u.streak_count, u.total_items_completed, u.equipped_title, u.equipped_frame, u.equipped_accent,
+                    ${score.sql} AS score
+             FROM users u
+             WHERE ${where.join(' AND ')}
+         ) b
+         ${board === 'weekly' || board === 'streak' ? 'WHERE b.score > 0' : ''}
+         ORDER BY b.score DESC, b.lifetime_xp_total DESC, b.discord_id
          LIMIT ${n}`,
         params
     );
+    // Games played only for the rows on the board.
+    const ids = rows.map((r) => r.discord_id);
+    const games = ids.length
+        ? await run(
+              null,
+              `SELECT discord_id, COUNT(*) AS n FROM game_sessions
+               WHERE discord_id = ANY(?) AND state IN ('won','blackjack','lost','push') GROUP BY discord_id`,
+              [ids]
+          )
+        : [];
+    const played = new Map(games.map((g) => [g.discord_id, Number(g.n)]));
     return rows.map((r, i) => ({
         rank: i + 1,
         ...r,
         // On the streak tab the live streak is the score (a stale one is already filtered out).
         ...(board === 'streak' ? { streak_count: Number(r.score) } : {}),
         score: Number(r.score),
-        games_played: Number(r.games_played)
+        games_played: played.get(r.discord_id) || 0
     }));
 }
 
@@ -310,7 +320,7 @@ async function getRank(discordId, by = 'lifetime', { now, playerClass } = {}) {
     const [row] = await run(
         null,
         `SELECT COUNT(*) + 1 AS user_rank FROM users u
-         WHERE u.gamification_enabled = TRUE ${cls ? 'AND u.player_class = ?' : ''}
+         WHERE u.gamification_enabled = 1 ${cls ? 'AND u.player_class = ?' : ''}
            AND (${other.sql} > ? OR (${other.sql} = ? AND (GREATEST(u.lifetime_xp_total, u.lifetime_xp) > ? OR (GREATEST(u.lifetime_xp_total, u.lifetime_xp) = ? AND u.discord_id < ?))))`,
         [...(cls ? [cls] : []), ...other.params, score, ...other.params, score, lifetime, lifetime, String(discordId)]
     );
@@ -324,7 +334,7 @@ async function getDigestCandidates(now = new Date()) {
     return run(
         null,
         `SELECT discord_id, timezone, reminder_hour, last_digest_at, ai_enabled FROM users
-         WHERE weekly_digest = TRUE AND (last_digest_at IS NULL OR last_digest_at < ?)`,
+         WHERE weekly_digest = 1 AND (last_digest_at IS NULL OR last_digest_at < ?)`,
         [new Date(now.getTime() - 6 * 86400e3)]
     );
 }
@@ -346,8 +356,8 @@ async function claimDigest(discordId, now = new Date()) {
 }
 
 /**
- * `last_digest_at` is a TIMESTAMP without fractions, so the value a claim stores is the whole second; release compares against the same
- * whole second (a Date with milliseconds would never equal the stored value, and the undo would silently do nothing).
+ * A claim stores the whole second in `last_digest_at`, and release compares against the same whole second, so the undo matches
+ * exactly the value the claim wrote (callers may pass the claim time with or without its milliseconds).
  */
 const wholeSecond = (date) => new Date(Math.floor(new Date(date).getTime() / 1000) * 1000);
 
@@ -422,11 +432,11 @@ async function resetProgress(discordId) {
         await conn.query('DELETE FROM parties WHERE owner_id = ?', [id]); // a party the user owns goes with them
         await conn.query('DELETE FROM party_members WHERE discord_id = ?', [id]);
         await conn.query(
-            `UPDATE users SET progress_reset_at = UTC_TIMESTAMP(), player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
+            `UPDATE users SET progress_reset_at = CURRENT_TIMESTAMP, player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,
                 total_lists_created = 0, total_items_added = 0, total_items_completed = 0,
-                owns_hero = FALSE, owns_gambler = FALSE, owns_assassin = FALSE, owns_wizard = FALSE,
-                owns_archer = FALSE, owns_tank = FALSE, owns_monk = FALSE, monk_rhythm = 0, monk_day = NULL, owns_artisan = FALSE, artisan_progress = 0, owns_ranger = FALSE, owns_necromancer = FALSE, owns_paladin = FALSE, necro_souls = 0, owns_bard = FALSE, owns_alchemist = FALSE, owns_druid = FALSE, owns_chronomancer = FALSE, owns_warden = FALSE, bard_recent = '', alchemist_mix = 0, xp_spent = 0, streak_freezes = 0, last_chest_streak = 0, equipped_title = NULL, equipped_frame = NULL, equipped_accent = NULL,
+                owns_hero = 0, owns_gambler = 0, owns_assassin = 0, owns_wizard = 0,
+                owns_archer = 0, owns_tank = 0, owns_monk = 0, monk_rhythm = 0, monk_day = NULL, owns_artisan = 0, artisan_progress = 0, owns_ranger = 0, owns_necromancer = 0, owns_paladin = 0, necro_souls = 0, owns_bard = 0, owns_alchemist = 0, owns_druid = 0, owns_chronomancer = 0, owns_warden = 0, bard_recent = '', alchemist_mix = 0, xp_spent = 0, streak_freezes = 0, last_chest_streak = 0, equipped_title = NULL, equipped_frame = NULL, equipped_accent = NULL,
                 assassin_streak = 0, assassin_stacks = 0, assassin_last_at = NULL, assassin_bleed = 0, gambler_streak = 0, wizard_counter = 0, archer_streak = 0, tank_stacks = 0
              WHERE discord_id = ?`,
             [id]

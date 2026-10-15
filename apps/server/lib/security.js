@@ -8,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import db from '@taskquest/shared/db';
 import config from '../config.js';
-import { MySQLSessionStore } from './sessionStore.js';
+import { DbSessionStore } from './sessionStore.js';
 
 /** Security headers, with a CSP matching what the SPA actually loads. */
 export function securityHeaders() {
@@ -121,7 +121,7 @@ export function csrfProtection(req, res, next) {
 
 /** express-session backed by the web_sessions table (survives restarts and redeploys). */
 export function sessionMiddleware(cookieName) {
-    const store = new MySQLSessionStore(db.getPool(), { ttlMs: config.sessionMaxAgeMs });
+    const store = new DbSessionStore(db.getPool(), { ttlMs: config.sessionMaxAgeMs });
 
     return session({
         name: cookieName,

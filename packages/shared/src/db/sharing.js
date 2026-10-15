@@ -78,7 +78,7 @@ function invitePreview(invitee) {
 const notSent = (input) => (input.dryRun ? { dryRun: true, name: null, avatarUrl: null } : { sent: false });
 
 /** Pending invitations that have not run out. */
-const LIVE = "status = 'pending' AND expires_at > UTC_TIMESTAMP()";
+const LIVE = "status = 'pending' AND expires_at > CURRENT_TIMESTAMP";
 
 async function memberCount(conn, listId) {
     const [[m]] = await conn.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [listId]);
@@ -102,7 +102,7 @@ async function invite(actorId, listId, input = {}) {
         if (role === 'manager' && !isOwner) throw errors.forbidden('Only the owner can invite someone as a manager.');
 
         // Checked before the lookup: a limit that only fires for real, invitable people would reveal who exists.
-        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)', [String(actorId)]);
+        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND created_at > (CURRENT_TIMESTAMP - make_interval(days => 1))', [String(actorId)]);
         if (Number(sent.n) >= LIMITS.INVITES_PER_DAY) throw new TaskQuestError('RATE_LIMITED', 'You have sent a lot of invitations today. Try again tomorrow.', 429);
 
         const invitee = await findInvitee(conn, input);
@@ -114,14 +114,14 @@ async function invite(actorId, listId, input = {}) {
         const [[already]] = await conn.query('SELECT 1 AS x FROM list_members WHERE list_id = ? AND discord_id = ?', [list.id, inviteeId]);
         if (already) throw errors.conflict('That person is already on this list.');
         // An invitation that ran out no longer blocks a new one.
-        await conn.query("UPDATE list_invites SET status = 'revoked' WHERE list_id = ? AND invitee_discord_id = ? AND status = 'pending' AND expires_at <= UTC_TIMESTAMP()", [list.id, inviteeId]);
+        await conn.query("UPDATE list_invites SET status = 'revoked' WHERE list_id = ? AND invitee_discord_id = ? AND status = 'pending' AND expires_at <= CURRENT_TIMESTAMP", [list.id, inviteeId]);
         const [[pending]] = await conn.query(`SELECT 1 AS x FROM list_invites WHERE list_id = ? AND invitee_discord_id = ? AND ${LIVE}`, [list.id, inviteeId]);
         if (pending) throw errors.conflict('That person already has an invitation to this list.');
 
         // Hidden from the inviter: the person takes no invitations, or declined this inviter in the last few days (on any list).
         if (!Number(invitee.accept_invites)) return notSent(input);
         const [[declined]] = await conn.query(
-            "SELECT 1 AS x FROM list_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND COALESCE(responded_at, created_at) > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
+            "SELECT 1 AS x FROM list_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND COALESCE(responded_at, created_at) > (CURRENT_TIMESTAMP - make_interval(days => ?)) LIMIT 1",
             [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
         );
         if (declined) return notSent(input);
@@ -133,7 +133,7 @@ async function invite(actorId, listId, input = {}) {
 
         if (input.dryRun) return { dryRun: true, ...invitePreview(invitee) };
         const expiresAt = new Date(Date.now() + LIMITS.INVITE_TTL_DAYS * DAY_MS);
-        const [res] = await conn.query('INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, expires_at) VALUES (?, ?, ?, ?, ?)', [
+        const [res] = await conn.query('INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, expires_at) VALUES (?, ?, ?, ?, ?) RETURNING id', [
             list.id,
             inviteeId,
             role,
@@ -152,7 +152,7 @@ async function listInvites(userId) {
          JOIN lists l ON l.id = i.list_id
          JOIN users ou ON ou.discord_id = l.discord_id
          LEFT JOIN users iu ON iu.discord_id = i.invited_by
-         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > UTC_TIMESTAMP()
+         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP
          ORDER BY i.id DESC`,
         [String(userId)]
     );
@@ -191,7 +191,7 @@ async function respondIn(userId, id, accept) {
             throw errors.conflict('This invitation has expired. Ask for a new one.');
         }
         if (!accept) {
-            await conn.query("UPDATE list_invites SET status = 'declined', responded_at = UTC_TIMESTAMP() WHERE id = ?", [id]);
+            await conn.query("UPDATE list_invites SET status = 'declined', responded_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
             return { accepted: false, list: null, role: inv.role };
         }
         const [[list]] = await conn.query('SELECT id, name, discord_id FROM lists WHERE id = ?', [inv.list_id]);
@@ -256,7 +256,7 @@ async function listMembers(userId, listId) {
         const [inv] = await getPool().query(
             `SELECT i.id, i.role, i.created_at, i.expires_at, u.discord_username AS invitee_name
              FROM list_invites i JOIN users u ON u.discord_id = i.invitee_discord_id
-             WHERE i.list_id = ? AND i.status = 'pending' AND i.expires_at > UTC_TIMESTAMP() ORDER BY i.id`,
+             WHERE i.list_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP ORDER BY i.id`,
             [list.id]
         );
         invites = inv.map((r) => ({ id: r.id, inviteeName: r.invitee_name, role: r.role, createdAt: r.created_at, expiresAt: r.expires_at }));
@@ -298,7 +298,7 @@ async function dropMember(conn, listId, discordId, { keepInvites = false } = {})
     await conn.query('DELETE FROM list_reminders WHERE list_id = ? AND discord_id = ?', [listId, discordId]);
     // Read the task ids first (a plain consistent read), so this transaction never takes row locks on items while it holds the list lock.
     const [tasks] = await conn.query('SELECT id FROM items WHERE list_id = ?', [listId]);
-    if (tasks.length) await conn.query('DELETE FROM item_reminders WHERE discord_id = ? AND item_id IN (?)', [discordId, tasks.map((t) => t.id)]);
+    if (tasks.length) await conn.query('DELETE FROM item_reminders WHERE discord_id = ? AND item_id = ANY(?)', [discordId, tasks.map((t) => t.id)]);
 }
 
 /** Remove a member from a list the actor manages. Only the owner removes a manager. */
@@ -342,7 +342,7 @@ async function transferOwnership(actorId, listId, memberKey) {
         if (Number(theirs.n) + Number(here.n) > LIMITS.MAX_ITEMS_PER_USER) throw errors.validation('That person would go over the task limit with this quest.');
 
         const former = String(actorId);
-        await conn.query('UPDATE lists SET discord_id = ? WHERE id = ?', [next, list.id]);
+        await conn.query('UPDATE lists SET discord_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, list.id]);
         // The new owner is no longer a member; their member-only reminder state goes with the row. The invitations they sent stay valid.
         await dropMember(conn, list.id, next, { keepInvites: true });
         const key = crypto.randomBytes(6).toString('hex');

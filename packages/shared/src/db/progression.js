@@ -97,7 +97,7 @@ async function applyXP(conn, user, amount, source, opts = {}) {
 
     const [res] = await conn.query(
         `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id, player_class)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         [user.discord_id, delta, source, balanceBefore, balanceAfter, opts.referenceId ?? null, user.player_class || null]
     );
 
@@ -227,7 +227,7 @@ async function unlockAchievements(conn, user, events = {}) {
         const candidates = evaluateAchievements({ ...user, games_played: games.played, games_won: games.won }, known, events);
         let found = 0;
         for (const ach of candidates) {
-            const [res] = await conn.query('INSERT IGNORE INTO achievements (discord_id, achievement_key) VALUES (?, ?)', [
+            const [res] = await conn.query('INSERT INTO achievements (discord_id, achievement_key) VALUES (?, ?) ON CONFLICT DO NOTHING RETURNING id', [
                 user.discord_id,
                 ach.key
             ]);
@@ -467,7 +467,7 @@ async function unlockSkill(discordId, skillId) {
         const tx = await applyXP(conn, user, -skill.cost, 'skill_purchase');
         await conn.query(
             `INSERT INTO user_skills (discord_id, skill_id, skill_level) VALUES (?, ?, 1)
-             ON DUPLICATE KEY UPDATE skill_level = skill_level + 1`,
+             ON CONFLICT (discord_id, skill_id) DO UPDATE SET skill_level = user_skills.skill_level + 1`,
             [user.discord_id, skillId]
         );
         return { skillId, treeKey, skill, level: currentLevel + 1, cost: skill.cost, balance: tx.balanceAfter };

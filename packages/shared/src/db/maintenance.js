@@ -27,8 +27,8 @@ async function moveBatches({ table, archive, columns, where, params, batch, dryR
             const [rows] = await conn.query(`SELECT id FROM ${table} WHERE ${where} ORDER BY id LIMIT ?`, [...params, batch]);
             if (!rows.length) return 0;
             const ids = rows.map((r) => r.id);
-            await conn.query(`INSERT IGNORE INTO ${archive} (${columns}) SELECT ${columns} FROM ${table} WHERE id IN (?)`, [ids]);
-            await conn.query(`DELETE FROM ${table} WHERE id IN (?)`, [ids]);
+            await conn.query(`INSERT INTO ${archive} (${columns}) SELECT ${columns} FROM ${table} WHERE id = ANY(?) ON CONFLICT DO NOTHING`, [ids]);
+            await conn.query(`DELETE FROM ${table} WHERE id = ANY(?)`, [ids]);
             return ids.length;
         });
         moved += n;
@@ -63,7 +63,7 @@ const MODIFIED_SOURCES = ['list_create', 'item_add', 'item_complete', 'daily', '
 async function xpByClass({ days = 90, now = new Date() } = {}) {
     const [rows] = await getPool().query(
         `SELECT COALESCE(player_class, 'UNKNOWN') AS player_class, source, COUNT(*) AS rewards, AVG(amount) AS average, SUM(amount) AS total
-           FROM xp_transactions WHERE created_at >= ? AND amount > 0 AND source IN (?)
+           FROM xp_transactions WHERE created_at >= ? AND amount > 0 AND source = ANY(?)
           GROUP BY COALESCE(player_class, 'UNKNOWN'), source ORDER BY player_class, source`,
         [new Date(now.getTime() - days * DAY_MS), MODIFIED_SOURCES]
     );

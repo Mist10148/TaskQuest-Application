@@ -84,7 +84,7 @@ async function createTemplate(discordId, input) {
         if (Number(count.n) >= MAX_TEMPLATES) throw errors.validation(`You can keep at most ${MAX_TEMPLATES} templates. Delete one first.`);
         let id;
         try {
-            const [res] = await conn.query('INSERT INTO task_templates (discord_id, name, description, items) VALUES (?, ?, ?, ?)', [
+            const [res] = await conn.query('INSERT INTO task_templates (discord_id, name, description, items) VALUES (?, ?, ?, ?) RETURNING id', [
                 user.discord_id,
                 t.name,
                 t.description,

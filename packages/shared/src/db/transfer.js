@@ -207,7 +207,7 @@ async function importAll(discordId, data) {
                 if (parentId !== null && subtaskRefs.has(it.parentRef)) throw errors.validation('Subtasks can only be one level deep.');
                 const [ir] = await conn.query(
                     `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, completed_by, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, counts_for_quests, created_by)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?) RETURNING id`,
                     [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, it.completed ? user.discord_id : null, position++, it.due_date, it.due_date ? new Date() : null, it.priority, it.tags, it.recurrence, it.estimate_minutes, parentId, user.discord_id]
                 );
                 if (it.ref !== null) {
@@ -227,7 +227,7 @@ async function importAll(discordId, data) {
 /** Create (or replace) the user's secret calendar feed token. */
 async function regenerateCalendarToken(discordId) {
     const token = crypto.randomBytes(16).toString('hex');
-    await getPool().query('INSERT IGNORE INTO users (discord_id) VALUES (?)', [String(discordId)]);
+    await getPool().query('INSERT INTO users (discord_id) VALUES (?) ON CONFLICT DO NOTHING', [String(discordId)]);
     await getPool().query('UPDATE users SET calendar_token = ? WHERE discord_id = ?', [token, String(discordId)]);
     return token;
 }
@@ -254,7 +254,7 @@ async function getCalendarData(discordId) {
     const acc = access.accessSql('l', discordId);
     const [lists] = await getPool().query(
         `SELECT l.id, l.name, l.description, l.category, l.deadline,
-                (SELECT COUNT(*) > 0 AND SUM(i.completed) = COUNT(*) FROM items i WHERE i.list_id = l.id) AS completed
+                (SELECT CASE WHEN COUNT(*) > 0 AND SUM(i.completed) = COUNT(*) THEN 1 ELSE 0 END FROM items i WHERE i.list_id = l.id) AS completed
          FROM lists l WHERE ${acc.sql} AND l.deadline IS NOT NULL`,
         acc.params
     );

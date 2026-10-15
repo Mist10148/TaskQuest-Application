@@ -40,7 +40,7 @@ async function completionExtras(conn, user, item, ctx, now = new Date()) {
     // Perfect day: every top-level task due today on your own lists is done (at least 3 of them), once a day.
     if (dueToday && (await countToday(conn, user, 'perfect_day', now)) === 0) {
         const [[due]] = await conn.query(
-            `SELECT COUNT(*) AS total, COALESCE(SUM(i.completed = 0), 0) AS open
+            `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE i.completed = 0) AS open
                FROM items i JOIN lists l ON l.id = i.list_id
               WHERE l.discord_id = ? AND i.parent_id IS NULL AND i.due_date = ?`,
             [user.discord_id, ctx.today]
@@ -66,7 +66,7 @@ async function completionExtras(conn, user, item, ctx, now = new Date()) {
 
     // Boss defeated: finishing the last open subtask of a task with at least 4 subtasks, once per boss.
     if (item.parent_id) {
-        const [[subs]] = await conn.query('SELECT COUNT(*) AS total, COALESCE(SUM(completed = 0), 0) AS open FROM items WHERE parent_id = ?', [item.parent_id]);
+        const [[subs]] = await conn.query('SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE completed = 0) AS open FROM items WHERE parent_id = ?', [item.parent_id]);
         if (Number(subs.total) >= LIMITS.BOSS_MIN_SUBTASKS && Number(subs.open) === 0) {
             const [[paid]] = await conn.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'boss_defeated' AND reference_id = ?", [user.discord_id, item.parent_id]);
             if (Number(paid.n) === 0) await pay('boss_defeated', REWARDS.BOSS_DEFEATED, { dailyCap: LIMITS.BOSS_XP_PER_DAY, referenceId: item.parent_id });

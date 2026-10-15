@@ -47,7 +47,7 @@ async function writeReflection(discordId, note, now = new Date()) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
         const day = todayInZone(user.timezone, now);
-        const [res] = await conn.query('INSERT IGNORE INTO reflections (discord_id, day, note) VALUES (?, ?, ?)', [user.discord_id, day, text.value]);
+        const [res] = await conn.query('INSERT INTO reflections (discord_id, day, note) VALUES (?, ?, ?) ON CONFLICT DO NOTHING RETURNING id', [user.discord_id, day, text.value]);
         if (res.affectedRows !== 1) throw errors.conflict("You already wrote today's reflection.");
         const previousLevel = Number(user.player_level);
         const paid = await awardFlat(conn, user, 'reflection', REWARDS.REFLECTION, { referenceId: res.insertId });
@@ -121,7 +121,7 @@ async function setGoal(discordId, target, now = new Date()) {
         if (s.claimed) throw errors.conflict("This week's goal is already claimed.");
         if (n <= s.progress) throw errors.validation(`You have already finished ${s.progress} tasks this week: set a goal above that.`);
         await conn.query(
-            'INSERT INTO weekly_goals (discord_id, week_key, target) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE target = VALUES(target)',
+            'INSERT INTO weekly_goals (discord_id, week_key, target) VALUES (?, ?, ?) ON CONFLICT (discord_id, week_key) DO UPDATE SET target = EXCLUDED.target',
             [user.discord_id, s.weekStart, n]
         );
         const state = publicGoal(await goalState(conn, user, now));
@@ -138,7 +138,7 @@ async function claimGoal(discordId, now = new Date()) {
         if (!s.target) throw errors.validation('Set a goal for this week first.');
         if (s.claimed) throw errors.conflict("You already claimed this week's goal.");
         if (s.progress < s.target) throw errors.validation(`Finish ${s.target - s.progress} more tasks to reach your goal of ${s.target}.`);
-        const [res] = await conn.query('UPDATE weekly_goals SET claimed_at = UTC_TIMESTAMP() WHERE discord_id = ? AND week_key = ? AND claimed_at IS NULL', [user.discord_id, s.weekStart]);
+        const [res] = await conn.query('UPDATE weekly_goals SET claimed_at = CURRENT_TIMESTAMP WHERE discord_id = ? AND week_key = ? AND claimed_at IS NULL', [user.discord_id, s.weekStart]);
         if (res.affectedRows !== 1) throw errors.conflict("You already claimed this week's goal.");
         const previousLevel = Number(user.player_level);
         const paid = await awardFlat(conn, user, 'weekly_goal', goalReward(s.target), { referenceId: Number(String(s.weekStart).replace(/-/g, '')) });

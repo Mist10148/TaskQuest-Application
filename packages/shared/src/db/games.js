@@ -41,7 +41,7 @@ async function lockActiveSession(conn, discordId, gameType) {
 async function insertSession(conn, discordId, gameType, { bet = 0, state = 'active', data = null, payout = 0 } = {}) {
     const ended = state === 'active' ? null : new Date();
     const [res] = await conn.query(
-        'INSERT INTO game_sessions (discord_id, game_type, bet_amount, state, game_data, payout, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO game_sessions (discord_id, game_type, bet_amount, state, game_data, payout, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
         [discordId, gameType, bet, state, data ? JSON.stringify(data) : null, payout, ended]
     );
     return res.insertId;
@@ -314,7 +314,7 @@ async function finishArcade(discordId, sessionId, claim) {
         const user = await lockUser(conn, discordId);
         requireGamification(user);
         const [[session]] = await conn.query(
-            `SELECT *, TIMESTAMPDIFF(MICROSECOND, created_at, CURRENT_TIMESTAMP(3)) DIV 1000 AS elapsed_ms
+            `SELECT *, FLOOR(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP(3) - created_at)) * 1000)::bigint AS elapsed_ms
              FROM game_sessions WHERE id = ? AND discord_id = ? AND state = 'active' FOR UPDATE`,
             [id, user.discord_id]
         );
@@ -369,7 +369,7 @@ async function getFreeGameAllowance(discordId, now = new Date()) {
  */
 async function expireStaleSessions(ttlMinutes = LIMITS.GAME_SESSION_TTL_MINUTES) {
     const [stale] = await getPool().query(
-        "SELECT id, discord_id FROM game_sessions WHERE state = 'active' AND created_at < (CURRENT_TIMESTAMP(3) - INTERVAL ? MINUTE)",
+        "SELECT id, discord_id FROM game_sessions WHERE state = 'active' AND created_at < (CURRENT_TIMESTAMP(3) - make_interval(mins => ?))",
         [ttlMinutes]
     );
     let expired = 0;

@@ -47,12 +47,12 @@ async function getToday(discordId, now = new Date()) {
            FROM items i JOIN lists l ON l.id = i.list_id
           WHERE l.discord_id = ? AND i.completed = 0 AND i.parent_id IS NULL
             AND (i.due_date <= ? OR COALESCE(i.priority, l.priority) = 'HIGH')
-          ORDER BY (i.due_date IS NULL), i.due_date ASC, FIELD(COALESCE(i.priority, l.priority), 'HIGH', 'MEDIUM', 'LOW'), i.id
+          ORDER BY (i.due_date IS NULL), i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 0 END, i.id
           LIMIT ${TASK_LIMIT}`,
         [id, today]
     );
     const [[counts]] = await pool.query(
-        `SELECT COALESCE(SUM(i.due_date = ?), 0) AS dueToday, COALESCE(SUM(i.due_date < ?), 0) AS overdue
+        `SELECT COUNT(*) FILTER (WHERE i.due_date = ?) AS "dueToday", COUNT(*) FILTER (WHERE i.due_date < ?) AS overdue
            FROM items i JOIN lists l ON l.id = i.list_id
           WHERE l.discord_id = ? AND i.completed = 0 AND i.parent_id IS NULL`,
         [today, today, id]
@@ -93,7 +93,7 @@ async function getStreakWarnings(now = new Date()) {
     const pool = getPool();
     const [rows] = await pool.query(
         `SELECT discord_id, timezone, streak_count, last_daily_claim, player_class, streak_warned_day FROM users
-          WHERE gamification_enabled = TRUE AND automation_enabled = TRUE AND streak_count >= ? AND last_daily_claim >= ?`,
+          WHERE gamification_enabled = 1 AND automation_enabled = 1 AND streak_count >= ? AND last_daily_claim >= ?`,
         [STREAK_WARNING.MIN_STREAK, new Date(now.getTime() - 6 * 86400e3)]
     );
     const out = [];

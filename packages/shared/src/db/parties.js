@@ -31,7 +31,7 @@ const { questPeriod } = require('../quests');
 
 const DAY_MS = 86400e3;
 const newPublicId = () => crypto.randomBytes(6).toString('hex'); // 12 characters, random, never derived from a Discord ID
-const LIVE = "status = 'pending' AND expires_at > UTC_TIMESTAMP()";
+const LIVE = "status = 'pending' AND expires_at > CURRENT_TIMESTAMP";
 
 const unwrap = (result) => {
     if (!result.ok) throw errors.validation(result.error);
@@ -53,7 +53,7 @@ async function create(userId, name) {
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, userId);
         if (await myParty(conn, user.discord_id)) throw errors.conflict('You are already in a party. Leave it first.');
-        const [res] = await conn.query('INSERT INTO parties (name, owner_id) VALUES (?, ?)', [partyName, user.discord_id]);
+        const [res] = await conn.query('INSERT INTO parties (name, owner_id) VALUES (?, ?) RETURNING id', [partyName, user.discord_id]);
         await conn.query('INSERT INTO party_members (party_id, discord_id, public_id) VALUES (?, ?, ?)', [res.insertId, user.discord_id, newPublicId()]);
         return { id: res.insertId, name: partyName };
     });
@@ -84,7 +84,7 @@ async function invite(actorId, input = {}) {
     return withTransaction(async (conn) => {
         const party = await lockMyParty(conn, actorId, { ownerOnly: true });
         // Checked before the lookup: a limit that only fires for real, invitable people would reveal who exists.
-        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ? AND created_at > (UTC_TIMESTAMP() - INTERVAL 1 DAY)', [String(actorId)]);
+        const [[sent]] = await conn.query('SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ? AND created_at > (CURRENT_TIMESTAMP - make_interval(days => 1))', [String(actorId)]);
         if (Number(sent.n) >= LIMITS.INVITES_PER_DAY) throw new TaskQuestError('RATE_LIMITED', 'You have sent a lot of invitations today. Try again tomorrow.', 429);
 
         const invitee = await findInvitee(conn, input);
@@ -95,12 +95,12 @@ async function invite(actorId, input = {}) {
 
         if (!Number(invitee.accept_invites)) return notSent(input);
         const [[declined]] = await conn.query(
-            "SELECT 1 AS x FROM party_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND COALESCE(responded_at, created_at) > (UTC_TIMESTAMP() - INTERVAL ? DAY) LIMIT 1",
+            "SELECT 1 AS x FROM party_invites WHERE invited_by = ? AND invitee_discord_id = ? AND status = 'declined' AND COALESCE(responded_at, created_at) > (CURRENT_TIMESTAMP - make_interval(days => ?)) LIMIT 1",
             [String(actorId), inviteeId, LIMITS.INVITE_DECLINE_COOLDOWN_DAYS]
         );
         if (declined) return notSent(input);
 
-        await conn.query("UPDATE party_invites SET status = 'revoked' WHERE party_id = ? AND invitee_discord_id = ? AND status = 'pending' AND expires_at <= UTC_TIMESTAMP()", [party.id, inviteeId]);
+        await conn.query("UPDATE party_invites SET status = 'revoked' WHERE party_id = ? AND invitee_discord_id = ? AND status = 'pending' AND expires_at <= CURRENT_TIMESTAMP", [party.id, inviteeId]);
         const [[pending]] = await conn.query(`SELECT 1 AS x FROM party_invites WHERE party_id = ? AND invitee_discord_id = ? AND ${LIVE}`, [party.id, inviteeId]);
         if (pending) throw errors.conflict('That person already has an invitation to your party.');
         const c = await counts(conn, party.id);
@@ -109,7 +109,7 @@ async function invite(actorId, input = {}) {
         }
         if (input.dryRun) return { dryRun: true, ...invitePreview(invitee) };
         const expiresAt = new Date(Date.now() + LIMITS.INVITE_TTL_DAYS * DAY_MS);
-        const [res] = await conn.query('INSERT INTO party_invites (party_id, invitee_discord_id, invited_by, expires_at) VALUES (?, ?, ?, ?)', [party.id, inviteeId, String(actorId), expiresAt]);
+        const [res] = await conn.query('INSERT INTO party_invites (party_id, invitee_discord_id, invited_by, expires_at) VALUES (?, ?, ?, ?) RETURNING id', [party.id, inviteeId, String(actorId), expiresAt]);
         return { sent: true, id: res.insertId, inviteeName: invitee.discord_username || null, inviteeDiscordId: inviteeId, expiresAt, partyName: party.name };
     });
 }
@@ -119,7 +119,7 @@ async function listInvites(userId) {
     const [rows] = await getPool().query(
         `SELECT i.id, i.created_at, i.expires_at, p.name AS party_name, ou.discord_username AS owner_name
          FROM party_invites i JOIN parties p ON p.id = i.party_id JOIN users ou ON ou.discord_id = p.owner_id
-         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > UTC_TIMESTAMP() ORDER BY i.id DESC`,
+         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP ORDER BY i.id DESC`,
         [String(userId)]
     );
     return rows.map((r) => ({ id: r.id, partyName: r.party_name, ownerName: r.owner_name, createdAt: r.created_at, expiresAt: r.expires_at }));
@@ -147,7 +147,7 @@ async function respondIn(userId, id, accept) {
             throw errors.conflict('This invitation has expired. Ask for a new one.');
         }
         if (!accept) {
-            await conn.query("UPDATE party_invites SET status = 'declined', responded_at = UTC_TIMESTAMP() WHERE id = ?", [id]);
+            await conn.query("UPDATE party_invites SET status = 'declined', responded_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
             return { accepted: false, party: null };
         }
         if (await myParty(conn, user.discord_id)) throw errors.conflict('You are already in a party. Leave it first.');
@@ -304,7 +304,7 @@ async function status(userId, now = new Date()) {
         if (isOwner) {
             const [rows] = await conn.query(
                 `SELECT i.id, i.created_at, i.expires_at, u.discord_username AS invitee_name FROM party_invites i JOIN users u ON u.discord_id = i.invitee_discord_id
-                 WHERE i.party_id = ? AND i.status = 'pending' AND i.expires_at > UTC_TIMESTAMP() ORDER BY i.id`,
+                 WHERE i.party_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP ORDER BY i.id`,
                 [party.id]
             );
             invites = rows.map((r) => ({ id: r.id, inviteeName: r.invitee_name, createdAt: r.created_at, expiresAt: r.expires_at }));
@@ -358,7 +358,7 @@ async function claim(userId, now = new Date()) {
         }
         const [[already]] = await conn.query("SELECT 1 AS x FROM quest_claims WHERE discord_id = ? AND LEFT(quest_key, 6) = 'PARTY_' AND period_start = ?", [user.discord_id, q.period.start]);
         if (already) throw errors.conflict('You already claimed a party reward this week.');
-        const [res] = await conn.query('INSERT IGNORE INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?)', [
+        const [res] = await conn.query('INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING id', [
             user.discord_id,
             `${PARTY_QUEST.KEY_PREFIX}${party.id}`,
             q.period.start,
@@ -394,7 +394,7 @@ async function claimFocus(userId, now = new Date()) {
         }
         const [[already]] = await conn.query('SELECT 1 AS x FROM quest_claims WHERE discord_id = ? AND LEFT(quest_key, 11) = ? AND period_start = ?', [user.discord_id, PARTY_FOCUS_QUEST.KEY_PREFIX, q.period.start]);
         if (already) throw errors.conflict('You already claimed a party focus reward this week.');
-        const [res] = await conn.query('INSERT IGNORE INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?)', [
+        const [res] = await conn.query('INSERT INTO quest_claims (discord_id, quest_key, period_start, reward_xp) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING id', [
             user.discord_id,
             `${PARTY_FOCUS_QUEST.KEY_PREFIX}${party.id}`,
             q.period.start,

@@ -123,7 +123,7 @@ async function runMigrations({ log = console.log } = {}) {
 
         await conn.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
             id VARCHAR(100) PRIMARY KEY,
-            applied_at TIMESTAMPTZ(0) NOT NULL DEFAULT CURRENT_TIMESTAMP
+            applied_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         )`);
 
         const [rows] = await conn.query('SELECT id FROM schema_migrations');

@@ -64,7 +64,7 @@ function dayStarts(zone, now, n) {
  * the database knowing the zone. `expr` is a timestamp column, `select` an aggregate over the rows.
  */
 const QUARTER = 900;
-const bucketSql = (column) => `UNIX_TIMESTAMP(${column}) DIV ${QUARTER}`;
+const bucketSql = (column) => `FLOOR(EXTRACT(EPOCH FROM ${column}) / ${QUARTER})::bigint`;
 const bucketTime = (b) => new Date(Number(b) * QUARTER * 1000);
 
 /** A positive whole number of days from the allowed ranges; anything else throws a RangeError. */

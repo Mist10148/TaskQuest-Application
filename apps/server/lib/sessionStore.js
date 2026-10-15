@@ -1,14 +1,13 @@
 /**
- * express-session store backed by the `web_sessions` table (migration 001),
- * using the shared mysql2 pool. Replaces express-mysql-session, which pins an
- * old, vulnerable mysql2 release.
+ * express-session store backed by the `web_sessions` table (migration 001_baseline),
+ * using the shared database pool.
  */
 
 import session from 'express-session';
 
-export class MySQLSessionStore extends session.Store {
+export class DbSessionStore extends session.Store {
     /**
-     * @param {import('mysql2/promise').Pool} pool
+     * @param {{ query: Function }} pool the shared pool (packages/shared/src/db/pool.js)
      * @param {{ ttlMs: number, cleanupIntervalMs?: number }} options
      */
     constructor(pool, { ttlMs, cleanupIntervalMs = 15 * 60 * 1000 }) {
@@ -35,7 +34,7 @@ export class MySQLSessionStore extends session.Store {
         this.pool
             .query(
                 `INSERT INTO web_sessions (session_id, expires, data) VALUES (?, ?, ?)
-                 ON DUPLICATE KEY UPDATE expires = VALUES(expires), data = VALUES(data)`,
+                 ON CONFLICT (session_id) DO UPDATE SET expires = EXCLUDED.expires, data = EXCLUDED.data`,
                 [sid, this.expiresAt(sess), JSON.stringify(sess)]
             )
             .then(() => cb(null), cb);

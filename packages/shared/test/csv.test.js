@@ -55,7 +55,6 @@ test('csvToImport: TaskQuest export format, including subtasks and defused formu
 });
 
 test('csvToImport: generic headers, aliases, case, tag separators and the default list', () => {
-    const csv = 'Title;Due;Priority;Tags;Recurrence;Done\nBuy milk;2030-01-05;low;home;errands;weekly;no\n'.replace('home;errands;weekly', 'home,errands;weekly');
     // Tags use a comma inside quotes in a semicolon file.
     const r = csvToImport('Title;Due;Priority;Tags;Recurrence;Done\nBuy milk;2030-01-05;low;"home,errands";weekly;1\nPay rent;;;a;;false\n');
     assert.deepEqual(r.errors, []);

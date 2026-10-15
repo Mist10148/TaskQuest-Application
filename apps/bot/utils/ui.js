@@ -100,7 +100,6 @@ function bar(cur, max, len = 10) {
 
 function smoothBar(current, max, length = 12) {
     if (max === 0) return `${'▱'.repeat(length)} 0%`;
-    const percent = Math.min(100, Math.round((current / max) * 100));
     const filled = Math.round((current / max) * length);
     const start = filled > 0 ? '▰' : '▱';
     const middle = '▰'.repeat(Math.max(0, filled - 1));
@@ -356,8 +355,6 @@ function bonusLines(bonuses) {
 }
 
 function classShopEmbed(user, classes) {
-    const currentClass = classes[user.player_class] || classes.DEFAULT;
-    
     const embed = new EmbedBuilder()
         .setColor(COLORS[user.player_class] || COLORS.primary)
         .setTitle('⚔️ Class Shop')

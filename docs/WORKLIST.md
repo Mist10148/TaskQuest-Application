@@ -15,7 +15,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P1.4 Cap HIGH-priority bonuses at 3 completions a day
 - [x] P1.5 Champion and Legendary class-only (Valor, Inspire stay generic)
 - [x] P1.6 Daily streak by calendar day; Sniper list priority verified (completionContext already resolves it)
-- [ ] P1.7 Lint warnings (7)
+- [x] P1.7 Lint warnings (7)
 
 ## P2 Balance pass (existing classes)
 - [ ] P2.1 Nerfs: Monk, Wizard, Hero, Gambler, Archer

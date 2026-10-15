@@ -34,7 +34,7 @@ IDs: personas are `P1` to `P5`, goals `G1` to `G8`, user stories `US-<section le
 
 ## 1. Summary
 
-TaskQuest turns ordinary to-do lists into RPG-style progression. People create lists, add tasks and complete them, and every meaningful action earns XP. XP drives levels, a daily reward with streaks and chests, twelve character classes (Default plus eleven to buy) that change how XP is earned, 62 skills, 33 achievements, daily, weekly, monthly and rotating quests, focus sessions, a weekly review, prestige, a cosmetics shop, and a small game centre where XP can be won or wagered. Lists can be shared, and small parties work on a shared weekly quest.
+TaskQuest turns ordinary to-do lists into RPG-style progression. People create lists, add tasks and complete them, and every meaningful action earns XP. XP drives levels, a daily reward with streaks and chests, seventeen character classes (Default plus sixteen to buy) that change how XP is earned, 96 skills, 33 achievements, daily, weekly, monthly and rotating quests, focus sessions, a weekly review, prestige, a cosmetics shop, and a small game centre where XP can be won or wagered. Lists can be shared, and small parties work on a shared weekly quest.
 
 TaskQuest is one product with two front ends that share one account (the Discord identity) and one database:
 
@@ -132,10 +132,10 @@ TaskQuest addresses this in three ways:
 | ID | Story | Acceptance criteria | Status |
 |---|---|---|---|
 | US-P1 | Earn XP for creating lists, adding tasks and completing tasks | 10, 5 and 10 base XP. Daily caps apply (10 lists, 50 additions, 50 completions). Completion XP is paid once per task. | Done |
-| US-P2 | Claim a daily reward with a streak bonus | 100 base XP, plus 5 per streak day (max +50), plus skill bonus. 24h cooldown. A 48h window keeps the streak. | Done |
+| US-P2 | Claim a daily reward with a streak bonus | 100 base XP, plus 5 per streak day (max +50), plus skill bonus. 24h cooldown. A claim on consecutive calendar days keeps the streak. | Done |
 | US-P3 | Level up from lifetime XP | Level = ⌊lifetime XP / 100⌋ + 1. Spending XP never lowers your level. | Done |
-| US-P4 | Buy and equip classes | The purchase is atomic, so a double click can't charge twice. Switching class resets class counters. Twelve classes: Default plus eleven. | Done |
-| US-P5 | Unlock and level skills | The tree must be owned and the prerequisite unlocked. Cost is charged per level. 62 skills; every skill has a working effect. | Done |
+| US-P4 | Buy and equip classes | The purchase is atomic, so a double click can't charge twice. Switching class resets class counters. Seventeen classes: Default plus sixteen. | Done |
+| US-P5 | Unlock and level skills | The tree must be owned and the prerequisite unlocked. Cost is charged per level. 96 skills; every skill has a working effect. | Done |
 | US-P6 | Unlock achievements and see them immediately | 33 achievements, evaluated in the same transaction as the action that earned them. Each pays 25 XP. | Done |
 | US-P7 | Turn XP off entirely | The XP toggle stops rewards, purchases and games. Tasks keep working. | Done |
 | US-P8 | Compare with others on a leaderboard | Top 10 on four boards: lifetime XP (default), XP earned this week, daily streak, current balance; optional class filter. Shows the stored display name, avatar, prestige title and equipped cosmetics, never a Discord ID. Spending XP does not lower the default board. | Done |
@@ -192,7 +192,7 @@ TaskQuest addresses this in three ways:
 | FR8 | Bot interactions that show XP or achievements are ephemeral | Done |
 | FR9 | The web app and API are served from one origin | Done |
 | FR10 | The bot exposes a health endpoint; the web app exposes `/api/health` | Done |
-| FR11 | Twelve classes and 62 skills are defined only in `packages/shared/src/constants.js`; a test checks `docs/GAMEPLAY.md` against it | Done |
+| FR11 | Seventeen classes and 96 skills are defined only in `packages/shared/src/constants.js`; a test checks `docs/GAMEPLAY.md` against it | Done |
 | FR12 | Bonus XP sources (task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, weekly review, quests, party quest) are flat, paid in their own `xp_transactions` source and each has a cap ([XP_GUIDE](XP_GUIDE.md)) | Done |
 | FR13 | Task bonuses are paid only on a task's first completion, never for imported or auto-created tasks, and need a due date set at least 24 hours earlier to count as early or overdue | Done |
 | FR14 | Quests: daily, weekly, monthly and a rotating weekly pool, with progress derived from real activity and one atomic claim per period | Done |
@@ -231,7 +231,7 @@ TaskQuest addresses this in three ways:
 | Per-task due date, priority, tags, repeat | `/list` Details, `/quick` | ✓ |
 | Task search inside names and descriptions | — | ✓ |
 | Daily reward, profile, achievements | ✓ | ✓ |
-| Classes & skills (12 classes, 62 skills) | ✓ | ✓ |
+| Classes & skills (17 classes, 96 skills) | ✓ | ✓ |
 | Leaderboard | ✓ | ✓ |
 | Blackjack (incl. double down), RPS, Hangman | ✓ | ✓ |
 | Snake, Dino Runner, Space Invaders | — | ✓ |
@@ -281,7 +281,7 @@ TaskQuest addresses this in three ways:
 - CI and tests.
 - Consolidated documentation.
 
-**Improvement pass (unreleased, migrations 010 to 022):** the balance rework and five new classes, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
+**Improvement pass (unreleased, migrations 010 to 026):** the balance rework, ten new classes in all, the new XP sources, quests, prestige, cosmetics, templates, CSV import, search, stats and focus pages, per-task reminders, per-user days, arcade replay verification, optional web push, shared lists and parties, Tailwind 4 and Playwright tests. See the [CHANGELOG](../CHANGELOG.md#unreleased).
 
 **Out of scope:** the items listed under Later in the roadmap.
 
@@ -290,14 +290,14 @@ TaskQuest addresses this in three ways:
 | Priority | Item |
 |---|---|
 | Next | Run the AI evals against real Gemini and grow the golden sets. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
-| Later | Ownership transfer for shared lists |
-| Later | Party features beyond the weekly quest (party boards, more quests) |
 | Later | Push notifications for AI results |
 | Later | More component tests for the web app (the first set exists) |
-| Later | Internationalisation |
+| Later | Internationalisation (nothing is extracted yet) |
+| Later | Screenshots in the README and push delivery tested against real push services (both need a live deployment) |
 | Done | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |
-| Done | The class rebalance, five new classes and 62 skills; task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, the weekly review, the monthly boss, rotating quests and prestige; the cosmetics shop |
+| Done | The class rebalance, five new classes and 96 skills; task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, the weekly review, the monthly boss, rotating quests and prestige; the cosmetics shop |
 | Done | CSV import, templates, task search, stats; per-task reminders; per-user days; optional web push |
+| Done | Ownership transfer for shared lists; a party board and a focus quest; a Today page, weekly goal and reflection; board and calendar views; previews and skill reset; streak warnings; an archive job and a per-class XP report |
 | Done | Shared lists and parties ([shared-lists](design/shared-lists.md)); arcade anti-cheat by replay ([arcade-anti-cheat](design/arcade-anti-cheat.md)); Tailwind 4 ([tailwind-4-migration](design/tailwind-4-migration.md)); Playwright smoke tests |
 
 ## 12. Risks and assumptions

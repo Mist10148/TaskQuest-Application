@@ -11,7 +11,8 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
-const { rewardAction, unlockAchievements, awardFlat, countToday } = require('./progression');
+const { rewardAction, unlockAchievements, awardFlat, countToday, dayWindow } = require('./progression');
+const { completionExtras } = require('./extras');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS, BONUS_LABELS, HABIT_PERIOD_DAYS } = require('../constants');
 const v = require('../validation');
@@ -58,7 +59,7 @@ const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by']
  */
 const MEMBER_ITEM_FIELDS = [
     'id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id',
-    'recurrence', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'
+    'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'
 ];
 /** The same for a list: the fields the UI draws, the sharing fields, and the item counts. No reminder or notification state. */
 const MEMBER_LIST_FIELDS = [
@@ -325,6 +326,7 @@ function parseItemExtras(input, { partial = false } = {}) {
     if (!partial || input.priority !== undefined) out.priority = unwrap(v.priority(input.priority));
     if (!partial || input.tags !== undefined) out.tags = unwrap(v.tags(input.tags));
     if (!partial || input.recurrence !== undefined) out.recurrence = unwrap(v.recurrence(input.recurrence));
+    if (!partial || input.estimate_minutes !== undefined) out.estimate_minutes = unwrap(v.estimate(input.estimate_minutes));
     return out;
 }
 
@@ -412,9 +414,9 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
 
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [lid, name, description, Number(pos.next), extras.due_date, extras.due_date ? new Date() : null, extras.priority, extras.tags, extras.recurrence, parentId, user.discord_id]
+        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [lid, name, description, Number(pos.next), extras.due_date, extras.due_date ? new Date() : null, extras.priority, extras.tags, extras.recurrence, extras.estimate_minutes, parentId, user.discord_id]
     );
     await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
     user.total_items_added = Number(user.total_items_added) + 1;
@@ -586,14 +588,42 @@ async function completionContext(conn, item, user, now = new Date()) {
     // A list that was cleared once never counts as cleared again (same rule as the list_cleared XP), so re-opening it
     // by adding or un-checking a task and finishing it again cannot repeat the Artisan's project bonus.
     const [[marked]] = await conn.query('SELECT cleared_at FROM lists WHERE id = ?', [item.list_id]);
+    // HIGH is the player's own label, so only the first few HIGH completions of the day count as HIGH for classes and skills.
+    let priority = item.priority || item.list_priority;
+    if (priority === 'HIGH') {
+        const { from, to } = await dayWindow(conn, user, now);
+        const [[high]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM items WHERE first_completed_by = ? AND first_completed_high = 1 AND first_completed_at >= ? AND first_completed_at < ?',
+            [user.discord_id, from, to]
+        );
+        if (Number(high.n) > LIMITS.HIGH_BONUS_PER_DAY) priority = 'MEDIUM';
+    }
+    // The newer classes read a little more of the world; the queries run only for the class that needs them.
+    const extra = {};
+    if (user.player_class === 'CHRONOMANCER') {
+        const [[focus]] = await conn.query("SELECT finished_at FROM focus_sessions WHERE discord_id = ? AND state = 'finished' ORDER BY finished_at DESC LIMIT 1", [user.discord_id]);
+        if (focus && focus.finished_at) {
+            const [[since]] = await conn.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete' AND created_at >= ?", [user.discord_id, focus.finished_at]);
+            extra.afterFocus = { minutes: Math.floor((now.getTime() - new Date(focus.finished_at).getTime()) / 60000), completions: Number(since.n) };
+        }
+    }
+    if (user.player_class === 'WARDEN') {
+        const [[members]] = await conn.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ?', [item.list_id]);
+        extra.sharedMembers = Number(members.n);
+    }
     return {
-        priority: item.priority || item.list_priority,
+        ...extra,
+        listId: item.list_id,
+        habitStreak: Number(item.habit_streak) || 0,
+        recurrence: item.recurrence || null,
+        priority,
         recurring: Boolean(item.recurrence),
         today,
         dueDate,
         // The stored date whatever its age: habit streaks follow the schedule, not the bonuses.
         scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null,
         overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
+        firstOfDay: (await countToday(conn, user, 'item_complete', now)) === 0,
         listCleared: !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0 && !(marked && marked.cleared_at)
     };
 }
@@ -639,6 +669,7 @@ async function completionBonuses(conn, user, item, ctx) {
             await pay('subtasks_done', REWARDS.SUBTASKS_DONE, { dailyCap: LIMITS.SUBTASKS_DONE_XP_PER_DAY, referenceId: item.parent_id });
         }
     }
+    out.push(...(await completionExtras(conn, user, item, ctx)));
     return out;
 }
 

@@ -97,4 +97,4 @@ async function claimReview(discordId, now = new Date()) {
     });
 }
 
-module.exports = { getReview, claimReview };
+module.exports = { getReview, claimReview, completedThisWeek };

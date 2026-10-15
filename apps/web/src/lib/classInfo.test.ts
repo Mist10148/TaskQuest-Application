@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classCounter, dailyDescription, describeChest, freezeLimits } from "./classInfo";
+import { classCounter, dailyDescription, describeChest, freezeLimits, MIX_LABELS } from "./classInfo";
 import type { UserSkill } from "./api";
 
 const skill = (id: string): UserSkill => ({ skill_id: id, skill_level: 1, unlocked_at: "" });
@@ -21,7 +21,7 @@ describe("classCounter", () => {
 
   it("shows the Monk rhythm with the Discipline cap and flags a lapsed rhythm", () => {
     expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-10" }, [], NOW)).toMatchObject({ value: 5, max: 14, note: undefined });
-    expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-09" }, [skill("monk_discipline")], NOW)).toMatchObject({ max: 18, note: undefined });
+    expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-09" }, [skill("monk_discipline")], NOW)).toMatchObject({ max: 16, note: undefined });
     expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-07" }, [], NOW)?.note).toMatch(/Lapsed/);
     // Serenity forgives one skipped day.
     expect(classCounter({ player_class: "MONK", monk_rhythm: 5, monk_day: "2026-10-08" }, [skill("monk_serenity")], NOW)?.note).toBeUndefined();
@@ -32,6 +32,9 @@ describe("classCounter", () => {
     expect(classCounter({ player_class: "ARTISAN", artisan_progress: 4 }, [skill("artisan_blueprint")], NOW)?.max).toBe(13);
     expect(classCounter({ player_class: "NECROMANCER", necro_souls: 9 }, [], NOW)).toMatchObject({ label: "Souls", value: 5, max: 5 });
     expect(classCounter({ player_class: "NECROMANCER", necro_souls: 2 }, [skill("necro_jar")], NOW)?.max).toBe(8);
+    expect(classCounter({ player_class: "ALCHEMIST", alchemist_mix: 5 }, [], NOW)).toMatchObject({ label: "Brew", value: 2, max: 3 });
+    expect(classCounter({ player_class: "BARD", bard_recent: "1,2,2,3" }, [], NOW)).toMatchObject({ label: "Medley", value: 3, max: 5 });
+    expect(classCounter({ player_class: "BARD", bard_recent: "1,2,3,4,5,6,7,8" }, [skill("bard_harmony")], NOW)).toMatchObject({ value: 7, max: 7 });
   });
 });
 
@@ -48,5 +51,13 @@ describe("daily reward text", () => {
     expect(dailyDescription({ success: true, bonusInfo: { details: "Hero +25" }, surpriseBonus: 50 })).toBe("Hero +25 · 🎉 Daily Surprise +50 XP");
     expect(dailyDescription({ success: true, surpriseBonus: 50 })).toBe("🎉 Daily Surprise +50 XP");
     expect(dailyDescription({ success: true })).toBe("");
+  });
+});
+
+describe("preview labels", () => {
+  it("has a plain-words label for every situation the server simulates", () => {
+    for (const mix of ["plain", "high", "early", "overdue", "list", "variety", "rotate", "habit", "focus", "shared"]) {
+      expect(MIX_LABELS[mix], mix).toBeTruthy();
+    }
   });
 });

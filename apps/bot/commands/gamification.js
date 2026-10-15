@@ -184,10 +184,6 @@ function progressBar(current, max, length = 20) {
     };
 }
 
-function bar(current, max, length = 20) {
-    return progressBar(current, max, length).bar;
-}
-
 // Class info
 const CLASS_INFO = Object.fromEntries(
     Object.entries(CLASSES).map(([key, c]) => [key, { emoji: c.emoji, color: ui.COLORS[key], name: c.name, desc: c.description, playstyle: c.playstyle }])
@@ -244,9 +240,6 @@ async function profile(interaction) {
     // Focus Rate: % of tasks completed vs created
     const focusRate = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
     const focusBar = progressBar(completedItems, totalItems, 10);
-
-    // Active tasks (uncompleted)
-    const activeTasks = totalItems - completedItems;
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  BUILD PLAYER DASHBOARD

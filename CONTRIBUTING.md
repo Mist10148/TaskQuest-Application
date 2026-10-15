@@ -64,7 +64,20 @@ TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=3306 TEST_DB_USER=root TEST_DB_PASSWORD= TES
 
 With XAMPP's MariaDB you can also start a disposable server with its own data directory on another port. CI runs the same suite against MySQL 8.
 
+On MariaDB 10.4 two of the web API tests (the prestige and cosmetics checks that read the leaderboard) fail even on an untouched checkout; they pass on MySQL 8, which CI uses. Trust CI for those two.
+
 When fixing a bug, add a test that fails without the fix. Use the existing helpers: the injectable `rng` for rules, and `fake()` interactions for bot flows.
+
+### Balance changes
+
+Class and skill numbers are checked three ways: unit tests for the exact rules (`packages/shared/test/rules.test.js`, `skills2.test.js`, `newclasses.test.js`), the GAMEPLAY tables against the constants (`docs.test.js`), and bands for how strong each class may be (`balance.test.js`, fed by the simulation in `packages/shared/src/simulate.js`). When you change a number:
+
+```bash
+npm run balance              # the per-class table; add --markdown for the CLASS_GUIDE build tables
+npm test -w @taskquest/shared
+```
+
+Then update the GAMEPLAY and CLASS_GUIDE text, [design/balance.md](docs/design/balance.md) and the CHANGELOG in the same commit. With real history, `npm run xp-report` shows what each class actually earns per action.
 
 ### Browser tests
 

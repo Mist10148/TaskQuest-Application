@@ -26,10 +26,11 @@ export interface ItemFormValues {
   priority: string; // "none" when unset
   tags: string; // "work, home"
   recurrence: string; // "none" | daily | weekly | monthly
+  estimate: string; // minutes, or ""
   parent_id: string; // "none" or an item id
 }
 
-export const EMPTY_ITEM_FORM: ItemFormValues = { name: "", description: "", due_date: "", priority: "none", tags: "", recurrence: "none", parent_id: "none" };
+export const EMPTY_ITEM_FORM: ItemFormValues = { name: "", description: "", due_date: "", priority: "none", tags: "", recurrence: "none", estimate: "", parent_id: "none" };
 
 /** Values in the shape the API expects: unset fields become null. */
 export const itemPayload = (v: ItemFormValues): ItemInput => ({
@@ -39,5 +40,6 @@ export const itemPayload = (v: ItemFormValues): ItemInput => ({
   priority: v.priority !== "none" ? (v.priority as Priority) : null,
   tags: v.tags.trim() || null,
   recurrence: v.recurrence !== "none" ? (v.recurrence as Recurrence) : null,
+  estimate_minutes: v.estimate.trim() ? Number(v.estimate) : null,
   parent_id: v.parent_id !== "none" ? Number(v.parent_id) : null,
 });

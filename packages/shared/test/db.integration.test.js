@@ -20,6 +20,7 @@ if (enabled) {
     process.env.DB_USER = process.env.TEST_DB_USER || 'root';
     process.env.DB_PASSWORD = process.env.TEST_DB_PASSWORD || '';
     process.env.DB_NAME = process.env.TEST_DB_NAME;
+    process.env.XP_WEEKLY_MODIFIER = 'off'; // the real week would double one bonus source and change the expected amounts
 }
 
 const db = enabled ? require('../src/db') : null;
@@ -70,7 +71,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const items = await cols('items');
         for (const c of ['due_date', 'priority', 'tags', 'parent_id', 'recurrence']) assert.ok(items.includes(c), `items.${c}`);
         const users = await cols('users');
-        for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent']) {
+        for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent', 'owns_bard', 'owns_warden', 'bard_recent', 'alchemist_mix']) {
             assert.ok(users.includes(c), `users.${c}`);
         }
         assert.ok((await cols('lists')).includes('remind_at'));
@@ -570,7 +571,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('a game run past the daily cap does not advance class counters', async () => {
-        const W = '100000000000000601';
+        const W = '100000000000000701';
         await db.users.ensureUser(W);
         await pool.query("UPDATE users SET player_class = 'WIZARD', owns_wizard = 1 WHERE discord_id = ?", [W]);
         const user = await db.users.getUser(W);
@@ -583,7 +584,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('completing an item that is already completed keeps its completion time', async () => {
-        const U = '100000000000000602';
+        const U = '100000000000000702';
         await db.users.ensureUser(U);
         const { list } = await db.tasks.createList(U, { name: 'Idempotent' });
         const { item } = await db.tasks.addItem(U, list.id, { name: 'Once' });
@@ -873,17 +874,503 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const A = '100000000000000201';
         await db.users.ensureUser(A);
         await db.query(
-            "UPDATE users SET player_class = 'ASSASSIN', assassin_streak = 6, assassin_stacks = 7, assassin_last_at = NOW() - INTERVAL 40 HOUR WHERE discord_id = ?",
+            "UPDATE users SET player_class = 'ASSASSIN', assassin_streak = 6, assassin_stacks = 7, assassin_last_at = NOW() - INTERVAL 50 HOUR WHERE discord_id = ?",
             [A]
         );
         const { list } = await db.tasks.createList(A, { name: 'Decay' });
         const row = async () => (await db.query('SELECT assassin_streak, assassin_stacks, assassin_last_at FROM users WHERE discord_id = ?', [A]))[0];
         const after = await row();
-        assert.equal(after.assassin_streak, 1, 'the 40h-old streak restarted with this action');
+        assert.equal(after.assassin_streak, 1, 'the 50h-old streak restarted with this action');
         assert.equal(after.assassin_stacks, 0);
         assert.ok(Date.now() - new Date(after.assassin_last_at).getTime() < 60_000);
         await db.tasks.addItem(A, list.id, { name: 'Another' });
         assert.equal((await row()).assassin_streak, 2, 'inside the window it keeps building');
+    });
+
+    await t.test('the five newer classes: buy, earn through the real task flow, and the counters reset', async () => {
+        const mk = async (id, cls) => {
+            await db.users.ensureUser(id);
+            await setXP(id, 1000);
+            await db.progression.buyClass(id, cls);
+            return id;
+        };
+        const add = async (id, listId, extra = {}) => (await db.tasks.addItem(id, listId, { name: 'task', ...extra })).item.id;
+
+        // Bard: tasks from different lists build a medley that is stored on the account
+        const B = await mk('100000000000000301', 'Bard');
+        assert.equal((await db.users.getUser(B)).player_class, 'BARD');
+        const lists = [];
+        for (const n of [1, 2, 3]) lists.push((await db.tasks.createList(B, { name: `Stage ${n}` })).list);
+        for (const l of lists) await db.tasks.setItemCompleted(B, await add(B, l.id));
+        assert.equal((await db.users.getUser(B)).bard_recent.split(',').length, 3);
+        const fourth = await db.tasks.setItemCompleted(B, await add(B, lists[0].id));
+        assert.equal(fourth.xp.bonusInfo.type, 'BARD_MEDLEY');
+        assert.equal(fourth.xp.bonusInfo.classBonus, 6, 'three different lists: two steps of 3');
+        await db.progression.equipClass(B, 'DEFAULT');
+        assert.equal((await db.users.getUser(B)).bard_recent, '', 'switching class clears the medley');
+
+        // Alchemist: LOW, MEDIUM and HIGH finish a brew
+        const A = await mk('100000000000000302', 'Alchemist');
+        const { list: lab } = await db.tasks.createList(A, { name: 'Lab' });
+        const low = await db.tasks.setItemCompleted(A, await add(A, lab.id, { priority: 'low' }));
+        assert.equal(low.xp.bonusInfo.classBonus, 2);
+        const mid = await db.tasks.setItemCompleted(A, await add(A, lab.id, { priority: 'medium' }));
+        assert.equal(mid.xp.bonusInfo.classBonus, 4);
+        assert.equal(Number((await db.users.getUser(A)).alchemist_mix), 3);
+        const brew = await db.tasks.setItemCompleted(A, await add(A, lab.id, { priority: 'high' }));
+        assert.equal(brew.xp.bonusInfo.type, 'ALCHEMIST_BREW');
+        assert.equal(brew.xp.bonusInfo.classBonus, 30);
+        assert.equal(Number((await db.users.getUser(A)).alchemist_mix), 0, 'the brew starts over');
+
+        // Druid: a repeating task is a habit, a plain task is not
+        const D = await mk('100000000000000303', 'Druid');
+        const { list: grove } = await db.tasks.createList(D, { name: 'Grove' });
+        const habit = await db.tasks.setItemCompleted(D, await add(D, grove.id, { recurrence: 'daily' }));
+        assert.equal(habit.xp.bonusInfo.type, 'DRUID_HABIT');
+        const plain = await db.tasks.setItemCompleted(D, await add(D, grove.id));
+        assert.equal(plain.xp.bonusInfo.type, 'DRUID');
+
+        // Chronomancer: the first three tasks after a finished focus session are in the flow
+        const C = await mk('100000000000000304', 'Chronomancer');
+        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP() - INTERVAL 30 MINUTE, 25, 'finished', UTC_TIMESTAMP() - INTERVAL 5 MINUTE, 25, 15)", [C]);
+        const { list: clock } = await db.tasks.createList(C, { name: 'Clock' });
+        const types = [];
+        for (let i = 0; i < 4; i++) types.push((await db.tasks.setItemCompleted(C, await add(C, clock.id))).xp.bonusInfo.type);
+        assert.deepEqual(types, ['CHRONOMANCER_FLOW', 'CHRONOMANCER_FLOW', 'CHRONOMANCER_FLOW', 'CHRONOMANCER'], 'the flow covers three tasks');
+
+        // Warden: people on the list make the bonus
+        const W = await mk('100000000000000305', 'Warden');
+        const friends = ['100000000000000306', '100000000000000307'];
+        for (const f of friends) await db.users.ensureUser(f);
+        const { list: hall } = await db.tasks.createList(W, { name: 'Hall' });
+        const solo = await db.tasks.setItemCompleted(W, await add(W, hall.id));
+        assert.equal(solo.xp.bonusInfo.type, 'WARDEN', 'nobody else on the list');
+        for (const f of friends) await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [hall.id, f, 'editor', require('crypto').randomBytes(6).toString('hex')]);
+        const together = await db.tasks.setItemCompleted(W, await add(W, hall.id));
+        assert.equal(together.xp.bonusInfo.type, 'WARDEN_SHARED');
+        assert.equal(together.xp.bonusInfo.classBonus, 2 + 4, 'two people: 10% of 10 twice, and 2 each');
+
+        // a full progress reset clears the new ownership flags and counters
+        await db.query("UPDATE users SET bard_recent = '1,2', alchemist_mix = 5 WHERE discord_id IN (?, ?)", [B, A]);
+        for (const id of [B, A, D, C, W]) await db.users.resetProgress(id);
+        for (const [id, col] of [[B, 'owns_bard'], [A, 'owns_alchemist'], [D, 'owns_druid'], [C, 'owns_chronomancer'], [W, 'owns_warden']]) {
+            const u = await db.users.getUser(id);
+            assert.equal(Number(u[col]), 0, col);
+            assert.equal(u.player_class, 'DEFAULT');
+            assert.equal(u.bard_recent, '');
+            assert.equal(Number(u.alchemist_mix), 0);
+        }
+    });
+
+    await t.test('the weekly modifier doubles the source of the week and nothing else', async () => {
+        const shared = require('../src');
+        const season = shared.currentSeason(shared.SEASONS, new Date());
+        const other = shared.SEASONS.find((s) => s.key !== season.key).doubles;
+        const M = '100000000000000401';
+        await db.users.ensureUser(M);
+        const pay = (source) =>
+            db.withTransaction(async (conn) => {
+                const user = await db.users.lockUser(conn, M);
+                return (await db.progression.awardFlat(conn, user, source, 10)).xp;
+            });
+        process.env.XP_WEEKLY_MODIFIER = 'on';
+        try {
+            assert.equal(await pay(season.doubles), 20, `${season.name} doubles ${season.doubles}`);
+            assert.equal(await pay(other), 10, 'another source is untouched');
+            process.env.XP_WEEKLY_MODIFIER = 'off';
+            assert.equal(await pay(season.doubles), 10, 'the operator switch turns it off');
+        } finally {
+            process.env.XP_WEEKLY_MODIFIER = 'off';
+        }
+    });
+
+    await t.test('engagement bonuses: perfect day, inbox zero, boss defeated, welcome back and party assist', async () => {
+        const shared = require('../src');
+        const day = (offset) => {
+            const d = new Date(`${shared.todayInZone()}T00:00:00Z`);
+            d.setUTCDate(d.getUTCDate() + offset);
+            return d.toISOString().slice(0, 10);
+        };
+        const keys = (r) => r.bonuses.map((b) => b.key);
+        const add = async (id, listId, extra = {}) => (await db.tasks.addItem(id, listId, { name: 'task', ...extra })).item.id;
+
+        // Perfect day: three tasks due today, all done
+        const E = '100000000000000501';
+        await db.users.ensureUser(E);
+        const { list: plan } = await db.tasks.createList(E, { name: 'Plan' });
+        const due = [];
+        for (let n = 0; n < 3; n++) due.push(await add(E, plan.id, { due_date: day(0) }));
+        assert.ok(!keys(await db.tasks.setItemCompleted(E, due[0])).includes('perfect_day'));
+        assert.ok(!keys(await db.tasks.setItemCompleted(E, due[1])).includes('perfect_day'));
+        const perfect = await db.tasks.setItemCompleted(E, due[2]);
+        assert.equal(perfect.bonuses.find((b) => b.key === 'perfect_day').xp, 30);
+        const extra = await add(E, plan.id, { due_date: day(0) });
+        assert.ok(!keys(await db.tasks.setItemCompleted(E, extra)).includes('perfect_day'), 'once a day');
+
+        // Inbox zero: three overdue tasks cleared, none left
+        const I = '100000000000000502';
+        await db.users.ensureUser(I);
+        const { list: inbox } = await db.tasks.createList(I, { name: 'Inbox' });
+        const stale = [];
+        for (let n = 0; n < 3; n++) stale.push(await ageDue(await add(I, inbox.id, { due_date: day(-3) })));
+        assert.ok(!keys(await db.tasks.setItemCompleted(I, stale[0])).includes('inbox_zero'));
+        assert.ok(!keys(await db.tasks.setItemCompleted(I, stale[1])).includes('inbox_zero'));
+        assert.equal((await db.tasks.setItemCompleted(I, stale[2])).bonuses.find((b) => b.key === 'inbox_zero').xp, 40);
+        const again = await ageDue(await add(I, inbox.id, { due_date: day(-2) }));
+        assert.ok(!keys(await db.tasks.setItemCompleted(I, again)).includes('inbox_zero'), 'once a week');
+
+        // Boss defeated: a task with 4 subtasks, all done; 3 subtasks is no boss
+        const B = '100000000000000503';
+        await db.users.ensureUser(B);
+        const { list: dungeon } = await db.tasks.createList(B, { name: 'Dungeon' });
+        const boss = await add(B, dungeon.id, { name: 'Boss' });
+        const minions = [];
+        for (let n = 0; n < 4; n++) minions.push(await add(B, dungeon.id, { parent_id: boss }));
+        for (const m of minions.slice(0, 3)) assert.ok(!keys(await db.tasks.setItemCompleted(B, m)).includes('boss_defeated'));
+        const slain = await db.tasks.setItemCompleted(B, minions[3]);
+        assert.equal(slain.bonuses.find((b) => b.key === 'boss_defeated').xp, 30);
+        const small = await add(B, dungeon.id, { name: 'Imp' });
+        const imps = [];
+        for (let n = 0; n < 3; n++) imps.push(await add(B, dungeon.id, { parent_id: small }));
+        let last;
+        for (const m of imps) last = await db.tasks.setItemCompleted(B, m);
+        assert.ok(!keys(last).includes('boss_defeated'), 'three subtasks is not a boss');
+
+        // Welcome back: the first completion after three idle days
+        const W = '100000000000000504';
+        await db.users.ensureUser(W);
+        const { list: home } = await db.tasks.createList(W, { name: 'Home' });
+        assert.ok(!keys(await db.tasks.setItemCompleted(W, await add(W, home.id))).includes('comeback'));
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 5 DAY) WHERE discord_id = ? AND source = 'item_complete'", [W]);
+        assert.equal((await db.tasks.setItemCompleted(W, await add(W, home.id))).bonuses.find((b) => b.key === 'comeback').xp, 25);
+        assert.ok(!keys(await db.tasks.setItemCompleted(W, await add(W, home.id))).includes('comeback'), 'only after a break');
+
+        // Party assist: in a party of two or more
+        const P = '100000000000000505';
+        const Q = '100000000000000506';
+        await db.users.ensureUser(P);
+        await db.users.ensureUser(Q);
+        const { list: camp } = await db.tasks.createList(P, { name: 'Camp' });
+        assert.ok(!keys(await db.tasks.setItemCompleted(P, await add(P, camp.id))).includes('party_assist'), 'no party');
+        await db.query("INSERT INTO parties (name, owner_id) VALUES ('Crew', ?)", [P]);
+        const crew = (await db.query("SELECT id FROM parties WHERE owner_id = ? AND name = 'Crew'", [P]))[0];
+        await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?), (?, ?)', [crew.id, P, crew.id, Q]);
+        assert.equal((await db.tasks.setItemCompleted(P, await add(P, camp.id))).bonuses.find((b) => b.key === 'party_assist').xp, 3);
+    });
+
+    await t.test('daily reflection and weekly goal: pay once, flat, and cannot be gamed', async () => {
+        const R = '100000000000000801';
+        await db.users.ensureUser(R);
+
+        // reflection: once a day, validated, and paid flat
+        assert.equal((await db.goals.getReflection(R)).reflection, null);
+        await assert.rejects(db.goals.writeReflection(R, '   '), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.writeReflection(R, 'x'.repeat(201)), { code: 'VALIDATION' });
+        const first = await db.goals.writeReflection(R, 'Finished the hard thing first.');
+        assert.equal(first.xp, 10);
+        assert.equal((await db.goals.getReflection(R)).reflection.note, 'Finished the hard thing first.');
+        await assert.rejects(db.goals.writeReflection(R, 'again'), { code: 'CONFLICT' });
+        assert.equal((await db.query("SELECT COALESCE(SUM(amount), 0) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'reflection'", [R]))[0].n, 10);
+        // with XP off the note is kept and nothing is paid
+        const Z = '100000000000000802';
+        await db.users.ensureUser(Z);
+        await db.query('UPDATE users SET gamification_enabled = 0 WHERE discord_id = ?', [Z]);
+        assert.equal((await db.goals.writeReflection(Z, 'quiet day')).xp, 0);
+
+        // weekly goal: set above your progress, finish, claim once
+        const empty = await db.goals.getGoal(R);
+        assert.deepEqual([empty.target, empty.progress, empty.claimed, empty.claimable, empty.min, empty.max], [null, 0, false, false, 3, 60]);
+        await assert.rejects(db.goals.setGoal(R, 2), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.setGoal(R, 61), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.setGoal(R, 3.5), { code: 'VALIDATION' });
+        await assert.rejects(db.goals.claimGoal(R), { code: 'VALIDATION' }, 'no goal yet');
+        const set = await db.goals.setGoal(R, 3);
+        assert.deepEqual([set.target, set.reward], [3, 16]);
+        assert.equal((await db.goals.setGoal(R, 4)).target, 4, 'the target can change while it is open');
+        await db.goals.setGoal(R, 3);
+        await assert.rejects(db.goals.claimGoal(R), { code: 'VALIDATION' }, 'not there yet');
+        const { list } = await db.tasks.createList(R, { name: 'Week' });
+        for (let n = 0; n < 3; n++) await db.tasks.setItemCompleted(R, (await db.tasks.addItem(R, list.id, { name: `t${n}` })).item.id);
+        const done = await db.goals.getGoal(R);
+        assert.deepEqual([done.progress, done.claimable], [3, true]);
+        await assert.rejects(db.goals.setGoal(R, 3), { code: 'VALIDATION' }, 'a goal at or below your progress is refused');
+        const claimed = await db.goals.claimGoal(R);
+        assert.equal(claimed.xp, 16);
+        await assert.rejects(db.goals.claimGoal(R), { code: 'CONFLICT' });
+        await assert.rejects(db.goals.setGoal(R, 10), { code: 'CONFLICT' }, 'a claimed goal is closed');
+        assert.equal(db.goals.goalReward(60), 80, 'the reward is capped at 80');
+        assert.equal(db.goals.goalReward(5), 20);
+    });
+
+    await t.test('estimates: validated, exported, and a good guess after a focus session pays a bonus', async () => {
+        const U = '100000000000000901';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Estimates' });
+        await assert.rejects(db.tasks.addItem(U, list.id, { name: 'bad', estimate_minutes: 0 }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.addItem(U, list.id, { name: 'bad', estimate_minutes: 601 }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.addItem(U, list.id, { name: 'bad', estimate_minutes: 2.5 }), { code: 'VALIDATION' });
+        const guess = (await db.tasks.addItem(U, list.id, { name: 'exact', estimate_minutes: 25 })).item;
+        assert.equal(guess.estimate_minutes, 25);
+        const off = (await db.tasks.addItem(U, list.id, { name: 'way off', estimate_minutes: 60 })).item.id;
+        const close = (await db.tasks.addItem(U, list.id, { name: 'close', estimate_minutes: 20 })).item.id;
+        const none = (await db.tasks.addItem(U, list.id, { name: 'no estimate' })).item.id;
+        assert.equal((await db.tasks.updateItem(U, close, { estimate_minutes: 20 })).estimate_minutes, 20);
+        const exported = await db.transfer.exportAll(U);
+        assert.deepEqual(exported.lists[0].items.map((i) => i.estimate_minutes), [25, 60, 20, null]);
+
+        const keys = (r) => r.bonuses.map((b) => b.key);
+        // no focus session yet
+        assert.ok(!keys(await db.tasks.setItemCompleted(U, none)).includes('estimate_accuracy'));
+        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP() - INTERVAL 30 MINUTE, 25, 'finished', UTC_TIMESTAMP() - INTERVAL 3 MINUTE, 25, 15)", [U]);
+        assert.ok(!keys(await db.tasks.setItemCompleted(U, off)).includes('estimate_accuracy'), '60 minutes against a 25 minute session');
+        assert.equal((await db.tasks.setItemCompleted(U, guess.id)).bonuses.find((b) => b.key === 'estimate_accuracy').xp, 10);
+        assert.equal((await db.tasks.setItemCompleted(U, close)).bonuses.find((b) => b.key === 'estimate_accuracy').xp, 10, '25% off is still inside the tolerance');
+    });
+
+    await t.test('skill respec: 75% of a tree comes back as a refund, once a day, never lifetime XP', async () => {
+        const R = '100000000000000902';
+        await db.users.ensureUser(R);
+        await setXP(R, 3000);
+        await db.progression.buyClass(R, 'Hero');
+        await assert.rejects(db.progression.respecSkills(R, 'hero'), { code: 'CONFLICT' }, 'no skills yet');
+        await assert.rejects(db.progression.respecSkills(R, 'nope'), { code: 'NOT_FOUND' });
+        await db.progression.unlockSkill(R, 'hero_valor');
+        await db.progression.unlockSkill(R, 'hero_valor');
+        await db.progression.unlockSkill(R, 'hero_inspire');
+        const before = await db.users.getUser(R);
+        const spent = 100 + 100 + 150;
+        const r = await db.progression.respecSkills(R, 'HERO');
+        assert.deepEqual([r.spent, r.refund, r.percent], [spent, Math.floor(spent * 0.75), 75]);
+        assert.deepEqual(r.removed.sort(), ['hero_inspire', 'hero_valor']);
+        const after = await db.users.getUser(R);
+        assert.equal(Number(after.player_xp), Number(before.player_xp) + r.refund);
+        assert.equal(Number(after.lifetime_xp), Number(before.lifetime_xp), 'a refund is not lifetime XP');
+        assert.equal(Number(after.xp_spent), Number(before.xp_spent), 'the spending total is unchanged');
+        assert.equal((await db.users.getUserSkills(R)).length, 0);
+        // once a day
+        await db.progression.unlockSkill(R, 'hero_valor');
+        await assert.rejects(db.progression.respecSkills(R, 'HERO'), { code: 'COOLDOWN' });
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 2 DAY) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
+        assert.equal((await db.progression.respecSkills(R, 'HERO')).refund, 75);
+
+        // Freeze Cache cannot be dropped while more than 3 freezes are held
+        await db.progression.unlockSkill(R, 'default_xp_boost');
+        await db.progression.unlockSkill(R, 'default_daily_boost');
+        await db.progression.unlockSkill(R, 'default_streak_shield');
+        await db.progression.unlockSkill(R, 'default_freeze_cache');
+        await db.query('UPDATE users SET streak_freezes = 5 WHERE discord_id = ?', [R]);
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 2 DAY) WHERE discord_id = ? AND source = 'skill_refund'", [R]);
+        await assert.rejects(db.progression.respecSkills(R, 'DEFAULT'), { code: 'VALIDATION' });
+        await db.query('UPDATE users SET streak_freezes = 3 WHERE discord_id = ?', [R]);
+        assert.ok((await db.progression.respecSkills(R, 'DEFAULT')).refund > 0);
+    });
+
+    await t.test('the Today read: what needs doing, counts, the weekly modifier and the streak', async () => {
+        const shared = require('../src');
+        const day = (offset) => {
+            const d = new Date(`${shared.todayInZone()}T00:00:00Z`);
+            d.setUTCDate(d.getUTCDate() + offset);
+            return d.toISOString().slice(0, 10);
+        };
+        const Y = '100000000000000903';
+        await db.users.ensureUser(Y);
+        const empty = await db.today.getToday(Y);
+        assert.deepEqual([empty.tasks.length, empty.counts.dueToday, empty.counts.overdue, empty.counts.doneToday], [0, 0, 0, 0]);
+        assert.equal(empty.day, shared.todayInZone());
+        assert.deepEqual(Object.keys(empty.season).sort(), ['blurb', 'doubles', 'enabled', 'key', 'name']);
+        assert.equal(empty.streak.atRisk, false);
+        assert.equal(empty.goal.target, null);
+        assert.equal(empty.reflection.reflection, null);
+
+        const { list } = await db.tasks.createList(Y, { name: 'Today' });
+        const add = async (extra) => (await db.tasks.addItem(Y, list.id, { name: 'task', ...extra })).item.id;
+        const late = await add({ name: 'late', due_date: day(-2) });
+        const now = await add({ name: 'now', due_date: day(0) });
+        const urgent = await add({ name: 'urgent', priority: 'high' });
+        await add({ name: 'later', due_date: day(5) });
+        await add({ name: 'whenever' });
+        const done = await add({ name: 'done', due_date: day(0) });
+        await db.tasks.setItemCompleted(Y, done);
+        const sub = await add({ name: 'sub', due_date: day(0), parent_id: now });
+        assert.ok(sub);
+
+        const r = await db.today.getToday(Y);
+        assert.deepEqual(r.tasks.map((x) => x.name), ['late', 'now', 'urgent'], 'overdue first, then today, then HIGH without a date');
+        assert.deepEqual(r.tasks.map((x) => x.overdueDays), [2, 0, 0]);
+        assert.deepEqual([r.counts.dueToday, r.counts.overdue, r.counts.doneToday], [1, 1, 1], 'subtasks and finished tasks are not counted');
+        assert.equal(r.tasks[0].id, late);
+        assert.equal(r.tasks[2].id, urgent);
+
+        // the streak: claimed today is safe; a streak last claimed yesterday has until the end of today
+        await db.query('UPDATE users SET streak_count = 5, last_daily_claim = UTC_TIMESTAMP() WHERE discord_id = ?', [Y]);
+        const safe = (await db.today.getToday(Y)).streak;
+        assert.deepEqual([safe.live, safe.claimedToday, safe.atRisk], [5, true, false]);
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY WHERE discord_id = ?', [Y]);
+        const risky = (await db.today.getToday(Y)).streak;
+        assert.deepEqual([risky.live, risky.claimedToday, risky.daysLeft, risky.atRisk], [5, false, 0, true]);
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 3 DAY WHERE discord_id = ?', [Y]);
+        assert.equal((await db.today.getToday(Y)).streak.live, 0, 'a lapsed streak reads 0');
+    });
+
+    await t.test('ownership transfer: the list moves, the old owner stays as a manager, and limits hold', async () => {
+        const O = '100000000000000911';
+        const N = '100000000000000912';
+        const X = '100000000000000913';
+        for (const id of [O, N, X]) await db.users.ensureUser(id);
+        const member = (listId, userId, role = 'editor') =>
+            db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, require('crypto').randomBytes(6).toString('hex')]);
+        const keyOf = async (listId, who) => (await db.sharing.listMembers(O, listId)).members.find((m) => m.name === who);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['newbie', N]);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['ownerboss', O]);
+
+        const { list } = await db.tasks.createList(O, { name: 'Handover' });
+        await db.tasks.addItem(O, list.id, { name: 'a task' });
+        await member(list.id, N);
+        const row = await keyOf(list.id, 'newbie');
+
+        // only the owner, and only to a member
+        await assert.rejects(db.sharing.transferOwnership(N, list.id, row.memberKey), { code: 'FORBIDDEN' });
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, 'abcdefabcdef'), { code: 'NOT_FOUND' });
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, 'owner'), { code: 'NOT_FOUND' });
+
+        // a clashing name blocks it
+        await db.tasks.createList(N, { name: 'Handover' });
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, row.memberKey), { code: 'CONFLICT' });
+        await db.query("UPDATE lists SET name = 'Mine' WHERE discord_id = ? AND name = 'Handover'", [N]);
+
+        const done = await db.sharing.transferOwnership(O, list.id, row.memberKey);
+        assert.equal(done.role, 'manager');
+        const owner = (await db.query('SELECT discord_id FROM lists WHERE id = ?', [list.id]))[0];
+        assert.equal(owner.discord_id, N, 'the list now belongs to the member');
+        const after = await db.sharing.listMembers(N, list.id);
+        assert.equal(after.isOwner, true);
+        assert.deepEqual(after.members.map((m) => [m.name, m.role, m.isOwner]), [['newbie', 'manager', true], ['ownerboss', 'manager', false]]);
+        // the old owner can still open it, as a manager, but can no longer hand it over or delete it
+        assert.equal((await db.sharing.listMembers(O, list.id)).role, 'manager');
+        await assert.rejects(db.sharing.transferOwnership(O, list.id, (await db.sharing.listMembers(N, list.id)).members[1].memberKey), { code: 'FORBIDDEN' });
+        assert.equal((await db.query('SELECT COUNT(*) AS n FROM list_members WHERE list_id = ? AND discord_id = ?', [list.id, N]))[0].n, 0, 'the new owner is not also a member');
+
+        // it can go back
+        const back = (await db.sharing.listMembers(N, list.id)).members.find((m) => m.name === 'ownerboss');
+        await db.sharing.transferOwnership(N, list.id, back.memberKey);
+        assert.equal((await db.query('SELECT discord_id FROM lists WHERE id = ?', [list.id]))[0].discord_id, O);
+        void X;
+    });
+
+    await t.test('party board and the focus quest: minutes together, a board, one claim a week each', async () => {
+        const P = '100000000000000921';
+        const Q = '100000000000000922';
+        for (const id of [P, Q]) await db.users.ensureUser(id);
+        await db.query("UPDATE users SET discord_username = 'pia' WHERE discord_id = ?", [P]);
+        await db.query("UPDATE users SET discord_username = 'quinn' WHERE discord_id = ?", [Q]);
+        await db.query("INSERT INTO parties (name, owner_id) VALUES ('Deep Work', ?)", [P]);
+        const party = (await db.query("SELECT id FROM parties WHERE owner_id = ? AND name = 'Deep Work'", [P]))[0];
+        await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?), (?, ?)', [party.id, P, party.id, Q]);
+        const focus = (id, minutes) =>
+            db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP(), ?, 'finished', UTC_TIMESTAMP(), ?, 0)", [id, minutes, minutes]);
+
+        const none = (await db.parties.status(P)).focusQuest;
+        assert.deepEqual([none.progress, none.target, none.reached, none.claimable], [0, 60, false, false]);
+        await focus(P, 60);
+        await focus(Q, 30);
+        const some = await db.parties.status(P);
+        assert.deepEqual([some.focusQuest.progress, some.focusQuest.target, some.focusQuest.yourMinutes], [90, 120, 60], 'two members focused, so the target is 2 x 60');
+        await assert.rejects(db.parties.claimFocus(P), { code: 'VALIDATION' }, 'not there yet');
+
+        // a task finished by Q puts Q on top of the board on tasks, then minutes break ties
+        const { list } = await db.tasks.createList(Q, { name: 'Board' });
+        await db.tasks.setItemCompleted(Q, (await db.tasks.addItem(Q, list.id, { name: 'one' })).item.id);
+        const board = (await db.parties.status(P)).board;
+        assert.deepEqual(board.map((r) => [r.rank, r.name, r.count, r.focusMinutes, r.isYou]), [[1, 'quinn', 1, 30, false], [2, 'pia', 0, 60, true]]);
+
+        await focus(Q, 30);
+        const done = (await db.parties.status(Q)).focusQuest;
+        assert.deepEqual([done.progress, done.reached, done.claimable, done.reward, done.minToClaim], [120, true, true, 40, 20]);
+        assert.equal((await db.parties.claimFocus(P)).xp, 40);
+        await assert.rejects(db.parties.claimFocus(P), { code: 'CONFLICT' });
+        assert.equal((await db.parties.status(P)).focusQuest.claimed, true);
+        assert.equal((await db.parties.claimFocus(Q)).xp, 40);
+        assert.equal((await db.parties.status(Q)).claimed, false, 'the task quest is separate and still open');
+
+        // someone with under 20 minutes of their own cannot claim
+        const S = '100000000000000923';
+        await db.users.ensureUser(S);
+        await db.query('INSERT INTO party_members (party_id, discord_id) VALUES (?, ?)', [party.id, S]);
+        await focus(S, 5);
+        await focus(P, 60);
+        await assert.rejects(db.parties.claimFocus(S), { code: 'VALIDATION' });
+    });
+
+    await t.test('streak warnings: only a live streak whose last day it is, in the evening, once a day', async () => {
+        const W = '100000000000000931';
+        await db.users.ensureUser(W);
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY, automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?", [W]);
+        const at = (hour) => new Date(`${require('../src').todayInZone()}T${String(hour).padStart(2, '0')}:30:00Z`);
+        const ids = async (hour) => (await db.today.getStreakWarnings(at(hour))).map((w) => w.discord_id);
+
+        assert.ok(!(await ids(10)).includes(W), 'not in the morning');
+        assert.ok((await ids(19)).includes(W), 'in the evening of the last day');
+        const w = (await db.today.getStreakWarnings(at(19))).find((x) => x.discord_id === W);
+        assert.deepEqual([w.streak, w.day], [6, require('../src').todayInZone()]);
+
+        // claimed once: the same day is closed to a second run
+        assert.equal(await db.today.claimStreakWarning(W, w.day), true);
+        assert.equal(await db.today.claimStreakWarning(W, w.day), false);
+        assert.ok(!(await ids(20)).includes(W), 'warned already today');
+        await db.today.releaseStreakWarning(W, w.day);
+        assert.ok((await ids(20)).includes(W), 'a released warning can be sent again');
+
+        // not at risk: claimed today, a short streak, reminders off, XP off, or a streak that has lapsed
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'already claimed today');
+        await db.query('UPDATE users SET last_daily_claim = UTC_TIMESTAMP() - INTERVAL 1 DAY, streak_count = 2 WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'under 3 days');
+        await db.query('UPDATE users SET streak_count = 6, automation_enabled = 0 WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'reminders off');
+        await db.query('UPDATE users SET automation_enabled = 1, gamification_enabled = 0 WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'XP off');
+        await db.query('UPDATE users SET gamification_enabled = 1, last_daily_claim = UTC_TIMESTAMP() - INTERVAL 3 DAY WHERE discord_id = ?', [W]);
+        assert.ok(!(await ids(20)).includes(W), 'the streak already lapsed');
+    });
+
+    await t.test('maintenance: the XP log records the class, old rows move to the archive, and the class report reads real XP', async () => {
+        const A = '100000000000000941';
+        await db.users.ensureUser(A);
+        await setXP(A, 700);
+        await db.progression.buyClass(A, 'Hero');
+        const { list } = await db.tasks.createList(A, { name: 'Report' });
+        for (let n = 0; n < 3; n++) await db.tasks.setItemCompleted(A, (await db.tasks.addItem(A, list.id, { name: `t${n}` })).item.id);
+        const classes = (await db.query("SELECT DISTINCT player_class FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete'", [A])).map((r) => r.player_class);
+        assert.deepEqual(classes, ['HERO'], 'the class at the time is stored with the XP');
+
+        const report = await db.maintenance.xpByClass({ days: 1 });
+        const hero = report.find((r) => r.playerClass === 'HERO' && r.source === 'item_complete');
+        assert.ok(hero && hero.rewards >= 3 && hero.average >= 35, 'a Hero task pays at least 35');
+        assert.ok(report.every((r) => db.maintenance.MODIFIED_SOURCES.includes(r.source)), 'only the sources a class reshapes are reported');
+
+        // archive: old rows move, recent ones stay, a dry run changes nothing, and the move can be repeated
+        await db.query("UPDATE xp_transactions SET created_at = DATE_SUB(created_at, INTERVAL 400 DAY) WHERE discord_id = ? AND source = 'item_add'", [A]);
+        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 365 DAY)", [A]))[0].n);
+        assert.ok(old >= 3);
+        const dry = await db.maintenance.archiveOld({ days: 365, dryRun: true });
+        assert.ok(dry.dryRun && dry.xpTransactions >= old && dry.gameSessions === null);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM xp_transactions_archive WHERE discord_id = ?', [A]))[0].n), 0, 'a dry run moves nothing');
+        const moved = await db.maintenance.archiveOld({ days: 365, batch: 2 });
+        assert.ok(moved.xpTransactions >= old, 'rows are moved in batches of 2 until none are left');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM xp_transactions_archive WHERE discord_id = ?', [A]))[0].n), old);
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_add'", [A]))[0].n), 0);
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete'", [A]))[0].n), 3, 'recent rows stay');
+        assert.equal((await db.maintenance.archiveOld({ days: 365 })).xpTransactions, 0, 'nothing is left to move');
+        assert.equal((await db.query("SELECT player_class FROM xp_transactions_archive WHERE discord_id = ? LIMIT 1", [A]))[0].player_class, 'HERO');
+        await assert.rejects(db.maintenance.archiveOld({ days: 0 }), /days/);
+        await assert.rejects(db.maintenance.archiveOld({ batch: 0 }), /batch/);
+
+        // game sessions only on request, and never an active one
+        await db.query("INSERT INTO game_sessions (discord_id, game_type, bet_amount, state, payout, created_at) VALUES (?, 'rps', 0, 'won', 0, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 500 DAY)), (?, 'rps', 0, 'active', 0, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 500 DAY))", [A, A]);
+        assert.equal((await db.maintenance.archiveOld({ days: 365 })).gameSessions, null, 'not touched without the option');
+        const games = await db.maintenance.archiveOld({ days: 365, games: true });
+        assert.equal(games.gameSessions, 1, 'the finished session moves, the active one stays');
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM game_sessions WHERE discord_id = ? AND state = 'active'", [A]))[0].n), 1);
     });
 
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
@@ -1003,10 +1490,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.setItemCompleted(R, ids[1]);
         const last = await db.tasks.setItemCompleted(R, ids[2]);
         assert.equal(last.xp.bonusInfo.type, 'ARTISAN_CLEAR');
-        // list create + 3 adds + 3 completions = 7 progress: 7 * 2 + 7 * 5
-        assert.equal(last.xp.bonusInfo.classBonus, 14 + 35);
+        // list create + 3 adds + 3 completions = 7 progress: 7 * 2 + 7 * 6
+        assert.equal(last.xp.bonusInfo.classBonus, 14 + 42);
         u = await db.users.getUser(R);
-        assert.equal(Number(u.artisan_progress), 0, 'a finished project resets');
+        assert.equal(Number(u.artisan_progress), 3, 'a finished project keeps half of its progress');
 
         // lists with fewer than 3 tasks, and recurring tasks, never count as a cleared list
         const { list: small } = await db.tasks.createList(R, { name: 'Tiny' });
@@ -1049,7 +1536,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const make = async (name, due_date) => ageDue((await db.tasks.addItem(G, list.id, { name, due_date })).item.id);
         const early = await db.tasks.setItemCompleted(G, await make('early', day(3)));
         assert.equal(early.xp.bonusInfo.type, 'RANGER_EARLY');
-        assert.equal(early.xp.bonusInfo.classBonus, 3 + 6, '3 days early on a 10 XP task');
+        assert.equal(early.xp.bonusInfo.classBonus, 3 + 9, '3 days early on a 10 XP task');
         const today = await db.tasks.setItemCompleted(G, await make('today', day(0)));
         assert.equal(today.xp.bonusInfo.type, 'RANGER_DUE');
         assert.equal(today.xp.bonusInfo.classBonus, 2);
@@ -1114,7 +1601,14 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const vow = await db.tasks.setItemCompleted(P, hard);
         assert.equal(vow.xp.bonusInfo.type, 'PALADIN_VOW');
         assert.equal(vow.xp.bonusInfo.classBonus, 20);
-        assert.equal((await db.tasks.setItemCompleted(P, easy)).xp.bonusInfo.classBonus, 5);
+        assert.equal((await db.tasks.setItemCompleted(P, easy)).xp.bonusInfo.classBonus, 8);
+
+        // only the first 3 HIGH completions of the day count as HIGH: the 4th pays like any other task
+        const more = [];
+        for (const name of ['h2', 'h3', 'h4']) more.push((await db.tasks.addItem(P, list.id, { name, priority: 'high' })).item.id);
+        assert.equal((await db.tasks.setItemCompleted(P, more[0])).xp.bonusInfo.type, 'PALADIN_VOW');
+        assert.equal((await db.tasks.setItemCompleted(P, more[1])).xp.bonusInfo.type, 'PALADIN_VOW');
+        assert.equal((await db.tasks.setItemCompleted(P, more[2])).xp.bonusInfo.type, 'PALADIN', 'the 4th HIGH of the day is not a Vow');
 
         // streak board: a Paladin 60h after the last claim still has a live streak, a Default player does not
         const P2 = '100000000000000211';
@@ -1301,8 +1795,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('streak chests: 7, 14 and 30 pay once per streak run, and a reset streak can earn them again', async () => {
         const U = '100000000000000111';
         await db.users.ensureUser(U);
-        const setStreak = (streak, hoursAgo = 25) =>
-            db.query('UPDATE users SET streak_count = ?, last_daily_claim = UTC_TIMESTAMP() - INTERVAL ? HOUR WHERE discord_id = ?', [streak, hoursAgo, U]);
+        // The streak counts calendar days, so rewind by whole days (a fixed number of hours would depend on the time of day).
+        const setStreak = (streak, daysAgo = 1) =>
+            db.query('UPDATE users SET streak_count = ?, last_daily_claim = UTC_TIMESTAMP() - INTERVAL ? DAY WHERE discord_id = ?', [streak, daysAgo, U]);
 
         await setStreak(5);
         const six = await db.progression.claimDaily(U);
@@ -1328,7 +1823,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await sumSource(U, 'streak_chest'), 950);
 
         // Break the streak (no freeze), then climb to 7 again: a new run, a new chest.
-        await setStreak(30, 100);
+        await setStreak(30, 5);
         const broken = await db.progression.claimDaily(U);
         assert.equal(broken.streak, 1);
         assert.equal(Number((await db.users.getUser(U)).last_chest_streak), 0);
@@ -3025,7 +3520,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.snoozeList(O, list.id, new Date(Date.now() + 3600e3));
         await db.tasks.setItemCompleted(O, item.id, true); // xp_awarded, first_completed_*, the repeat copy
 
-        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'];
+        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'];
         const PRIVATE_ITEM = ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'first_completed_by', 'first_completed_high', 'first_completed_early', 'first_completed_overdue', 'due_date_set_at', 'repeat_anchor_day', 'habit_streak', 'rearm_count', 'rearm_day', 'created_by', 'completed_by'];
         const PRIVATE_LIST = ['remind_at', 'deadline_notified', 'overdue_notified', 'cleared_at', 'cleared_by', 'rearm_count', 'rearm_day', 'discord_id'];
 
@@ -3358,8 +3853,8 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     });
 
     await t.test('backdated and far-future due dates earn no overdue or early extras until they are 24 hours old', async () => {
-        const N = '100000000000000601';
-        const G = '100000000000000602';
+        const N = '100000000000000701';
+        const G = '100000000000000702';
         const E = '100000000000000603';
         for (const id of [N, G, E]) await db.users.ensureUser(id);
         for (const [id, cls] of [[N, 'necromancer'], [G, 'RANGER']]) {

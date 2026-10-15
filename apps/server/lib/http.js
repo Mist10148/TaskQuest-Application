@@ -23,7 +23,6 @@ export function notFound(req, res) {
     res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
 }
 
-// eslint-disable-next-line no-unused-vars
 export function errorHandler(err, req, res, next) {
     if (err instanceof TaskQuestError) {
         if (err.code === 'COOLDOWN' && err.details?.retryAfterMs) {

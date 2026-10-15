@@ -33,7 +33,15 @@ const SOURCE_LABELS = {
     habit_bonus: 'Habit bonus',
     focus_session: 'Focus sessions',
     weekly_review: 'Weekly review',
-    party_quest: 'Party quest'
+    party_quest: 'Party quest',
+    perfect_day: 'Perfect days',
+    inbox_zero: 'Inbox zero',
+    boss_defeated: 'Bosses defeated',
+    comeback: 'Welcome back',
+    reflection: 'Reflections',
+    weekly_goal: 'Weekly goals',
+    party_assist: 'Party assist',
+    estimate_accuracy: 'Good estimates'
 };
 
 function sourceLabel(source) {

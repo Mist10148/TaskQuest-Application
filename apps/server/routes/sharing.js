@@ -9,7 +9,7 @@ import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
 import { inviteLimiter, inviteIpLimiter } from '../lib/security.js';
-import { idParam, inviteBody, memberRoleBody, memberKeyParam } from '../lib/schemas.js';
+import { idParam, inviteBody, memberRoleBody, memberKeyParam, transferBody } from '../lib/schemas.js';
 
 export const listSharingRouter = Router();
 export const invitesRouter = Router();
@@ -51,6 +51,15 @@ listSharingRouter.delete(
         const { id, memberKey } = parse(memberKeyParam, req.params);
         await db.sharing.removeMember(uid(req), id, memberKey);
         res.json({ success: true });
+    })
+);
+
+listSharingRouter.post(
+    '/:id/transfer',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { memberKey } = parse(transferBody, req.body);
+        res.json({ success: true, ...(await db.sharing.transferOwnership(uid(req), id, memberKey)) });
     })
 );
 

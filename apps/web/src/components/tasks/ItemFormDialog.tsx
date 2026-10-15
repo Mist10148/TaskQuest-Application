@@ -92,6 +92,11 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
               <Input id="item-tags" placeholder="work, urgent" value={form.tags} onChange={(e) => set("tags", e.target.value)} />
             </div>
           </div>
+          <div>
+            <label htmlFor="item-estimate" className="text-sm font-medium block mb-1">Estimate (minutes)</label>
+            <Input id="item-estimate" type="number" inputMode="numeric" min={1} max={600} placeholder="25" value={form.estimate} onChange={(e) => set("estimate", e.target.value)} />
+            <p className="text-xs text-foreground-muted mt-1">Finish it right after a focus session of about that length for a bonus.</p>
+          </div>
           {parentOptions.length > 0 && (
             <div>
               <label className="text-sm font-medium block mb-1">Subtask of</label>

@@ -51,8 +51,12 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `020_due_date_set_at` | `items.due_date_set_at` (when the due date was set or last changed; backfilled from `created_at`). Overdue and early effects apply only to a date set at least 24 hours before the completion |
 | `021_sharing_hardening` | Sharing hardening: `users.discord_handle` (the unique Discord username, binary collation, UNIQUE; filled at every web login and by the bot, never backfilled), `users.accept_invites` (1 default; 0 refuses every invitation silently), `party_members.public_id` (opaque member key for removing a member, backfilled randomly), `items.rearm_count` / `rearm_day` and `lists.rearm_count` / `rearm_day` (how often today, UTC, a changed due date or deadline re-armed everyone's reminders; limited to 3 a day), `users.progress_reset_at` (set by a progress reset; quest, weekly review and party metrics ignore completions before it) |
 | `022_invite_responded_at` | `list_invites.responded_at` and `party_invites.responded_at`: when the invitee declined. The 7-day decline cooldown counts from it (older rows fall back to `created_at`) |
+| `023_new_classes` | Five more classes (Bard, Alchemist, Druid, Chronomancer, Warden): `users.owns_bard` / `owns_alchemist` / `owns_druid` / `owns_chronomancer` / `owns_warden`, counters `bard_recent` (list ids of the last completions) and `alchemist_mix` (priority bitmask of the current brew), and `player_class` extended with the new values |
+| `024_engagement` | New XP sources: `reflections` (one short note a day, unique per user and day), `weekly_goals` (the target a player sets for a week and when it was claimed) and `items.estimate_minutes` (the player's own estimate of a task's length) |
+| `025_streak_warnings` | `users.streak_warned_day`: the player's own day on which the bot last warned them that today is the last day to keep their streak (at most one warning a day) |
+| `026_balance_data` | `xp_transactions.player_class` (the class equipped when the XP was earned; NULL before this migration) and the empty `xp_transactions_archive` and `game_sessions_archive` tables |
 
-The release that introduced migrations `010` to `022` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
+The release that introduced migrations `010` to `026` is the first to ship them. Migrations `011` and `012` were edited across commits of the development branch before release, so a development database migrated at an intermediate commit must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)); after release, never edit a migration.
 
 To add a migration, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists`, `columnExists`, `columnInfo`, `indexExists`, `addColumnIfMissing`, `addIndexIfMissing`, `addForeignKeyIfMissing`. Never edit a migration that has already been released.
 
@@ -102,9 +106,11 @@ All tables use InnoDB and `utf8mb4`. Every per-user table has a foreign key to `
 | `gamification_enabled`, `automation_enabled`, `auto_delete_old_lists` | BOOLEAN | Settings (default on) |
 | `streak_count`, `last_daily_claim`, `last_active_day` | INT / DATETIME / DATE | Daily reward |
 | `last_game_at` | DATETIME(3) | Free-game cooldown |
-| `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
+| `owns_hero` … `owns_tank`, `owns_monk`, `owns_artisan`, `owns_ranger`, `owns_necromancer`, `owns_paladin`, `owns_bard`, `owns_alchemist`, `owns_druid`, `owns_chronomancer`, `owns_warden` | BOOLEAN | Class ownership (one column per purchasable class, named `owns_<class>`) |
 | `assassin_streak`, `assassin_stacks`, `wizard_counter`, `archer_streak`, `tank_stacks`, `gambler_streak`, `monk_rhythm`, `artisan_progress`, `necro_souls` | INT | Class counters, reset when switching class (`CLASS_COUNTER_RESET` in `db/progression.js`) |
-| `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 36 h (48 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
+| `bard_recent` | VARCHAR(120) | Bard: the list ids of the last completed tasks, comma separated (newest last). Reset with the class counters. |
+| `alchemist_mix` | INT | Alchemist: bitmask of the priorities completed in the current brew (1 LOW, 2 MEDIUM, 4 HIGH). Reset with the class counters. |
+| `assassin_last_at` | DATETIME NULL | Last Assassin action. After more than 48 h (72 h with Night Owl) the streak and stacks reset. Cleared on class switch. |
 | `monk_day` | DATE NULL | Last day (in the user's time zone) the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
 | `assassin_bleed` | INT | Actions left with the Bleed bonus after a crit. Not tied to a class, so it survives a class switch; cleared by a progress reset. |
 | `total_lists_created`, `total_items_added`, `total_items_completed` | INT | Monotonic counters for achievements |
@@ -229,8 +235,10 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 |---|---|---|
 | `list_create`, `item_add`, `item_complete` | + | Task rewards |
 | `daily` | + | Daily reward |
-| `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
+| `reflection`, `weekly_goal` | + | A daily note and a weekly goal (flat XP) |
+| `first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist`, `estimate_accuracy` | + | Flat bonuses on a task's first completion (capped, see GAMEPLAY 5c) |
 | `streak_chest`, `achievement_reward`, `focus_session`, `weekly_review`, `quest_reward`, `party_quest` | + | Flat bonuses from streaks, achievements, focus sessions, the weekly review, daily/weekly/monthly quests and the party quest |
+| `skill_refund` | + | 75% of a skill tree's cost handed back when it is reset. Never lifetime XP. |
 | `prestige` | − | The balance leaving at a prestige (not spending: `xp_spent` is unchanged) |
 | `game_reward` | + | RPS, Hangman and arcade winnings. These count toward the free-game daily cap. |
 | `blackjack_bet` | − | Bet escrow (and double down) |
@@ -264,5 +272,6 @@ See [`packages/shared/src/db/pool.js`](../packages/shared/src/db/pool.js):
 ## Backups and maintenance
 
 - Take a `mysqldump --single-transaction --routines taskquest` before upgrades.
-- `xp_transactions` grows without bound. Archive rows older than the retention window you need. Only today's rows are used by caps, and the last 50 by the history view.
-- `game_sessions` can be pruned the same way. Achievement checks count finished games, so archive into a summary table if you need lifetime game stats.
+- `xp_transactions` grows without bound. `npm run archive -- --days 365` moves rows older than the window to `xp_transactions_archive` in batches (add `--dry-run` to see how many first, `--batch N` to change the batch size). Caps use today's rows, the history view the last 50 and the quests and review their own week or month, so a window of a year or more changes nothing you can see; stats charts that look back further than `--days` will not include archived XP.
+- `game_sessions` can be archived the same way with `--games` (finished sessions only, never an active one). The games played and won counts are counted from the sessions, so they drop by what moves: leave `--games` off unless you accept that.
+- `npm run xp-report -- --days 90` prints the average XP per reward by class and source from `xp_transactions.player_class`, the real data behind [design/balance.md](design/balance.md) (rows from before migration `026` show as UNKNOWN).

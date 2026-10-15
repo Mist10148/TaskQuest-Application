@@ -42,7 +42,7 @@ export function classCounter(user: Partial<User>, skills: UserSkill[] = [], now:
   const level = (id: string) => skills.find((s) => s.skill_id === id)?.skill_level ?? 0;
   switch (user.player_class) {
     case "MONK": {
-      const max = 14 + (level("monk_discipline") > 0 ? 4 : 0);
+      const max = 14 + (level("monk_discipline") > 0 ? 2 : 0);
       const value = Math.min(max, Number(user.monk_rhythm) || 0);
       const today = dayInZone(now, user.timezone);
       const gap = user.monk_day ? dayNumber(today) - dayNumber(String(user.monk_day)) : null;
@@ -50,12 +50,21 @@ export function classCounter(user: Partial<User>, skills: UserSkill[] = [], now:
       return { label: "Rhythm", emoji: "🧘", value, max, note: lapsed ? "Lapsed: restarts at 1 on your next action" : undefined };
     }
     case "ARTISAN": {
-      const max = 10 + (level("artisan_blueprint") > 0 ? 3 : 0);
+      const max = 10 + level("artisan_blueprint") * 3;
       return { label: "Project", emoji: "🛠️", value: Math.min(max, Number(user.artisan_progress) || 0), max };
     }
     case "NECROMANCER": {
       const max = 5 + (level("necro_jar") > 0 ? 3 : 0);
       return { label: "Souls", emoji: "💀", value: Math.min(max, Number(user.necro_souls) || 0), max };
+    }
+    case "ALCHEMIST": {
+      const mix = Number(user.alchemist_mix) || 0;
+      return { label: "Brew", emoji: "⚗️", value: (mix & 1) + ((mix >> 1) & 1) + ((mix >> 2) & 1), max: 3 };
+    }
+    case "BARD": {
+      const max = level("bard_harmony") > 0 ? 7 : 5;
+      const recent = String(user.bard_recent ?? "").split(",").filter(Boolean).slice(-max);
+      return { label: "Medley", emoji: "🎵", value: new Set(recent).size, max };
     }
     default:
       return null;
@@ -82,3 +91,17 @@ export function dailyDescription(r: DailyClaimResult): string {
   if ((r.surpriseBonus ?? 0) > 0) text = [text, `🎉 Daily Surprise +${r.surpriseBonus} XP`].filter(Boolean).join(" · ");
   return text;
 }
+
+/** Plain words for the situations the "what would I earn?" preview simulates (`mix` in the preview). */
+export const MIX_LABELS: Record<string, string> = {
+  plain: "an ordinary task",
+  high: "every second task HIGH priority",
+  early: "tasks finished 3 days early",
+  overdue: "every third task overdue",
+  list: "finishing lists of ten",
+  variety: "tasks from five lists in rotation",
+  rotate: "LOW, MEDIUM and HIGH tasks in rotation",
+  habit: "daily habits with an 8 step streak",
+  focus: "tasks right after a focus session",
+  shared: "lists shared with three people",
+};

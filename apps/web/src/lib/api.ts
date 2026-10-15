@@ -168,6 +168,7 @@ export const sharingApi = {
         patch<{ memberKey: string; role: ListRole }>(`/api/lists/${listId}/members/${memberKey}`, { role }),
     removeMember: (listId: number, memberKey: string) => del<{ success: boolean }>(`/api/lists/${listId}/members/${memberKey}`),
     leave: (listId: number) => post<{ success: boolean }>(`/api/lists/${listId}/leave`),
+    transfer: (listId: number, memberKey: string) => post<{ success: boolean; listId: number; role: ListRole; memberKey: string }>(`/api/lists/${listId}/transfer`, { memberKey }),
     myInvites: () => apiFetch<MyInvite[]>('/api/invites'),
     accept: (id: number) => post<InviteResponse>(`/api/invites/${id}/accept`),
     decline: (id: number) => post<InviteResponse>(`/api/invites/${id}/decline`),
@@ -213,6 +214,33 @@ export interface PartyStatus {
     reached: boolean;
     claimed: boolean;
     claimable: boolean;
+    /** This week's tasks and focus minutes per member, best first. */
+    board?: PartyBoardRow[];
+    /** The second weekly party quest: focus minutes together. */
+    focusQuest?: PartyFocusQuest;
+}
+
+export interface PartyBoardRow {
+    rank: number;
+    memberKey: string;
+    name: string | null;
+    count: number;
+    focusMinutes: number;
+    isYou: boolean;
+    isOwner: boolean;
+}
+
+export interface PartyFocusQuest {
+    target: number;
+    progress: number;
+    reward: number;
+    /** Minutes you must focus yourself (since joining, this week) before you may claim. */
+    minToClaim: number;
+    perMember: number;
+    yourMinutes: number;
+    reached: boolean;
+    claimed: boolean;
+    claimable: boolean;
 }
 
 export interface MyPartyInvite {
@@ -250,6 +278,7 @@ export const partyApi = {
     kick: (memberKey: string) => del<{ success: boolean }>(`/api/parties/members/${memberKey}`),
     disband: () => del<{ success: boolean }>('/api/parties'),
     claim: () => post<PartyClaimResult>('/api/parties/claim'),
+    claimFocus: () => post<PartyClaimResult>('/api/parties/focus/claim'),
 };
 
 export const questsApi = {
@@ -333,7 +362,39 @@ export const classesApi = {
     getAll: () => apiFetch<ClassesData>('/api/classes'),
     buy: (classKey: string) => post<{ success: boolean; user: User; newAchievements?: AchievementUnlock[] }>(`/api/classes/${classKey}/buy`),
     equip: (classKey: string) => post<{ success: boolean; user: User }>(`/api/classes/${classKey}/equip`),
+    preview: (classKey: string, mix?: string) => apiFetch<ClassPreview>(`/api/classes/${classKey}/preview${mix ? `?mix=${encodeURIComponent(mix)}` : ''}`),
 };
+
+/** "What would I earn?": the average XP of a 10 XP task (a simulation of the real rules). */
+export interface ClassPreview {
+    classKey: string;
+    level: number;
+    mix: string;
+    base: number;
+    noSkills: number;
+    yourSkills: number;
+    fullTree: number;
+}
+
+export interface RespecResult {
+    success: boolean;
+    treeKey: string;
+    removed: string[];
+    spent: number;
+    refund: number;
+    balance: number;
+    percent: number;
+}
+
+export interface SkillPreview {
+    classKey: string;
+    level: number;
+    mix: string;
+    base: number;
+    average: number;
+    /** skill id -> what its next level adds to the average XP of a 10 XP task for the equipped class. */
+    gains: Record<string, number>;
+}
 
 export type CosmeticKind = 'title' | 'frame' | 'accent';
 
@@ -380,6 +441,8 @@ export const pushApi = {
 
 export const skillsApi = {
     getAll: () => apiFetch<SkillsData>('/api/skills'),
+    preview: () => apiFetch<SkillPreview>('/api/skills/preview'),
+    respec: (classKey: string) => post<RespecResult>('/api/skills/respec', { classKey }),
     unlock: (skillId: string) => post<{ success: boolean; skill: { skill_id: string; skill_level: number }; balance: number }>(`/api/skills/${skillId}/unlock`),
 };
 
@@ -435,6 +498,21 @@ export const reviewApi = {
     claim: () => post<ReviewClaimResult>('/api/review/claim'),
 };
 
+export const todayApi = {
+    get: () => apiFetch<TodayData>('/api/today'),
+};
+
+export const reflectionApi = {
+    get: () => apiFetch<ReflectionStatus>('/api/reflection'),
+    write: (note: string) => post<ReflectionResult>('/api/reflection', { note }),
+};
+
+export const goalApi = {
+    get: () => apiFetch<WeeklyGoal>('/api/goal'),
+    set: (target: number) => apiFetch<WeeklyGoal & { success: boolean }>('/api/goal', { method: 'PUT', json: { target } }),
+    claim: () => post<GoalClaimResult>('/api/goal/claim'),
+};
+
 export const xpApi = {
     getHistory: () => apiFetch<XPTransaction[]>('/api/xp/history'),
 };
@@ -443,7 +521,7 @@ export const xpApi = {
 
 export type PlayerClass =
     | 'DEFAULT' | 'HERO' | 'GAMBLER' | 'ASSASSIN' | 'WIZARD' | 'ARCHER' | 'TANK'
-    | 'MONK' | 'ARTISAN' | 'RANGER' | 'NECROMANCER' | 'PALADIN';
+    | 'MONK' | 'ARTISAN' | 'RANGER' | 'NECROMANCER' | 'PALADIN' | 'WARDEN' | 'CHRONOMANCER' | 'DRUID' | 'ALCHEMIST' | 'BARD';
 
 export interface User {
     discord_id: string;
@@ -476,11 +554,18 @@ export interface User {
     owns_ranger?: boolean | number;
     owns_necromancer?: boolean | number;
     owns_paladin?: boolean | number;
+    owns_warden?: boolean | number;
+    owns_chronomancer?: boolean | number;
+    owns_druid?: boolean | number;
+    owns_alchemist?: boolean | number;
+    owns_bard?: boolean | number;
     /** Class counters: Monk rhythm (and its last UTC day), Artisan project progress, Necromancer souls. */
     monk_rhythm?: number;
     monk_day?: string | null;
     artisan_progress?: number;
     necro_souls?: number;
+    bard_recent?: string;
+    alchemist_mix?: number;
     total_items_added: number;
     total_items_completed: number;
     total_lists_created: number;
@@ -609,6 +694,8 @@ export interface Item {
     tags?: string | null;
     parent_id?: number | null;
     recurrence?: Recurrence | null;
+    /** The player's own estimate in minutes (a focus session of about that length right before finishing pays a bonus). */
+    estimate_minutes?: number | null;
     /** Display name of the person who finished it (shared quests only). */
     completed_by_name?: string | null;
     /** false when the server would refuse to delete it for me (an editor may only delete tasks they added). Absent: assume yes. */
@@ -624,6 +711,7 @@ export interface ItemInput {
     priority?: Priority | null;
     tags?: string[] | string | null;
     recurrence?: Recurrence | null;
+    estimate_minutes?: number | null;
     parent_id?: number | null;
 }
 
@@ -976,6 +1064,69 @@ export interface WeeklyReview {
     claimable: boolean;
     streak: number;
     reward: number;
+}
+
+export interface TodayTask {
+    id: number;
+    name: string;
+    listId: number;
+    listName: string;
+    dueDate: string | null;
+    priority: Priority | null;
+    estimateMinutes: number | null;
+    overdueDays: number;
+}
+
+export interface TodayData {
+    day: string;
+    season: { key: string; name: string; blurb: string; doubles: string; enabled: boolean };
+    streak: { count: number; live: number; claimedToday: boolean; daysLeft: number | null; atRisk: boolean };
+    counts: { dueToday: number; overdue: number; doneToday: number };
+    tasks: TodayTask[];
+    reflection: ReflectionStatus;
+    goal: WeeklyGoal;
+    xpEnabled: boolean;
+}
+
+export interface ReflectionStatus {
+    day: string;
+    reflection: { day: string; note: string; createdAt: string } | null;
+    reward: number;
+    maxLength: number;
+}
+
+export interface ReflectionResult {
+    success: boolean;
+    day: string;
+    note: string;
+    xp: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
+}
+
+export interface WeeklyGoal {
+    weekStart: string;
+    resetsAt: string;
+    target: number | null;
+    progress: number;
+    claimed: boolean;
+    claimable: boolean;
+    reward: number | null;
+    min: number;
+    max: number;
+}
+
+export interface GoalClaimResult {
+    success: boolean;
+    weekStart: string;
+    target: number;
+    xp: number;
+    balance: number;
+    level: number;
+    leveledUp: boolean;
+    newAchievements: AchievementUnlock[];
 }
 
 export interface ReviewClaimResult {

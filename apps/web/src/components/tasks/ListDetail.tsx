@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils";
 import { CATEGORIES } from "./constants";
 import { QuickAddBar } from "./QuickAddBar";
 import { TaskRow } from "./TaskRow";
+import { TaskBoard } from "./TaskBoard";
+import { TaskCalendar } from "./TaskCalendar";
+import { TASK_VIEWS, type TaskView } from "@/lib/taskViews";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { ShortcutsDialog } from "./ShortcutsDialog";
@@ -78,6 +81,23 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showHelp, setShowHelp] = useState(false);
+  // How the tasks are drawn: remembered per browser (a convenience only, so a blocked store is fine).
+  const [view, setViewState] = useState<TaskView>(() => {
+    try {
+      const saved = window.localStorage.getItem("taskquest:task-view");
+      return saved === "board" || saved === "calendar" ? saved : "list";
+    } catch {
+      return "list";
+    }
+  });
+  const setView = (next: TaskView) => {
+    setViewState(next);
+    try {
+      window.localStorage.setItem("taskquest:task-view", next);
+    } catch {
+      /* the choice just is not remembered */
+    }
+  };
   const quickAddRef = useRef<HTMLInputElement>(null);
   const lastSelectedRef = useRef<number | null>(null);
   // Rows in the order they are drawn (each task followed by its subtasks), for Shift-click ranges.
@@ -231,11 +251,32 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
 
       {editable && <QuickAddBar ref={quickAddRef} pending={quickAddPending} aiEnabled={aiEnabled} onAdd={onQuickAdd} />}
 
+      {items.length > 0 && (
+        <div role="tablist" aria-label="How to show the tasks" className="mb-4 inline-flex rounded-lg border border-border bg-card p-0.5">
+          {TASK_VIEWS.map((v) => (
+            <button
+              key={v.value}
+              type="button"
+              role="tab"
+              aria-selected={view === v.value}
+              onClick={() => setView(v.value)}
+              className={cn("rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring", view === v.value ? "bg-primary text-primary-foreground" : "text-foreground-muted hover:text-foreground")}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {items.length === 0 ? (
         <div className="text-center py-12 text-foreground-muted">
           <Scroll className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>{editable ? "No tasks yet. Type one above or press Add Task." : "No tasks yet."}</p>
         </div>
+      ) : view === "board" ? (
+        <TaskBoard items={items} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} />
+      ) : view === "calendar" ? (
+        <TaskCalendar items={items} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} />
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-foreground-muted mb-3 flex items-center gap-2">

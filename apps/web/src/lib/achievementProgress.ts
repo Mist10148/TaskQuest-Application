@@ -62,3 +62,25 @@ export function achievementProgress(key: string, stats: AchievementStats): Progr
 export function cappedDelay(base: number, index: number, step: number, max = 0.6): number {
   return Math.min(base + index * step, max);
 }
+
+export interface NextUnlock {
+  key: string;
+  progress: Progress;
+  /** How much is left, in the same unit. */
+  remaining: number;
+}
+
+/**
+ * The locked achievements closest to unlocking (most progress first, then the smallest goal), for the "next unlocks" hint.
+ * Only achievements the client can count are considered, and ones that have not been started are left out.
+ */
+export function nextUnlocks(lockedKeys: readonly string[], stats: AchievementStats, limit = 3): NextUnlock[] {
+  const out: NextUnlock[] = [];
+  for (const key of lockedKeys) {
+    const progress = achievementProgress(key, stats);
+    if (!progress || progress.current <= 0 || progress.current >= progress.goal) continue;
+    out.push({ key, progress, remaining: progress.goal - progress.current });
+  }
+  out.sort((a, b) => b.progress.percent - a.progress.percent || a.progress.goal - b.progress.goal);
+  return out.slice(0, limit);
+}

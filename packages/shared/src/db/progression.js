@@ -17,14 +17,18 @@ const {
     findSkill,
     LIMITS,
     REWARDS,
+    SKILL_TREES,
+    STREAK_FREEZE,
     SPEND_SOURCES,
     STREAK_CHESTS,
-    PRESTIGE
+    PRESTIGE,
+    SEASONS
 } = require('../constants');
 const { levelFromXP, prestigeTitle, calculateFinalXP, calculateDailyReward, getFreezeLimits } = require('../xp');
 const { evaluateAchievements } = require('../achievements');
 const tz = require('../tz');
 const { todayInZone } = require('../dates');
+const { currentSeason } = require('../quests');
 
 /** Columns applyXP() may update alongside the balance. */
 const UPDATABLE_COLUMNS = new Set([
@@ -32,10 +36,11 @@ const UPDATABLE_COLUMNS = new Set([
     'player_class', 'streak_count', 'last_daily_claim', 'last_active_day', 'last_game_at',
     'owns_hero', 'owns_gambler', 'owns_assassin', 'owns_wizard', 'owns_archer', 'owns_tank', 'streak_freezes',
     'owns_monk', 'monk_rhythm', 'monk_day', 'owns_artisan', 'artisan_progress', 'owns_ranger', 'owns_necromancer', 'owns_paladin', 'necro_souls',
+    'owns_bard', 'owns_alchemist', 'owns_druid', 'owns_chronomancer', 'owns_warden', 'bard_recent', 'alchemist_mix',
     'last_chest_streak'
 ]);
 
-const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, artisan_progress: 0, necro_souls: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0 };
+const CLASS_COUNTER_RESET = { assassin_streak: 0, assassin_stacks: 0, assassin_last_at: null, gambler_streak: 0, monk_rhythm: 0, monk_day: null, artisan_progress: 0, necro_souls: 0, wizard_counter: 0, archer_streak: 0, tank_stacks: 0, bard_recent: '', alchemist_mix: 0 };
 
 /** Persist column updates on a locked user and mirror them on the object. */
 async function updateUserColumns(conn, user, updates) {
@@ -91,9 +96,9 @@ async function applyXP(conn, user, amount, source, opts = {}) {
     }
 
     const [res] = await conn.query(
-        `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [user.discord_id, delta, source, balanceBefore, balanceAfter, opts.referenceId ?? null]
+        `INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id, player_class)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [user.discord_id, delta, source, balanceBefore, balanceAfter, opts.referenceId ?? null, user.player_class || null]
     );
 
     return {
@@ -190,6 +195,8 @@ async function rewardAction(conn, user, source, baseXP, opts = {}) {
 async function awardFlat(conn, user, source, amount, opts = {}) {
     if (!user.gamification_enabled) return null;
     let pay = Math.trunc(Number(amount));
+    // The weekly modifier doubles one source for everybody; the daily cap below still bounds the doubled amount.
+    if (process.env.XP_WEEKLY_MODIFIER !== 'off' && currentSeason(SEASONS, opts.now || new Date()).doubles === source) pay *= 2;
     if (opts.dailyCap !== undefined) {
         let paid = 0;
         for (const s of opts.capSources || [source]) paid += await sumToday(conn, user, s);
@@ -467,7 +474,47 @@ async function unlockSkill(discordId, skillId) {
     });
 }
 
+/**
+ * Unlearn every skill of one tree and get RESPEC_REFUND_PERCENT of what the levels cost back (a refund: it never counts as
+ * lifetime XP and does not lower xp_spent). Once a day. Freeze Cache cannot be dropped while you hold more freezes than
+ * the normal limit, so no purchased freeze is ever lost.
+ */
+async function respecSkills(discordId, treeKey) {
+    const key = String(treeKey || '').toUpperCase();
+    const tree = SKILL_TREES[key];
+    if (!tree) throw errors.notFound('Skill tree not found.');
+    return withTransaction(async (conn) => {
+        const user = await lockUser(conn, discordId);
+        requireGamification(user);
+        const ids = Object.keys(tree.skills);
+        const [rows] = await conn.query(`SELECT skill_id, skill_level FROM user_skills WHERE discord_id = ? AND skill_id IN (${ids.map(() => '?').join(',')}) FOR UPDATE`, [user.discord_id, ...ids]);
+        if (!rows.length) throw errors.conflict(`You have no ${tree.name} skills to reset.`);
+
+        const [[last]] = await conn.query("SELECT MAX(created_at) AS at FROM xp_transactions WHERE discord_id = ? AND source = 'skill_refund'", [user.discord_id]);
+        if (last && last.at) {
+            const wait = new Date(last.at).getTime() + LIMITS.RESPEC_COOLDOWN_HOURS * 3600e3 - Date.now();
+            if (wait > 0) {
+                const err = errors.cooldown(wait);
+                err.message = `You can reset one skill tree a day. Try again in about ${Math.ceil(wait / 3600e3)} hours.`;
+                throw err;
+            }
+        }
+        if (rows.some((r) => r.skill_id === 'default_freeze_cache') && Number(user.streak_freezes) > STREAK_FREEZE.MAX) {
+            throw errors.validation(`You hold ${user.streak_freezes} streak freezes; use some first, because without Freeze Cache you can hold ${STREAK_FREEZE.MAX}.`);
+        }
+
+        const spent = rows.reduce((sum, r) => sum + tree.skills[r.skill_id].cost * Number(r.skill_level), 0);
+        const refund = Math.floor((spent * LIMITS.RESPEC_REFUND_PERCENT) / 100);
+        await conn.query(`DELETE FROM user_skills WHERE discord_id = ? AND skill_id IN (${ids.map(() => '?').join(',')})`, [user.discord_id, ...ids]);
+        // Counters that only the removed skills explained are cleared with them.
+        await conn.query('UPDATE users SET assassin_bleed = 0 WHERE discord_id = ?', [user.discord_id]);
+        const tx = await applyXP(conn, user, refund, 'skill_refund', { lifetimeDelta: 0 });
+        return { treeKey: key, removed: rows.map((r) => r.skill_id), spent, refund, balance: tx.balanceAfter, percent: LIMITS.RESPEC_REFUND_PERCENT };
+    });
+}
+
 module.exports = {
+    respecSkills,
     applyXP,
     rewardAction,
     awardFlat,

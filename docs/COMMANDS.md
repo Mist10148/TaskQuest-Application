@@ -126,6 +126,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 - **Fan-out cap:** you get at most 20 reminder DMs per hourly run (list and task reminders together). Anything over that is collapsed into **one** DM, "N more reminders due: see /list", and counted as handled, so a big or hostile shared list cannot flood you. Names in reminders are escaped and a reminder never pings anyone.
 - **Abandoned games:** expired every 5 minutes; an unfinished Blackjack hand is settled as a stand, not refunded.
 - **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out).
+- **Streak warning:** checked hourly; on the evening (from 18:00 your time) of the last day a streak of 3 or more days can still be saved, a player who has not claimed the daily reward gets one DM (and a web push when push is set up). At most one a day, and never for players with reminders (`/automation`) or XP turned off.
 
 ## Interaction IDs (for developers)
 
@@ -137,7 +138,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 | `shop_tab_<kind>`, `shop_buy_<id>`, `shop_equip_<id>`, `shop_unequip_<kind>`, `shop_pick_<kind>` (menu) | `commands/shop.js` buttons and menu |
 | `remind_snooze_<listId>`, `task_remind_snooze_<itemId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
 | `inv_accept_<id>`, `inv_decline_<id>`, `leave_yes_<listId>`, `leave_no`, `mem_rm_<listId>` (menu; the value is the opaque member key) | `commands/sharing.js` |
-| `party_claim`, `party_accept_<id>`, `party_decline_<id>`, `party_disband_yes`, `party_disband_no` | `commands/party.js` buttons |
+| `party_claim`, `party_claim_focus`, `party_accept_<id>`, `party_decline_<id>`, `party_disband_yes`, `party_disband_no` | `commands/party.js` buttons |
 | `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_` (incl. `item_details_`), `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
 | `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_details_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
 | `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_details_`, `m_search` | `commands/list.js` modals |

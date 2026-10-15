@@ -3,10 +3,12 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Lock, Check, Sparkles, Loader2, ShieldX } from "lucide-react";
+import { Lock, Check, Sparkles, Loader2, ShieldX, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSkills, useUnlockSkill } from "@/hooks/useApi";
+import { useSkills, useSkillPreview, useUnlockSkill, useRespecSkills } from "@/hooks/useApi";
+import { MIX_LABELS } from "@/lib/classInfo";
+import { skillTiers } from "@/lib/skillTree";
 import { toast } from "sonner";
 import { classColor } from "@/lib/classColors";
 import { nextTabIndex } from "@/lib/tabs";
@@ -19,6 +21,9 @@ const Skills = () => {
   const { refresh, user } = useAuth();
   const { data, isLoading, isError, error, refetch, isFetching } = useSkills();
   const unlockSkill = useUnlockSkill();
+  const preview = useSkillPreview().data;
+  const respec = useRespecSkills();
+  const [confirmRespec, setConfirmRespec] = useState(false);
   const equippedKey: string = user?.user?.player_class || 'DEFAULT';
   // Until the player picks a tab, show the tree of the class they have equipped.
   const [pickedTreeKey, setPickedTreeKey] = useState<string | null>(null);
@@ -62,6 +67,18 @@ const Skills = () => {
   };
 
   const color = classColor(selectedTreeKey);
+  const spentOnTree = (selectedTree?.skills ?? []).reduce((sum: number, s: Skill) => sum + s.cost * s.currentLevel, 0);
+  const refundPreview = Math.floor(spentOnTree * 0.75);
+
+  const handleRespec = async () => {
+    try {
+      const r = await respec.mutateAsync(selectedTreeKey);
+      toast.success(`🔄 ${selectedTree?.name ?? "Tree"} reset`, { description: `${r.refund.toLocaleString()} XP came back (${r.percent}% of ${r.spent.toLocaleString()}).` });
+      refresh();
+    } catch {
+      /* error toast shown by the mutation hook */
+    }
+  };
 
   // With 12 trees the tab list scrolls; keep the selected tab in view.
   useEffect(() => {
@@ -155,10 +172,19 @@ const Skills = () => {
                 <Lock className="h-3 w-3" /> Requires owning this class
               </p>
             )}
+            {isClassOwned && spentOnTree > 0 && (
+              <Button type="button" variant="outline" size="sm" className="mt-3 gap-2" onClick={() => setConfirmRespec(true)} disabled={respec.isPending}>
+                {respec.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Reset this tree
+              </Button>
+            )}
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {selectedTree.skills.map((skill: Skill) => {
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-2" data-testid="skill-tiers">
+            {skillTiers(selectedTree.skills).map((tier, tierIndex) => (
+              <div key={tierIndex} className="flex flex-1 flex-col gap-3 sm:gap-4 lg:min-w-0">
+                {tierIndex > 0 && <div className="text-center text-foreground-muted lg:hidden" aria-hidden>↓</div>}
+                <div className="hidden text-center text-[10px] uppercase tracking-wide text-foreground-muted lg:block">{tierIndex === 0 ? "Start" : `Tier ${tierIndex + 1}`}</div>
+            {tier.map((skill: Skill) => {
               const status = getSkillStatus(skill);
               const canAfford = userXP >= skill.cost;
               const isClassLocked = status === 'class_locked';
@@ -187,6 +213,15 @@ const Skills = () => {
                     <h4 className="font-heading font-semibold text-sm sm:text-base">{skill.name}</h4>
                   </div>
                   <p className="text-[10px] sm:text-xs text-foreground-muted mb-2 sm:mb-3">{skill.description}</p>
+                  {preview && skill.currentLevel < skill.maxLevel && preview.gains[skill.id] !== undefined && (
+                    <p className="text-[10px] sm:text-xs mb-2 sm:mb-3" data-testid={`skill-gain-${skill.id}`}>
+                      {preview.gains[skill.id] > 0 ? (
+                        <span className="text-xp font-medium">≈ +{preview.gains[skill.id]} XP per task</span>
+                      ) : (
+                        <span className="text-foreground-muted">Adds nothing to {MIX_LABELS[preview.mix] ?? "a task"} right now</span>
+                      )}
+                    </p>
+                  )}
                   
                   <div className="flex items-center justify-between mb-2 sm:mb-3">
                     <div className="flex gap-1">
@@ -220,9 +255,24 @@ const Skills = () => {
                 </motion.div>
               );
             })}
+              </div>
+            ))}
           </div>
         </motion.div>
       )}
+      <ConfirmDialog
+        open={confirmRespec}
+        onOpenChange={setConfirmRespec}
+        title={`Reset the ${selectedTree?.name ?? ""} tree?`}
+        description={(
+          <div className="space-y-1 text-sm">
+            <p>Every {selectedTree?.name} skill is unlearned and <span className="font-semibold text-xp">{refundPreview.toLocaleString()} XP</span> comes back (75% of the {spentOnTree.toLocaleString()} XP you spent).</p>
+            <p>You can reset one tree a day. The refund never counts as lifetime XP.</p>
+          </div>
+        )}
+        confirmLabel="Reset the tree"
+        onConfirm={() => { setConfirmRespec(false); void handleRespec(); }}
+      />
       <ConfirmDialog
         open={confirmSkill !== null}
         onOpenChange={(open) => { if (!open) setConfirmSkill(null); }}
@@ -231,6 +281,12 @@ const Skills = () => {
           <div className="space-y-1 text-sm">
             <p>Price: <span className="font-semibold text-xp">{confirmSkill.cost.toLocaleString()} XP</span></p>
             <p>Balance after: <span className="font-semibold">{Math.max(0, userXP - confirmSkill.cost).toLocaleString()} XP</span></p>
+            {preview && preview.gains[confirmSkill.id] !== undefined && (
+              <p>
+                For your {preview.classKey.toLowerCase()} at level {preview.level}:{" "}
+                <span className="font-semibold">{preview.gains[confirmSkill.id] > 0 ? `≈ +${preview.gains[confirmSkill.id]} XP` : "no change"}</span> per 10 XP task ({MIX_LABELS[preview.mix] ?? "a task"}).
+              </p>
+            )}
           </div>
         )}
         confirmLabel={`Spend ${confirmSkill?.cost.toLocaleString() ?? ""} XP`}

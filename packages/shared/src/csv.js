@@ -229,7 +229,7 @@ function csvToImport(text) {
 
     const listArr = [...lists.values()].map((l) => ({
         ...l,
-        items: l.items.map(({ subtaskOf, row, ...rest }) => ({ ...rest, id: rest.ref, parent_id: rest.parentRef })) // eslint-disable-line no-unused-vars
+        items: l.items.map(({ subtaskOf, row, ...rest }) => ({ ...rest, id: rest.ref, parent_id: rest.parentRef }))
     }));
     return {
         data: { lists: listArr },

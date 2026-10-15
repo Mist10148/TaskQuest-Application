@@ -1,7 +1,9 @@
-import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, ListPlus, Pencil, Repeat, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, ListPlus, Pencil, Repeat, Timer, Trash2 } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { useRef, useState } from "react";
+import { swipeAction, swipeOffset } from "@/lib/swipe";
 
 const DOT: Record<string, string> = { HIGH: "bg-red-500", MEDIUM: "bg-yellow-500", LOW: "bg-blue-500" };
 
@@ -46,9 +48,34 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
   const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
   const overdue = !completed && isPastDeadline(item.due_date);
 
+  // Touch: swipe a task to the right to complete it (the checkbox and the keyboard still work as before).
+  const swipeable = !readOnly && !completed && !selectMode;
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const [offset, setOffset] = useState(0);
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (swipeable) touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!touch.current) return;
+    setOffset(swipeOffset(e.touches[0].clientX - touch.current.x, e.touches[0].clientY - touch.current.y));
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    setOffset(0);
+    if (!start) return;
+    const end = e.changedTouches[0];
+    if (swipeAction(end.clientX - start.x, end.clientY - start.y) === "complete") onToggle(item.id);
+  };
+
   return (
     <div
       data-task-row
+      onTouchStart={swipeable ? onTouchStart : undefined}
+      onTouchMove={swipeable ? onTouchMove : undefined}
+      onTouchEnd={swipeable ? onTouchEnd : undefined}
+      onTouchCancel={swipeable ? () => { touch.current = null; setOffset(0); } : undefined}
+      style={offset ? { transform: `translateX(${offset}px)` } : undefined}
       onDragOver={drag ? (e) => drag.onDragOver(e, item.id) : undefined}
       onDragLeave={drag?.onDragLeave}
       onDrop={drag ? (e) => drag.onDrop(e, item.id) : undefined}
@@ -118,7 +145,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         </p>
         {item.description && <p className="text-xs sm:text-sm mt-1 line-clamp-2 text-foreground-muted">{item.description}</p>}
         {completed && item.completed_by_name && <p className="mt-1 text-xs text-foreground-muted">Done by {item.completed_by_name}</p>}
-        {(item.due_date || item.recurrence || tags.length > 0) && (
+        {(item.due_date || item.recurrence || item.estimate_minutes || tags.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
               <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
@@ -131,6 +158,11 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
                 <Repeat className="h-3 w-3" aria-hidden /> {item.recurrence}
               </span>
             )}
+            {item.estimate_minutes ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 border border-border text-foreground-muted">
+                <Timer className="h-3 w-3" aria-hidden /> {item.estimate_minutes} min
+              </span>
+            ) : null}
             {tags.map((t) => (
               <span key={t} className="rounded-full px-2 py-0.5 bg-primary/10 text-primary-text">#{t}</span>
             ))}

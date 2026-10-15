@@ -252,7 +252,15 @@ test('GAMEPLAY §5c bonus sources match REWARDS, LIMITS and STREAK_CHESTS', () =
         achievement_reward: [R.ACHIEVEMENT],
         habit_bonus: [R.HABIT_PER_STREAK, R.HABIT_MIN_STREAK, L.HABIT_MAX, L.HABIT_XP_PER_DAY],
         focus_session: [R.FOCUS_XP_PER_MINUTE, L.FOCUS_XP_PER_DAY, L.FOCUS_SESSIONS_PER_DAY],
-        weekly_review: [R.WEEKLY_REVIEW]
+        weekly_review: [R.WEEKLY_REVIEW],
+        perfect_day: [R.PERFECT_DAY, L.PERFECT_DAY_MIN_TASKS],
+        inbox_zero: [R.INBOX_ZERO, L.INBOX_ZERO_MIN_OVERDUE],
+        boss_defeated: [R.BOSS_DEFEATED, L.BOSS_MIN_SUBTASKS, L.BOSS_XP_PER_DAY],
+        comeback: [R.COMEBACK, L.COMEBACK_AFTER_DAYS],
+        party_assist: [R.PARTY_ASSIST, L.PARTY_ASSIST_XP_PER_DAY],
+        estimate_accuracy: [R.ESTIMATE_ACCURACY, L.ESTIMATE_TOLERANCE_PERCENT, L.ESTIMATE_XP_PER_DAY],
+        reflection: [R.REFLECTION],
+        weekly_goal: [R.WEEKLY_GOAL_BASE, R.WEEKLY_GOAL_PER_TASK, L.WEEKLY_GOAL_MAX_XP]
     };
     for (const [source, expected] of Object.entries(spec)) {
         expectRow(problems, `§5c row \`${source}\``, rowOf(block, new RegExp('^' + source + '$'), source), expected);
@@ -267,9 +275,11 @@ test('GAMEPLAY §5c bonus sources match REWARDS, LIMITS and STREAK_CHESTS', () =
 test('GAMEPLAY §5 daily reward, chests and streak freezes match DAILY and STREAK_FREEZE', () => {
     const daily = section(/^5\. Daily reward/).join('\n');
     const problems = [];
-    const hours = (ms) => ms / 3600e3;
-    for (const n of [hours(C.DAILY.COOLDOWN_MS), hours(C.DAILY.STREAK_WINDOW_MS), hours(C.DAILY.SHIELDED_STREAK_WINDOW_MS), hours(C.DAILY.SANCTUARY_STREAK_WINDOW_MS)]) {
-        if (!new RegExp(`\\b${n}\\s*(?:-| )?hours?\\b`).test(daily)) problems.push(`§5 should mention a ${n} hour window or cooldown`);
+    const cooldown = C.DAILY.COOLDOWN_MS / 3600e3;
+    if (!new RegExp(`\\b${cooldown}\\s*(?:-| )?hours?\\b`).test(daily)) problems.push(`§5 should mention a ${cooldown} hour cooldown`);
+    // The streak window is counted in calendar days: Streak Shield (one missed day) and Sanctuary (two).
+    for (const n of [C.DAILY.SHIELDED_STREAK_DAYS, C.DAILY.SANCTUARY_STREAK_DAYS]) {
+        if (!new RegExp(`\\b${n}\\s*days?\\b`).test(daily)) problems.push(`§5 should mention a streak window of ${n} days`);
     }
     const streak = rowOfText(daily, /\*\*XP\*\*/);
     if (!streak || !numbers(streak).includes(C.REWARDS.DAILY_STREAK_MAX_BONUS) || !numbers(streak).includes(C.REWARDS.DAILY_STREAK_STEP)) {
@@ -377,6 +387,10 @@ test('GAMEPLAY §5h party quest numbers match PARTY_QUEST and the party size', (
     const problems = [];
     for (const n of [P.PER_MEMBER_TARGET, P.MIN_OWN_TO_CLAIM, P.REWARD, C.LIMITS.MAX_PARTY_MEMBERS]) {
         if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5h should mention ${n}`);
+    }
+    const F = C.PARTY_FOCUS_QUEST;
+    for (const n of [F.PER_MEMBER_MINUTES, F.MIN_OWN_MINUTES, F.REWARD]) {
+        if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5h should mention the focus quest number ${n}`);
     }
     if (P.MIN_OWN_TO_CLAIM * 2 !== P.PER_MEMBER_TARGET) problems.push('§5h says the claim needs half the per-member target, but MIN_OWN_TO_CLAIM is not half of PER_MEMBER_TARGET');
     check('The party section', problems);

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun } from "lucide-react";
+import { Sword, Dices, Skull, Wand2, Target, Shield, User, Flower2, Hammer, Compass, Ghost, Sun, Music, FlaskConical, Leaf, Hourglass, HeartHandshake } from "lucide-react";
 
 export type PlayerClass = 
   | "DEFAULT" 
@@ -13,7 +13,12 @@ export type PlayerClass =
   | "ARTISAN"
   | "RANGER"
   | "NECROMANCER"
-  | "PALADIN";
+  | "PALADIN"
+  | "WARDEN"
+  | "CHRONOMANCER"
+  | "DRUID"
+  | "ALCHEMIST"
+  | "BARD";
 
 interface ClassBadgeProps {
   playerClass: PlayerClass;
@@ -139,6 +144,51 @@ const classConfig: Record<PlayerClass, {
     bgClass: "bg-class-paladin/10",
     borderClass: "border-class-paladin",
     description: "Rewards HIGH priority work",
+  },
+  BARD: {
+    name: "Bard",
+    icon: Music,
+    emoji: "🎵",
+    colorClass: "text-class-bard",
+    bgClass: "bg-class-bard/10",
+    borderClass: "border-class-bard",
+    description: "Rewards hopping between lists",
+  },
+  ALCHEMIST: {
+    name: "Alchemist",
+    icon: FlaskConical,
+    emoji: "⚗️",
+    colorClass: "text-class-alchemist",
+    bgClass: "bg-class-alchemist/10",
+    borderClass: "border-class-alchemist",
+    description: "Rewards every priority honestly",
+  },
+  DRUID: {
+    name: "Druid",
+    icon: Leaf,
+    emoji: "🌿",
+    colorClass: "text-class-druid",
+    bgClass: "bg-class-druid/10",
+    borderClass: "border-class-druid",
+    description: "Rewards steady habits",
+  },
+  CHRONOMANCER: {
+    name: "Chronomancer",
+    icon: Hourglass,
+    emoji: "⏳",
+    colorClass: "text-class-chronomancer",
+    bgClass: "bg-class-chronomancer/10",
+    borderClass: "border-class-chronomancer",
+    description: "Rewards finishing tasks after a focus session",
+  },
+  WARDEN: {
+    name: "Warden",
+    icon: HeartHandshake,
+    emoji: "🤝",
+    colorClass: "text-class-warden",
+    bgClass: "bg-class-warden/10",
+    borderClass: "border-class-warden",
+    description: "Rewards working together",
   },
 };
 

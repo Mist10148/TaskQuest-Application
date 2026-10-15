@@ -27,6 +27,7 @@ const Games = lazy(() => import("./pages/Games"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Focus = lazy(() => import("./pages/Focus"));
 const Review = lazy(() => import("./pages/Review"));
+const Today = lazy(() => import("./pages/Today"));
 const Party = lazy(() => import("./pages/Party"));
 const Stats = lazy(() => import("./pages/Stats"));
 const Chat = lazy(() => import("./pages/Chat"));
@@ -93,6 +94,7 @@ const App = () => (
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/focus" element={<Focus />} />
             <Route path="/review" element={<Review />} />
+            <Route path="/today" element={<Today />} />
             <Route path="/party" element={<Party />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/chat" element={<Chat />} />

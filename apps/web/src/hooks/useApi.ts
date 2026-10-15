@@ -5,13 +5,15 @@
  */
 
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { createElement } from 'react';
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
 import { applyItemOrder } from '@/lib/reorder';
 import { isAccessLost, type ListRole } from '@/lib/sharing';
 import { celebrate } from '@/lib/celebrate';
 import { describeChest } from '@/lib/classInfo';
-import { achievementDescription, rewardDescription } from '@/lib/bonuses';
+import { achievementDescription } from '@/lib/bonuses';
+import { RewardBreakdown } from '@/components/feedback/RewardBreakdown';
 import {
     userApi,
     importApi,
@@ -30,6 +32,9 @@ import {
     statsApi,
     focusApi,
     reviewApi,
+    todayApi,
+    reflectionApi,
+    goalApi,
     partyApi,
     aiApi,
     type AchievementUnlock,
@@ -46,13 +51,18 @@ import {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export function showXPNotification(result: Partial<RewardFields> | null | undefined, action: string, emoji = '✨') {
+export function showXPNotification(result: Partial<RewardFields> | null | undefined, action: string, emoji = '✨', undo?: () => void) {
     const xp = result?.xpResult;
-    if (!xp || xp.finalXP <= 0) return;
+    // An undo button keeps the toast up a little longer; it only un-checks the task (XP is paid once per task).
+    const extra = undo ? { action: { label: 'Undo', onClick: undo }, duration: 6000 } : { duration: 3500 };
+    if (!xp || xp.finalXP <= 0) {
+        if (undo) toast(`✓ ${action}`, extra);
+        return;
+    }
     if (xp.leveledUp) celebrate('level');
     toast.success(`${emoji} ${action} +${xp.finalXP} XP!`, {
-        description: rewardDescription({ leveledUp: xp.leveledUp, newLevel: xp.newLevel, details: xp.bonusInfo?.details, bonuses: result?.bonuses }),
-        duration: 3500,
+        description: createElement(RewardBreakdown, { leveledUp: xp.leveledUp, newLevel: xp.newLevel, details: xp.bonusInfo?.details, bonuses: result?.bonuses }),
+        ...extra,
     });
 }
 
@@ -82,6 +92,7 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['focus'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
     qc.invalidateQueries({ queryKey: ['prestige'] });
+    qc.invalidateQueries({ queryKey: ['today'] });
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -326,6 +337,18 @@ export function useRemoveMember(listId: number) {
     });
 }
 
+export function useTransferList(listId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (memberKey: string) => sharingApi.transfer(listId, memberKey),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['lists'] });
+            refreshSharing(qc, listId);
+        },
+        onError: (error) => { showError(error); refreshSharing(qc, listId); },
+    });
+}
+
 export function useLeaveList(listId: number) {
     const qc = useQueryClient();
     return useMutation({
@@ -422,7 +445,11 @@ export function useToggleItem() {
         onSuccess: (result) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);
-            if (result.completed) showXPNotification(result, 'Task done!', '✨');
+            if (result.completed) {
+                // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing.
+                const undo = () => itemsApi.toggle(result.id, false).then(() => qc.invalidateQueries({ queryKey: ['lists'] })).catch(showError);
+                showXPNotification(result, 'Task done!', '✨', undo);
+            }
             if (result.nextItem) {
                 toast('🔁 Next one is ready', { description: result.nextItem.due_date ? `Due ${formatDeadline(result.nextItem.due_date)}` : undefined });
             }
@@ -492,6 +519,24 @@ export function useSkills() {
     return useQuery({ queryKey: ['skills'], queryFn: skillsApi.getAll });
 }
 
+/** What each skill's next level adds for the equipped class (a simulation, so it is cached for a while). */
+export function useSkillPreview() {
+    return useQuery({ queryKey: ['skills', 'preview'], queryFn: skillsApi.preview, staleTime: 1000 * 60 * 5 });
+}
+
+export function useRespecSkills() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (classKey: string) => skillsApi.respec(classKey),
+        onSuccess: () => invalidateProgress(qc),
+        onError: showError,
+    });
+}
+
+export function useClassPreview(classKey: string | undefined, mix?: string) {
+    return useQuery({ queryKey: ['classes', 'preview', classKey, mix ?? 'default'], queryFn: () => classesApi.preview(classKey as string, mix), enabled: Boolean(classKey), staleTime: 1000 * 60 * 5 });
+}
+
 export function useUnlockSkill() {
     const qc = useQueryClient();
     return useMutation({
@@ -533,6 +578,46 @@ export function useXpHistory(days: HistoryRange) {
 
 export function useStatsSummary() {
     return useQuery({ queryKey: ['stats', 'summary'], queryFn: statsApi.summary });
+}
+
+export function useToday() {
+    return useQuery({ queryKey: ['today'], queryFn: todayApi.get });
+}
+
+export function useWriteReflection() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (note: string) => reflectionApi.write(note),
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            toast.success(result.xp > 0 ? `📝 Reflection saved +${result.xp} XP` : '📝 Reflection saved');
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
+}
+
+export function useSetGoal() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (target: number) => goalApi.set(target),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['today'] }),
+        onError: showError,
+    });
+}
+
+export function useClaimGoal() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: goalApi.claim,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            celebrate(result.leveledUp ? 'level' : 'quest');
+            toast.success(`🎯 Weekly goal reached +${result.xp} XP!`, { description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: showError,
+    });
 }
 
 export function useReview() {
@@ -637,6 +722,23 @@ export function useClaimParty() {
             void qc.invalidateQueries({ queryKey: ['parties'] });
             celebrate(result.leveledUp ? 'level' : 'quest');
             toast.success(`🛡️ Party quest claimed +${result.xp} XP!`, {
+                description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
+            });
+            showAchievementNotifications(result.newAchievements, qc);
+        },
+        onError: (error) => { showError(error); void qc.invalidateQueries({ queryKey: ['parties'] }); },
+    });
+}
+
+export function useClaimPartyFocus() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: partyApi.claimFocus,
+        onSuccess: (result) => {
+            invalidateProgress(qc);
+            void qc.invalidateQueries({ queryKey: ['parties'] });
+            celebrate(result.leveledUp ? 'level' : 'quest');
+            toast.success(`⏱️ Party focus quest claimed +${result.xp} XP!`, {
                 description: result.leveledUp ? `🎉 Level up! You are now level ${result.level}.` : undefined,
             });
             showAchievementNotifications(result.newAchievements, qc);

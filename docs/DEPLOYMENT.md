@@ -101,6 +101,12 @@ In production, set the variables in your host's dashboard instead. Because the b
 | `DB_SSL_CA` | — | PEM CA certificate contents |
 | `DB_POOL_SIZE` | `10` | Connections per process |
 
+### Game rules (both apps, optional)
+
+| Variable | Description |
+|---|---|
+| `XP_WEEKLY_MODIFIER` | Set to `off` to turn the [weekly modifier](GAMEPLAY.md#5c-bonus-xp-sources) off (it doubles one flat bonus source each week). Default: on. |
+
 ### Web build (`apps/web`, optional; read from the root `.env`, only `VITE_*` reach the browser)
 
 | Variable | Description |
@@ -214,7 +220,7 @@ If you ran `taskquest-botv2` (v3.x) and/or `taskquest-web_deploy` (v1.5):
 
 Behaviour changes players may notice are listed in [CHANGELOG.md](../CHANGELOG.md#400).
 
-**Upgrading to the improvement pass** (migrations `010` to `022`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
+**Upgrading to the improvement pass** (migrations `010` to `026`): back up, deploy, let either app run the migrations (or `npm run db:migrate`), then re-run `npm run deploy:commands` because commands were added. Web push and the other new variables are optional. The checklist is in the [CHANGELOG upgrade notes](../CHANGELOG.md#unreleased); a development database migrated at an intermediate commit of the branch must be reset ([KNOWN_ISSUES](KNOWN_ISSUES.md)).
 
 ## 7. Operations
 

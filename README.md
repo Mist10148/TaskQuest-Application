@@ -31,8 +31,8 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 | **Tasks** | Lists with description, category, priority and deadline. Tasks have their own due date, priority, tags, subtasks and a repeat rule, and can be added (also from one line of text), edited, reordered, completed in bulk, deleted with undo, searched (names and descriptions) and saved as templates. |
 | **Progression** | XP for creating lists, adding tasks and completing tasks, plus capped bonuses for good habits (first task of the day, clearing a list, finishing early, clearing overdue work, subtasks, habit streaks, achievements, streak chests, focus sessions, a weekly review). Levels come from lifetime XP (100 XP a level). A daily reward with streaks and freezes. See [docs/XP_GUIDE.md](docs/XP_GUIDE.md). |
 | **Quests** | Daily, weekly, a rotating weekly pool and a monthly boss, all computed from what you actually did in your own day. |
-| **Classes** | Twelve classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank, Monk, Artisan, Ranger, Necromancer, Paladin), each changing how XP is earned. Choosing one: [docs/CLASS_GUIDE.md](docs/CLASS_GUIDE.md). |
-| **Skills** | 62 skills in 12 trees, all with real effects that work the same on both platforms. |
+| **Classes** | Seventeen classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank, Monk, Artisan, Ranger, Necromancer, Paladin, Bard, Alchemist, Druid, Chronomancer, Warden), each changing how XP is earned. Choosing one: [docs/CLASS_GUIDE.md](docs/CLASS_GUIDE.md). |
+| **Skills** | 96 skills in 12 trees, all with real effects that work the same on both platforms. |
 | **Achievements** | 33 achievements for lists, tasks, XP, levels, streaks, classes, games and spending; each pays 25 XP. |
 | **Prestige and shop** | At level 30, start over for a permanent XP bonus and a title. Spend XP on titles, avatar frames and profile accents with no gameplay effect. |
 | **Sharing** | Share a list with viewer, editor or manager roles (invited by Discord username), and team up in parties of up to six with a shared weekly quest. |
@@ -151,7 +151,7 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run dev:web` / `dev:server` / `dev:bot` | Run each app in watch mode |
 | `npm run build` | Build the web app into `apps/web/dist` |
 | `npm run start:server` / `start:bot` | Production start |
-| `npm run db:migrate` | Apply pending database migrations (001 to 022; both apps also do it on start) |
+| `npm run db:migrate` | Apply pending database migrations (001 to 026; both apps also do it on start) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |
 | `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |

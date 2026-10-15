@@ -4,10 +4,10 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, requireAuth, uid, avatarUrl } from '../lib/http.js';
-import { keyParam, skillParam, leaderboardQuery } from '../lib/schemas.js';
+import { keyParam, skillParam, leaderboardQuery, previewQuery, respecBody } from '../lib/schemas.js';
 import { sealId, openId } from '../lib/avatarProxy.js';
 
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, classOwnershipColumn } = shared;
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, classOwnershipColumn, simulateAverage, FAVOURABLE } = shared;
 
 export const classesRouter = Router();
 export const skillsRouter = Router();
@@ -25,6 +25,27 @@ classesRouter.get(
             currentClass: user.player_class,
             playerXP: Number(user.player_xp)
         });
+    })
+);
+
+/**
+ * "What would I earn?" for a class: the average XP of a 10 base XP task (five a day on a 7 day streak) with no skills, with
+ * the player's own skills of this class and the Default tree, and with the whole class tree. A simulation of the real rules.
+ */
+classesRouter.get(
+    '/:key/preview',
+    asyncRoute(async (req, res) => {
+        const { key: raw } = parse(keyParam, req.params);
+        const key = String(raw).toUpperCase();
+        if (!CLASSES[key]) return res.status(404).json({ error: 'No such class.' });
+        const q = parse(previewQuery, req.query);
+        const user = await db.users.ensureUser(uid(req));
+        const level = q.level || Number(user.player_level) || 1;
+        const mix = q.mix || FAVOURABLE[key] || 'plain';
+        const mine = (await db.users.getUserSkills(uid(req))).filter((s) => SKILL_TREES.DEFAULT.skills[s.skill_id] || SKILL_TREES[key]?.skills[s.skill_id]);
+        const full = Object.entries(SKILL_TREES[key]?.skills || {}).map(([id, s]) => ({ skill_id: id, skill_level: s.maxLevel }));
+        const avg = (skills) => Math.round(simulateAverage(key, skills, { level, mix }) * 10) / 10;
+        res.json({ classKey: key, level, mix, base: 10, noSkills: avg([]), yourSkills: avg(mine), fullTree: avg(full) });
     })
 );
 
@@ -62,6 +83,45 @@ skillsRouter.get(
             userXP: Number(user.player_xp),
             playerClass: user.player_class
         });
+    })
+);
+
+/**
+ * What each skill's next level would add to the average XP of a task, for the class you have equipped at your level
+ * (a simulation of the real rules; `gain` is XP per 10 base XP task, 0 for a skill that does nothing for your class).
+ */
+skillsRouter.get(
+    '/preview',
+    asyncRoute(async (req, res) => {
+        const q = parse(previewQuery, req.query);
+        const user = await db.users.ensureUser(uid(req));
+        const cls = user.player_class;
+        const level = q.level || Number(user.player_level) || 1;
+        const mix = q.mix || FAVOURABLE[cls] || 'plain';
+        const rows = await db.users.getUserSkills(uid(req));
+        const levels = new Map(rows.map((s) => [s.skill_id, Number(s.skill_level)]));
+        const asRows = (m) => [...m].map(([skill_id, skill_level]) => ({ skill_id, skill_level }));
+        const avg = (m) => simulateAverage(cls, asRows(m), { level, mix });
+        const base = avg(levels);
+        const gains = {};
+        for (const tree of Object.values(SKILL_TREES)) {
+            for (const [id, skill] of Object.entries(tree.skills)) {
+                const have = levels.get(id) || 0;
+                if (have >= skill.maxLevel) continue;
+                const next = new Map(levels).set(id, have + 1);
+                gains[id] = Math.round((avg(next) - base) * 10) / 10;
+            }
+        }
+        res.json({ classKey: cls, level, mix, base: 10, average: Math.round(base * 10) / 10, gains });
+    })
+);
+
+/** Unlearn a whole tree for a partial refund (once a day). */
+skillsRouter.post(
+    '/respec',
+    asyncRoute(async (req, res) => {
+        const { classKey } = parse(respecBody, req.body);
+        res.json({ success: true, ...(await db.progression.respecSkills(uid(req), classKey)) });
     })
 );
 

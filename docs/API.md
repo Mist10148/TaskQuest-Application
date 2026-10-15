@@ -105,14 +105,14 @@ Every list in `GET /api/lists`, `GET /api/lists/:id` and `PATCH /api/lists/:id` 
 | DELETE | `/api/lists/:id` | — | `{success:true}` (items cascade). Owner only: `403` for a member (leave it instead). |
 | POST | `/api/lists/:id/save-as-template` | `{name?}` (default: the quest's name) | `201` template (see [Templates](#templates)). Saves the quest's tasks, in order, as a flat list: subtasks become plain tasks, and completion state and due dates are dropped. `409` when the name is taken, `400` for a quest with no tasks or more than 30. |
 | PATCH | `/api/lists/:id/reorder` | `{itemIds: [int]}`: every task id of the list, exactly once, in the new order | The list's items in the new order. Positions become 0..n-1. `400` if the ids are not exactly the list's tasks. |
-| POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000), due_date?: "YYYY-MM-DD"\|null, priority?, tags?: string\|string[], recurrence?: "daily"\|"weekly"\|"monthly"\|null, parent_id?: int\|null}` | `201 {...item, xpResult, newAchievements}` |
+| POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000), due_date?: "YYYY-MM-DD"\|null, priority?, tags?: string\|string[], recurrence?: "daily"\|"weekly"\|"monthly"\|null, estimate_minutes?: 1–600\|null, parent_id?: int\|null}` | `201 {...item, xpResult, newAchievements}` |
 | PATCH | `/api/items/:id` | Any subset of the create fields, plus `position? (int ≥0)`; ≥1. A position moves the task there and closes the gaps. | Updated item (with `list_name`, `list_priority`) |
 | PATCH | `/api/items/:id/toggle` | optional `{completed: boolean}` (no body toggles) | `{...item, completed, xpResult, bonuses, newAchievements, nextItem}`. XP only on the **first** completion. `bonuses` is `[{key, label, xp}]`, the flat extras paid with that first completion (`first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus`; see [GAMEPLAY](GAMEPLAY.md#5c-bonus-xp-sources)), empty when none. `nextItem` is the newly created copy when a repeating task is completed (else `null`). |
 | DELETE | `/api/items/:id` | — | `{success:true}` |
 
 Field limits: list name 1–100, category ≤ 50, description ≤ 1000. Deadlines and task due dates must be real calendar dates between 2000 and 2100.
 
-**Task details.** A task can have its own `due_date`, `priority` (used for class and skill effects instead of the list's) and up to 5 `tags` (letters, numbers, `-` and `_`, ≤ 20 characters, stored lower-case as `"work,home"`). `recurrence` repeats it: completing a repeating task for the first time creates the next copy in the same transaction (monthly repeats clamp to short months, and a late completion never creates an already-overdue copy). A repeat grants no creation XP and is not counted as an added task. `parent_id` makes a task a **subtask**: the parent must be a top-level task of the same list, nesting is one level deep, and a task that has subtasks cannot become a subtask. Deleting a parent deletes its subtasks.
+**Task details.** A task can have its own `due_date`, `priority` (used for class and skill effects instead of the list's) and up to 5 `tags` (letters, numbers, `-` and `_`, ≤ 20 characters, stored lower-case as `"work,home"`). `recurrence` repeats it: completing a repeating task for the first time creates the next copy in the same transaction (monthly repeats clamp to short months, and a late completion never creates an already-overdue copy). A repeat grants no creation XP and is not counted as an added task. `parent_id` makes a task a **subtask**: the parent must be a top-level task of the same list, nesting is one level deep, and a task that has subtasks cannot become a subtask. Deleting a parent deletes its subtasks. A task can also carry `estimate_minutes` (a whole number of minutes, 1 to 600): finishing it within 10 minutes after a focus session of about that length (within 25%) pays the `estimate_accuracy` bonus, and the export and import keep it.
 
 Completing tasks pays XP for the first **50 completions per day (in your time zone)** (like list and task creation, so an add / complete / delete loop cannot farm XP). A capped completion is still recorded and cannot be re-earned by un-checking and re-checking.
 
@@ -128,6 +128,7 @@ All routes are 🔒. People are invited by their exact **Discord username** (the
 | PATCH | `/api/lists/:id/members/:memberKey` | `{role}` | `{memberKey, role}`. Managers only; only the owner makes or changes a manager. |
 | DELETE | `/api/lists/:id/members/:memberKey` | — | Remove a member (their personal reminder state goes with them). Managers only; only the owner removes a manager. Their next request on the list is `404`. |
 | POST | `/api/lists/:id/leave` | — | Leave a list you are a member of. `403` for the owner, who deletes the list instead. |
+| POST | `/api/lists/:id/transfer` | `{memberKey}` (a member key from the members list, 12 hex characters; strict) | Hand the list to one of its members: `{success, listId, role: "manager", memberKey}` (your new member key). The new owner gets the list, you stay on it as a manager. Owner only (`403`); `404` for an unknown member; `409` when the new owner already owns a quest with that name; `400` when they would go over the 200 quest or 5,000 task limit. |
 | GET | `/api/invites` | — | The invitations waiting for you: `[{id, listName, ownerName, invitedByName, role, createdAt, expiresAt}]`. |
 | POST | `/api/invites/:id/accept` | — | `{accepted:true, list:{id,name}, role}`. Only the invitee can answer (`404` otherwise); `409` when it is no longer open or has expired, `400` when the list is full. |
 | POST | `/api/invites/:id/decline` | — | `{accepted:false}` |
@@ -140,7 +141,7 @@ All routes are 🔒. A user is in at most one party (up to 6 people, the owner i
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, minToClaim, yourCount, target, progress, reward, members:[{memberKey, name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. |
+| GET | `/api/parties` | — | `{party, invites}`. `party` is `null` or `{party:{id,name,isOwner}, weekStart, resetsAt, perMember, minToClaim, yourCount, target, progress, reward, members:[{memberKey, name, count, isYou, isOwner}], invites:[{id,inviteeName,createdAt,expiresAt}] (owner only), limit, reached, claimed, claimable}`; `invites` are the party invitations waiting for you `[{id, partyName, ownerName, createdAt, expiresAt}]`. `board: [{rank, memberKey, name, count, focusMinutes, isYou, isOwner}]` (this week's tasks and focus minutes, best first) and `focusQuest: {target, progress, reward, minToClaim, perMember, yourMinutes, reached, claimed, claimable}` are part of the party object. |
 | POST | `/api/parties` | `{name (1–40)}` | `201` the new party in the shape above. `409` if you are already in one. |
 | POST | `/api/parties/invites` | `{username, dryRun?}` | Like the list invite: `200 {message}`, the same neutral message, whether or not anything was sent (unknown username, invitations off, declined this owner within 7 days, already in a party), and with `dryRun: true` `200 {name, avatarUrl}` (or nulls) and nobody is invited. Owner only (`403`); `409` for someone already invited, `400` when the party is full (6, pending invitations included). The invitee sees it in `GET /api/parties`. |
 | DELETE | `/api/parties/invites/:id` | — | Withdraw a pending invitation (owner). |
@@ -150,6 +151,7 @@ All routes are 🔒. A user is in at most one party (up to 6 people, the owner i
 | DELETE | `/api/parties/members/:memberKey` | — | Owner only: remove a member, addressed by the opaque `memberKey` from the status. `403` for a non-owner, `400` for yourself (disband instead), `404` for an unknown key or someone who is not in your party. |
 | DELETE | `/api/parties` | — | Disband the party for everyone (owner only). |
 | POST | `/api/parties/claim` | — | `{success:true, weekStart, xp, balance, level, leveledUp, newAchievements}`. Flat +60 XP, once per person per week; `400` while the quest is unfinished or you have not finished at least `minToClaim` (6) tasks yourself since joining, `409` if you already claimed a party reward this week, `403` when XP is off. |
+| POST 🔒 | `/api/parties/focus/claim` | — | Claim the party focus quest reward: `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. +40 XP once a week; `400` until the party has focused its target minutes or when you have under 20 focus minutes of your own; `409` once claimed; `403` when XP is off; `404` without a party. |
 
 The party quest is described in [GAMEPLAY](GAMEPLAY.md#5h-parties).
 
@@ -173,6 +175,9 @@ All routes are 🔒 and owner-scoped (another user's template ID is `404`). A te
 | POST | `/api/classes/:key/equip` | 🔒 | `403` if not owned. Switching resets class counters. |
 | GET | `/api/skills` | 🔒 | `{skillTrees:[{classKey,name,emoji,description,classOwned,skills:[{id,name,emoji,description,maxLevel,cost,requires,currentLevel}]}], skillPoints, userXP, playerClass}` |
 | POST | `/api/skills/:skillId/unlock` | 🔒 | Unlocks or levels up one skill (cost per level). The tree is derived on the server; any `classKey` in the body is ignored. `{success, skill:{skill_id, skill_level}, balance}` |
+| POST | `/api/skills/respec` | 🔒 `{classKey}` (strict) | Unlearns every skill of one tree and refunds 75% of what the levels cost as a plain balance credit (source `skill_refund`: never lifetime XP, `xp_spent` unchanged). `{success, treeKey, removed, spent, refund, balance, percent}`. Once a day (`429`-style cooldown error with `retryAfterMs`), `409` with no skills in that tree, `400` when dropping Freeze Cache would leave more freezes than the normal limit, `403` when XP is off, `404` for an unknown tree. |
+| GET | `/api/classes/:key/preview` | 🔒 `?level=1–200&mix=plain\|high\|early\|overdue\|list\|variety\|rotate\|habit\|focus\|shared` (both optional; level defaults to yours, mix to the situation the class is built for) | "What would I earn?": `{classKey, level, mix, base: 10, noSkills, yourSkills, fullTree}`, the average XP of a 10 XP task (five a day on a 7 day streak) with no skills, with your own skills of that class and the Default tree, and with the whole class tree. A simulation of the real rules. `404` for an unknown class, `400` for a bad query. |
+| GET | `/api/skills/preview` | 🔒 same query | `{classKey, level, mix, base: 10, average, gains: {skillId: xp}}` for the class you have equipped: what each skill's next level would add to the average XP of a 10 XP task. A skill that does nothing for your class shows `0`; a percentage boost rounds down on small amounts, as in the game. |
 | GET | `/api/achievements` | 🔒 | `{achievements:[{key,name,emoji,description,category,unlocked,unlockedAt}], unlockedCount, totalCount}` |
 | GET | `/api/leaderboard?by=&class=` | — | Top 10: `[{rank, username, avatarUrl, xp, lifetimeXp, prestige, prestigeTitle, cosmetics, score, level, playerClass, streak, gamesPlayed, tasksCompleted, isYou}]` (`lifetimeXp` is the never-reset total). `by` is `lifetime` (default), `weekly` (XP earned since Monday 00:00 UTC, earning sources only; one global week for everyone, not per viewer), `streak` or `xp` (current balance); `class` filters by class key. `score` is the value the board ranks by. `weekly` and `streak` only list players with a score above 0. No Discord IDs: `avatarUrl` is `/api/leaderboard/avatar/:token`, an opaque sealed token the server resolves itself (a Discord CDN address contains the ID). Each board is cached for 30 seconds. |
 | GET | `/api/leaderboard/avatar/:token` | — | The avatar image for a leaderboard row (`404` for a forged or unknown token, `502` if Discord's CDN is unreachable). |
@@ -227,6 +232,22 @@ A server-timed work timer. The server measures the time; the client only says st
 |---|---|---|---|
 | GET 🔒 | `/api/review` | — | `{weekStart, resetsAt, completed, xpEarned, claimed, claimable, streak, reward}` for the current week in your time zone (`weekStart` is its Monday, a local date) |
 | POST 🔒 | `/api/review/claim` | — | `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. Once per week (`409`); `400` unless you finished at least one task this week; `403` when XP is off. |
+
+## Today
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET 🔒 | `/api/today` | — | The Today screen in one read: `{day, season: {key, name, blurb, doubles, enabled}, streak: {count, live, claimedToday, daysLeft, atRisk}, counts: {dueToday, overdue, doneToday}, tasks: [{id, name, listId, listName, dueDate, priority, estimateMinutes, overdueDays}] (up to 6 open top-level tasks on your own lists that are overdue, due today or HIGH priority, most urgent first), reflection, goal, xpEnabled}`. `streak.atRisk` is true when the streak is alive, today's reward is unclaimed and today is the last day to keep it. Read only. |
+
+## Reflection and weekly goal
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET 🔒 | `/api/reflection` | — | `{day, reflection: {day, note, createdAt}\|null, reward, maxLength}` for your day (your time zone) |
+| POST 🔒 | `/api/reflection` | `{note: string (1–200 characters)}` | `{success, day, note, xp, balance, level, leveledUp, newAchievements}`. One reflection a day (`409`); the note is kept even with XP off (then `xp` is 0). |
+| GET 🔒 | `/api/goal` | — | `{weekStart, resetsAt, target\|null, progress, claimed, claimable, reward\|null, min, max}`; `progress` counts the tasks you first finished this week (the same count as the weekly review) |
+| PUT 🔒 | `/api/goal` | `{target: integer 3–60}` | The goal as above. `400` unless the target is above this week's progress; `409` once claimed. It can be changed while it is open. |
+| POST 🔒 | `/api/goal/claim` | — | `{success, weekStart, target, xp, balance, level, leveledUp, newAchievements}`. Pays `min(80, 10 + 2 × target)` once a week (`409`); `400` before the goal is reached or set; `403` when XP is off. |
 
 ## Statistics
 

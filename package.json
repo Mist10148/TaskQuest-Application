@@ -22,6 +22,9 @@
     "test": "npm test --workspaces --if-present",
     "test:e2e": "npm run e2e -w @taskquest/web",
     "test:db": "echo \"Set TEST_DB_HOST/TEST_DB_PORT/TEST_DB_NAME (a throwaway database that will be WIPED) then run npm test\"",
+    "archive": "node scripts/archive.js",
+    "xp-report": "node scripts/xp-report.js",
+    "balance": "node scripts/balance-sim.js",
     "check": "node scripts/check-syntax.js"
   },
   "engines": {

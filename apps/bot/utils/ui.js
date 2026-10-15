@@ -31,7 +31,7 @@ const COLORS = {
     // Class Colors
     DEFAULT: 0x95A5A6, HERO: 0xFFD700, GAMBLER: 0x9B59B6, ASSASSIN: 0x2C3E50,
     WIZARD: 0x3498DB, ARCHER: 0x27AE60, TANK: 0xE74C3C,
-    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1,
+    MONK: 0x1ABC9C, ARTISAN: 0xD35400, RANGER: 0xA0764B, NECROMANCER: 0x5B2C6F, PALADIN: 0xECF0F1, WARDEN: 0xE17055, CHRONOMANCER: 0x6C5CE7, DRUID: 0x7CB342, ALCHEMIST: 0x00B894, BARD: 0xE91E8C,
     
     // Skill Colors
     skill: 0x9B59B6, locked: 0x2C3E50, unlocked: 0x27AE60
@@ -68,6 +68,15 @@ function classCounterLine(user, userSkills = [], now = Date.now()) {
             const cap = n.MAX_SOULS + (lvl('necro_jar') ? n.JAR_SOULS : 0);
             return `💀 Souls **${Math.min(cap, Number(user.necro_souls) || 0)}/${cap}**`;
         }
+        case 'ALCHEMIST': {
+            const mix = Number(user.alchemist_mix) || 0;
+            return `⚗️ Brew **${(mix & 1) + ((mix >> 1) & 1) + ((mix >> 2) & 1)}/3** ingredients`;
+        }
+        case 'BARD': {
+            const window = lvl('bard_harmony') ? CLASS_RULES.BARD.HARMONY_WINDOW : CLASS_RULES.BARD.WINDOW;
+            const recent = String(user.bard_recent || '').split(',').filter(Boolean).slice(-window);
+            return `🎵 Medley **${new Set(recent).size}/${window}** lists`;
+        }
         default:
             return '';
     }
@@ -100,7 +109,6 @@ function bar(cur, max, len = 10) {
 
 function smoothBar(current, max, length = 12) {
     if (max === 0) return `${'▱'.repeat(length)} 0%`;
-    const percent = Math.min(100, Math.round((current / max) * 100));
     const filled = Math.round((current / max) * length);
     const start = filled > 0 ? '▰' : '▱';
     const middle = '▰'.repeat(Math.max(0, filled - 1));
@@ -356,8 +364,6 @@ function bonusLines(bonuses) {
 }
 
 function classShopEmbed(user, classes) {
-    const currentClass = classes[user.player_class] || classes.DEFAULT;
-    
     const embed = new EmbedBuilder()
         .setColor(COLORS[user.player_class] || COLORS.primary)
         .setTitle('⚔️ Class Shop')
@@ -970,7 +976,7 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     
     const rows = [];
     
-    // Jump straight to any class (12 classes fit one select menu, the limit is 25).
+    // Jump straight to any class (17 classes fit one select menu, the limit is 25).
     rows.push(classSelectMenu(CLASSES, user, classKey));
     
     // Navigation row: Previous / Class Count / Next

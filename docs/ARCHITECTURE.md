@@ -33,7 +33,7 @@ flowchart TB
     subgraph "Bot worker (apps/bot)"
         GW["discord.js client"]
         CMD["commands: list · game · gamification · quests · review · prestige · shop · sharing · party · timezone · weekly · quick · ai"]
-        JOBS["jobs: reminders (list + task) · weekly digest · clean-up · session expiry"]
+        JOBS["jobs: reminders (list + task) · weekly digest · streak warning · clean-up · session expiry"]
     end
     subgraph "@taskquest/shared"
         RULES["rules: constants · xp · achievements · games · validation"]
@@ -219,6 +219,7 @@ All jobs run in the bot process. Each is wrapped so that a failure is logged and
 |---|---|---|
 | Deadline and task reminders | 5s after ready, then hourly | `utils/reminders.js`: for each candidate list (`tasks.getReminderCandidates`) and task with its own due date (`getTaskReminderCandidates`) it decides, in each recipient's time zone and at their reminder hour, whether to send a *due* reminder, one *overdue* notice or a *snooze* reminder (`decideReminder`, a pure function). Shared lists remind the owner and every member with automation on, once each. At most 20 DMs a person per run; the rest collapse into one digest message. A reminder is marked handled only when the DM was sent or can never be sent (DMs closed); temporary errors retry on the next run. Reminder DMs carry Snooze and Stop buttons, and the same text is pushed to the person's subscribed browsers when web push is configured (best effort, through the web server's `/internal/push`). |
 | Weekly digest | 15s after ready, then hourly | `utils/digest.js`: users who opted in (`/weekly`) get one DM on Monday at their reminder hour with their week's numbers, plus the AI recap when AI is on (best effort, never blocking). `last_digest_at` keeps it to once a week. |
+| Streak warning | 20s after ready, then hourly | `utils/streakWarning.js`: one DM (and web push) on the evening of the last day a 3+ day streak can be saved; claimed through `db.today.claimStreakWarning` first so overlapping runs cannot double-send |
 | Finished-list clean-up | 10s after ready, then daily | Deletes lists whose tasks have all been done for 5+ days (see [DATABASE.md](DATABASE.md#automation-queries)), never a list with members, and tells the AI service to forget their vectors. |
 | Game session expiry | On ready, then every 5 min (bot and web server) | Expires sessions older than 30 minutes; an unfinished Blackjack hand is settled as a stand. |
 

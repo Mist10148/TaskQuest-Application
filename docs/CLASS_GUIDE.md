@@ -1,6 +1,6 @@
 # Choosing a class
 
-Thirteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
+Fourteen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
 
 ## How to read the numbers
 
@@ -32,6 +32,7 @@ A bare Default player gets exactly the base. Every class beats it, by very diffe
 | mark real priorities | Paladin |
 | want rewards that grow with your level | Wizard (and Tank, Archer slowly) |
 | juggle many lists | Bard |
+| use all three priorities | Alchemist |
 
 ## Hero (500 XP)
 
@@ -168,6 +169,18 @@ Favourable mix: every task comes from a different list than the last four.
 | No skills | - | 0 | 12 / 12 / 12 | 23 / 23 / 23 |
 | Starter | Encore ×3 | 330 | 12 / 12 / 12 | 35 / 35 / 35 |
 | Full tree | Encore ×3, Harmony, Crescendo, Ballad | 1090 | 21 / 21 / 21 | 39 / 39 / 39 |
+
+## Alchemist (650 XP)
+
+**Rewards:** each completion adds its priority to the brew and pays +2 XP per ingredient; completing the third different priority finishes the brew for 150% of the base plus 15 and starts a new one. Other actions pay +2. **Suits:** people who really use all three priorities. **Pitfalls:** a player who marks everything MEDIUM never brews and earns only the +2; HIGH is the player's own label, so only the first 3 HIGH completions of a day count as HIGH for the brew; the brew is kept until it finishes, however long that takes.
+
+Favourable mix: LOW, MEDIUM and HIGH tasks in rotation.
+
+| Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
+|---|---|---|---|---|
+| No skills | - | 0 | 12 / 12 / 12 | 22 / 22 / 22 |
+| Starter | Catalyst ×3 | 330 | 12 / 12 / 12 | 27 / 27 / 27 |
+| Full tree | Catalyst ×3, Elixir, Transmute, Distill | 1090 | 14 / 14 / 14 | 38 / 38 / 38 |
 
 ## Changing your mind
 

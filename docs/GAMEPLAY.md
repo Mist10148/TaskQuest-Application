@@ -85,6 +85,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | 💀 **Necromancer** | 600 | **Revive.** (The due date must be at least 24 hours old, or the task is not overdue for this purpose.) Completing an overdue task pays ⌊base × 150%⌋ + min(30, 3 × days overdue) and binds a soul (max 5). Every soul you hold adds ⌊base × 8%⌋ to *every* action (counted after the new soul). Every 10th task you complete also binds a soul. Souls do not decay. |
 | ⚜️ **Paladin** | 600 | **Vow.** Completing a HIGH priority task pays base + 10; every other action pays +8. Passive: your daily streak always has the Streak Shield window (one missed day forgiven) for free, including on the streak leaderboard. |
 | 🎵 **Bard** | 600 | **Variety.** Completing a task remembers its list; among your last 5 completions, every list beyond the first adds ⌊base × 4%⌋ + 3 XP (a medley of up to 4 steps). Other actions, and a medley of one list, pay +2. The counter is `bard_recent`. |
+| ⚗️ **Alchemist** | 650 | **Brew.** Completing a task adds its priority to the brew (`alchemist_mix`) and pays +2 XP per ingredient in it. Completing the third different priority finishes the brew: ⌊base × 150%⌋ + 15, and the brew starts over. Other actions pay +2. A task with no priority counts as MEDIUM. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
@@ -240,7 +241,16 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 📯 Crescendo | 1 | 260 | +25% Bard bonus when every task of the medley is from a different list *(class)* | Harmony |
 | 🪕 Ballad | 1 | 300 | The first task you complete each day counts as a full medley *(class)* | Crescendo |
 
-There are 80 skills in 13 trees (Default plus the eleven classes).
+### ⚗️ Alchemist
+
+| Skill | Max | Cost | Effect | Requires |
+|---|---|---|---|---|
+| 🧪 Catalyst | 3 | 110 | +5 XP on a finished brew, per level *(class)* | — |
+| 🍶 Elixir | 1 | 200 | Each ingredient in the brew pays +2 XP more *(class)* | Catalyst |
+| 💎 Transmute | 1 | 260 | A finished brew pays 50% more *(class)* | Elixir |
+| 🫗 Distill | 1 | 300 | After a brew the next one starts with a MEDIUM ingredient already in it *(class)* | Transmute |
+
+There are 84 skills in 14 trees (Default plus the eleven classes).
 
 ## 5. Daily reward
 

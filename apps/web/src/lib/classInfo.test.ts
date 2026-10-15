@@ -32,6 +32,7 @@ describe("classCounter", () => {
     expect(classCounter({ player_class: "ARTISAN", artisan_progress: 4 }, [skill("artisan_blueprint")], NOW)?.max).toBe(13);
     expect(classCounter({ player_class: "NECROMANCER", necro_souls: 9 }, [], NOW)).toMatchObject({ label: "Souls", value: 5, max: 5 });
     expect(classCounter({ player_class: "NECROMANCER", necro_souls: 2 }, [skill("necro_jar")], NOW)?.max).toBe(8);
+    expect(classCounter({ player_class: "ALCHEMIST", alchemist_mix: 5 }, [], NOW)).toMatchObject({ label: "Brew", value: 2, max: 3 });
     expect(classCounter({ player_class: "BARD", bard_recent: "1,2,2,3" }, [], NOW)).toMatchObject({ label: "Medley", value: 3, max: 5 });
     expect(classCounter({ player_class: "BARD", bard_recent: "1,2,3,4,5,6,7,8" }, [skill("bard_harmony")], NOW)).toMatchObject({ value: 7, max: 7 });
   });

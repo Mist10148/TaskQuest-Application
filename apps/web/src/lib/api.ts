@@ -443,7 +443,7 @@ export const xpApi = {
 
 export type PlayerClass =
     | 'DEFAULT' | 'HERO' | 'GAMBLER' | 'ASSASSIN' | 'WIZARD' | 'ARCHER' | 'TANK'
-    | 'MONK' | 'ARTISAN' | 'RANGER' | 'NECROMANCER' | 'PALADIN' | 'BARD';
+    | 'MONK' | 'ARTISAN' | 'RANGER' | 'NECROMANCER' | 'PALADIN' | 'ALCHEMIST' | 'BARD';
 
 export interface User {
     discord_id: string;
@@ -476,6 +476,7 @@ export interface User {
     owns_ranger?: boolean | number;
     owns_necromancer?: boolean | number;
     owns_paladin?: boolean | number;
+    owns_alchemist?: boolean | number;
     owns_bard?: boolean | number;
     /** Class counters: Monk rhythm (and its last UTC day), Artisan project progress, Necromancer souls. */
     monk_rhythm?: number;

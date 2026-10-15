@@ -29,7 +29,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 ## P4 New classes
 - [x] P4.0 Migration and shared plumbing for new classes
 - [x] P4.1 Bard
-- [ ] P4.2 Alchemist
+- [x] P4.2 Alchemist
 - [ ] P4.3 Druid
 - [ ] P4.4 Chronomancer
 - [ ] P4.5 Warden

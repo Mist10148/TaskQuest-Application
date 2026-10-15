@@ -53,3 +53,37 @@ test('Bard medley: every list beyond the first among the last 5 completions pays
 test('Bard tree: four chained skills', () => {
     checkTree('BARD', ['bard_encore', 'bard_harmony', 'bard_crescendo', 'bard_ballad'], 600);
 });
+
+// ─── Alchemist ───────────────────────────────────────────────────────────────
+
+test('Alchemist brew: +2 per ingredient, and the third different priority finishes the brew', () => {
+    const alch = (mix) => user({ player_class: 'ALCHEMIST', alchemist_mix: mix });
+    const done = (priority) => ({ action: 'item_complete', priority });
+    // [label, mix before, priority, skills, expected type, expected bonus, expected mix after]
+    const cases = [
+        ['the first ingredient', 0, 'MEDIUM', [], 'ALCHEMIST', 2, 2],
+        ['a second ingredient', 2, 'LOW', [], 'ALCHEMIST', 4, 3],
+        ['the same priority again adds nothing', 2, 'MEDIUM', [], 'ALCHEMIST', 2, 2],
+        ['the third priority finishes the brew', 3, 'HIGH', [], 'ALCHEMIST_BREW', 30, 0],
+        ['any order works', 5, 'MEDIUM', [], 'ALCHEMIST_BREW', 30, 0],
+        ['no priority counts as MEDIUM', 5, undefined, [], 'ALCHEMIST_BREW', 30, 0],
+        ['Catalyst adds 5 per level to a brew', 3, 'HIGH', [sk('alch_catalyst', 2)], 'ALCHEMIST_BREW', 40, 0],
+        ['Elixir doubles the ingredient pay', 2, 'LOW', [sk('alch_elixir')], 'ALCHEMIST', 8, 3],
+        ['Transmute: a brew pays 50% more', 3, 'HIGH', [sk('alch_transmute')], 'ALCHEMIST_BREW', 45, 0],
+        ['Distill: the next brew starts with MEDIUM', 3, 'HIGH', [sk('alch_distill')], 'ALCHEMIST_BREW', 30, 2]
+    ];
+    for (const [label, mix, priority, skills, type, bonus, after] of cases) {
+        const r = calc(alch(mix), 10, skills, done(priority));
+        assert.equal(r.bonusInfo.type, type, `${label}: type`);
+        assert.equal(r.bonusInfo.classBonus, bonus, `${label}: bonus`);
+        assert.equal(r.userUpdates.alchemist_mix, after, `${label}: mix`);
+        assert.equal(r.finalXP, 10 + bonus, `${label}: final`);
+    }
+    const add = calc(alch(3), 10, [], { action: 'item_add', priority: 'HIGH' });
+    assert.equal(add.bonusInfo.classBonus, 2);
+    assert.equal(add.userUpdates.alchemist_mix, undefined, 'only completions change the brew');
+});
+
+test('Alchemist tree: four chained skills', () => {
+    checkTree('ALCHEMIST', ['alch_catalyst', 'alch_elixir', 'alch_transmute', 'alch_distill'], 650);
+});

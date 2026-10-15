@@ -103,6 +103,13 @@ const CLASSES = {
         cost: 600,
         description: 'Variety: finishing tasks from different lists in a row builds a medley. Every list beyond the first among your last 5 completions adds 4% of the base XP plus 3 XP. Every other action gives +2 XP.',
         playstyle: 'Rewards hopping between lists instead of grinding one.'
+    },
+    ALCHEMIST: {
+        name: 'Alchemist',
+        emoji: '⚗️',
+        cost: 650,
+        description: 'Brew: every task you complete adds its priority (LOW, MEDIUM, HIGH) to the brew and pays +2 XP per ingredient in it. Completing the third different priority finishes the brew: +150% of the base XP plus 15, and the brew starts over. Other actions give +2 XP.',
+        playstyle: 'Rewards using every priority honestly.'
     }
 };
 
@@ -290,6 +297,17 @@ const SKILL_TREES = {
             bard_crescendo: { name: 'Crescendo', emoji: '📯', description: '+25% Bard bonus when every task of the medley is from a different list (Bard)', maxLevel: 1, cost: 260, requires: 'bard_harmony' },
             bard_ballad: { name: 'Ballad', emoji: '🪕', description: 'The first task you complete each day counts as a full medley (Bard)', maxLevel: 1, cost: 300, requires: 'bard_crescendo' }
         }
+    },
+    ALCHEMIST: {
+        name: 'Alchemist',
+        emoji: '⚗️',
+        description: 'Brews and transmutation',
+        skills: {
+            alch_catalyst: { name: 'Catalyst', emoji: '🧪', description: '+5 XP on a finished brew, per level (Alchemist)', maxLevel: 3, cost: 110, requires: null },
+            alch_elixir: { name: 'Elixir', emoji: '🍶', description: 'Each ingredient in the brew pays +2 XP more (Alchemist)', maxLevel: 1, cost: 200, requires: 'alch_catalyst' },
+            alch_transmute: { name: 'Transmute', emoji: '💎', description: 'A finished brew pays 50% more (Alchemist)', maxLevel: 1, cost: 260, requires: 'alch_elixir' },
+            alch_distill: { name: 'Distill', emoji: '🫗', description: 'After a brew the next one starts with a MEDIUM ingredient already in it (Alchemist)', maxLevel: 1, cost: 300, requires: 'alch_transmute' }
+        }
     }
 };
 
@@ -466,7 +484,8 @@ const CLASS_RULES = {
     RANGER: { TRACKER_FLAT: 4, MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 3, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 5, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
     ARTISAN: { PROTOTYPE_KEEP_PERCENT: 75, MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 6, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 0.5, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
     MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 },
-    BARD: { WINDOW: 5, HARMONY_WINDOW: 7, PERCENT_PER_STEP: 4, FLAT_PER_STEP: 3, OTHER_FLAT: 2, ENCORE_PER_STEP: 1, CRESCENDO_PERCENT: 25 }
+    BARD: { WINDOW: 5, HARMONY_WINDOW: 7, PERCENT_PER_STEP: 4, FLAT_PER_STEP: 3, OTHER_FLAT: 2, ENCORE_PER_STEP: 1, CRESCENDO_PERCENT: 25 },
+    ALCHEMIST: { STEP_FLAT: 2, BREW_PERCENT: 150, BREW_FLAT: 15, OTHER_FLAT: 2, CATALYST_FLAT: 5, ELIXIR_STEP: 2, TRANSMUTE_PERCENT: 50 }
 };
 
 /**

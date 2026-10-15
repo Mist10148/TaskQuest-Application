@@ -413,6 +413,31 @@ function calculateClassXP(user, baseXP, opts = {}) {
             break;
         }
 
+        case 'ALCHEMIST': {
+            const a = CLASS_RULES.ALCHEMIST;
+            if (context.action !== 'item_complete') {
+                finalXP = baseXP + a.OTHER_FLAT;
+                bonusInfo = { type: 'ALCHEMIST', details: `⚗️ Alchemist +${a.OTHER_FLAT}`, classBonus: a.OTHER_FLAT };
+                break;
+            }
+            const bit = { LOW: 1, MEDIUM: 2, HIGH: 4 }[context.priority] || 2;
+            const mix = (Number(user.alchemist_mix) || 0) | bit;
+            if (mix === 7) {
+                let brew = Math.floor((baseXP * a.BREW_PERCENT) / 100) + a.BREW_FLAT + lvl('alch_catalyst') * a.CATALYST_FLAT;
+                if (lvl('alch_transmute')) brew = Math.floor((brew * (100 + a.TRANSMUTE_PERCENT)) / 100);
+                userUpdates.alchemist_mix = lvl('alch_distill') ? 2 : 0;
+                finalXP = baseXP + brew;
+                bonusInfo = { type: 'ALCHEMIST_BREW', details: `⚗️ Brew complete! +${brew}`, classBonus: brew };
+                break;
+            }
+            const ingredients = (mix & 1) + ((mix >> 1) & 1) + ((mix >> 2) & 1);
+            const bonus = ingredients * (a.STEP_FLAT + lvl('alch_elixir') * a.ELIXIR_STEP);
+            userUpdates.alchemist_mix = mix;
+            finalXP = baseXP + bonus;
+            bonusInfo = { type: 'ALCHEMIST', details: `⚗️ Brew ${ingredients}/3 +${bonus}`, classBonus: bonus };
+            break;
+        }
+
         default:
             break;
     }

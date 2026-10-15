@@ -12,8 +12,8 @@ const embedSize = (e) => {
     return (j.title || '').length + (j.description || '').length + (j.footer?.text || '').length + (j.fields || []).reduce((n, f) => n + f.name.length + f.value.length, 0);
 };
 
-test('there are 13 classes and every one has a colour and an emoji', () => {
-    assert.equal(KEYS.length, 13);
+test('there are 14 classes and every one has a colour and an emoji', () => {
+    assert.equal(KEYS.length, 14);
     for (const k of KEYS) {
         assert.equal(typeof ui.COLORS[k], 'number', `${k} colour`);
         assert.equal(ui.classEmoji(k), CLASSES[k].emoji);
@@ -28,14 +28,14 @@ test('the class browser fits Discord limits for every class', () => {
         for (const r of rows) assert.ok(r.components.length <= 5, `${k} components`);
         const select = rows[0].components[0];
         assert.equal(select.custom_id, 'class_select');
-        assert.equal(select.options.length, 13);
+        assert.equal(select.options.length, 14);
         assert.ok(select.options.length <= 25);
         assert.equal(select.options.filter((o) => o.default).length, 1);
         assert.equal(select.options.find((o) => o.default).value, k);
         const nav = rows[1].components;
         assert.equal(nav[0].disabled, KEYS.indexOf(k) === 0);
         assert.equal(nav[2].disabled, KEYS.indexOf(k) === KEYS.length - 1);
-        assert.match(nav[1].label, new RegExp(`^${KEYS.indexOf(k) + 1} / 13$`));
+        assert.match(nav[1].label, new RegExp(`^${KEYS.indexOf(k) + 1} / 14$`));
         for (const o of select.options) {
             assert.ok(o.label.length <= 100 && o.description.length <= 100);
         }
@@ -44,7 +44,7 @@ test('the class browser fits Discord limits for every class', () => {
 
 test('class and skill embeds respect Discord field and embed limits', () => {
     for (const k of KEYS) {
-        const detail = ui.classDetailEmbed(userOf(k), k, CLASSES[k], SKILL_TREES[k], 0, 13);
+        const detail = ui.classDetailEmbed(userOf(k), k, CLASSES[k], SKILL_TREES[k], 0, 14);
         const skills = ui.skillTreeEmbed(userOf(k), k, SKILL_TREES, []);
         for (const e of [detail, skills]) {
             assert.ok(embedSize(e) <= 6000, `${k} embed size`);
@@ -62,11 +62,11 @@ test('class and skill embeds respect Discord field and embed limits', () => {
 });
 
 test('the class view shows the mechanic and, for the equipped class, the counter', () => {
-    const monk = ui.classDetailEmbed(userOf('MONK', { monk_rhythm: 4, monk_day: new Date().toISOString().slice(0, 10) }), 'MONK', CLASSES.MONK, SKILL_TREES.MONK, 6, 13).toJSON();
+    const monk = ui.classDetailEmbed(userOf('MONK', { monk_rhythm: 4, monk_day: new Date().toISOString().slice(0, 10) }), 'MONK', CLASSES.MONK, SKILL_TREES.MONK, 6, 14).toJSON();
     assert.match(monk.description, /Rhythm/);
     assert.ok(monk.fields.some((f) => f.name.includes('Playstyle') && f.value === CLASSES.MONK.playstyle));
     assert.ok(monk.fields.some((f) => f.name.includes('Current') && /Rhythm \*\*4\/14\*\*/.test(f.value)));
-    const notEquipped = ui.classDetailEmbed(userOf('HERO', { monk_rhythm: 4 }), 'MONK', CLASSES.MONK, SKILL_TREES.MONK, 6, 13).toJSON();
+    const notEquipped = ui.classDetailEmbed(userOf('HERO', { monk_rhythm: 4 }), 'MONK', CLASSES.MONK, SKILL_TREES.MONK, 6, 14).toJSON();
     assert.ok(!notEquipped.fields.some((f) => f.name.includes('Current')));
 });
 
@@ -76,6 +76,7 @@ test('classCounterLine reads the counters and the skill-dependent caps', () => {
     assert.match(ui.classCounterLine(userOf('MONK', { monk_rhythm: 3, monk_day: today })), /Rhythm \*\*3\/14\*\*$/);
     assert.match(ui.classCounterLine(userOf('MONK', { monk_rhythm: 3, monk_day: today }), [{ skill_id: 'monk_discipline', skill_level: 1 }]), /3\/16/);
     assert.match(ui.classCounterLine(userOf('MONK', { monk_rhythm: 3, monk_day: '2020-01-01' })), /lapsed/);
+    assert.match(ui.classCounterLine(userOf('ALCHEMIST', { alchemist_mix: 3 })), /Brew \*\*2\/3\*\*/);
     assert.match(ui.classCounterLine(userOf('BARD', { bard_recent: '1,2,2,3' })), /Medley \*\*3\/5\*\*/);
     assert.match(ui.classCounterLine(userOf('ARTISAN', { artisan_progress: 7 })), /Project \*\*7\/10\*\*/);
     assert.match(ui.classCounterLine(userOf('ARTISAN', { artisan_progress: 7 }), [{ skill_id: 'artisan_blueprint', skill_level: 1 }]), /7\/13/);

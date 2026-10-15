@@ -63,6 +63,7 @@
   --color-class-ranger: hsl(var(--class-ranger));
   --color-class-necromancer: hsl(var(--class-necromancer));
   --color-class-paladin: hsl(var(--class-paladin));
+  --color-class-alchemist: hsl(var(--class-alchemist));
   --color-class-bard: hsl(var(--class-bard));
 
   --color-priority-high: hsl(var(--priority-high));
@@ -202,6 +203,7 @@
     --class-ranger: 32 50% 58%;
     --class-necromancer: 320 55% 68%;
     --class-paladin: 195 30% 82%;
+    --class-alchemist: 150 60% 52%;
     --class-bard: 340 75% 70%;
 
     /* Priority Colors */
@@ -287,6 +289,7 @@
     --class-ranger: 30 55% 28%;
     --class-necromancer: 320 60% 33%;
     --class-paladin: 200 30% 30%;
+    --class-alchemist: 150 80% 20%;
     --class-bard: 340 70% 38%;
 
     --priority-none: 218 15% 40%;

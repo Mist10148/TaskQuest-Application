@@ -33,6 +33,8 @@ Things that are not as good as they could be, and what to do about them.
 | 45 | Data | Archiving is manual: `npm run archive` is not scheduled by TaskQuest, and archived XP is not part of stats charts that look back further than the days you keep. | The log keeps growing until someone runs it. | Schedule it (cron, a Render job). |
 | 46 | Tests | The web API tests that read the leaderboard after a prestige or a cosmetics purchase fail on MariaDB 10.4 (they pass on MySQL 8, which CI uses). | A MariaDB-only developer sees two red tests that are not regressions. | Run the integration suite against MySQL 8, or trust CI for those two. |
 
+| 47 | Sharing | Handing a list over checks the new owner's list and task limits under the list lock but does not lock the new owner's account (that would reverse the lock order used when tasks are added and risk a deadlock). | If the new owner adds tasks at the very moment of the hand-over, they can end slightly over the 5,000 task limit; later adds are then refused. | Low impact; retry or remove tasks. |
+
 ## By design
 
 Things that look like gaps but are decisions, with the reason.

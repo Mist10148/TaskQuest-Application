@@ -12,6 +12,7 @@ const { getPool, withTransaction } = require('./pool');
 const { lockUser } = require('./users');
 const { errors } = require('../errors');
 const v = require('../validation');
+const { parseDone } = require('../csv');
 const { LIMITS: USER_LIMITS } = require('../constants');
 const access = require('./access');
 
@@ -80,6 +81,17 @@ function toCsv(data) {
 }
 
 /** Validate a whole import before writing anything. Returns normalised lists. */
+/** The `completed` flag of an imported task: true/false, 1/0 or the words the CSV import knows; anything else is refused (never guessed). */
+function done(raw, at) {
+    if (raw === undefined || raw === null || raw === false || raw === 0) return false;
+    if (raw === true || raw === 1) return true;
+    if (typeof raw === 'string') {
+        const r = parseDone(raw);
+        if (r.ok) return r.value;
+    }
+    return at('completed must be true or false.');
+}
+
 function parseImport(data) {
     if (!data || typeof data !== 'object' || !Array.isArray(data.lists)) throw errors.validation('Import file must contain a "lists" array.');
     if (data.lists.length > LIMITS.LISTS) throw errors.validation(`An import can contain at most ${LIMITS.LISTS} lists.`);
@@ -113,7 +125,7 @@ function parseImport(data) {
                     parentRef: it.parent_id === undefined || it.parent_id === null ? null : String(it.parent_id),
                     name: field(v.itemName(it.name)),
                     description: field(v.description(it.description)),
-                    completed: Boolean(it.completed),
+                    completed: done(it.completed, at),
                     due_date: field(v.dueDate(it.due_date)),
                     priority: field(v.priority(it.priority)),
                     tags: field(v.tags(it.tags)),

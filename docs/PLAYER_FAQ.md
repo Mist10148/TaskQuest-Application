@@ -56,7 +56,7 @@ At **level 30** you can prestige (profile, or `/prestige`), up to 10 times. You 
 
 **How do I share a list?** On the web, open the list's members dialog and type the person's exact Discord username (not their display name); you confirm the name you found before anything is sent. On Discord, use `/share` with their mention. They get an invitation (7 days) to accept or decline in `/invites` or the web banner. They must have signed in on the web or used a command since the sharing update (that is when their username is stored), and bots and yourself cannot be invited.
 
-**What can each role do?** Viewers read. Editors add, edit, reorder and complete tasks and delete tasks they added themselves. Managers also edit the list's details and invite and remove people (only the owner makes or removes managers). Only the owner deletes the list. You can leave any list you do not own with `/leave` or on the web.
+**What can each role do?** Viewers read. Editors add, edit, reorder and complete tasks and delete tasks they added themselves (not one that somebody else finished). Managers also edit the list's details and invite and remove people (only the owner makes or removes managers). Only the owner deletes the list. You can leave any list you do not own with `/leave` or on the web.
 
 **Whose XP is it?** Yours, always: the person who finishes a task gets its XP, quest progress and statistics, whoever owns the list. The owner gets nothing for a member's work, and nobody sees another person's XP or Discord ID, only display names.
 

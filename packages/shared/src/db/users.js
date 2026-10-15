@@ -293,15 +293,18 @@ async function getRank(discordId, by = 'lifetime', { now, playerClass } = {}) {
     const cls = playerClass ? String(playerClass).toUpperCase() : null;
     if (cls && user.player_class !== cls) return null;
     const mine = scoreSql(by, now);
-    const [own] = await run(null, `SELECT ${mine.sql} AS score FROM users u WHERE u.discord_id = ?`, [...mine.params, String(discordId)]);
+    const [own] = await run(null, `SELECT ${mine.sql} AS score, GREATEST(u.lifetime_xp_total, u.lifetime_xp) AS lifetime FROM users u WHERE u.discord_id = ?`, [...mine.params, String(discordId)]);
     const score = Number(own.score);
+    const lifetime = Number(own.lifetime);
     if ((by === 'weekly' || by === 'streak') && score <= 0) return null;
     const other = scoreSql(by, now);
+    // The same order as getLeaderboard (score, then lifetime XP, then id), so tied players do not all share the best position.
     const [row] = await run(
         null,
         `SELECT COUNT(*) + 1 AS user_rank FROM users u
-         WHERE u.gamification_enabled = TRUE ${cls ? 'AND u.player_class = ?' : ''} AND ${other.sql} > ?`,
-        [...(cls ? [cls] : []), ...other.params, score]
+         WHERE u.gamification_enabled = TRUE ${cls ? 'AND u.player_class = ?' : ''}
+           AND (${other.sql} > ? OR (${other.sql} = ? AND (GREATEST(u.lifetime_xp_total, u.lifetime_xp) > ? OR (GREATEST(u.lifetime_xp_total, u.lifetime_xp) = ? AND u.discord_id < ?))))`,
+        [...(cls ? [cls] : []), ...other.params, score, ...other.params, score, lifetime, lifetime, String(discordId)]
     );
     return Number(row.user_rank);
 }

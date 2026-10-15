@@ -519,15 +519,17 @@ async function reorderItems(discordId, listId, orderedIds) {
 
 /**
  * Whether `me` may delete an item of a list they hold `role` on: a manager (the owner counts) deletes anything; an editor only a task
- * they added themselves (deleting somebody else's finished task would take away that person's quest, review and party progress).
+ * they added themselves and that nobody else finished (deleting somebody else's finished task would take away that person's quest, review and party progress).
  */
-const mayDelete = (role, item, me) => access.atLeast(role, 'manager') || (item.created_by !== null && item.created_by !== undefined && String(item.created_by) === String(me));
+const finishedByOther = (item, me) => [item.first_completed_by, item.completed_by].some((who) => who !== null && who !== undefined && String(who) !== String(me));
+const mayDelete = (role, item, me) =>
+    access.atLeast(role, 'manager') || (item.created_by !== null && item.created_by !== undefined && String(item.created_by) === String(me) && !finishedByOther(item, me));
 
 async function deleteItem(discordId, itemId) {
     const id = unwrap(v.id(itemId));
     await withTransaction(async (conn) => {
         const { item, role } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
-        if (!mayDelete(role, item, discordId)) throw errors.forbidden('Editors can only delete tasks they added themselves. Ask a manager of this list.');
+        if (!mayDelete(role, item, discordId)) throw errors.forbidden('Editors can only delete tasks they added themselves and that nobody else finished. Ask a manager of this list.');
         if (!access.atLeast(role, 'manager')) {
             // Deleting a task also deletes its subtasks: not when somebody else added any of them.
             const [[others]] = await conn.query('SELECT COUNT(*) AS n FROM items WHERE parent_id = ? AND (created_by IS NULL OR created_by <> ?)', [id, String(discordId)]);
@@ -634,7 +636,8 @@ async function completionContext(conn, item, user, now = new Date()) {
         scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null,
         overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
         firstOfDay: (await countToday(conn, user, 'item_complete', now)) === 0,
-        listCleared: !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0 && !(marked && marked.cleared_at)
+        // Imported tasks and auto-spawned copies (counts_for_quests = 0) never mark a list as cleared, so they must not pay the clear bonus either.
+        listCleared: Number(item.counts_for_quests) !== 0 && !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0 && !(marked && marked.cleared_at)
     };
 }
 
@@ -1034,6 +1037,7 @@ const asOwner = {
 
 module.exports = {
     completionContext,
+    mayDelete,
     asOwner,
     getLists,
     getList,

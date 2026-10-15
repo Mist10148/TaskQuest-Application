@@ -243,4 +243,4 @@ function csvToImport(text) {
     };
 }
 
-module.exports = { parseCsv, csvToImport, sniffDelimiter, MAX_CSV_CHARS, MAX_REPORTED_ERRORS, DEFAULT_LIST };
+module.exports = { parseDone, parseCsv, csvToImport, sniffDelimiter, MAX_CSV_CHARS, MAX_REPORTED_ERRORS, DEFAULT_LIST };

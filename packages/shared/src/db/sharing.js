@@ -292,9 +292,9 @@ async function revokeInvitesBy(conn, listId, inviterId) {
 }
 
 /** Delete a member's rows from one list, including their personal reminder state and the invitations they sent. */
-async function dropMember(conn, listId, discordId) {
+async function dropMember(conn, listId, discordId, { keepInvites = false } = {}) {
     await conn.query('DELETE FROM list_members WHERE list_id = ? AND discord_id = ?', [listId, discordId]);
-    await revokeInvitesBy(conn, listId, discordId);
+    if (!keepInvites) await revokeInvitesBy(conn, listId, discordId);
     await conn.query('DELETE FROM list_reminders WHERE list_id = ? AND discord_id = ?', [listId, discordId]);
     // Read the task ids first (a plain consistent read), so this transaction never takes row locks on items while it holds the list lock.
     const [tasks] = await conn.query('SELECT id FROM items WHERE list_id = ?', [listId]);
@@ -343,8 +343,8 @@ async function transferOwnership(actorId, listId, memberKey) {
 
         const former = String(actorId);
         await conn.query('UPDATE lists SET discord_id = ? WHERE id = ?', [next, list.id]);
-        // The new owner is no longer a member; their member-only reminder state goes with the row.
-        await dropMember(conn, list.id, next);
+        // The new owner is no longer a member; their member-only reminder state goes with the row. The invitations they sent stay valid.
+        await dropMember(conn, list.id, next, { keepInvites: true });
         const key = crypto.randomBytes(6).toString('hex');
         await conn.query("INSERT INTO list_members (list_id, discord_id, role, public_id, added_by) VALUES (?, ?, 'manager', ?, ?)", [list.id, former, key, next]);
         return { listId: list.id, role: 'manager', memberKey: key };

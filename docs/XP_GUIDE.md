@@ -29,6 +29,7 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `boss_defeated` | +30 for the last open subtask of a task with at least 4 subtasks | Once per task, 60 XP a day | No |
 | `comeback` | +25 for the first completion after 3 idle days | Once a week | No |
 | `party_assist` | +3 per completion while you are in a party of two or more | 15 XP a day | No |
+| `estimate_accuracy` | +10 for a task with an estimate finished within 10 minutes after a focus session of about that length (within 25%) | 30 XP a day | No |
 | `reflection` | +10 for a one-line note about your day | Once a day | No |
 | `weekly_goal` | 10 + 2 per task of the goal you set (3 to 60 tasks), max 80 | Once a week | No |
 | `achievement_reward` | +25 per newly unlocked achievement | Each achievement once (33 in total) | No |
@@ -39,7 +40,7 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `game_reward` | RPS win 10 base; Hangman max(10, 10 × lives left) base; arcade points × rate (Snake 2, Dino 1, Invaders 3 per point, max 100 / 100 / 150 per run) | 500 XP a day across all free games, 3 s cooldown | Yes (then trimmed to the remaining allowance) |
 | `blackjack_win`, `blackjack_blackjack` | Winnings: 1:1, or 3:2 for a natural | Bet 10 to min(25% of balance, 1000) | No (flat on purpose) |
 
-Task bonuses (`first_of_day` to `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist`) are paid only on a task's **first, paid completion**: un-checking and re-checking pays nothing, neither does a completion over the 50-a-day cap, and imported tasks and auto-created repeat copies never earn them. An *early* or *overdue* effect needs a due date that was set at least 24 hours before the completion. Imports, templates and exports never pay XP.
+Task bonuses (`first_of_day` to `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist`, `estimate_accuracy`) are paid only on a task's **first, paid completion**: un-checking and re-checking pays nothing, neither does a completion over the 50-a-day cap, and imported tasks and auto-created repeat copies never earn them. An *early* or *overdue* effect needs a due date that was set at least 24 hours before the completion. Imports, templates and exports never pay XP.
 
 Spending sinks: classes (300 to 750), skills (50 to 360 a level), streak freezes (150, or 120 with Freeze Cache), cosmetics (200 to 2000), Blackjack bets. Prestige empties your balance.
 

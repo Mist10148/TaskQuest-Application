@@ -15,6 +15,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Task estimates and a good-estimate bonus.** A task can carry an estimate in minutes (`estimate_minutes`, 1 to 600; export and import keep it). Finishing it within 10 minutes after a focus session whose real minutes are within 25% of the estimate pays +10 XP (30 a day). The web task form has an Estimate field.
 - **A daily reflection and a weekly goal.** Write one line about your day for +10 XP (once a day), or set how many tasks you will finish this week (3 to 60) and claim 10 + 2 XP per task, at most 80, when you get there. `/api/reflection`, `/api/goal`; migration `024_engagement` adds the tables.
 - **Five more task bonuses** (flat, capped, on a task's first paid completion, listed with the completion result): **perfect day** (+30, every task due today done), **inbox zero** (+40 a week, the last overdue task cleared after three), **boss defeated** (+30, the last subtask of a task with 4 or more), **welcome back** (+25, the first completion after 3 idle days) and **party assist** (+3 a completion in a party, 15 a day).
 - **A weekly modifier.** Each UTC ISO week doubles one flat bonus source (early finish, overdue cleared, habit streaks or list cleared, in rotation). `SEASONS`, `currentSeason`.

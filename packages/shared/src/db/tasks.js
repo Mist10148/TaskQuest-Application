@@ -59,7 +59,7 @@ const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by']
  */
 const MEMBER_ITEM_FIELDS = [
     'id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id',
-    'recurrence', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'
+    'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'
 ];
 /** The same for a list: the fields the UI draws, the sharing fields, and the item counts. No reminder or notification state. */
 const MEMBER_LIST_FIELDS = [
@@ -326,6 +326,7 @@ function parseItemExtras(input, { partial = false } = {}) {
     if (!partial || input.priority !== undefined) out.priority = unwrap(v.priority(input.priority));
     if (!partial || input.tags !== undefined) out.tags = unwrap(v.tags(input.tags));
     if (!partial || input.recurrence !== undefined) out.recurrence = unwrap(v.recurrence(input.recurrence));
+    if (!partial || input.estimate_minutes !== undefined) out.estimate_minutes = unwrap(v.estimate(input.estimate_minutes));
     return out;
 }
 
@@ -413,9 +414,9 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
 
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [lid]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [lid, name, description, Number(pos.next), extras.due_date, extras.due_date ? new Date() : null, extras.priority, extras.tags, extras.recurrence, parentId, user.discord_id]
+        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [lid, name, description, Number(pos.next), extras.due_date, extras.due_date ? new Date() : null, extras.priority, extras.tags, extras.recurrence, extras.estimate_minutes, parentId, user.discord_id]
     );
     await conn.query('UPDATE users SET total_items_added = total_items_added + 1 WHERE discord_id = ?', [user.discord_id]);
     user.total_items_added = Number(user.total_items_added) + 1;

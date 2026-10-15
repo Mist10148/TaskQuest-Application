@@ -43,7 +43,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P5.6 weekly goal (API and shared logic; the UI lives on the Today screen, P6.5)
 - [x] P5.7 party task bonus
 - [x] P5.8 seasonal weekly modifier (also: migration 024 and the constants for P5)
-- [ ] P5.9 estimate accuracy
+- [x] P5.9 estimate accuracy
 
 ## P6 Product and UX
 - [ ] P6.1 Class what-if calculator

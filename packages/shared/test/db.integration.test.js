@@ -1102,6 +1102,31 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(db.goals.goalReward(5), 20);
     });
 
+    await t.test('estimates: validated, exported, and a good guess after a focus session pays a bonus', async () => {
+        const U = '100000000000000901';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Estimates' });
+        await assert.rejects(db.tasks.addItem(U, list.id, { name: 'bad', estimate_minutes: 0 }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.addItem(U, list.id, { name: 'bad', estimate_minutes: 601 }), { code: 'VALIDATION' });
+        await assert.rejects(db.tasks.addItem(U, list.id, { name: 'bad', estimate_minutes: 2.5 }), { code: 'VALIDATION' });
+        const guess = (await db.tasks.addItem(U, list.id, { name: 'exact', estimate_minutes: 25 })).item;
+        assert.equal(guess.estimate_minutes, 25);
+        const off = (await db.tasks.addItem(U, list.id, { name: 'way off', estimate_minutes: 60 })).item.id;
+        const close = (await db.tasks.addItem(U, list.id, { name: 'close', estimate_minutes: 20 })).item.id;
+        const none = (await db.tasks.addItem(U, list.id, { name: 'no estimate' })).item.id;
+        assert.equal((await db.tasks.updateItem(U, close, { estimate_minutes: 20 })).estimate_minutes, 20);
+        const exported = await db.transfer.exportAll(U);
+        assert.deepEqual(exported.lists[0].items.map((i) => i.estimate_minutes), [25, 60, 20, null]);
+
+        const keys = (r) => r.bonuses.map((b) => b.key);
+        // no focus session yet
+        assert.ok(!keys(await db.tasks.setItemCompleted(U, none)).includes('estimate_accuracy'));
+        await db.query("INSERT INTO focus_sessions (discord_id, started_at, minutes_planned, state, finished_at, minutes_credited, xp) VALUES (?, UTC_TIMESTAMP() - INTERVAL 30 MINUTE, 25, 'finished', UTC_TIMESTAMP() - INTERVAL 3 MINUTE, 25, 15)", [U]);
+        assert.ok(!keys(await db.tasks.setItemCompleted(U, off)).includes('estimate_accuracy'), '60 minutes against a 25 minute session');
+        assert.equal((await db.tasks.setItemCompleted(U, guess.id)).bonuses.find((b) => b.key === 'estimate_accuracy').xp, 10);
+        assert.equal((await db.tasks.setItemCompleted(U, close)).bonuses.find((b) => b.key === 'estimate_accuracy').xp, 10, '25% off is still inside the tolerance');
+    });
+
     await t.test('Freeze Cache: 5 freezes at 120 XP, chain-gated, and class counters reset on a class switch', async () => {
         const F = '100000000000000203';
         await db.users.ensureUser(F);
@@ -3249,7 +3274,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.snoozeList(O, list.id, new Date(Date.now() + 3600e3));
         await db.tasks.setItemCompleted(O, item.id, true); // xp_awarded, first_completed_*, the repeat copy
 
-        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'];
+        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'];
         const PRIVATE_ITEM = ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'first_completed_by', 'first_completed_high', 'first_completed_early', 'first_completed_overdue', 'due_date_set_at', 'repeat_anchor_day', 'habit_streak', 'rearm_count', 'rearm_day', 'created_by', 'completed_by'];
         const PRIVATE_LIST = ['remind_at', 'deadline_notified', 'overdue_notified', 'cleared_at', 'cleared_by', 'rearm_count', 'rearm_day', 'discord_id'];
 

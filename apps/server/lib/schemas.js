@@ -93,6 +93,7 @@ const itemExtras = {
     priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),
     tags: tagsField,
     recurrence: nullableEmpty(z.enum(['daily', 'weekly', 'monthly']).nullable().optional()),
+    estimate_minutes: z.number().int().min(1).max(shared.LIMITS.ESTIMATE_MAX_MINUTES).nullable().optional(),
     parent_id: z.number().int().positive().nullable().optional()
 };
 

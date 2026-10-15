@@ -1,6 +1,6 @@
 /**
  * Engagement bonuses paid on a task's first, paid completion (see completionBonuses in tasks.js): perfect day,
- * inbox zero, a boss defeated, a welcome back and a party assist. Like the other task bonuses they are flat XP
+ * inbox zero, a boss defeated, a welcome back, a good estimate and a party assist. Like the other task bonuses they are flat XP
  * (no class or skill modifiers), each has its own cap, and they never repeat for the same thing.
  */
 
@@ -11,6 +11,8 @@ const tz = require('../tz');
 const { awardFlat, countToday } = require('./progression');
 
 const DAY_MS = 86400e3;
+/** A focus session counts as the one a task was done in when it ended at most this long before the completion. */
+const ESTIMATE_WINDOW_MINUTES = 10;
 
 /** Rows of `source` the user earned in their current week (Monday to Monday in their zone). */
 async function countThisWeek(conn, user, source, now) {
@@ -79,6 +81,18 @@ async function completionExtras(conn, user, item, ctx, now = new Date()) {
             [user.discord_id, new Date(now.getTime() - LIMITS.COMEBACK_COOLDOWN_DAYS * DAY_MS)]
         );
         if (Number(again.n) === 0) await pay('comeback', REWARDS.COMEBACK, { referenceId: item.id });
+    }
+
+    // Good estimate: you guessed the task's length within 25% and finished it right after a focus session of about that length.
+    if (item.estimate_minutes) {
+        const [[session]] = await conn.query(
+            "SELECT minutes_credited FROM focus_sessions WHERE discord_id = ? AND state = 'finished' AND finished_at <= ? AND finished_at >= ? ORDER BY finished_at DESC LIMIT 1",
+            [user.discord_id, now, new Date(now.getTime() - ESTIMATE_WINDOW_MINUTES * 60e3)]
+        );
+        const estimate = Number(item.estimate_minutes);
+        if (session && Number(session.minutes_credited) > 0 && (Math.abs(estimate - Number(session.minutes_credited)) * 100) / estimate <= LIMITS.ESTIMATE_TOLERANCE_PERCENT) {
+            await pay('estimate_accuracy', REWARDS.ESTIMATE_ACCURACY, { dailyCap: LIMITS.ESTIMATE_XP_PER_DAY, referenceId: item.id });
+        }
     }
 
     // Party assist: a few XP for every completion while you are in a party of two or more, 15 a day.

@@ -627,6 +627,8 @@ export interface Item {
     tags?: string | null;
     parent_id?: number | null;
     recurrence?: Recurrence | null;
+    /** The player's own estimate in minutes (a focus session of about that length right before finishing pays a bonus). */
+    estimate_minutes?: number | null;
     /** Display name of the person who finished it (shared quests only). */
     completed_by_name?: string | null;
     /** false when the server would refuse to delete it for me (an editor may only delete tasks they added). Absent: assume yes. */
@@ -642,6 +644,7 @@ export interface ItemInput {
     priority?: Priority | null;
     tags?: string[] | string | null;
     recurrence?: Recurrence | null;
+    estimate_minutes?: number | null;
     parent_id?: number | null;
 }
 

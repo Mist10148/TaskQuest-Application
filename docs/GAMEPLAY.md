@@ -349,6 +349,7 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | `boss_defeated` | +30 when you finish the last open subtask of a task that has at least 4 subtasks | Once per task, 60 XP a day |
 | `comeback` | +25 for the first completion after 3 idle days (the previous paid completion is 3 or more days old) | Once a week |
 | `party_assist` | +3 for every completion while you are in a party of two or more | 15 XP a day |
+| `estimate_accuracy` | +10 when a task you gave an estimate is finished within 10 minutes after a focus session whose real minutes are within 25% of the estimate | 30 XP a day |
 | `reflection` | +10 for a one-line note about your day ([reflection](#5e-reflection-and-weekly-goal)) | Once a day |
 | `weekly_goal` | +10 + 2 per task of your goal, at most 80, when you reach the goal you set ([weekly goal](#5e-reflection-and-weekly-goal)) | Once a week |
 | `focus_session` | floor(minutes × 0.6) per [focus session](#5d-focus-sessions) | 100 XP and 8 sessions a day |

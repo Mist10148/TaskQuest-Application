@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, ListPlus, Pencil, Repeat, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, ListPlus, Pencil, Repeat, Timer, Trash2 } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -118,7 +118,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         </p>
         {item.description && <p className="text-xs sm:text-sm mt-1 line-clamp-2 text-foreground-muted">{item.description}</p>}
         {completed && item.completed_by_name && <p className="mt-1 text-xs text-foreground-muted">Done by {item.completed_by_name}</p>}
-        {(item.due_date || item.recurrence || tags.length > 0) && (
+        {(item.due_date || item.recurrence || item.estimate_minutes || tags.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
               <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
@@ -131,6 +131,11 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
                 <Repeat className="h-3 w-3" aria-hidden /> {item.recurrence}
               </span>
             )}
+            {item.estimate_minutes ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 border border-border text-foreground-muted">
+                <Timer className="h-3 w-3" aria-hidden /> {item.estimate_minutes} min
+              </span>
+            ) : null}
             {tags.map((t) => (
               <span key={t} className="rounded-full px-2 py-0.5 bg-primary/10 text-primary-text">#{t}</span>
             ))}

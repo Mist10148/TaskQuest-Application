@@ -105,6 +105,7 @@ const Tasks = () => {
         priority: i.priority || "none",
         tags: i.tags ? i.tags.split(",").join(", ") : "",
         recurrence: i.recurrence || "none",
+        estimate: i.estimate_minutes ? String(i.estimate_minutes) : "",
         parent_id: i.parent_id ? String(i.parent_id) : "none",
       };
     }

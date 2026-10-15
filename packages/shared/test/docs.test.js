@@ -258,6 +258,7 @@ test('GAMEPLAY §5c bonus sources match REWARDS, LIMITS and STREAK_CHESTS', () =
         boss_defeated: [R.BOSS_DEFEATED, L.BOSS_MIN_SUBTASKS, L.BOSS_XP_PER_DAY],
         comeback: [R.COMEBACK, L.COMEBACK_AFTER_DAYS],
         party_assist: [R.PARTY_ASSIST, L.PARTY_ASSIST_XP_PER_DAY],
+        estimate_accuracy: [R.ESTIMATE_ACCURACY, L.ESTIMATE_TOLERANCE_PERCENT, L.ESTIMATE_XP_PER_DAY],
         reflection: [R.REFLECTION],
         weekly_goal: [R.WEEKLY_GOAL_BASE, R.WEEKLY_GOAL_PER_TASK, L.WEEKLY_GOAL_MAX_XP]
     };

@@ -36,6 +36,14 @@ function optionalText(value, max, label) {
 
 const listName = (v) => requiredText(v, TEXT_LIMITS.LIST_NAME, 'List name');
 const partyName = (v) => requiredText(v, TEXT_LIMITS.PARTY_NAME, 'Party name');
+/** A task's own length estimate in whole minutes, or null. */
+function estimate(value) {
+    if (value === undefined || value === null || value === '') return ok(null);
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > LIMITS.ESTIMATE_MAX_MINUTES) return fail(`Estimate must be a whole number of minutes from 1 to ${LIMITS.ESTIMATE_MAX_MINUTES}.`);
+    return ok(n);
+}
+
 const reflection = (v) => requiredText(v, LIMITS_REFLECTION_MAX, 'Reflection');
 const itemName = (v) => requiredText(v, TEXT_LIMITS.ITEM_NAME, 'Task name');
 const description = (v) => optionalText(v, TEXT_LIMITS.DESCRIPTION, 'Description');
@@ -129,6 +137,7 @@ module.exports = {
     listName,
     itemName,
     reflection,
+    estimate,
     description,
     category,
     priority,

@@ -40,7 +40,8 @@ async function exportAll(discordId) {
             due_date: isoDate(i.due_date),
             priority: i.priority,
             tags: i.tags,
-            recurrence: i.recurrence
+            recurrence: i.recurrence,
+            estimate_minutes: i.estimate_minutes === undefined ? null : i.estimate_minutes
         });
     }
     return {
@@ -116,7 +117,8 @@ function parseImport(data) {
                     due_date: field(v.dueDate(it.due_date)),
                     priority: field(v.priority(it.priority)),
                     tags: field(v.tags(it.tags)),
-                    recurrence: field(v.recurrence(it.recurrence))
+                    recurrence: field(v.recurrence(it.recurrence)),
+                    estimate_minutes: field(v.estimate(it.estimate_minutes))
                 };
             })
         };
@@ -190,9 +192,9 @@ async function importAll(discordId, data) {
                 // Subtasks are one level deep (the same rule assertValidParent enforces elsewhere).
                 if (parentId !== null && subtaskRefs.has(it.parentRef)) throw errors.validation('Subtasks can only be one level deep.');
                 const [ir] = await conn.query(
-                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, completed_by, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, counts_for_quests, created_by)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-                    [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, it.completed ? user.discord_id : null, position++, it.due_date, it.due_date ? new Date() : null, it.priority, it.tags, it.recurrence, parentId, user.discord_id]
+                    `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, completed_by, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, counts_for_quests, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+                    [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, it.completed ? user.discord_id : null, position++, it.due_date, it.due_date ? new Date() : null, it.priority, it.tags, it.recurrence, it.estimate_minutes, parentId, user.discord_id]
                 );
                 if (it.ref !== null) {
                     idByRef.set(it.ref, ir.insertId);

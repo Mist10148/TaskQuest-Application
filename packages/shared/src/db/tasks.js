@@ -580,7 +580,7 @@ function trustedDueDate(item, now) {
  */
 async function completionContext(conn, item, user, now = new Date()) {
     const today = todayInZone(user.timezone);
-    const dueDate = trustedDueDate(item, now);
+    let dueDate = trustedDueDate(item, now);
     const [[counts]] = await conn.query(
         'SELECT COUNT(*) AS total, COALESCE(SUM(completed = 0), 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
         [item.list_id]
@@ -597,6 +597,16 @@ async function completionContext(conn, item, user, now = new Date()) {
             [user.discord_id, from, to]
         );
         if (Number(high.n) > LIMITS.HIGH_BONUS_PER_DAY) priority = 'MEDIUM';
+    }
+    // Deadlines are the player's own data too (a task can be created with an old or distant date and finished a day later), so for
+    // the two classes that pay for them only the first few early or overdue completions of the day count as early or overdue.
+    if (dueDate && (user.player_class === 'NECROMANCER' || user.player_class === 'RANGER')) {
+        const { from, to } = await dayWindow(conn, user, now);
+        const [[dated]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM items WHERE first_completed_by = ? AND (first_completed_early = 1 OR first_completed_overdue = 1) AND first_completed_at >= ? AND first_completed_at < ?',
+            [user.discord_id, from, to]
+        );
+        if (Number(dated.n) > LIMITS.CLASS_DEADLINE_PER_DAY) dueDate = null;
     }
     // The newer classes read a little more of the world; the queries run only for the class that needs them.
     const extra = {};
@@ -1023,6 +1033,7 @@ const asOwner = {
 };
 
 module.exports = {
+    completionContext,
     asOwner,
     getLists,
     getList,

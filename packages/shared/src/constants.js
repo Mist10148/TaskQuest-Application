@@ -668,6 +668,8 @@ const LIMITS = {
     ESTIMATE_XP_PER_DAY: 30,
     /** HIGH priority is the player's own label: only the first N HIGH completions a day count as HIGH for classes and skills (Vow, Rally, Sniper, Crusade). */
     HIGH_BONUS_PER_DAY: 3,
+    /** Necromancer and Ranger: only the first N early or overdue completions of a day count as early or overdue for the class. */
+    CLASS_DEADLINE_PER_DAY: 8,
     /** LIST_CLEARED pays at most this many lists a day (and each list only once). */
     LIST_CLEARED_PER_DAY: 5,
     /** EARLY_FINISH never pays more than this per task (5 XP per day early). */

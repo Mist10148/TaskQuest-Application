@@ -137,6 +137,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Back-dated due dates could farm the Necromancer and Ranger.** A standing routine that creates tasks with an old or distant due date every day (the 24 hour rule only delays it by a day) paid about 59 XP per 10 XP task to a Necromancer with five souls. Only the first 8 early or overdue completions of a day now count for those two classes (`LIMITS.CLASS_DEADLINE_PER_DAY`).
 - **Quests and the weekly review could be claimed twice after a time zone change.** Claims were keyed by the period's local start date, and a different zone can give the same real week another key. A claim now also checks the time of the last claim of that quest (`claimedSince` in `db/progression.js`).
 - **Blackjack no longer mints lifetime XP.** Wins were credited to lifetime XP (level, prestige, XP achievements, the lifetime board) while losses never took any back, so about 40 hands at a 25% bet could reach the prestige level. Winnings now only change the balance.
 - **Broken documentation links** (`CHANGELOG.md#400` in DEPLOYMENT and KNOWN_ISSUES, a `../SECURITY.md` path in the shared-lists design note).

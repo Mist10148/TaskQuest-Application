@@ -127,7 +127,7 @@ Favourable mix: lists of ten tasks, cleared on every tenth completion. Keeping h
 
 ## Ranger (600 XP)
 
-**Rewards:** finishing a task with a due date early pays 10% of the base plus 3 XP per day early (up to 7 days), due today 25% of the base, overdue nothing; every other action +5. **Suits:** planners who give tasks due dates and finish ahead. **Pitfalls:** the due date must have been set at least 24 hours before, so a date typed just before finishing counts as none; overdue tasks earn nothing from the class; Long Sight, Bullseye and Second Wind only matter for far-ahead, on-the-day and late tasks.
+**Rewards:** finishing a task with a due date early pays 10% of the base plus 3 XP per day early (up to 7 days), due today 25% of the base, overdue nothing; every other action +5. **Suits:** planners who give tasks due dates and finish ahead. **Pitfalls:** the due date must have been set at least 24 hours before, so a date typed just before finishing counts as none; overdue tasks earn nothing from the class; Only your first 8 early or overdue completions of a day count for the class; Long Sight, Bullseye and Second Wind only matter for far-ahead, on-the-day and late tasks.
 
 Favourable mix: every task finished three days early.
 
@@ -139,7 +139,7 @@ Favourable mix: every task finished three days early.
 
 ## Necromancer (600 XP)
 
-**Rewards:** completing an overdue task pays +150% of the base plus 3 XP per day overdue (max 30) and binds a soul (max 5, or 8 with Soul Jar), and every 10th task you complete also binds one; every soul adds +8% of the base to every action. **Suits:** people with a backlog to clear. **Pitfalls:** plain tasks pay the base plus the soul bonus only; the overdue date must be at least 24 hours old; souls never decay. Letting tasks go overdue on purpose is a poor trade, because the days-overdue part of the bonus is capped at 30 XP and every overdue task also lacks the early-finish bonus.
+**Rewards:** completing an overdue task pays +150% of the base plus 3 XP per day overdue (max 30) and binds a soul (max 5, or 8 with Soul Jar), and every 10th task you complete also binds one; every soul adds +8% of the base to every action. **Suits:** people with a backlog to clear. **Pitfalls:** plain tasks pay the base plus the soul bonus only; the overdue date must be at least 24 hours old; souls never decay. Only your first 8 overdue completions of a day count for the class. Letting tasks go overdue on purpose is a poor trade, because the days-overdue part of the bonus is capped at 30 XP and every overdue task also lacks the early-finish bonus.
 
 Favourable mix: every third task is three days overdue.
 

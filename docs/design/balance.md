@@ -32,16 +32,16 @@ Average multiplier on a 10 base XP task, from the simulation described above.
 |---|---|---|---|
 | Default (0) | 1.0 | 1.0 | 1.2 |
 | Hero (500) | 3.5 | 3.5 (every second task HIGH) | 13.6 |
-| Gambler (450) | 3.4 | same | 5.0 |
+| Gambler (450) | 3.4 | same | 5.3 |
 | Assassin (400) | 1.8 | same | 4.4 |
-| Wizard (700) | 1.6 / 2.8 / 4.6 | same | 5.7 / 9.7 / 15.7 |
-| Archer (600) | 3.3 / 3.5 / 3.8 | 3.3 / 3.5 / 3.8 (every second task HIGH) | 7.5 / 7.6 / 7.8 |
+| Wizard (700) | 1.6 / 2.8 / 4.6 | same | 5.9 / 10.1 / 16.4 |
+| Archer (600) | 3.3 / 3.5 / 3.8 | 3.3 / 3.5 / 3.8 (every second task HIGH) | 9.0 / 9.2 / 9.4 |
 | Tank (500) | 1.7 / 2.2 / 2.7 | same | 4.1 / 4.6 / 5.3 |
-| Monk (550) | 2.6 | same | 6.4 |
-| Artisan (650) | 3.0 | 3.5 (lists of 10) | 8.6 |
+| Monk (550) | 2.6 | same | 7.5 |
+| Artisan (650) | 3.0 | 3.5 (lists of 10) | 9.3 |
 | Ranger (600) | 1.5 | 2.2 (3 days early) | 4.0 |
-| Necromancer (600) | 1.4 | 2.4 (every third task overdue) | 4.5 |
-| Paladin (600) | 1.8 | 2.5 (every second task HIGH) | 4.6 |
+| Necromancer (600) | 1.4 | 2.4 (every third task overdue) | 5.1 |
+| Paladin (600) | 1.8 | 2.5 (every second task HIGH) | 4.7 |
 
 Assumptions behind it:
 

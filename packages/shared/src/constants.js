@@ -123,7 +123,10 @@ const SKILL_TREES = {
             default_streak_shield: { name: 'Streak Shield', emoji: '🛡️', description: 'Your daily streak survives one missed day (a claim up to 2 days after the last one still continues it)', maxLevel: 1, cost: 100, requires: 'default_daily_boost' },
             default_momentum: { name: 'Momentum', emoji: '🔥', description: '+0.5% XP per level for each day of your current daily streak (counted up to 10 days, so +15% at level 3)', maxLevel: 3, cost: 70, requires: 'default_xp_boost' },
             default_freeze_cache: { name: 'Freeze Cache', emoji: '🧊', description: 'Hold 5 streak freezes instead of 3, and each costs 120 XP instead of 150', maxLevel: 1, cost: 120, requires: 'default_streak_shield' },
-            default_daily_surprise: { name: 'Daily Surprise', emoji: '🎁', description: 'Your daily reward has a 15% chance to add +50 XP', maxLevel: 1, cost: 140, requires: 'default_freeze_cache' }
+            default_daily_surprise: { name: 'Daily Surprise', emoji: '🎁', description: 'Your daily reward has a 15% chance to add +50 XP', maxLevel: 1, cost: 140, requires: 'default_freeze_cache' },
+            default_scholar: { name: 'Scholar', emoji: '🎓', description: '+15% XP on the first task you complete each day', maxLevel: 1, cost: 90, requires: 'default_xp_boost' },
+            default_nightshift: { name: 'Night Shift', emoji: '🌃', description: '+5% XP per level on actions between 21:00 and 05:00 (your time)', maxLevel: 2, cost: 80, requires: 'default_scholar' },
+            default_tidymind: { name: 'Tidy Mind', emoji: '🧹', description: '+8 XP per level when your completion clears a list', maxLevel: 2, cost: 90, requires: 'default_momentum' }
         }
     },
     HERO: {
@@ -136,7 +139,8 @@ const SKILL_TREES = {
             hero_champion: { name: 'Champion', emoji: '👑', description: '+50% XP while your level is a multiple of 5 (Hero)', maxLevel: 1, cost: 200, requires: 'hero_inspire', classOnly: true },
             hero_legend: { name: 'Legendary', emoji: '🏆', description: '+15% XP on every action (Hero)', maxLevel: 1, cost: 300, requires: 'hero_champion', classOnly: true },
             hero_oath: { name: 'Oath', emoji: '🛡️', description: 'Hero bonus becomes min(25 + level, 50), still capped at 3× the base reward (Hero)', maxLevel: 1, cost: 250, requires: 'hero_legend' },
-            hero_rally: { name: 'Rally', emoji: '📣', description: '+15 flat XP when you complete a HIGH priority task', maxLevel: 1, cost: 220, requires: 'hero_oath' }
+            hero_rally: { name: 'Rally', emoji: '📣', description: '+15 flat XP when you complete a HIGH priority task', maxLevel: 1, cost: 220, requires: 'hero_oath' },
+            hero_laststand: { name: 'Last Stand', emoji: '🚩', description: '+20 flat XP when your completion clears a list', maxLevel: 1, cost: 260, requires: 'hero_rally' }
         }
     },
     GAMBLER: {
@@ -149,7 +153,8 @@ const SKILL_TREES = {
             gambler_safety: { name: 'Safety Net', emoji: '🪢', description: 'Gambler bad-luck losses are 25% smaller per level', maxLevel: 2, cost: 150, requires: 'gambler_double' },
             gambler_jackpot: { name: 'Jackpot', emoji: '💎', description: '1% chance for 10× XP on an action', maxLevel: 1, cost: 250, requires: 'gambler_safety' },
             gambler_insurance: { name: 'Insurance', emoji: '🎟️', description: 'Bad luck can never cut a reward below 60% of the base XP (Gambler)', maxLevel: 1, cost: 200, requires: 'gambler_jackpot' },
-            gambler_hothand: { name: 'Hot Hand', emoji: '🔁', description: 'After 3 lucky rolls in a row the next roll cannot be bad luck (Gambler)', maxLevel: 1, cost: 230, requires: 'gambler_insurance' }
+            gambler_hothand: { name: 'Hot Hand', emoji: '🔁', description: 'After 3 lucky rolls in a row the next roll cannot be bad luck (Gambler)', maxLevel: 1, cost: 230, requires: 'gambler_insurance' },
+            gambler_loaded: { name: 'Loaded Dice', emoji: '🎯', description: 'Lucky rolls never roll below a quarter of the range (Gambler)', maxLevel: 1, cost: 260, requires: 'gambler_hothand' }
         }
     },
     ASSASSIN: {
@@ -162,7 +167,8 @@ const SKILL_TREES = {
             assassin_shadow: { name: 'Shadow Step', emoji: '🌑', description: 'Critical hits grant +100% XP instead of +50%', maxLevel: 1, cost: 180, requires: 'assassin_critical' },
             assassin_execute: { name: 'Execute', emoji: '☠️', description: '+100% XP while at 10/10 Assassin stacks', maxLevel: 1, cost: 280, requires: 'assassin_shadow' },
             assassin_nightowl: { name: 'Night Owl', emoji: '🌙', description: 'Your Assassin streak survives 72 hours of inactivity instead of 48 (Assassin)', maxLevel: 1, cost: 200, requires: 'assassin_execute' },
-            assassin_bleed: { name: 'Bleed', emoji: '🩸', description: 'After a critical hit your next 3 actions get +20% XP', maxLevel: 1, cost: 240, requires: 'assassin_nightowl' }
+            assassin_bleed: { name: 'Bleed', emoji: '🩸', description: 'After a critical hit your next 3 actions get +20% XP', maxLevel: 1, cost: 240, requires: 'assassin_nightowl' },
+            assassin_vanish: { name: 'Vanish', emoji: '🌫️', description: 'When the streak decays it halves instead of resetting (Assassin)', maxLevel: 1, cost: 260, requires: 'assassin_bleed' }
         }
     },
     WIZARD: {
@@ -175,7 +181,8 @@ const SKILL_TREES = {
             wizard_focus: { name: 'Focus', emoji: '🧘', description: '+10% XP per level', maxLevel: 2, cost: 200, requires: 'wizard_combo' },
             wizard_mastery: { name: 'Arcane Mastery', emoji: '🌟', description: 'Wizard Burst grants 3× Wisdom instead of 2×', maxLevel: 1, cost: 350, requires: 'wizard_focus' },
             wizard_overcharge: { name: 'Overcharge', emoji: '🕯️', description: 'After a Burst the Wizard cycle restarts at 2 charges instead of 0 (Wizard)', maxLevel: 1, cost: 300, requires: 'wizard_mastery' },
-            wizard_tome: { name: 'Tome', emoji: '📚', description: 'Wisdom grows by 1 for every 20 tasks you have ever completed (Wizard)', maxLevel: 1, cost: 260, requires: 'wizard_overcharge' }
+            wizard_tome: { name: 'Tome', emoji: '📚', description: 'Wisdom grows by 1 for every 20 tasks you have ever completed (Wizard)', maxLevel: 1, cost: 260, requires: 'wizard_overcharge' },
+            wizard_cantrip: { name: 'Cantrip', emoji: '✨', description: 'The 2nd and 4th action of a cycle add a quarter of your Wisdom (Wizard)', maxLevel: 1, cost: 280, requires: 'wizard_tome' }
         }
     },
     ARCHER: {
@@ -188,7 +195,8 @@ const SKILL_TREES = {
             archer_piercing: { name: 'Piercing Shot', emoji: '💫', description: 'Archer misses no longer reduce your streak', maxLevel: 1, cost: 190, requires: 'archer_multishot' },
             archer_sniper: { name: 'Sniper', emoji: '🦅', description: 'Completing a HIGH-priority task (its own priority, else the priority of its list) is always a headshot (Archer)', maxLevel: 1, cost: 300, requires: 'archer_piercing' },
             archer_quiver: { name: 'Quiver', emoji: '🪶', description: '+3% Archer hit chance per level (still capped at 97%)', maxLevel: 2, cost: 150, requires: 'archer_sniper' },
-            archer_eagle: { name: 'Eagle Eye', emoji: '🦉', description: 'Archer headshot chance ×1.5', maxLevel: 1, cost: 260, requires: 'archer_quiver' }
+            archer_eagle: { name: 'Eagle Eye', emoji: '🦉', description: 'Archer headshot chance ×1.5', maxLevel: 1, cost: 260, requires: 'archer_quiver' },
+            archer_ricochet: { name: 'Ricochet', emoji: '🪃', description: 'Every hit adds +1 XP per streak step (Archer)', maxLevel: 1, cost: 280, requires: 'archer_eagle' }
         }
     },
     TANK: {
@@ -201,7 +209,8 @@ const SKILL_TREES = {
             tank_revenge: { name: 'Revenge', emoji: '⚡', description: '+10% XP per level while at max shield stacks', maxLevel: 2, cost: 200, requires: 'tank_absorb' },
             tank_unstoppable: { name: 'Unstoppable', emoji: '🚀', description: 'Your daily streak never resets; a missed day only pauses it', maxLevel: 1, cost: 320, requires: 'tank_revenge' },
             tank_bulwark: { name: 'Bulwark', emoji: '🏰', description: 'Each action adds 2 Tank shield stacks instead of 1 (Tank)', maxLevel: 1, cost: 240, requires: 'tank_unstoppable' },
-            tank_anchor: { name: 'Anchor', emoji: '⚓', description: '+8 flat XP when you complete a recurring task', maxLevel: 1, cost: 260, requires: 'tank_bulwark' }
+            tank_anchor: { name: 'Anchor', emoji: '⚓', description: '+8 flat XP when you complete a recurring task', maxLevel: 1, cost: 260, requires: 'tank_bulwark' },
+            tank_taunt: { name: 'Taunt', emoji: '📢', description: 'Completing a HIGH priority task adds one extra shield stack (Tank)', maxLevel: 1, cost: 280, requires: 'tank_anchor' }
         }
     },
     MONK: {
@@ -212,7 +221,8 @@ const SKILL_TREES = {
             monk_breath: { name: 'Steady Breath', emoji: '🌬️', description: '+0.5 XP per Rhythm day on every action, per level (Monk)', maxLevel: 3, cost: 120, requires: null },
             monk_focus: { name: 'Inner Focus', emoji: '🧠', description: 'Monk bonus +15% per level (Monk)', maxLevel: 2, cost: 180, requires: 'monk_breath' },
             monk_discipline: { name: 'Discipline', emoji: '🪷', description: 'Maximum Rhythm +2 (14 → 16) (Monk)', maxLevel: 1, cost: 260, requires: 'monk_focus' },
-            monk_serenity: { name: 'Serenity', emoji: '☯️', description: 'Rhythm survives one missed day (Monk)', maxLevel: 1, cost: 340, requires: 'monk_discipline' }
+            monk_serenity: { name: 'Serenity', emoji: '☯️', description: 'Rhythm survives one missed day (Monk)', maxLevel: 1, cost: 340, requires: 'monk_discipline' },
+            monk_meditation: { name: 'Meditation', emoji: '🕯️', description: 'The first action of each new day pays double the Monk bonus (Monk)', maxLevel: 1, cost: 300, requires: 'monk_serenity' }
         }
     },
     ARTISAN: {
@@ -223,7 +233,8 @@ const SKILL_TREES = {
             artisan_toolkit: { name: 'Toolkit', emoji: '🔧', description: '+0.5 XP per progress on every action, per level (Artisan)', maxLevel: 3, cost: 130, requires: null },
             artisan_blueprint: { name: 'Blueprint', emoji: '📐', description: 'Maximum progress +3 per level (10 → 16) (Artisan)', maxLevel: 2, cost: 190, requires: 'artisan_toolkit' },
             artisan_assembly: { name: 'Assembly Line', emoji: '🏭', description: 'Each action adds 2 progress instead of 1 (Artisan)', maxLevel: 1, cost: 280, requires: 'artisan_blueprint' },
-            artisan_masterwork: { name: 'Masterwork', emoji: '🏆', description: 'Completing a project pays +50% more (Artisan)', maxLevel: 1, cost: 360, requires: 'artisan_assembly' }
+            artisan_masterwork: { name: 'Masterwork', emoji: '🏆', description: 'Completing a project pays +50% more (Artisan)', maxLevel: 1, cost: 360, requires: 'artisan_assembly' },
+            artisan_prototype: { name: 'Prototype', emoji: '🧩', description: 'A finished project keeps 75% of its progress instead of 50% (Artisan)', maxLevel: 1, cost: 320, requires: 'artisan_masterwork' }
         }
     },
     RANGER: {
@@ -234,7 +245,8 @@ const SKILL_TREES = {
             ranger_scout: { name: 'Scout', emoji: '🔭', description: '+2 XP per day early on early completions, per level (Ranger)', maxLevel: 3, cost: 130, requires: null },
             ranger_longsight: { name: 'Long Sight', emoji: '🗺️', description: 'The early bonus counts up to 10 days instead of 7 (Ranger)', maxLevel: 1, cost: 220, requires: 'ranger_scout' },
             ranger_bullseye: { name: 'Bullseye', emoji: '🎯', description: '+10 XP when you complete a task on its due date (Ranger)', maxLevel: 1, cost: 280, requires: 'ranger_longsight' },
-            ranger_secondwind: { name: 'Second Wind', emoji: '🌅', description: 'Overdue completions pay half the due-today bonus (Ranger)', maxLevel: 1, cost: 330, requires: 'ranger_bullseye' }
+            ranger_secondwind: { name: 'Second Wind', emoji: '🌅', description: 'Overdue completions pay half the due-today bonus (Ranger)', maxLevel: 1, cost: 330, requires: 'ranger_bullseye' },
+            ranger_tracker: { name: 'Tracker', emoji: '👣', description: 'Actions that are not early, on time or late pay +4 XP more (Ranger)', maxLevel: 1, cost: 240, requires: 'ranger_secondwind' }
         }
     },
     NECROMANCER: {
@@ -245,7 +257,8 @@ const SKILL_TREES = {
             necro_siphon: { name: 'Siphon', emoji: '🫧', description: 'Each soul adds +2% more XP per level (Necromancer)', maxLevel: 3, cost: 130, requires: null },
             necro_jar: { name: 'Soul Jar', emoji: '🏺', description: 'Hold up to 8 souls instead of 5 (Necromancer)', maxLevel: 1, cost: 210, requires: 'necro_siphon' },
             necro_ritual: { name: 'Dark Ritual', emoji: '🕯️', description: 'Reviving pays +50% more (Necromancer)', maxLevel: 1, cost: 280, requires: 'necro_jar' },
-            necro_lich: { name: 'Lichdom', emoji: '☠️', description: 'Reviving also pays +3 XP per soul you hold (Necromancer)', maxLevel: 1, cost: 350, requires: 'necro_ritual' }
+            necro_lich: { name: 'Lichdom', emoji: '☠️', description: 'Reviving also pays +3 XP per soul you hold (Necromancer)', maxLevel: 1, cost: 350, requires: 'necro_ritual' },
+            necro_souleater: { name: 'Soul Eater', emoji: '👻', description: 'A revive pays 25% more while you hold 3 or more souls (Necromancer)', maxLevel: 1, cost: 320, requires: 'necro_lich' }
         }
     },
     PALADIN: {
@@ -256,7 +269,8 @@ const SKILL_TREES = {
             paladin_aura: { name: 'Holy Aura', emoji: '✨', description: '+2 XP on every action per level (Paladin)', maxLevel: 3, cost: 140, requires: null },
             paladin_smite: { name: 'Smite', emoji: '⚔️', description: 'The HIGH priority Vow bonus is +25% larger per level (Paladin)', maxLevel: 2, cost: 210, requires: 'paladin_aura' },
             paladin_crusade: { name: 'Crusade', emoji: '📯', description: '+20% XP when you complete a HIGH priority task (Paladin)', maxLevel: 1, cost: 290, requires: 'paladin_smite' },
-            paladin_sanctuary: { name: 'Sanctuary', emoji: '🏛️', description: 'Your daily streak survives two missed days (a claim up to 3 days after the last one) (Paladin)', maxLevel: 1, cost: 350, requires: 'paladin_crusade' }
+            paladin_sanctuary: { name: 'Sanctuary', emoji: '🏛️', description: 'Your daily streak survives two missed days (a claim up to 3 days after the last one) (Paladin)', maxLevel: 1, cost: 350, requires: 'paladin_crusade' },
+            paladin_aegis: { name: 'Aegis', emoji: '🔰', description: 'The +8 on non-HIGH actions is 50% larger (Paladin)', maxLevel: 1, cost: 300, requires: 'paladin_sanctuary' }
         }
     }
 };
@@ -423,17 +437,17 @@ const STREAK_FREEZE_CACHE = { COST: 120, MAX: 5 };
  * tables them. Percentages are plain numbers (20 = 20%).
  */
 const CLASS_RULES = {
-    HERO: { FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15, CHAMPION_MULTIPLIER: 1.5, LEGEND_PERCENT: 15 },
-    GAMBLER: { BONUS_BASE_MULTIPLE: 2, BONUS_FLAT: 40, LOSS_CHANCE: 0.2, MIN_LOSS_CHANCE: 0.05, INSURANCE_FLOOR: 0.6, HOT_HAND_STREAK: 3 },
-    ASSASSIN: { DECAY_HOURS: 48, NIGHT_OWL_DECAY_HOURS: 72, STACK_PERCENT: 8, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
-    WIZARD: { WISDOM_PER_LEVEL: 2, OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
-    ARCHER: { QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97, STREAK_PERCENT: 6, HIT_FLAT: 2, HEADSHOT_BASE_MULTIPLE: 1.5, HEADSHOT_PER_STREAK: 2, PERFECT_CHANCE: 0.03, PERFECT_BASE_MULTIPLE: 3, PERFECT_PER_STREAK: 6 },
-    TANK: { CAP_MAX: 15, CAP_BASE: 5, CAP_LEVELS_PER_STACK: 3, STACK_PERCENT: 7, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
-    PALADIN: { HIGH_FLAT: 10, OTHER_FLAT: 8, AURA_FLAT: 3, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
-    NECROMANCER: { MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 8, SIPHON_PERCENT: 2, HARVEST_EVERY: 10, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
-    RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 3, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 5, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
-    ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 6, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 0.5, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
-    MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 }
+    HERO: { LAST_STAND_XP: 20, FLAT: 25, MAX_BASE_MULTIPLE: 3, OATH_CAP: 50, RALLY_XP: 15, CHAMPION_MULTIPLIER: 1.5, LEGEND_PERCENT: 15 },
+    GAMBLER: { BONUS_BASE_MULTIPLE: 2, BONUS_FLAT: 40, LOADED_FLOOR: 0.25, LOSS_CHANCE: 0.2, MIN_LOSS_CHANCE: 0.05, INSURANCE_FLOOR: 0.6, HOT_HAND_STREAK: 3 },
+    ASSASSIN: { VANISH_KEEP_PERCENT: 50, DECAY_HOURS: 48, NIGHT_OWL_DECAY_HOURS: 72, STACK_PERCENT: 8, MAX_STACKS: 10, BLEED_ACTIONS: 3, BLEED_BONUS_PERCENT: 20 },
+    WIZARD: { CANTRIP_PERCENT: 25, WISDOM_PER_LEVEL: 2, OVERCHARGE_START: 2, TOME_TASKS_PER_WISDOM: 20 },
+    ARCHER: { RICOCHET_PER_STREAK: 1, QUIVER_HIT_PERCENT: 3, EAGLE_HEADSHOT_MULTIPLIER: 1.5, MAX_HIT_CHANCE: 97, STREAK_PERCENT: 6, HIT_FLAT: 2, HEADSHOT_BASE_MULTIPLE: 1.5, HEADSHOT_PER_STREAK: 2, PERFECT_CHANCE: 0.03, PERFECT_BASE_MULTIPLE: 3, PERFECT_PER_STREAK: 6 },
+    TANK: { TAUNT_STACKS: 1, CAP_MAX: 15, CAP_BASE: 5, CAP_LEVELS_PER_STACK: 3, STACK_PERCENT: 7, BULWARK_STACKS: 2, ANCHOR_XP: 8 },
+    PALADIN: { AEGIS_PERCENT: 50, HIGH_FLAT: 10, OTHER_FLAT: 8, AURA_FLAT: 3, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
+    NECROMANCER: { SOUL_EATER_PERCENT: 25, SOUL_EATER_SOULS: 3, MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 8, SIPHON_PERCENT: 2, HARVEST_EVERY: 10, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
+    RANGER: { TRACKER_FLAT: 4, MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 3, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 5, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
+    ARTISAN: { PROTOTYPE_KEEP_PERCENT: 75, MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 6, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 0.5, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
+    MONK: { MEDITATION_MULTIPLIER: 2, MAX_RHYTHM: 14, PERCENT_PER_DAY: 2, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 0.5, FOCUS_PERCENT: 15, DISCIPLINE_CAP: 2 }
 };
 
 /**
@@ -444,6 +458,11 @@ const SMALL_ACTION_CAP = { ACTIONS: ['item_add', 'list_create'], MAX_MULTIPLE: 4
 
 /** Numbers behind the default-tree skills. */
 const SKILL_RULES = {
+    SCHOLAR_PERCENT: 15,
+    NIGHT_SHIFT_PERCENT: 5,
+    NIGHT_SHIFT_FROM: 21,
+    NIGHT_SHIFT_UNTIL: 5,
+    TIDY_MIND_XP: 8,
     MOMENTUM_PERCENT_PER_DAY: 0.5,
     MOMENTUM_MAX_DAYS: 10,
     DAILY_SURPRISE_CHANCE: 0.15,

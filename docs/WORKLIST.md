@@ -23,8 +23,8 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 - [x] P2.3 Docs tables regenerated from the sim
 
 ## P3 New skills for existing classes
-- [ ] P3.1 One new skill per existing class tree
-- [ ] P3.2 Three new Default skills
+- [x] P3.1 One new skill per existing class tree
+- [x] P3.2 Three new Default skills
 
 ## P4 New classes
 - [ ] P4.0 Migration and shared plumbing for new classes

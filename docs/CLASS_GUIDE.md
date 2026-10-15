@@ -42,7 +42,7 @@ Favourable mix for the Hero: every second task is HIGH priority (Rally).
 |---|---|---|---|---|
 | No skills | - | 0 | 35 / 35 / 35 | 35 / 35 / 35 |
 | Starter | Valor ×3, Inspire ×2 | 600 | 70 / 70 / 70 | 70 / 70 / 70 |
-| Full tree | Valor ×3, Inspire ×2, Champion, Legendary, Oath, Rally | 1570 | 123 / 123 / 123 | 136 / 136 / 136 |
+| Full tree | Valor ×3, Inspire ×2, Champion, Legendary, Oath, Rally, Last Stand | 1830 | 123 / 123 / 123 | 136 / 136 / 136 |
 
 At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 123 and 136: the Champion skill adds 50% on levels 5, 10, 15 and so on.
 
@@ -54,7 +54,7 @@ At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 
 |---|---|---|---|
 | No skills | - | 0 | 34 / 34 / 34 |
 | Starter | Lucky Streak ×3, Double Down ×2 | 480 | 46 / 46 / 46 |
-| Full tree | Lucky Streak ×3, Double Down ×2, Safety Net ×2, Jackpot, Insurance, Hot Hand | 1460 | 50 / 50 / 50 |
+| Full tree | Lucky Streak ×3, Double Down ×2, Safety Net ×2, Jackpot, Insurance, Hot Hand, Loaded Dice | 1720 | 53 / 53 / 53 |
 
 ## Assassin (400 XP)
 
@@ -64,7 +64,7 @@ At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 
 |---|---|---|---|
 | No skills | - | 0 | 18 / 18 / 18 |
 | Starter | Swift Strike ×3, Critical Hit ×2 | 530 | 20 / 20 / 20 |
-| Full tree | Swift Strike ×3, Critical Hit ×2, Shadow Step, Execute, Night Owl, Bleed | 1430 | 44 / 44 / 44 |
+| Full tree | Swift Strike ×3, Critical Hit ×2, Shadow Step, Execute, Night Owl, Bleed, Vanish | 1690 | 44 / 44 / 44 |
 
 ## Wizard (700 XP)
 
@@ -74,7 +74,7 @@ At a level that is not a multiple of 5 the full tree gives 82 and 91 instead of 
 |---|---|---|---|
 | No skills | - | 0 | 16 / 28 / 46 |
 | Starter | Arcane Study ×3, Spell Combo ×2 | 600 | 27 / 43 / 67 |
-| Full tree | Arcane Study ×3, Spell Combo ×2, Focus ×2, Arcane Mastery, Overcharge, Tome | 1910 | 57 / 97 / 157 |
+| Full tree | Arcane Study ×3, Spell Combo ×2, Focus ×2, Arcane Mastery, Overcharge, Tome, Cantrip | 2190 | 59 / 101 / 164 |
 
 ## Archer (600 XP)
 
@@ -86,7 +86,7 @@ Favourable mix: every second task is HIGH priority (Sniper makes those always hi
 |---|---|---|---|---|
 | No skills | - | 0 | 33 / 35 / 38 | 33 / 35 / 38 |
 | Starter | Steady Aim ×3, Multishot ×2 | 535 | 45 / 47 / 51 | 45 / 47 / 51 |
-| Full tree | Steady Aim ×3, Multishot ×2, Piercing Shot, Sniper, Quiver ×2, Eagle Eye | 1585 | 51 / 53 / 57 | 75 / 76 / 78 |
+| Full tree | Steady Aim ×3, Multishot ×2, Piercing Shot, Sniper, Quiver ×2, Eagle Eye, Ricochet | 1865 | 65 / 68 / 72 | 90 / 92 / 94 |
 
 ## Tank (500 XP)
 
@@ -96,7 +96,7 @@ Favourable mix: every second task is HIGH priority (Sniper makes those always hi
 |---|---|---|---|
 | No skills | - | 0 | 17 / 22 / 27 |
 | Starter | Fortify ×3, Absorb ×2 | 500 | 37 / 41 / 47 |
-| Full tree | Fortify ×3, Absorb ×2, Revenge ×2, Unstoppable, Bulwark, Anchor | 1720 | 41 / 46 / 53 |
+| Full tree | Fortify ×3, Absorb ×2, Revenge ×2, Unstoppable, Bulwark, Anchor, Taunt | 2000 | 41 / 46 / 53 |
 
 ## Monk (550 XP)
 
@@ -106,7 +106,7 @@ Favourable mix: every second task is HIGH priority (Sniper makes those always hi
 |---|---|---|---|
 | No skills | - | 0 | 26 / 26 / 26 |
 | Starter | Steady Breath ×3 | 360 | 47 / 47 / 47 |
-| Full tree | Steady Breath ×3, Inner Focus ×2, Discipline, Serenity | 1320 | 64 / 64 / 64 |
+| Full tree | Steady Breath ×3, Inner Focus ×2, Discipline, Serenity, Meditation | 1620 | 75 / 75 / 75 |
 
 ## Artisan (650 XP)
 
@@ -118,7 +118,7 @@ Favourable mix: lists of ten tasks, cleared on every tenth completion. Keeping h
 |---|---|---|---|---|
 | No skills | - | 0 | 30 / 30 / 30 | 35 / 35 / 35 |
 | Starter | Toolkit ×3 | 390 | 45 / 45 / 45 | 45 / 45 / 45 |
-| Full tree | Toolkit ×3, Blueprint ×2, Assembly Line, Masterwork | 1410 | 66 / 66 / 66 | 86 / 86 / 86 |
+| Full tree | Toolkit ×3, Blueprint ×2, Assembly Line, Masterwork, Prototype | 1730 | 66 / 66 / 66 | 93 / 93 / 93 |
 
 ## Ranger (600 XP)
 
@@ -130,7 +130,7 @@ Favourable mix: every task finished three days early.
 |---|---|---|---|---|
 | No skills | - | 0 | 15 / 15 / 15 | 22 / 22 / 22 |
 | Starter | Scout ×3 | 390 | 15 / 15 / 15 | 40 / 40 / 40 |
-| Full tree | Scout ×3, Long Sight, Bullseye, Second Wind | 1220 | 15 / 15 / 15 | 40 / 40 / 40 |
+| Full tree | Scout ×3, Long Sight, Bullseye, Second Wind, Tracker | 1460 | 19 / 19 / 19 | 40 / 40 / 40 |
 
 ## Necromancer (600 XP)
 
@@ -142,7 +142,7 @@ Favourable mix: every third task is three days overdue.
 |---|---|---|---|---|
 | No skills | - | 0 | 14 / 14 / 14 | 24 / 24 / 24 |
 | Starter | Siphon ×3 | 390 | 17 / 17 / 17 | 27 / 27 / 27 |
-| Full tree | Siphon ×3, Soul Jar, Dark Ritual, Lichdom | 1230 | 21 / 21 / 21 | 45 / 45 / 45 |
+| Full tree | Siphon ×3, Soul Jar, Dark Ritual, Lichdom, Soul Eater | 1550 | 21 / 21 / 21 | 51 / 51 / 51 |
 
 ## Paladin (600 XP)
 
@@ -154,7 +154,7 @@ Favourable mix: every second task is HIGH priority.
 |---|---|---|---|---|
 | No skills | - | 0 | 18 / 18 / 18 | 25 / 25 / 25 |
 | Starter | Holy Aura ×3 | 420 | 27 / 27 / 27 | 34 / 34 / 34 |
-| Full tree | Holy Aura ×3, Smite ×2, Crusade, Sanctuary | 1480 | 27 / 27 / 27 | 46 / 46 / 46 |
+| Full tree | Holy Aura ×3, Smite ×2, Crusade, Sanctuary, Aegis | 1780 | 31 / 31 / 31 | 47 / 47 / 47 |
 
 ## Changing your mind
 

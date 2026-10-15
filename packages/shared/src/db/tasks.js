@@ -604,6 +604,7 @@ async function completionContext(conn, item, user, now = new Date()) {
         // The stored date whatever its age: habit streaks follow the schedule, not the bonuses.
         scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null,
         overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
+        firstOfDay: (await countToday(conn, user, 'item_complete', now)) === 0,
         listCleared: !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0 && !(marked && marked.cleared_at)
     };
 }

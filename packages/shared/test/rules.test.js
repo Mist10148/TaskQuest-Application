@@ -32,7 +32,7 @@ test('every skill exists in exactly one tree and prerequisites resolve', () => {
             assert.ok(skill.description.length > 0);
         }
     }
-    assert.equal(seen.size, 62);
+    assert.equal(seen.size, 76);
     assert.equal(shared.findSkill('__proto__'), null);
 });
 
@@ -560,10 +560,10 @@ test('Monk Rhythm: consecutive UTC days build it, a missed day resets it, bonus 
     }
 });
 
-test('Monk tree: four skills in a chain, each with an implemented effect', () => {
+test('Monk tree: five skills in a chain, each with an implemented effect', () => {
     const ids = Object.keys(shared.SKILL_TREES.MONK.skills);
-    assert.deepEqual(ids, ['monk_breath', 'monk_focus', 'monk_discipline', 'monk_serenity']);
-    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'monk_breath', 'monk_focus', 'monk_discipline']);
+    assert.deepEqual(ids, ['monk_breath', 'monk_focus', 'monk_discipline', 'monk_serenity', 'monk_meditation']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'monk_breath', 'monk_focus', 'monk_discipline', 'monk_serenity']);
     assert.equal(shared.CLASSES.MONK.cost, 550);
 });
 
@@ -597,10 +597,10 @@ test('Artisan Project: +1 progress and +2 XP per progress per action; a cleared 
     assert.equal(shared.calculateClassXP(artisan(4), 10, { context: done }).bonusInfo.type, 'ARTISAN_CLEAR');
 });
 
-test('Artisan tree: four chained skills', () => {
+test('Artisan tree: five chained skills', () => {
     const ids = Object.keys(shared.SKILL_TREES.ARTISAN.skills);
-    assert.deepEqual(ids, ['artisan_toolkit', 'artisan_blueprint', 'artisan_assembly', 'artisan_masterwork']);
-    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'artisan_toolkit', 'artisan_blueprint', 'artisan_assembly']);
+    assert.deepEqual(ids, ['artisan_toolkit', 'artisan_blueprint', 'artisan_assembly', 'artisan_masterwork', 'artisan_prototype']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'artisan_toolkit', 'artisan_blueprint', 'artisan_assembly', 'artisan_masterwork']);
     assert.equal(shared.CLASSES.ARTISAN.cost, 650);
 });
 
@@ -641,10 +641,10 @@ test('Ranger Deadline Hunter: early, on the day, overdue and non-deadline action
     assert.equal(viaNow.bonusInfo.classBonus, 2 + 6);
 });
 
-test('Ranger tree: four chained skills and no counter column needed', () => {
+test('Ranger tree: five chained skills and no counter column needed', () => {
     const ids = Object.keys(shared.SKILL_TREES.RANGER.skills);
-    assert.deepEqual(ids, ['ranger_scout', 'ranger_longsight', 'ranger_bullseye', 'ranger_secondwind']);
-    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'ranger_scout', 'ranger_longsight', 'ranger_bullseye']);
+    assert.deepEqual(ids, ['ranger_scout', 'ranger_longsight', 'ranger_bullseye', 'ranger_secondwind', 'ranger_tracker']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'ranger_scout', 'ranger_longsight', 'ranger_bullseye', 'ranger_secondwind']);
     assert.equal(shared.CLASSES.RANGER.cost, 600);
     assert.deepEqual(shared.calculateClassXP(user({ player_class: 'RANGER' }), 10).userUpdates, {});
 });
@@ -689,10 +689,10 @@ test('Necromancer Revive: overdue completions pay and bind souls; souls boost ev
     assert.equal(shared.calculateClassXP(necro(0), 10, { context: plain }).bonusInfo.type, 'NECROMANCER');
 });
 
-test('Necromancer tree: four chained skills', () => {
+test('Necromancer tree: five chained skills', () => {
     const ids = Object.keys(shared.SKILL_TREES.NECROMANCER.skills);
-    assert.deepEqual(ids, ['necro_siphon', 'necro_jar', 'necro_ritual', 'necro_lich']);
-    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'necro_siphon', 'necro_jar', 'necro_ritual']);
+    assert.deepEqual(ids, ['necro_siphon', 'necro_jar', 'necro_ritual', 'necro_lich', 'necro_souleater']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'necro_siphon', 'necro_jar', 'necro_ritual', 'necro_lich']);
     assert.equal(shared.CLASSES.NECROMANCER.cost, 600);
 });
 
@@ -758,10 +758,10 @@ test('Paladin passive and Sanctuary: one missed day is forgiven for free, two wi
     assert.equal(claim(2, 'PALADIN', [], { streak_freezes: 1 }).freezeUsed, false, 'no freeze is spent while the window holds');
 });
 
-test('Paladin tree: four chained skills', () => {
+test('Paladin tree: five chained skills', () => {
     const ids = Object.keys(shared.SKILL_TREES.PALADIN.skills);
-    assert.deepEqual(ids, ['paladin_aura', 'paladin_smite', 'paladin_crusade', 'paladin_sanctuary']);
-    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'paladin_aura', 'paladin_smite', 'paladin_crusade']);
+    assert.deepEqual(ids, ['paladin_aura', 'paladin_smite', 'paladin_crusade', 'paladin_sanctuary', 'paladin_aegis']);
+    assert.deepEqual(ids.map((id) => shared.findSkill(id).skill.requires), [null, 'paladin_aura', 'paladin_smite', 'paladin_crusade', 'paladin_sanctuary']);
     assert.equal(shared.CLASSES.PALADIN.cost, 600);
 });
 

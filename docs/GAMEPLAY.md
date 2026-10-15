@@ -104,6 +104,9 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🔥 Momentum | 3 | 70 | +0.5% XP for each day of your current daily streak, counting up to 10 days (max +15% at level 3) | Quick Learner |
 | 🧊 Freeze Cache | 1 | 120 | Hold 5 streak freezes instead of 3, and each costs 120 XP instead of 150 | Streak Shield |
 | 🎁 Daily Surprise | 1 | 140 | The daily reward has a 15% chance to add +50 XP | Freeze Cache |
+| 🎓 Scholar | 1 | 90 | +15% XP on the first task you complete each day | Quick Learner |
+| 🌃 Night Shift | 2 | 80 | +5% XP per level on actions between 21:00 and 05:00 (your time) | Scholar |
+| 🧹 Tidy Mind | 2 | 90 | +8 XP per level when your completion clears a list | Momentum |
 
 ### ⚔️ Hero
 
@@ -115,6 +118,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🏆 Legendary | 1 | 300 | +15% XP *(class)* | Champion |
 | 🛡️ Oath | 1 | 250 | Hero bonus becomes min(25 + level, 50), still capped at 3 × base *(class)* | Legendary |
 | 📣 Rally | 1 | 220 | +15 flat XP when you complete a HIGH priority task | Oath |
+| 🚩 Last Stand | 1 | 260 | +20 flat XP when your completion clears a list | Rally |
 
 ### 🎲 Gambler
 
@@ -126,6 +130,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 💎 Jackpot | 1 | 250 | 1% chance for ×10 XP | Safety Net |
 | 🎟️ Insurance | 1 | 200 | Bad luck can never cut a reward below 60% of the base XP *(class)* | Jackpot |
 | 🔁 Hot Hand | 1 | 230 | After 3 lucky rolls in a row the next roll cannot be bad luck, then the run restarts *(class)* | Insurance |
+| 🎯 Loaded Dice | 1 | 260 | Lucky rolls never roll below a quarter of the range *(class)* | Hot Hand |
 
 ### 🗡️ Assassin
 
@@ -137,6 +142,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | ☠️ Execute | 1 | 280 | +100% XP at 10/10 stacks *(class)* | Shadow Step |
 | 🌙 Night Owl | 1 | 200 | The streak decay window is 72 hours instead of 48 *(class)* | Execute |
 | 🩸 Bleed | 1 | 240 | After a crit, your next 3 actions get +20% XP (any class that crits; the counter is `assassin_bleed`) | Night Owl |
+| 🌫️ Vanish | 1 | 260 | When the streak decays it halves instead of resetting *(class)* | Bleed |
 
 ### 🔮 Wizard
 
@@ -148,6 +154,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🌟 Arcane Mastery | 1 | 350 | Burst = 3 × Wisdom instead of 2 × *(class)* | Focus |
 | 🕯️ Overcharge | 1 | 300 | After a Burst the cycle restarts at 2 charges instead of 0 *(class)* | Arcane Mastery |
 | 📚 Tome | 1 | 260 | Wisdom + ⌊tasks ever completed / 20⌋ *(class)* | Overcharge |
+| ✨ Cantrip | 1 | 280 | The 2nd and 4th action of a cycle add a quarter of your Wisdom *(class)* | Tome |
 
 ### 🏹 Archer
 
@@ -159,6 +166,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🦅 Sniper | 1 | 300 | Completing a HIGH-priority task (its own priority, else the priority of its list) is always a hit and headshot *(class)* | Piercing Shot |
 | 🪶 Quiver | 2 | 150 | +3% hit chance per level, still capped at 97% *(class)* | Sniper |
 | 🦉 Eagle Eye | 1 | 260 | Headshot chance × 1.5 *(class)* | Quiver |
+| 🪃 Ricochet | 1 | 280 | Every hit adds +1 XP per streak step *(class)* | Eagle Eye |
 
 ### 🛡️ Tank
 
@@ -170,6 +178,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🚀 Unstoppable | 1 | 320 | The daily streak never resets. A missed day just continues it. | Revenge |
 | 🏰 Bulwark | 1 | 240 | Each action adds 2 shield stacks instead of 1 *(class)* | Unstoppable |
 | ⚓ Anchor | 1 | 260 | +8 flat XP when you complete a recurring task | Bulwark |
+| 📢 Taunt | 1 | 280 | Completing a HIGH priority task adds one extra shield stack *(class)* | Anchor |
 
 ### 🧘 Monk
 
@@ -179,6 +188,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🧠 Inner Focus | 2 | 180 | Monk bonus +15% per level *(class)* | Steady Breath |
 | 🪷 Discipline | 1 | 260 | Maximum Rhythm +2 (14 → 16) *(class)* | Inner Focus |
 | ☯️ Serenity | 1 | 340 | Rhythm survives one missed day (a gap of 2 days continues it) *(class)* | Discipline |
+| 🕯️ Meditation | 1 | 300 | The first action of each new day pays double the Monk bonus *(class)* | Serenity |
 
 ### 🛠️ Artisan
 
@@ -188,6 +198,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 📐 Blueprint | 2 | 190 | Maximum progress +3 per level (10 → 16) *(class)* | Toolkit |
 | 🏭 Assembly Line | 1 | 280 | Each action adds 2 progress instead of 1 *(class)* | Blueprint |
 | 🏆 Masterwork | 1 | 360 | Completing a project pays +50% more *(class)* | Assembly Line |
+| 🧩 Prototype | 1 | 320 | A finished project keeps 75% of its progress instead of 50% *(class)* | Masterwork |
 
 ### 🧭 Ranger
 
@@ -197,6 +208,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🗺️ Long Sight | 1 | 220 | The early bonus counts up to 10 days instead of 7 *(class)* | Scout |
 | 🎯 Bullseye | 1 | 280 | +10 XP when you complete a task on its due date *(class)* | Long Sight |
 | 🌅 Second Wind | 1 | 330 | Overdue completions pay half the due-today bonus *(class)* | Bullseye |
+| 👣 Tracker | 1 | 240 | Actions that are not early, on time or late pay +4 XP more *(class)* | Second Wind |
 
 ### 💀 Necromancer
 
@@ -206,6 +218,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🏺 Soul Jar | 1 | 210 | Hold up to 8 souls instead of 5 *(class)* | Siphon |
 | 🕯️ Dark Ritual | 1 | 280 | Reviving pays +50% more *(class)* | Soul Jar |
 | ☠️ Lichdom | 1 | 350 | Reviving also pays +3 XP per soul you hold *(class)* | Dark Ritual |
+| 👻 Soul Eater | 1 | 320 | A revive pays 25% more while you hold 3 or more souls *(class)* | Lichdom |
 
 ### ⚜️ Paladin
 
@@ -215,8 +228,9 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | ⚔️ Smite | 2 | 210 | The HIGH priority Vow bonus is +25% larger per level *(class)* | Holy Aura |
 | 📯 Crusade | 1 | 290 | +20% XP when you complete a HIGH priority task *(class)* | Smite |
 | 🏛️ Sanctuary | 1 | 350 | Your daily streak survives two missed days (a claim up to 3 days after the last one) *(class)* | Crusade |
+| 🔰 Aegis | 1 | 300 | The +8 on non-HIGH actions is 50% larger *(class)* | Sanctuary |
 
-There are 62 skills in 12 trees (Default plus the eleven classes).
+There are 76 skills in 12 trees (Default plus the eleven classes).
 
 ## 5. Daily reward
 

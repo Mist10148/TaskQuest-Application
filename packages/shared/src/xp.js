@@ -12,7 +12,7 @@
 
 const { XP_PER_LEVEL, REWARDS, DAILY, SMALL_ACTION_CAP, SKILL_TREES, STREAK_FREEZE, STREAK_FREEZE_CACHE, CLASS_RULES, SKILL_RULES, PRESTIGE, PRESTIGE_TITLES } = require('./constants');
 const { secureRandom } = require('./random');
-const { daysBetween, todayInZone } = require('./dates');
+const { daysBetween, todayInZone, hourInZone } = require('./dates');
 
 /** YYYY-MM-DD for a DATE column value (string or Date); null when empty. */
 function dayString(value) {
@@ -161,7 +161,10 @@ function calculateClassXP(user, baseXP, opts = {}) {
         }
 
         case 'GAMBLER': {
-            const bonus = Math.floor(rng() * (baseXP * CLASS_RULES.GAMBLER.BONUS_BASE_MULTIPLE + CLASS_RULES.GAMBLER.BONUS_FLAT));
+            const range = baseXP * CLASS_RULES.GAMBLER.BONUS_BASE_MULTIPLE + CLASS_RULES.GAMBLER.BONUS_FLAT;
+            let bonus = Math.floor(rng() * range);
+            // Loaded Dice: a lucky roll never lands in the bottom quarter of the range.
+            if (lvl('gambler_loaded')) bonus = Math.max(bonus, Math.floor(range * CLASS_RULES.GAMBLER.LOADED_FLOOR));
             const lossChance = Math.max(CLASS_RULES.GAMBLER.MIN_LOSS_CHANCE, CLASS_RULES.GAMBLER.LOSS_CHANCE - lvl('gambler_lucky') * 0.05);
             const streak = Number(user.gambler_streak) || 0;
             // Hot Hand: a run of lucky rolls guarantees the next one is not bad luck (the roll is still drawn).
@@ -190,9 +193,11 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const decayHours = lvl('assassin_nightowl') ? CLASS_RULES.ASSASSIN.NIGHT_OWL_DECAY_HOURS : CLASS_RULES.ASSASSIN.DECAY_HOURS;
             const decayed = lastAt !== null && nowMs - lastAt > decayHours * 3600e3;
             userUpdates.assassin_last_at = new Date(nowMs);
-            const prevStreak = decayed ? 0 : Number(user.assassin_streak) || 0;
-            const prevStacks = decayed ? 0 : Number(user.assassin_stacks) || 0;
-            if (decayed) userUpdates.assassin_stacks = 0;
+            // Vanish: a decayed streak halves instead of resetting.
+            const keep = (n) => (decayed ? (lvl('assassin_vanish') ? Math.floor((n * CLASS_RULES.ASSASSIN.VANISH_KEEP_PERCENT) / 100) : 0) : n);
+            const prevStreak = keep(Number(user.assassin_streak) || 0);
+            const prevStacks = keep(Number(user.assassin_stacks) || 0);
+            if (decayed) userUpdates.assassin_stacks = prevStacks;
             const streak = prevStreak + 1 + lvl('assassin_swift');
             userUpdates.assassin_streak = streak;
             if (streak >= 3) {
@@ -220,6 +225,10 @@ function calculateClassXP(user, baseXP, opts = {}) {
                 const combo = Math.floor(wisdom * (1 + lvl('wizard_combo') * 0.5));
                 finalXP = baseXP + combo;
                 bonusInfo = { type: 'WIZARD_COMBO', details: `✨ Combo +${combo}`, classBonus: combo };
+            } else if (counter % 2 === 0 && lvl('wizard_cantrip')) {
+                const cantrip = Math.floor((wisdom * CLASS_RULES.WIZARD.CANTRIP_PERCENT) / 100);
+                finalXP = baseXP + cantrip;
+                bonusInfo = { type: 'WIZARD_CANTRIP', details: `🪄 Cantrip +${cantrip}`, classBonus: cantrip };
             } else {
                 bonusInfo = { type: 'WIZARD_CHARGE', details: `🔮 Charge ${counter}/5`, classBonus: 0 };
             }
@@ -235,7 +244,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
                 userUpdates.archer_streak = streak;
                 const ar = CLASS_RULES.ARCHER;
                 const streakBonus = Math.floor((baseXP * streak * ar.STREAK_PERCENT) / 100) + ar.HIT_FLAT + Math.floor(streak / 2);
-                let total = streakBonus;
+                let total = streakBonus + (lvl('archer_ricochet') ? streak * ar.RICOCHET_PER_STREAK : 0);
                 let details = `🎯 Hit x${streak} +${streakBonus}`;
 
                 const headshotChance = Math.min(30, hitChance * 0.2) * (lvl('archer_eagle') ? CLASS_RULES.ARCHER.EAGLE_HEADSHOT_MULTIPLIER : 1);
@@ -262,7 +271,8 @@ function calculateClassXP(user, baseXP, opts = {}) {
 
         case 'TANK': {
             const cap = tankStackCap(level, skills);
-            const stacks = Math.min(cap, (Number(user.tank_stacks) || 0) + (lvl('tank_bulwark') ? CLASS_RULES.TANK.BULWARK_STACKS : 1));
+            const taunt = lvl('tank_taunt') && context.action === 'item_complete' && context.priority === 'HIGH' ? CLASS_RULES.TANK.TAUNT_STACKS : 0;
+            const stacks = Math.min(cap, (Number(user.tank_stacks) || 0) + (lvl('tank_bulwark') ? CLASS_RULES.TANK.BULWARK_STACKS : 1) + taunt);
             userUpdates.tank_stacks = stacks;
             const total = Math.floor((baseXP * stacks * CLASS_RULES.TANK.STACK_PERCENT) / 100) + Math.floor(stacks / 2);
             finalXP = baseXP + total;
@@ -277,7 +287,8 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const cap = m.MAX_RHYTHM + (lvl('monk_discipline') ? m.DISCIPLINE_CAP : 0);
             const gap = last ? daysBetween(last, today) : null;
             let rhythm = Math.max(0, Number(user.monk_rhythm) || 0);
-            if (gap !== null && gap <= 0 && rhythm > 0) {
+            const sameDay = gap !== null && gap <= 0 && rhythm > 0;
+            if (sameDay) {
                 // Same day: the rhythm holds.
             } else if (gap !== null && (gap === 1 || (gap === 2 && lvl('monk_serenity')))) {
                 rhythm += 1;
@@ -288,7 +299,9 @@ function calculateClassXP(user, baseXP, opts = {}) {
             userUpdates.monk_rhythm = rhythm;
             userUpdates.monk_day = today;
             const raw = Math.floor((baseXP * rhythm * m.PERCENT_PER_DAY) / 100) + rhythm * (m.FLAT_PER_DAY + lvl('monk_breath') * m.BREATH_FLAT_PER_DAY);
-            const bonus = Math.floor((raw * (100 + lvl('monk_focus') * m.FOCUS_PERCENT)) / 100);
+            let bonus = Math.floor((raw * (100 + lvl('monk_focus') * m.FOCUS_PERCENT)) / 100);
+            // Meditation: the first action of a new day pays double.
+            if (lvl('monk_meditation') && !sameDay) bonus *= m.MEDITATION_MULTIPLIER;
             finalXP = baseXP + bonus;
             bonusInfo = { type: 'MONK', details: `🧘 Rhythm ${rhythm}/${cap} +${bonus}`, classBonus: bonus };
             break;
@@ -304,7 +317,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
                 const clear = progress * a.CLEAR_XP_PER_PROGRESS;
                 bonus += lvl('artisan_masterwork') ? Math.floor((clear * (100 + a.MASTERWORK_PERCENT)) / 100) : clear;
             }
-            userUpdates.artisan_progress = cleared ? Math.floor((progress * a.CLEAR_KEEP_PERCENT) / 100) : progress;
+            userUpdates.artisan_progress = cleared ? Math.floor((progress * (lvl('artisan_prototype') ? a.PROTOTYPE_KEEP_PERCENT : a.CLEAR_KEEP_PERCENT)) / 100) : progress;
             finalXP = baseXP + bonus;
             bonusInfo = cleared
                 ? { type: 'ARTISAN_CLEAR', details: `🛠️ Project complete! +${bonus}`, classBonus: bonus }
@@ -316,8 +329,9 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const r = CLASS_RULES.RANGER;
             const dueDate = context.action === 'item_complete' && context.dueDate ? String(context.dueDate).slice(0, 10) : null;
             if (!dueDate) {
-                finalXP = baseXP + r.OTHER_FLAT;
-                bonusInfo = { type: 'RANGER', details: `🧭 Ranger +${r.OTHER_FLAT}`, classBonus: r.OTHER_FLAT };
+                const flat = r.OTHER_FLAT + (lvl('ranger_tracker') ? r.TRACKER_FLAT : 0);
+                finalXP = baseXP + flat;
+                bonusInfo = { type: 'RANGER', details: `🧭 Ranger +${flat}`, classBonus: flat };
                 break;
             }
             const today = context.today ? String(context.today).slice(0, 10) : todayInZone(user.timezone, new Date(toMs(opts.now) ?? Date.now()));
@@ -354,6 +368,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
                 reviveBonus = Math.floor((baseXP * n.REVIVE_PERCENT) / 100) + Math.min(n.REVIVE_OVERDUE_CAP, n.REVIVE_XP_PER_OVERDUE_DAY * Number(context.overdueDays));
                 if (lvl('necro_ritual')) reviveBonus = Math.floor((reviveBonus * (100 + n.RITUAL_PERCENT)) / 100);
                 if (lvl('necro_lich')) reviveBonus += souls * n.LICH_XP_PER_SOUL;
+                if (lvl('necro_souleater') && souls >= n.SOUL_EATER_SOULS) reviveBonus = Math.floor((reviveBonus * (100 + n.SOUL_EATER_PERCENT)) / 100);
             }
             const bonus = soulBonus + reviveBonus;
             finalXP = baseXP + bonus;
@@ -368,6 +383,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
             const high = context.action === 'item_complete' && context.priority === 'HIGH';
             let bonus = high ? baseXP + p.HIGH_FLAT : p.OTHER_FLAT;
             if (high) bonus = Math.floor((bonus * (100 + lvl('paladin_smite') * p.SMITE_PERCENT)) / 100);
+            else if (lvl('paladin_aegis')) bonus = Math.floor((bonus * (100 + p.AEGIS_PERCENT)) / 100);
             bonus += lvl('paladin_aura') * p.AURA_FLAT;
             finalXP = baseXP + bonus;
             bonusInfo = { type: high ? 'PALADIN_VOW' : 'PALADIN', details: `⚜️ ${high ? 'Vow' : 'Paladin'} +${bonus}`, classBonus: bonus };
@@ -423,6 +439,13 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
     // Momentum: the live daily streak (0 once it has lapsed, until the next claim), counted up to a cap.
     multiplier += bonuses.momentumPerDay * Math.min(SKILL_RULES.MOMENTUM_MAX_DAYS, liveStreak(user, skills, opts.now));
 
+    // Scholar: the first task of the day. Night Shift: actions late at night, in the player's own time.
+    if (lvl('default_scholar') && context.action === 'item_complete' && context.firstOfDay) multiplier += SKILL_RULES.SCHOLAR_PERCENT / 100;
+    if (lvl('default_nightshift')) {
+        const hour = hourInZone(user.timezone, new Date(opts.now ?? Date.now()));
+        if (hour >= SKILL_RULES.NIGHT_SHIFT_FROM || hour < SKILL_RULES.NIGHT_SHIFT_UNTIL) multiplier += (lvl('default_nightshift') * SKILL_RULES.NIGHT_SHIFT_PERCENT) / 100;
+    }
+
     // Bleed: a crit makes the next few actions worth more, whatever class you play.
     const procs = [];
     let bleedLeft = Number(user.assassin_bleed) || 0;
@@ -437,6 +460,7 @@ function calculateFinalXP(user, userSkills, baseXP, opts = {}) {
         flat += lvl('archer_multishot') * 5;
         if (context.priority === 'HIGH') flat += bonuses.rallyXP;
         if (context.recurring) flat += bonuses.anchorXP;
+        if (context.listCleared) flat += (lvl('hero_laststand') ? CLASS_RULES.HERO.LAST_STAND_XP : 0) + lvl('default_tidymind') * SKILL_RULES.TIDY_MIND_XP;
         flat += prestigeFlat(user);
     }
 

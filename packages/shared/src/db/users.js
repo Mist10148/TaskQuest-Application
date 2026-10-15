@@ -340,14 +340,20 @@ async function markDigestSent(discordId, now = new Date()) {
 async function claimDigest(discordId, now = new Date()) {
     const [res] = await getPool().query(
         'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND (last_digest_at IS NULL OR last_digest_at < ?)',
-        [now, String(discordId), new Date(now.getTime() - 6 * 86400e3)]
+        [wholeSecond(now), String(discordId), new Date(now.getTime() - 6 * 86400e3)]
     );
     return res.affectedRows > 0;
 }
 
+/**
+ * `last_digest_at` is a TIMESTAMP without fractions, so the value a claim stores is the whole second; release compares against the same
+ * whole second (a Date with milliseconds would never equal the stored value, and the undo would silently do nothing).
+ */
+const wholeSecond = (date) => new Date(Math.floor(new Date(date).getTime() / 1000) * 1000);
+
 /** Undo a claimDigest() after a temporary send failure (only if nobody claimed again since). */
 async function releaseDigest(discordId, claimedAt, previous = null) {
-    await run(null, 'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND last_digest_at = ?', [previous, String(discordId), claimedAt]);
+    await run(null, 'UPDATE users SET last_digest_at = ? WHERE discord_id = ? AND last_digest_at = ?', [previous, String(discordId), wholeSecond(claimedAt)]);
 }
 
 /** Numbers for the digest: the 7 days up to `now`, plus what is open right now. */
@@ -440,6 +446,7 @@ async function getXPHistory(discordId, limit = 20) {
 }
 
 module.exports = {
+    wholeSecond,
     publicUser,
     SETTINGS,
     AI_CHAT_FORMATS,

@@ -18,7 +18,7 @@
 
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { users, progression } = require('@taskquest/shared/db');
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress, describeEquipped } = require('@taskquest/shared');
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress, describeEquipped, escapeDiscord } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -202,7 +202,7 @@ async function profile(interaction) {
     if (userId === interaction.user.id) await users.ensureUser(userId);
     const stats = await users.getUserStats(userId);
     if (!stats) {
-        return interaction.reply({ embeds: [ui.info('No profile yet', `${targetUser.username} hasn't used TaskQuest yet.`)], ...EPHEMERAL });
+        return interaction.reply({ embeds: [ui.info('No profile yet', `${escapeDiscord(targetUser.username, { max: 60 })} hasn't used TaskQuest yet.`)], ...EPHEMERAL });
     }
     const user = stats.user;
     const userSkills = await users.getUserSkills(userId);
@@ -746,7 +746,7 @@ async function leaderboard(interaction) {
                 name = fetched ? fetched.displayName || fetched.username : null;
                 avatarURL = fetched ? fetched.displayAvatarURL({ extension: 'png', size: 64 }) : null;
             }
-            return { ...u, name: name || 'Adventurer', avatarURL };
+            return { ...u, name: escapeDiscord(name || 'Adventurer', { max: 60 }), avatarURL };
         })
     );
 

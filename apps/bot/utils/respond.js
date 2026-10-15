@@ -28,7 +28,11 @@ async function handleError(interaction, err) {
         embed = ui.error('Something went wrong', 'Please try again in a moment.');
     }
     try {
-        if (interaction.deferred && !interaction.replied) await interaction.editReply({ embeds: [embed], components: [] });
+        // A button that only acknowledged with deferUpdate still shows its panel: tell the error beside it and keep the buttons.
+        // (deferReply sets `ephemeral` to a boolean; deferUpdate leaves it unset.)
+        const keepsPanel = interaction.deferred && !interaction.replied && typeof interaction.isMessageComponent === 'function' && interaction.isMessageComponent() && typeof interaction.ephemeral !== 'boolean';
+        if (keepsPanel) await interaction.followUp({ embeds: [embed], ...EPHEMERAL });
+        else if (interaction.deferred && !interaction.replied) await interaction.editReply({ embeds: [embed], components: [] });
         else if (interaction.replied) await interaction.followUp({ embeds: [embed], ...EPHEMERAL });
         else await interaction.reply({ embeds: [embed], ...EPHEMERAL });
     } catch {

@@ -179,11 +179,12 @@ function itemMeta(it, today = undefined) {
 /** The lines for one task: name (indented when a subtask), details, description. */
 function itemLines(it, nested, today) {
     const pad = nested ? '　' : '';
-    const name = it.completed ? `~~${it.name}~~` : it.name;
+    const safeName = escapeDiscord(it.name, { max: 200 });
+    const name = it.completed ? `~~${safeName}~~` : safeName;
     let out = `${pad}${nested ? '↳ ' : ''}${it.completed ? '✅' : '⬜'} ${name}\n`;
     const meta = itemMeta(it, today);
     if (meta) out += `${pad}-# └─ ${meta}\n`;
-    if (it.description) out += `${pad}-# └─ ${it.description.substring(0, 50)}${it.description.length > 50 ? '...' : ''}\n`;
+    if (it.description) out += `${pad}-# └─ ${escapeDiscord(it.description, { max: 50 })}\n`;
     return out;
 }
 
@@ -215,7 +216,7 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     
     // Description if exists
     if (list.description) {
-        desc += `*${list.description}*\n\n`;
+        desc += `*${escapeDiscord(list.description, { max: 300 })}*\n\n`;
     }
     
     // Progress section
@@ -281,7 +282,7 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
         
         // Build clean list entry
         // Line 1: Priority dot + List Name
-        desc += `${priorityDot} **${l.name}**${l.shared ? ' 👥' : ''}\n`;
+        desc += `${priorityDot} **${escapeDiscord(l.name, { max: 100 })}**${l.shared ? ' 👥' : ''}\n`;
         
         // Line 2: Metadata (category + deadline) in muted text
         const metaParts = [];

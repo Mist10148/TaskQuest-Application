@@ -8,7 +8,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getPool, withTransaction } = require('./pool');
+const { getPool, withTransaction, isUniqueViolation, savepoint } = require('./pool');
 const { lockUser } = require('./users');
 const { errors } = require('../errors');
 const v = require('../validation');
@@ -184,13 +184,15 @@ async function importAll(discordId, data) {
                 const name = freeName(l.name, taken);
                 taken.add(name.toLowerCase());
                 try {
-                    const [res] = await conn.query(
-                        'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?)',
-                        [user.discord_id, name, l.description, l.category, l.priority, l.deadline]
+                    const [res] = await savepoint(conn, () =>
+                        conn.query(
+                            'INSERT INTO lists (discord_id, name, description, category, priority, deadline) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
+                            [user.discord_id, name, l.description, l.category, l.priority, l.deadline]
+                        )
                     );
                     listId = res.insertId;
                 } catch (err) {
-                    if (!err || err.code !== 'ER_DUP_ENTRY' || attempt >= 20) throw err;
+                    if (!isUniqueViolation(err) || attempt >= 20) throw err;
                 }
             }
             const idByRef = new Map();

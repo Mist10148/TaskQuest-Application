@@ -2,7 +2,7 @@
 
 'use strict';
 
-const { getPool, withTransaction } = require('./pool');
+const { getPool, withTransaction, isUniqueViolation, savepoint } = require('./pool');
 const { LEADERBOARDS, WEEKLY_XP_SOURCES, DAILY } = require('../constants');
 const { errors } = require('../errors');
 const { isValidTimeZone, todayInZone } = require('../dates');
@@ -49,10 +49,10 @@ async function ensureUser(discordId, profile, conn) {
             for (let attempt = 0; ; attempt++) {
                 await run(conn, 'UPDATE users SET discord_handle = NULL WHERE discord_handle = ? AND discord_id <> ?', [handle, id]);
                 try {
-                    await upsert();
+                    await savepoint(conn, upsert);
                     break;
                 } catch (err) {
-                    if (err.code !== 'ER_DUP_ENTRY' || attempt >= 2) throw err;
+                    if (!isUniqueViolation(err) || attempt >= 2) throw err;
                 }
             }
         } else await upsert();

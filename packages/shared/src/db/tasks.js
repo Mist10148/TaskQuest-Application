@@ -9,7 +9,7 @@
 
 'use strict';
 
-const { getPool, withTransaction } = require('./pool');
+const { getPool, withTransaction, isUniqueViolation } = require('./pool');
 const { lockUser } = require('./users');
 const { rewardAction, unlockAchievements, awardFlat, countToday, dayWindow } = require('./progression');
 const { completionExtras } = require('./extras');
@@ -44,7 +44,7 @@ function unwrap(result) {
 }
 
 function isDuplicate(err) {
-    return err && err.code === 'ER_DUP_ENTRY';
+    return isUniqueViolation(err);
 }
 
 // ─── Lists ───────────────────────────────────────────────────────────────────

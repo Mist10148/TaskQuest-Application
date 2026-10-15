@@ -6,7 +6,7 @@
 
 'use strict';
 
-const { getPool, withTransaction } = require('./pool');
+const { getPool, withTransaction, isUniqueViolation } = require('./pool');
 const { lockUser } = require('./users');
 const tasks = require('./tasks');
 const access = require('./access');
@@ -23,7 +23,7 @@ function unwrap(result) {
     return result.value;
 }
 
-const isDuplicate = (err) => err && err.code === 'ER_DUP_ENTRY';
+const isDuplicate = (err) => isUniqueViolation(err);
 
 /** One template task: a name plus the optional description, priority, tags and repeat rule. Due dates are not kept. */
 function parseTemplateItem(raw, index) {

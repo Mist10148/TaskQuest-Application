@@ -1003,10 +1003,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.setItemCompleted(R, ids[1]);
         const last = await db.tasks.setItemCompleted(R, ids[2]);
         assert.equal(last.xp.bonusInfo.type, 'ARTISAN_CLEAR');
-        // list create + 3 adds + 3 completions = 7 progress: 7 * 2 + 7 * 5
-        assert.equal(last.xp.bonusInfo.classBonus, 14 + 35);
+        // list create + 3 adds + 3 completions = 7 progress: 7 * 2 + 7 * 8
+        assert.equal(last.xp.bonusInfo.classBonus, 14 + 56);
         u = await db.users.getUser(R);
-        assert.equal(Number(u.artisan_progress), 0, 'a finished project resets');
+        assert.equal(Number(u.artisan_progress), 3, 'a finished project keeps half of its progress');
 
         // lists with fewer than 3 tasks, and recurring tasks, never count as a cleared list
         const { list: small } = await db.tasks.createList(R, { name: 'Tiny' });

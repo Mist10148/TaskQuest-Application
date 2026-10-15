@@ -564,7 +564,7 @@ test('Monk tree: four skills in a chain, each with an implemented effect', () =>
 
 // ─── Artisan ─────────────────────────────────────────────────────────────────
 
-test('Artisan Project: +1 progress and +2 XP per progress per action; a cleared list pays +5 per progress and resets', () => {
+test('Artisan Project: +1 progress and +2 XP per progress per action; a cleared list pays +8 per progress and keeps half', () => {
     const artisan = (progress) => user({ player_class: 'ARTISAN', artisan_progress: progress });
     const done = { action: 'item_complete', listCleared: true };
     const plain = { action: 'item_complete', listCleared: false };
@@ -573,15 +573,15 @@ test('Artisan Project: +1 progress and +2 XP per progress per action; a cleared 
         ['first action', 0, plain, [], 10, 1, 2],
         ['mid project', 4, plain, [], 10, 5, 10],
         ['capped at 10', 10, plain, [], 10, 10, 20],
-        ['list cleared pays 5 per progress and resets', 4, done, [], 10, 0, 10 + 25],
+        ['list cleared pays 8 per progress and keeps half', 4, done, [], 10, 2, 10 + 40],
         ['the flag only counts on a completion', 4, { action: 'item_add', listCleared: true }, [], 10, 5, 10],
         ['Toolkit adds 1 per progress per level', 4, plain, [sk('artisan_toolkit', 2)], 10, 5, 5 * 4],
         ['Blueprint raises the cap by 3 per level', 10, plain, [sk('artisan_blueprint', 2)], 10, 11, 22],
         ['Blueprint cap at 16', 16, plain, [sk('artisan_blueprint', 2)], 10, 16, 32],
         ['Assembly Line adds 2 progress per action', 4, plain, [sk('artisan_assembly')], 10, 6, 12],
         ['Assembly Line stops at the cap', 9, plain, [sk('artisan_assembly')], 10, 10, 20],
-        ['Masterwork pays 50% more on a clear', 4, done, [sk('artisan_masterwork')], 10, 0, 10 + 37],
-        ['clear after Assembly + Masterwork', 5, done, [sk('artisan_assembly'), sk('artisan_masterwork')], 10, 0, 14 + 52]
+        ['Masterwork pays 50% more on a clear', 4, done, [sk('artisan_masterwork')], 10, 2, 10 + 60],
+        ['clear after Assembly + Masterwork', 5, done, [sk('artisan_assembly'), sk('artisan_masterwork')], 10, 3, 14 + 84]
     ];
     for (const [label, progress, context, skills, base, expectedProgress, expectedBonus] of cases) {
         const r = shared.calculateClassXP(artisan(progress), base, { skills, context });

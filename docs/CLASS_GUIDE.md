@@ -110,9 +110,9 @@ Favourable mix: every second task is HIGH priority (Sniper makes those always hi
 
 ## Artisan (650 XP)
 
-**Rewards:** every action adds 1 progress (max 10) and pays +2 XP per progress; finishing the last open task of a list of at least 3 tasks pays +5 XP per progress on top. **Suits:** people who work through whole lists. **Pitfalls:** completing a list resets your progress to 0, so a long run of clearing small lists pays less than steadily working one big one; the clear bonus is paid once per list, ever, and repeating tasks and subtasks never count as the last task.
+**Rewards:** every action adds 1 progress (max 10) and pays +2 XP per progress; finishing the last open task of a list of at least 3 tasks pays +8 XP per progress on top. **Suits:** people who work through whole lists. **Pitfalls:** completing a list halves your progress, so a long run of clearing small lists builds less than steadily working one big one; the clear bonus is paid once per list, ever, and repeating tasks and subtasks never count as the last task.
 
-Favourable mix: lists of ten tasks, cleared on every tenth completion. The clear bonus does not make up for the reset in this model, which is a balance question ([design/balance.md](design/balance.md)).
+Favourable mix: lists of ten tasks, cleared on every tenth completion. Keeping half the progress and the +8 clear bonus make clearing lists worth more than never clearing them.
 
 | Build | Skills (in order) | Skill cost | Plain task, level 5 / 15 / 30 | Favourable mix, level 5 / 15 / 30 |
 |---|---|---|---|---|

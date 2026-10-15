@@ -73,7 +73,7 @@ const CLASSES = {
         name: 'Artisan',
         emoji: '🛠️',
         cost: 650,
-        description: 'Project: every action adds 1 progress (max 10) and pays +2 XP per progress. Finishing the last open task of a list that has at least 3 tasks completes the project: +5 XP per progress, then the progress resets.',
+        description: 'Project: every action adds 1 progress (max 10) and pays +2 XP per progress. Finishing the last open task of a list that has at least 3 tasks completes the project: +8 XP per progress, and half of the progress is kept.',
         playstyle: 'Rewards steady work and finishing whole lists.'
     },
     RANGER: {
@@ -432,7 +432,7 @@ const CLASS_RULES = {
     PALADIN: { HIGH_FLAT: 10, OTHER_FLAT: 5, AURA_FLAT: 2, SMITE_PERCENT: 25, CRUSADE_PERCENT: 20 },
     NECROMANCER: { MAX_SOULS: 5, REVIVE_PERCENT: 150, REVIVE_XP_PER_OVERDUE_DAY: 3, REVIVE_OVERDUE_CAP: 30, SOUL_PERCENT: 5, SIPHON_PERCENT: 2, JAR_SOULS: 3, RITUAL_PERCENT: 50, LICH_XP_PER_SOUL: 3 },
     RANGER: { MAX_EARLY_DAYS: 7, EARLY_PERCENT_PER_DAY: 10, EARLY_FLAT_PER_DAY: 2, DUE_TODAY_PERCENT: 25, OTHER_FLAT: 3, SCOUT_FLAT_PER_DAY: 2, LONGSIGHT_DAYS: 3, BULLSEYE_FLAT: 10, SECOND_WIND_PERCENT: 50 },
-    ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 5, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
+    ARTISAN: { MAX_PROGRESS: 10, XP_PER_PROGRESS: 2, CLEAR_XP_PER_PROGRESS: 8, CLEAR_KEEP_PERCENT: 50, MIN_LIST_SIZE: 3, TOOLKIT_XP_PER_PROGRESS: 1, BLUEPRINT_CAP: 3, ASSEMBLY_STEP: 2, MASTERWORK_PERCENT: 50 },
     MONK: { MAX_RHYTHM: 14, PERCENT_PER_DAY: 3, FLAT_PER_DAY: 1, BREATH_FLAT_PER_DAY: 1, FOCUS_PERCENT: 25, DISCIPLINE_CAP: 4 }
 };
 

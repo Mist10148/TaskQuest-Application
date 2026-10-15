@@ -287,7 +287,7 @@ function calculateClassXP(user, baseXP, opts = {}) {
                 const clear = progress * a.CLEAR_XP_PER_PROGRESS;
                 bonus += lvl('artisan_masterwork') ? Math.floor((clear * (100 + a.MASTERWORK_PERCENT)) / 100) : clear;
             }
-            userUpdates.artisan_progress = cleared ? 0 : progress;
+            userUpdates.artisan_progress = cleared ? Math.floor((progress * a.CLEAR_KEEP_PERCENT) / 100) : progress;
             finalXP = baseXP + bonus;
             bonusInfo = cleared
                 ? { type: 'ARTISAN_CLEAR', details: `🛠️ Project complete! +${bonus}`, classBonus: bonus }

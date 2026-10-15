@@ -11,7 +11,7 @@ How to resume: read the first unticked item, do it, run `npm test`, `npm run lin
 ## P1 Bug fixes
 - [x] P1.1 Cap class bonus on item_add and list_create at 3x base
 - [x] P1.2 Prestige bonus no longer rounds away
-- [ ] P1.3 Artisan keeps half its progress on a clear, clear bonus 5 -> 8
+- [x] P1.3 Artisan keeps half its progress on a clear, clear bonus 5 -> 8
 - [ ] P1.4 Cap HIGH-priority bonuses at 3 completions a day
 - [ ] P1.5 Hero's generic skills (Champion, Legendary, Valor, Inspire) become class-only
 - [ ] P1.6 Daily claim by calendar day (KNOWN_ISSUES #37); check Sniper list-priority resolution

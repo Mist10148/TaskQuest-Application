@@ -31,8 +31,9 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 |---|---|
 | `001_baseline` | Creates the whole schema (every table below, the `citext` and `vector` extensions) with `CREATE … IF NOT EXISTS`. It is the schema the 26 MySQL-era migrations ended at, squashed into one Postgres baseline; those files stay in git history. |
 | `002_drop_skill_points` | Drops the unused `users.skill_points` column (`DROP COLUMN IF EXISTS`, so it is safe to repeat). The baseline still creates it on a new database. |
+| `003_ai_prioritize_cache` | Adds `ai_prioritize_cache`, the prioritizer's result cache shared between AI service instances. |
 
-New migrations continue from `003`. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
+New migrations continue from `004`. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
 
 The scripts in [`db/legacy/`](../db/legacy) are MySQL-era history, kept for reference. **Do not run them.**
 
@@ -189,6 +190,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | `ai_checkpoints`, `ai_checkpoint_writes` | LangGraph state snapshots per thread (`BYTEA`), cascading with the thread. |
 | `ai_usage` | Daily per-user, per-feature request and token counts, used for quotas. |
 | `ai_summary_cache` | Cached summaries (`JSONB`) keyed by `(discord_id, scope_key)` with an input hash. |
+| `ai_prioritize_cache` | Cached "what should I do next?" rankings (`JSONB`) keyed by `(discord_id, cache_key)`, where `cache_key` is a hash of the open-task features and the limit. Valid for 5 minutes (`created_at`); the AI service deletes a user's expired rows when it writes, and a best-effort read treats a missing table as a miss. Shared by every AI instance. |
 
 `users.ai_enabled` (SMALLINT, default 1) lets a user opt out of AI features.
 

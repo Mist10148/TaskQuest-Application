@@ -39,6 +39,8 @@ SCHEMA = [
     " input_tokens INT DEFAULT 0, output_tokens INT DEFAULT 0, PRIMARY KEY (discord_id, day, feature))",
     "CREATE TABLE ai_summary_cache (discord_id TEXT, scope_key TEXT, input_hash TEXT, summary_json TEXT,"
     " created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (discord_id, scope_key))",
+    "CREATE TABLE ai_prioritize_cache (discord_id TEXT, cache_key TEXT, result_json TEXT,"
+    " created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (discord_id, cache_key))",
 ]
 
 

@@ -122,7 +122,7 @@ stateDiagram-v2
 - `merge_scores` blends the model's rank with that baseline. An overdue HIGH-priority quest can never be ranked below the top 3.
 - `fallback_rank` uses the baseline alone and template reasons, so the feature still works without Gemini.
 - `POST /v1/prioritize` is the one model route that degrades instead of failing on an exhausted daily quota: `require_ai("prioritize", degrade_on_quota=True)` lets it through unreserved, the graph's quota check sends it to `fallback_rank`, and the response carries `usedFallback: true` (nothing is booked). An opted-out user still gets 403 `AI_OPTED_OUT`.
-- More than 15 open quests switches to the reasoning model. Results are cached for 5 minutes per open-task set; fallback results are never cached.
+- More than 15 open quests switches to the reasoning model. Results are cached for 5 minutes per open-task set and limit, in process memory and in `ai_prioritize_cache`, so several AI instances share one answer; fallback results are never cached, and a missing or failing shared table only means a miss. (The pgvector search runs in SQL, so there is no vector cache to share on PostgreSQL; the in-process numpy cache in `EmbeddingStore` exists only for the SQLite tests.)
 
 ## 6. Chat graph
 

@@ -196,7 +196,7 @@ async def ai_enabled(conn: AsyncConnection, discord_id: str) -> bool:
 
 
 async def delete_user_ai_data(conn: AsyncConnection, discord_id: str) -> None:
-    """Remove a user's chat threads (with their checkpoints) and cached summaries.
+    """Remove a user's chat threads (with their checkpoints), cached summaries and cached rankings.
 
     ai_usage is kept on purpose: resetting progress must not refill the daily AI quota.
     """
@@ -206,3 +206,4 @@ async def delete_user_ai_data(conn: AsyncConnection, discord_id: str) -> None:
     await conn.execute(text(f"DELETE FROM ai_checkpoints WHERE thread_id IN ({owned})"), params)
     await conn.execute(text("DELETE FROM ai_chat_threads WHERE discord_id = :uid"), params)
     await conn.execute(text("DELETE FROM ai_summary_cache WHERE discord_id = :uid"), params)
+    await conn.execute(text("DELETE FROM ai_prioritize_cache WHERE discord_id = :uid"), params)

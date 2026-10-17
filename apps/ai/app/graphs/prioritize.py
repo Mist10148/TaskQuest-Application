@@ -16,16 +16,19 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal, TypedDict
 
 from cachetools import TTLCache
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app import usage
 from app.db import pool, repo
+from app.db.dialect import is_postgres
 from app.llm import AIUnavailable
 from app.llm_call import structured_call
 from app.prompts import load_prompt
@@ -35,7 +38,9 @@ log = logging.getLogger("taskquest.ai.prioritize")
 
 PRIORITY_WEIGHT = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
 REASONING_THRESHOLD = 15  # use the Pro model only above this many open quests
-_cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=500, ttl=300)
+CACHE_TTL_SECONDS = 300
+# Level 1: this process's memory. Level 2 is ai_prioritize_cache, which other AI instances share.
+_cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=500, ttl=CACHE_TTL_SECONDS)
 
 
 # ── LLM schema ───────────────────────────────────────────────────────────────
@@ -331,6 +336,58 @@ def _row(t: TaskFeatures, rank: int, score: float, reason: str, suggestion: str 
     }
 
 
+def _stamp(conn: AsyncConnection, moment: datetime) -> Any:
+    """A timestamp parameter for this dialect: a datetime for asyncpg, UTC text for SQLite (what its CURRENT_TIMESTAMP writes)."""
+    return moment if is_postgres(conn) else moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+
+async def _shared_get(discord_id: str, digest: str) -> dict[str, Any] | None:
+    """A fresh ranking another instance (or an earlier life of this one) stored, or None. Never raises: the cache is an
+    optimisation, so a missing table (migration not applied yet) or a database hiccup is just a miss."""
+    try:
+        async with pool.connection() as conn:
+            cutoff = _stamp(conn, datetime.now(UTC) - timedelta(seconds=CACHE_TTL_SECONDS))
+            row = (
+                await conn.execute(
+                    text(
+                        "SELECT result_json FROM ai_prioritize_cache "
+                        "WHERE discord_id = :uid AND cache_key = :k AND created_at > :cutoff"
+                    ),
+                    {"uid": discord_id, "k": digest, "cutoff": cutoff},
+                )
+            ).first()
+    except Exception:
+        log.warning("prioritize cache read failed; computing instead", exc_info=True)
+        return None
+    if not row:
+        return None
+    data = row[0]
+    value = json.loads(data) if isinstance(data, (str, bytes)) else data
+    return value if isinstance(value, dict) else None
+
+
+async def _shared_put(discord_id: str, digest: str, value: dict[str, Any]) -> None:
+    """Store a ranking for the other instances, and drop this user's expired rows. Best effort, like _shared_get."""
+    try:
+        async with pool.connection() as conn:
+            now = datetime.now(UTC)
+            await conn.execute(
+                text("DELETE FROM ai_prioritize_cache WHERE discord_id = :uid AND created_at <= :cutoff"),
+                {"uid": discord_id, "cutoff": _stamp(conn, now - timedelta(seconds=CACHE_TTL_SECONDS))},
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO ai_prioritize_cache (discord_id, cache_key, result_json, created_at) "
+                    "VALUES (:uid, :k, :j, :at) "
+                    "ON CONFLICT (discord_id, cache_key) DO UPDATE SET "
+                    "result_json = excluded.result_json, created_at = excluded.created_at"
+                ),
+                {"uid": discord_id, "k": digest, "j": json.dumps(value, default=str), "at": _stamp(conn, now)},
+            )
+    except Exception:
+        log.warning("prioritize cache write failed; the result is still returned", exc_info=True)
+
+
 async def prioritize(
     discord_id: str,
     llm_factory: Callable[..., Any],
@@ -339,7 +396,8 @@ async def prioritize(
     today: date | None = None,
     reserved: bool = False,
 ) -> dict[str, Any]:
-    """Run the graph. Results are cached for 5 minutes per (user, open-task set).
+    """Run the graph. Results are cached for 5 minutes per (user, open-task set): in this process's memory and in
+    ai_prioritize_cache, so several AI instances share one answer.
 
     ``reserved``: the request was reserved up front; it is handed back when the model gave no answer
     (cache hit, nothing to rank, provider failure).
@@ -356,10 +414,16 @@ async def prioritize(
     async with pool.connection() as conn:
         lists = await repo.lists_for_user(conn, discord_id, open_only=True)
     sig = json.dumps([asdict(f) for f in build_features(lists, today)], sort_keys=True, default=str)
-    key = f"{discord_id}:{limit}:{hashlib.sha256(sig.encode()).hexdigest()}"
+    digest = hashlib.sha256(f"{limit}:{sig}".encode()).hexdigest()
+    key = f"{discord_id}:{digest}"
     if key in _cache:
         await give_back()
         return {**_cache[key], "cached": True}
+    shared = await _shared_get(discord_id, digest)
+    if shared is not None:
+        _cache[key] = shared
+        await give_back()
+        return {**shared, "cached": True}
 
     try:
         state = await graph.ainvoke({"discord_id": discord_id, "today": today, "limit": limit, "lists": lists})
@@ -375,9 +439,12 @@ async def prioritize(
         "cached": False,
     }
     if not out["usedFallback"] and out["ranked"]:
-        _cache[key] = {k: v for k, v in out.items() if k != "cached"}
+        value = {k: v for k, v in out.items() if k != "cached"}
+        _cache[key] = value
+        await _shared_put(discord_id, digest, value)
     return out
 
 
 def clear_cache() -> None:
+    """Forget this process's memory (the shared rows stay until they expire, as they would for another instance)."""
     _cache.clear()

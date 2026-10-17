@@ -91,7 +91,7 @@ packages/shared/src
 └── db/
     ├── pool.js      pg (node-postgres) pool behind a mysql2-style layer (`?` placeholders, [rows] results, insertId via RETURNING id; UTC, DATE as string, TLS), withTransaction (retries deadlocks and serialization failures), savepoint
     ├── migrate.js   runner (advisory lock, one transaction per migration) + information_schema helpers
-    ├── migrations/  001_baseline (the whole Postgres schema), 002_drop_skill_points; new migrations continue from 003
+    ├── migrations/  001_baseline (the whole Postgres schema), 002_drop_skill_points, 003_ai_prioritize_cache; new migrations continue from 004
     ├── users.js     profile, settings, stats, leaderboard boards, weekly digest data, reset
     ├── progression.js  applyXP, rewardAction, awardFlat, achievements, daily and streak chests, streak freezes, classes, skills, prestige
     ├── access.js    the one rule for who may touch a list or task (owner, or a member with a sufficient role); everything else calls it

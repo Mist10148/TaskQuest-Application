@@ -258,3 +258,50 @@ async def test_quota_reservation_and_idempotent_threads_on_postgres(pg, monkeypa
     async with pool.get_engine().connect() as conn:
         n = (await conn.execute(text("SELECT COUNT(*) FROM ai_chat_threads WHERE id = :t"), {"t": tid})).scalar()
     assert n == 1
+
+
+async def test_usage_day_follows_the_users_time_zone(pg, monkeypatch):
+    """The quota day is the user's own calendar day: Manila (UTC+8) is already on the 13th at 20:00 UTC on the 12th."""
+    from datetime import UTC, date, datetime
+
+    engine, _ = pg
+    monkeypatch.setattr(usage, "_now", lambda: datetime(2030, 3, 12, 20, 0, tzinfo=UTC))
+    async with engine.begin() as conn:
+        await conn.execute(text("UPDATE users SET timezone = 'Asia/Manila' WHERE discord_id = :u"), {"u": UID})
+        await usage.reserve(conn, UID, "chat")
+    async with engine.connect() as conn:
+        days = [r[0] for r in (await conn.execute(text("SELECT day FROM ai_usage WHERE discord_id = :u"), {"u": UID})).all()]
+        assert days == [date(2030, 3, 13)]
+        assert await usage.requests_today(conn, UID) == 1
+
+
+async def test_prioritize_cache_is_shared_through_the_database(pg):
+    """A ranking written by one process is found by another (empty memory), and expires after five minutes."""
+    from datetime import UTC, datetime
+
+    from app.graphs import prioritize as P
+    from tests.fakes import ScriptedLLM
+    from tests.graphs.test_prioritize import RankedItem, RankingOut, factory_for
+
+    engine, list_id = pg
+    today = datetime.now(UTC).date()
+    P.clear_cache()
+    llm = ScriptedLLM([RankingOut(ranked=[RankedItem(id=f"L{list_id}", rank=1, reason="only one")], focus_message="Go")])
+    first = await P.prioritize(UID, factory_for(llm), today=today)
+    assert first["cached"] is False and first["usedFallback"] is False
+    async with engine.connect() as conn:
+        assert (await conn.execute(text("SELECT COUNT(*) FROM ai_prioritize_cache WHERE discord_id = :u"), {"u": UID})).scalar() == 1
+
+    P.clear_cache()  # another instance: nothing in memory
+    second = await P.prioritize(UID, factory_for(ScriptedLLM([])), today=today)
+    assert second["cached"] is True and second["ranked"] == first["ranked"]
+
+    P.clear_cache()
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE ai_prioritize_cache SET created_at = now() - interval '6 minutes' WHERE discord_id = :u"), {"u": UID}
+        )
+    llm2 = ScriptedLLM([RankingOut(ranked=[RankedItem(id=f"L{list_id}", rank=1, reason="again")], focus_message="Go")])
+    third = await P.prioritize(UID, factory_for(llm2), today=today)
+    assert third["cached"] is False
+    P.clear_cache()

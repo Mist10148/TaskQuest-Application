@@ -25,7 +25,7 @@ Use a **separate Discord application** for development, register commands to a t
 |---|---|
 | A number, rule, class, skill, achievement or game rule | `packages/shared/src` (`constants.js`, `xp.js`, `games/`) |
 | Anything that reads or writes the database | `packages/shared/src/db/*` services |
-| A schema change | A **new** migration, `packages/shared/src/db/migrations/00N_name.js` (after `002_drop_skill_points`, so from `003`) |
+| A schema change | A **new** migration, `packages/shared/src/db/migrations/00N_name.js` (after `003_ai_prioritize_cache`, so from `004`) |
 | An HTTP endpoint | `apps/server/routes/*` + a zod schema in `lib/schemas.js` |
 | A Discord interaction | `apps/bot/commands/*` + `utils/ui.js` |
 | UI | `apps/web/src` (pages in `pages/`, feature components in `components/<feature>/`, shared logic in `lib/` and `hooks/`) |

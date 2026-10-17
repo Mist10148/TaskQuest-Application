@@ -397,3 +397,83 @@ test('a failed mark on one list does not stop the reminders after it', async () 
     assert.deepEqual(ctx.marked, [[2, 'due', false]]);
     assert.equal(res.retry, 1);
 });
+
+// ─── the "sent" mark is retried (KNOWN_ISSUES #40) ──────────────────────────────
+
+const { markWithRetry } = require('../utils/reminders');
+
+test('markWithRetry succeeds after a one-off failure and gives up after the attempts', async () => {
+    let calls = 0;
+    const flaky = async () => {
+        if (++calls < 3) throw new Error('deadlock');
+        return 'ok';
+    };
+    assert.equal(await markWithRetry(flaky, { delayMs: 0 }), 'ok');
+    assert.equal(calls, 3);
+
+    let tries = 0;
+    await assert.rejects(
+        markWithRetry(async () => { tries++; throw new Error('db down'); }, { attempts: 2, delayMs: 0 }),
+        /db down/
+    );
+    assert.equal(tries, 2);
+});
+
+test('a list reminder whose mark fails once is marked on the retry, so the DM is not repeated', async () => {
+    const ctx = setup({ lists: [list()] });
+    const mark = ctx.db.tasks.markReminderSent;
+    let failures = 1;
+    ctx.db.tasks.markReminderSent = async (...args) => {
+        if (failures-- > 0) throw new Error('deadlock');
+        return mark(...args);
+    };
+    const res = await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.equal(ctx.sent.length, 1, 'one DM');
+    assert.deepEqual(ctx.marked, [[1, 'due', false]], 'and it was marked');
+    assert.equal(res.retry, 0, 'nothing is left for the next run');
+});
+
+test('a task reminder whose mark fails once is marked on the retry', async () => {
+    const marked = [];
+    const sent = [];
+    let failures = 2;
+    const db = {
+        tasks: {
+            getTaskReminderCandidates: async () => [task()],
+            markTaskReminderSent: async (id) => {
+                if (failures-- > 0) throw new Error('connection reset');
+                marked.push(id);
+            }
+        }
+    };
+    const client = { users: { fetch: async () => ({ send: async (m) => sent.push(m) }) } };
+    const res = await sendTaskReminders({ db, client, log: () => {}, now: NOW });
+    assert.equal(sent.length, 1);
+    assert.deepEqual(marked, [5]);
+    assert.equal(res.retry, 0);
+});
+
+test('a mark that keeps failing is still counted as a retry and does not stop the rest', async () => {
+    const ctx = setup({ lists: [list(), list({ id: 2 })] });
+    const mark = ctx.db.tasks.markReminderSent;
+    ctx.db.tasks.markReminderSent = async (id, ...rest) => {
+        if (id === 1) throw new Error('db down');
+        return mark(id, ...rest);
+    };
+    const res = await sendDeadlineReminders({ ...ctx, now: NOW });
+    assert.equal(res.retry, 1);
+    assert.deepEqual(ctx.marked, [[2, 'due', false]]);
+});
+
+test('a collapsed reminder that cannot be marked does not stop the others being marked', async () => {
+    const budget = createBudget(0);
+    const marks = [];
+    budget.defer('42', async () => { throw new Error('db down'); });
+    budget.defer('42', async () => marks.push('second'));
+    const client = { users: { fetch: async () => ({ send: async () => {} }) } };
+    const logs = [];
+    const out = await flushOverflow({ client, log: (...a) => logs.push(a), budget });
+    assert.deepEqual(marks, ['second']);
+    assert.equal(out.digests, 1);
+    assert.ok(logs.some((l) => /could not mark/.test(l.join(' '))));
+});

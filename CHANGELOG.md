@@ -152,6 +152,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Fewer duplicate reminder DMs.** The write that marks a reminder as handled is now tried up to three times (`markWithRetry`) after the DM went out, so a one-off database error no longer repeats the reminder at the next run, and a collapsed reminder that cannot be marked no longer stops the other marks. Known issue #40 is reworded.
 - **Wrong "00:00 UTC" reset times on three web pages.** The Review, Focus and Games pages said their limits reset at 00:00 UTC, but the weekly review, the daily focus-session limit and the free-game cap all follow the player's own time zone; the text now says so. The Party page and the weekly leaderboard keep UTC, because they use one global week.
 - **Three red web API tests.** The prestige and cosmetics tests now clear the 30 s leaderboard cache (`clearBoardCache`) before reading the board, and the skill preview test expects Valor to pay nothing for a non-Hero class, as the balance pass made it Hero-only. Closes known issue #46.
 - **The archive job is scheduled on Render.** `render.yaml` gets a weekly cron job `taskquest-archive` (Sundays 03:00 UTC, `npm run archive -- --days 365`, a paid plan) so `xp_transactions` no longer grows without bound by default. Games are not archived by the job.

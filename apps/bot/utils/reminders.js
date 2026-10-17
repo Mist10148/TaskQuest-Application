@@ -10,7 +10,8 @@
  *   snooze   the user pressed "Snooze 1 day" on an earlier reminder
  *
  * A list is marked as handled only when the DM went out or can never go out
- * (DMs closed, user gone); any other error leaves it for the next hourly run.
+ * (DMs closed, user gone); any other error leaves it for the next hourly run. The mark itself is retried a
+ * few times (markWithRetry), because a failure there, after the DM went out, would repeat the DM at the next run.
  *
  * Tasks with their own due date follow the same rules (sendTaskReminders): one DM on the
  * due day (up to 3 days late) at the owner's reminder hour, plus the snooze button. A
@@ -62,6 +63,25 @@ const PERMANENT_DM_ERRORS = new Set([50007 /* cannot DM this user */, 10013 /* u
 
 const MAX_LATE_DAYS = 3;
 
+const MARK_ATTEMPTS = 3;
+const MARK_RETRY_MS = 50;
+
+/**
+ * Run a "this reminder is handled" write, trying again a couple of times. By then the DM has already gone out (sending first is
+ * the safer failure), so a one-off database error here would otherwise repeat it at the next run; only a database that stays
+ * down for the whole retry window still does.
+ */
+async function markWithRetry(mark, { attempts = MARK_ATTEMPTS, delayMs = MARK_RETRY_MS } = {}) {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await mark();
+        } catch (err) {
+            if (attempt >= attempts) throw err;
+            await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+        }
+    }
+}
+
 /** Reminder DMs one person may get in one run; everything past it becomes a single digest DM. */
 const MAX_DMS_PER_USER_PER_RUN = 20;
 
@@ -110,7 +130,14 @@ async function flushOverflow({ client, log, budget }) {
                 continue;
             }
         }
-        for (const mark of marks) await mark();
+        for (const mark of marks) {
+            try {
+                await markWithRetry(mark);
+            } catch (err) {
+                // The digest went out; a reminder that could not be marked is repeated next run. The others still get their turn.
+                log('⚠️', 'DEADLINE', `could not mark a collapsed reminder for ${userId}: ${err.message}`);
+            }
+        }
         out.collapsed += n;
     }
     budget.overflow.clear();
@@ -222,7 +249,7 @@ async function sendTaskReminders({ db, client, log, push, now = new Date(), budg
                 }
             }
             await pushReminder(push, task.discord_id, pushForTask(task, kind, now));
-            await db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : []));
+            await markWithRetry(() => db.tasks.markTaskReminderSent(task.id, now, ...(isMemberRow(task) ? [task.discord_id] : [])));
         } catch (err) {
             // One bad row (a lost DB connection while marking, say) must not stop everyone after it.
             result.retry++;
@@ -315,7 +342,7 @@ async function sendDeadlineReminders({ db, client, log, push, now = new Date(), 
                 }
             }
             await pushReminder(push, list.discord_id, pushForList(list, kind, now));
-            await db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) });
+            await markWithRetry(() => db.tasks.markReminderSent(list.id, kind, { late, pastDeadline, ...forMember(list) }));
         } catch (err) {
             // One bad row (a lost DB connection while marking, say) must not stop everyone after it.
             result.retry++;
@@ -346,4 +373,4 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
     return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.', flags: MessageFlags.SuppressNotifications });
 }
 
-module.exports = { createBudget, flushOverflow, MAX_DMS_PER_USER_PER_RUN, sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };
+module.exports = { createBudget, flushOverflow, markWithRetry, MAX_DMS_PER_USER_PER_RUN, sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };

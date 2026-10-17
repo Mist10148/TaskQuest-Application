@@ -18,7 +18,7 @@
 
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { users, progression } = require('@taskquest/shared/db');
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress, describeEquipped, escapeDiscord } = require('@taskquest/shared');
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, LIMITS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress, describeEquipped, escapeDiscord } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -417,13 +417,23 @@ async function classView(userId, user, classKey) {
 
 /** Embed and components of one class's skill tree, with a way back to the class browser. */
 function skillTreeView(user, userSkills, classKey) {
+    const hasSkills = userSkills.some((s) => SKILL_TREES[classKey]?.skills[s.skill_id]);
     const backRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`class_browse_${classKey}`).setLabel('Back to Classes').setEmoji('◀️').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`class_browse_${classKey}`).setLabel('Back to Classes').setEmoji('◀️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`skill_respec_${classKey}`).setLabel('Reset Tree').setEmoji('🔄').setStyle(ButtonStyle.Secondary).setDisabled(!hasSkills)
     );
     return {
         embeds: [ui.skillTreeEmbed(user, classKey, SKILL_TREES, userSkills)],
         components: [ui.skillSelectMenu(SKILL_TREES[classKey], userSkills, classKey), backRow]
     };
+}
+
+/** What resetting a tree would refund, by the same rule as progression.respecSkills (levels × cost, RESPEC_REFUND_PERCENT back). */
+function respecPreview(userSkills, classKey) {
+    const tree = SKILL_TREES[classKey];
+    const owned = userSkills.filter((s) => tree?.skills[s.skill_id]);
+    const spent = owned.reduce((sum, s) => sum + tree.skills[s.skill_id].cost * Number(s.skill_level), 0);
+    return { skills: owned.length, spent, refund: Math.floor((spent * LIMITS.RESPEC_REFUND_PERCENT) / 100) };
 }
 
 async function classShop(interaction) {
@@ -502,6 +512,45 @@ async function routeClassButton(interaction) {
         }
 
         return interaction.update(skillTreeView(user, userSkills, selectedClass));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  SKILL TREE RESET (ask first, then refund)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    if (id.startsWith('skill_respec_yes_')) {
+        const classKey = classKeyFrom(id);
+        if (!classKey) return interaction.deferUpdate();
+        // Ownership, the once-a-day limit and the refund are enforced atomically.
+        const result = await progression.respecSkills(userId, classKey);
+        const user = await users.getUser(userId);
+        const userSkills = await users.getUserSkills(userId);
+
+        await interaction.update(skillTreeView(user, userSkills, classKey));
+        await interaction.followUp({
+            embeds: [ui.success('Skills Reset', `Removed ${result.removed.length} skill${result.removed.length === 1 ? '' : 's'} and refunded **${result.refund.toLocaleString()} XP** (${result.percent}% of ${result.spent.toLocaleString()}). Balance: ${result.balance.toLocaleString()} XP.`)],
+            ...EPHEMERAL
+        });
+        return;
+    }
+
+    if (id.startsWith('skill_respec_')) {
+        const classKey = classKeyFrom(id);
+        if (!classKey || !SKILL_TREES[classKey]) return interaction.deferUpdate();
+        const preview = respecPreview(await users.getUserSkills(userId), classKey);
+        if (!preview.skills) {
+            return interaction.update({ embeds: [ui.error('Nothing to reset', `You have no ${SKILL_TREES[classKey].name} skills.`)], components: [] });
+        }
+        return interaction.update({
+            embeds: [ui.warn(
+                `Reset the ${SKILL_TREES[classKey].name} tree?`,
+                `This removes ${preview.skills} skill${preview.skills === 1 ? '' : 's'} and refunds **${preview.refund.toLocaleString()} XP** (${LIMITS.RESPEC_REFUND_PERCENT}% of the ${preview.spent.toLocaleString()} XP they cost). The refund never counts as lifetime XP, and you can reset one tree a day.`
+            )],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`skill_respec_yes_${classKey}`).setLabel('Reset and refund').setEmoji('🔄').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`skill_back_${classKey}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+            )]
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

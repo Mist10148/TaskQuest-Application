@@ -118,7 +118,7 @@ const LIST_BUTTON_IDS = new Set(['create', 'back', 'filter_cat', 'filter_all', '
 const LIST_BUTTON_PREFIXES = ['sort_', 'search_', 'refresh_', 'edit_', 'view_', 'item_', 'list_', 'rename_', 'yes_', 'no_', 'metadone_'];
 // The class browser keeps no state: its buttons carry the class they show (class_next_HERO), so they route by prefix.
 const CLASS_BUTTON_IDS = new Set(['class_return_default']);
-const CLASS_BUTTON_PREFIXES = ['cbuy_', 'ceq_', 'cx_', 'skill_unlock_', 'class_prev_', 'class_next_', 'class_browse_', 'class_skills_', 'skill_back_'];
+const CLASS_BUTTON_PREFIXES = ['cbuy_', 'ceq_', 'cx_', 'skill_unlock_', 'class_prev_', 'class_next_', 'class_browse_', 'class_skills_', 'skill_back_', 'skill_respec_'];
 
 const COMMANDS = {
     list: listCommand.execute,

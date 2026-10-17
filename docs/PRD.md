@@ -232,6 +232,7 @@ TaskQuest addresses this in three ways:
 | Task search inside names and descriptions | — | ✓ |
 | Daily reward, profile, achievements | ✓ | ✓ |
 | Classes & skills (17 classes, 96 skills) | ✓ | ✓ |
+| Reset a skill tree (75% refund, once a day) | ✓ (`/class` → Skills → Reset Tree) | ✓ |
 | Leaderboard | ✓ | ✓ |
 | Blackjack (incl. double down), RPS, Hangman | ✓ | ✓ |
 | Snake, Dino Runner, Space Invaders | — | ✓ |

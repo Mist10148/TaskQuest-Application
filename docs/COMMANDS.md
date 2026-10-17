@@ -91,7 +91,7 @@ The class browser shows each class's description, cost and skill tree:
 - **◀ / ▶** browse classes.
 - **Buy** spends XP and equips the class.
 - **Equip** switches to a class you own (this resets class counters).
-- **Skills** opens the tree: select a skill, then **Unlock** or **Upgrade**.
+- **Skills** opens the tree: select a skill, then **Unlock** or **Upgrade**. **Reset Tree** (enabled once you own a skill from that tree) asks for confirmation, shows the refund, then unlearns the tree for 75% of its cost back, once a day.
 
 You can learn skills from the Default tree and from trees of classes you own. Every level costs the skill's listed price. Rules are in [GAMEPLAY.md](GAMEPLAY.md).
 
@@ -140,8 +140,8 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 | `inv_accept_<id>`, `inv_decline_<id>`, `leave_yes_<listId>`, `leave_no`, `mem_rm_<listId>` (menu; the value is the opaque member key) | `commands/sharing.js` |
 | `party_claim`, `party_claim_focus`, `party_accept_<id>`, `party_decline_<id>`, `party_disband_yes`, `party_disband_no` | `commands/party.js` buttons |
 | `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_` (incl. `item_details_`), `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
-| `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_details_`, `sel_swap1_`, `sel_swap2_`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
+| `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_details_`, `sel_swap1_<list>`, `sel_swap2_<list>_<first task>`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |
 | `m_newlist`, `m_editlist_`, `m_additem_`, `m_edititem_`, `m_desc_`, `m_details_`, `m_search` | `commands/list.js` modals |
 | `bj_`, `rps_`, `hm_`, `game_`, `game_select`, `hm_letter_select_a/n`, `bj_bet_modal` | `commands/game.js` |
-| `class_*`, `cbuy_`, `ceq_`, `skill_unlock_`, `skill_back`, `class_select`, `skill_select`, `ach_*` | `commands/gamification.js` |
+| `class_prev_<CLASS>`, `class_next_<CLASS>`, `class_browse_<CLASS>`, `class_skills_<CLASS>`, `class_return_default`, `cbuy_`, `ceq_`, `skill_unlock_`, `skill_back_<CLASS>`, `skill_respec_<CLASS>`, `skill_respec_yes_<CLASS>`, `class_select`, `skill_select_<CLASS>`, `ach_first_/prev_/next_/last_<page>` | `commands/gamification.js` |
 | `ai_ok:<thread id>`, `ai_no:<thread id>` | `commands/ai.js` (approve / cancel a paused `/ask` action) |

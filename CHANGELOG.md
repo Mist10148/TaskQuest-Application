@@ -17,6 +17,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Skill tree reset in the bot.** The `/class` skill view has a **Reset Tree** button (enabled once you own a skill from that tree): it asks for confirmation, shows the refund (75% of the tree's cost, once a day, never lifetime XP) and then calls the same `respecSkills` as the web. Previously the reset existed on the web and in the API only.
 - **An i18n scaffold for the web app.** A typed message catalog (`apps/web/src/i18n`: `messages.ts`, `translate()` with `{name}` placeholders and English fallback, a `useT()` hook) and a per-device `locale` preference that also sets `<html lang>`. The Review and Not-found pages use it; the rest of the app is still inline English, and there is no second language yet. No new dependency.
 - **More web component tests.** The shared loading and error states (`QueryState`, `ErrorCard`), the XP bar, stat card and achievement badge, the quests card and the Review page now have tests (known issue #24 reworded).
 - **A local PostgreSQL in one command.** `docker-compose.yml` runs `pgvector/pgvector:pg16` with the dev, test and browser-test databases (`npm run db:up`, `db:down`, `db:reset`); README, CONTRIBUTING and START_HERE use it.

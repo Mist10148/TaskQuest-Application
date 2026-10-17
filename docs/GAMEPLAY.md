@@ -283,7 +283,7 @@ All class bonuses are multiplied by your percentage skills (§2), like any other
 | 🥁 Rally Cry | 1 | 260 | +25% Warden bonus on lists with 3 or more other people *(class)* | Shield Wall |
 | 🏮 Vigil | 1 | 300 | +15 XP when your completion clears a shared list *(class)* | Rally Cry |
 
-**Resetting a tree.** You can unlearn every skill of one tree (web Skills page, `POST /api/skills/respec`) and get **75%** of what its levels cost back, once a day. The refund is a plain balance credit (source `skill_refund`): it never counts as lifetime XP, and `xp_spent` and the spending achievements are unaffected. Freeze Cache cannot be dropped while you hold more streak freezes than the normal limit of 3.
+**Resetting a tree.** You can unlearn every skill of one tree (web Skills page, `POST /api/skills/respec`, or **Reset Tree** in the bot's `/class` skill view) and get **75%** of what its levels cost back, once a day. The refund is a plain balance credit (source `skill_refund`): it never counts as lifetime XP, and `xp_spent` and the spending achievements are unaffected. Freeze Cache cannot be dropped while you hold more streak freezes than the normal limit of 3.
 
 There are 96 skills in 17 trees (Default plus the sixteen classes).
 

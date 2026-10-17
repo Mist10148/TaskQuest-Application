@@ -106,6 +106,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **Documentation corrections.** The PRD no longer lists ownership transfer as a non-goal (it shipped) or mentions legacy MySQL migrations as current; stale MySQL/MariaDB wording is gone from a code comment and a test header; OPERATIONS gets a table of what has not run against live services (Gemini, web push, the Supabase pooler, screenshots).
 - **Documentation structure.** A [START_HERE](docs/START_HERE.md) page for players and contributors, [KNOWN_ISSUES](docs/KNOWN_ISSUES.md) split into limitations and by-design decisions (numbers kept), a balance-change workflow in CONTRIBUTING, and the docs index refreshed.
 - **Balance pass 3: borrowed skills and runaway scaling.** Measured with `npm run balance` and a cross-class simulation (details in [design/balance.md](docs/design/balance.md#borrowed-skills-and-unbounded-scaling)).
   - Valor, Fortify, Arcane Study and Multishot are `classOnly`. A Default player with only borrowed skills (2,095 XP) used to earn 79 XP on a 10 XP task, more than nearly every class's own full tree; it now earns 15.

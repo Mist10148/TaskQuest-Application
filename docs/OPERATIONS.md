@@ -6,7 +6,8 @@ Practical procedures for running TaskQuest: backing up and restoring the databas
 
 1. [Backups and restore](#backups-and-restore)
 2. [Troubleshooting](#troubleshooting)
-3. [First live Gemini run](#first-live-gemini-run)
+3. [What has not run against live services](#what-has-not-run-against-live-services)
+4. [First live Gemini run](#first-live-gemini-run)
 
 ---
 
@@ -116,6 +117,19 @@ SELECT id, discord_id, name, deadline FROM lists
 -- Applied migrations
 SELECT * FROM schema_migrations ORDER BY id;
 ```
+
+---
+
+## What has not run against live services
+
+Everything in the repository is tested offline or against a throwaway PostgreSQL. These paths have never run against the real service, so treat the first production use as a test and keep the rollback in mind.
+
+| Area | What is covered | What is not | How to close it |
+|---|---|---|---|
+| Gemini (chat, embeddings, evals) | Fake models, offline evals, SQL against pgvector in CI | Real model ids, structured output, safety filters, retrieval and summary quality | [First live Gemini run](#first-live-gemini-run); known issues #17 and #18 |
+| Web push | Payload, subscription checks and sender with fakes | Delivery through the browsers' real push services | [DEPLOYMENT](DEPLOYMENT.md#web-push-optional) with real VAPID keys, then send a test reminder; known issue #30 |
+| Supabase pooler | Local and CI PostgreSQL with the same pool settings | Pooler limits under load, session-pooler behaviour on your plan | Use the session pooler and a small `DB_POOL_SIZE` ([DEPLOYMENT](DEPLOYMENT.md#2-database)); watch connection counts after the first deploy |
+| Screenshots | Text descriptions of every page | Images in the README | Capture them from a signed-in deployment; known issue #26 |
 
 ---
 

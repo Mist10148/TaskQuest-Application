@@ -74,7 +74,7 @@ TaskQuest addresses this in three ways:
 
 ### Non-goals
 
-- **Heavy team collaboration.** Lists can be shared (viewer, editor and manager roles) and small parties share a weekly quest, but there is no task assignment, comments, chat, activity feed or ownership transfer.
+- **Heavy team collaboration.** Lists can be shared (viewer, editor and manager roles) and small parties share a weekly quest, but there is no task assignment, comments, chat or an activity feed. (The owner can hand a list to one of its members; see [shared-lists](design/shared-lists.md).)
 - **Real money.** XP has no cash value and can't be bought, sold or transferred.
 - **A full calendar.** Tasks and lists have due dates, tasks can repeat, and reminders arrive once on the due day at the user's reminder hour (Discord DM, optionally a browser push). There are no times of day, and the calendar is a read-only `.ics` feed.
 - **Native mobile apps.** The web app is responsive, and push notifications are optional and browser-based, but there is no app-store product.
@@ -270,7 +270,7 @@ TaskQuest addresses this in three ways:
 **Release 4.0 (in scope):**
 
 - The monorepo with the shared package.
-- A unified schema, with migrations from every legacy layout (MySQL era; replaced by a PostgreSQL baseline since).
+- A unified schema (first as migrations from every legacy MySQL layout, now a single PostgreSQL baseline).
 - Server-authoritative games on both platforms.
 - An atomic XP economy with anti-farming limits.
 - Lifetime-XP levels.

@@ -57,7 +57,7 @@ function parseTemplateInput(input) {
     };
 }
 
-/** Rows come back with `items` as text (MariaDB) or already parsed (MySQL 8). */
+/** `items` is JSONB, which pg returns already parsed; a string is still accepted in case a row was written as text. */
 function shape(row) {
     const items = typeof row.items === 'string' ? JSON.parse(row.items) : row.items;
     return { id: row.id, name: row.name, description: row.description, items, itemCount: items.length, created_at: row.created_at };

@@ -1,6 +1,6 @@
 /**
  * /summary, /prioritize and /ask. The AI client and the database helpers are
- * stubbed, so these run without the AI service or MySQL.
+ * stubbed, so these run without the AI service or a database.
  */
 
 'use strict';

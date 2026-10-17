@@ -16,6 +16,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **An i18n scaffold for the web app.** A typed message catalog (`apps/web/src/i18n`: `messages.ts`, `translate()` with `{name}` placeholders and English fallback, a `useT()` hook) and a per-device `locale` preference that also sets `<html lang>`. The Review and Not-found pages use it; the rest of the app is still inline English, and there is no second language yet. No new dependency.
 - **More web component tests.** The shared loading and error states (`QueryState`, `ErrorCard`), the XP bar, stat card and achievement badge, the quests card and the Review page now have tests (known issue #24 reworded).
 - **A local PostgreSQL in one command.** `docker-compose.yml` runs `pgvector/pgvector:pg16` with the dev, test and browser-test databases (`npm run db:up`, `db:down`, `db:reset`); README, CONTRIBUTING and START_HERE use it.
 - **PostgreSQL on Supabase.** The bot, web server and AI service run on PostgreSQL with pgvector ([MIGRATION_POSTGRES](docs/MIGRATION_POSTGRES.md)):

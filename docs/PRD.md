@@ -79,7 +79,7 @@ TaskQuest addresses this in three ways:
 - **A full calendar.** Tasks and lists have due dates, tasks can repeat, and reminders arrive once on the due day at the user's reminder hour (Discord DM, optionally a browser push). There are no times of day, and the calendar is a read-only `.ics` feed.
 - **Native mobile apps.** The web app is responsive, and push notifications are optional and browser-based, but there is no app-store product.
 - **Server moderation features.**
-- **Internationalisation.** The product is English only.
+- **Internationalisation.** The product is English only. A message catalog and a language preference exist (`apps/web/src/i18n`), but only the Review and Not-found pages use them and there is no second language.
 
 ## 4. Personas
 
@@ -292,7 +292,7 @@ TaskQuest addresses this in three ways:
 | Next | Run the AI evals against real Gemini and grow the golden sets. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
 | Later | Push notifications for AI results |
 | Later | More component tests for the web app (the first set exists) |
-| Later | Internationalisation (nothing is extracted yet) |
+| Later | Internationalisation: extract the remaining strings into the catalog (`apps/web/src/i18n/messages.ts`) and add a language picker once there is a second catalog; the bot and the AI service are untouched |
 | Later | Screenshots in the README and push delivery tested against real push services (both need a live deployment) |
 | Done | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |
 | Done | The class rebalance, five new classes and 96 skills; task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, the weekly review, the monthly boss, rotating quests and prestige; the cosmetics shop |

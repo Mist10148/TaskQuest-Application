@@ -20,12 +20,14 @@ const SIMULATORS = { snake, dino, invaders };
 /**
  * Telemetry limits per game. `maxTicks` is about 10 minutes of play; the input
  * rate cap is per rolling second of simulated time (a person cannot press more).
+ * `minPayingRunMs` is the shortest run (in simulated play time) that earns XP: a shorter one is valid but pays nothing, so a
+ * script cannot farm the "+1 point" the plausibility bound allows on a run of a few steps.
  * Kept here, next to the simulators, rather than in ARCADE_CONFIG (which is sent to browsers).
  */
 const TELEMETRY_LIMITS = {
-    snake: { maxTicks: 6_000, maxInputsPerSecond: 15, maxInputs: 3_000 },
-    dino: { maxTicks: 36_000, maxInputsPerSecond: 8, maxInputs: 3_000 },
-    invaders: { maxTicks: 36_000, maxInputsPerSecond: 20, maxInputs: 6_000 }
+    snake: { maxTicks: 6_000, maxInputsPerSecond: 15, maxInputs: 3_000, minPayingRunMs: 5_000 },
+    dino: { maxTicks: 36_000, maxInputsPerSecond: 8, maxInputs: 3_000, minPayingRunMs: 5_000 },
+    invaders: { maxTicks: 36_000, maxInputsPerSecond: 20, maxInputs: 6_000, minPayingRunMs: 5_000 }
 };
 
 /**
@@ -122,7 +124,9 @@ function replayRun(type, seed, ticks, inputs) {
  * @param {string} type
  * @param {{ seed: number, elapsedMs: number }} run  what the server knows (seed issued at start, time since start)
  * @param {{ score?: number, ticks?: number, inputs?: number[] } | null} claim  what the client sent
- * @returns {{ ok: true, score: number, ticks: number, baseXP: number } | { ok: false, error: string }}
+ * A valid run shorter than `minPayingRunMs` is accepted but priced at 0 (`tooShort: true`); it is not rejected, so an honest
+ * quick game over is never punished with a cancelled run.
+ * @returns {{ ok: true, score: number, ticks: number, baseXP: number, tooShort: boolean } | { ok: false, error: string }}
  */
 function verifyRun(type, run, claim) {
     if (!isArcadeGame(type)) return { ok: false, error: 'Unknown arcade game' };
@@ -148,7 +152,51 @@ function verifyRun(type, run, claim) {
     // The previous plausibility bound still applies, on the replayed score.
     const priced = scoreRun(type, replay.score, elapsedMs);
     if (!priced.ok) return priced;
-    return { ok: true, score: priced.score, ticks: replay.ticks, baseXP: priced.baseXP };
+    const tooShort = simulatedMs < TELEMETRY_LIMITS[type].minPayingRunMs;
+    return { ok: true, score: priced.score, ticks: replay.ticks, baseXP: tooShort ? 0 : priced.baseXP, tooShort };
+}
+
+/** The value at fraction `p` (0 to 1) of an ascending list, by nearest rank. */
+function percentile(sorted, p) {
+    if (!sorted.length) return 0;
+    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))];
+}
+
+/**
+ * Calibration data for the plausibility bound, from finished runs (`npm run arcade-report`): how fast real players score.
+ * `bound` is the current maxPointsPerSecond; `headroom` is bound / p99 (1 means the bound sits right on the 99th percentile, so
+ * tightening it would reject honest players). Nothing here changes a limit: it only reports, so a person decides.
+ * @param {Array<{ game: string, score: number, ticks: number }>} runs finished runs (replayed score and tick count)
+ * @returns {Array<{ game: string, runs: number, p50: number, p95: number, p99: number, max: number, bound: number, headroom: number|null, nearBound: number }>}
+ */
+function summarizeRuns(runs) {
+    const out = [];
+    for (const game of Object.keys(ARCADE_CONFIG)) {
+        const step = SIMULATORS[game].STEP_MS;
+        const rates = [];
+        let nearBound = 0;
+        for (const r of runs.filter((x) => x.game === game && Number.isFinite(x.score) && Number.isFinite(x.ticks) && x.ticks > 0)) {
+            const seconds = (r.ticks * step) / 1000;
+            rates.push(r.score / seconds);
+            // "Near the bound": a real run (10+ points) that scored at least 90% of what the bound allows for its length.
+            if (r.score >= 10 && r.score >= 0.9 * (Math.floor(seconds * ARCADE_CONFIG[game].maxPointsPerSecond) + 1)) nearBound++;
+        }
+        rates.sort((a, b) => a - b);
+        const round = (n) => Math.round(n * 100) / 100;
+        const p99 = percentile(rates, 0.99);
+        out.push({
+            game,
+            runs: rates.length,
+            p50: round(percentile(rates, 0.5)),
+            p95: round(percentile(rates, 0.95)),
+            p99: round(p99),
+            max: round(rates.length ? rates[rates.length - 1] : 0),
+            bound: ARCADE_CONFIG[game].maxPointsPerSecond,
+            headroom: p99 > 0 ? round(ARCADE_CONFIG[game].maxPointsPerSecond / p99) : null,
+            nearBound
+        });
+    }
+    return out;
 }
 
 module.exports = {
@@ -157,6 +205,7 @@ module.exports = {
     verifyRun,
     replayRun,
     validateTimeline,
+    summarizeRuns,
     newSeed,
     SIMULATORS,
     TELEMETRY_LIMITS,

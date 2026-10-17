@@ -27,6 +27,7 @@
     "test:db": "echo \"Run npm run db:up, then: TEST_DB_PASSWORD=taskquest-dev TEST_DB_NAME=taskquest_test npm test (that database is WIPED)\"",
     "archive": "node scripts/archive.js",
     "xp-report": "node scripts/xp-report.js",
+    "arcade-report": "node scripts/arcade-report.js",
     "balance": "node scripts/balance-sim.js",
     "check": "node scripts/check-syntax.js"
   },

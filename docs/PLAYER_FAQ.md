@@ -80,4 +80,4 @@ Push sends your reminders to your browser as well as to Discord, and only exists
 
 **I closed the game in the middle of a hand.** An unfinished hand is settled after 30 minutes as if you had stood, and pays or loses normally; there are no refunds, because otherwise you could look at the deal and walk away from a bad hand. Come back to `/game` or the Games page to finish it sooner.
 
-**Why did a game pay nothing?** Free games (RPS, Hangman, arcade) share 500 XP a day and have a 3-second cooldown between rounds; the Games page shows how much allowance is left. A zero-score arcade run is a loss, and a run the server cannot reproduce from its recorded inputs is rejected (refresh the page after an update).
+**Why did a game pay nothing?** Free games (RPS, Hangman, arcade) share 500 XP a day and have a 3-second cooldown between rounds; the Games page shows how much allowance is left. A zero-score arcade run is a loss, an arcade run shorter than 5 seconds of play pays nothing, and a run the server cannot reproduce from its recorded inputs is rejected (refresh the page after an update). Free-game XP does not count for the public "this week" leaderboard.

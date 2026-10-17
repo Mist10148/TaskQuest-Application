@@ -153,6 +153,7 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run start:server` / `start:bot` | Production start |
 | `npm run db:up` / `db:down` / `db:reset` | Start, stop, or recreate the local Docker PostgreSQL (`docker-compose.yml`) |
 | `npm run db:migrate` | Apply pending database migrations (`001_baseline` and any later ones; both apps also do it on start) |
+| `npm run arcade-report` | How fast real players score in the arcade games, to check the plausibility bound (needs run history) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |
 | `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |

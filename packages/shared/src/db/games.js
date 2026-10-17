@@ -340,6 +340,7 @@ async function finishArcade(discordId, sessionId, claim) {
             score: scored.score,
             xpGained: gained,
             capped: Boolean(xp && xp.capped),
+            tooShort: scored.tooShort,
             bonusInfo: xp ? xp.bonusInfo : null,
             balance: Number(user.player_xp),
             achievements

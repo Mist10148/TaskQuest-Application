@@ -255,3 +255,53 @@ test('verifyRun: score-only submissions from an old client ask for a refresh', (
     }
     assert.match(arcade.verifyRun(f.game, { elapsedMs: 5000 }, claimOf(f)).error, /refresh the page/, 'a run issued without a seed cannot be verified');
 });
+
+// ─── anti-cheat option B: minimum paying run, calibration report ────────────────
+
+test('a valid run shorter than the minimum is accepted but pays nothing', () => {
+    const short = playBot('snake', 1, 2); // 2 pellets in 2.7 s
+    assert.ok(short.score === 2 && short.ticks * snake.STEP_MS < arcade.TELEMETRY_LIMITS.snake.minPayingRunMs);
+    const out = arcade.verifyRun('snake', { seed: 1, ...realTime('snake', short.ticks) }, claimOf(short));
+    assert.equal(out.ok, true, 'not rejected, so an honest quick game over cancels nothing');
+    assert.equal(out.score, 2);
+    assert.equal(out.tooShort, true);
+    assert.equal(out.baseXP, 0);
+});
+
+test('a run at or past the minimum pays as before', () => {
+    for (const f of fixtures.filter((x) => x.score > 0)) {
+        const out = arcade.verifyRun(f.game, { seed: f.seed, ...realTime(f.game, f.ticks) }, claimOf(f));
+        const long = f.ticks * arcade.SIMULATORS[f.game].STEP_MS >= arcade.TELEMETRY_LIMITS[f.game].minPayingRunMs;
+        assert.equal(out.tooShort, !long, `${f.game} ${f.seed}`);
+        assert.equal(out.baseXP > 0, long, `${f.game} ${f.seed}`);
+    }
+});
+
+test('the minimum is a server-side limit that browsers never receive', () => {
+    for (const game of Object.keys(shared.ARCADE_CONFIG)) {
+        assert.ok(arcade.TELEMETRY_LIMITS[game].minPayingRunMs > 0, game);
+        assert.equal('minPayingRunMs' in shared.ARCADE_CONFIG[game], false, game);
+    }
+});
+
+test('summarizeRuns reports points per second per game and how near the bound real play gets', () => {
+    // Snake: 100 ms steps. 600 steps = 60 s. The bound is 2 points/s, so 120 would be the limit.
+    const runs = [
+        { game: 'snake', score: 30, ticks: 600 },
+        { game: 'snake', score: 60, ticks: 600 },
+        { game: 'snake', score: 118, ticks: 600 }, // 98% of the bound
+        { game: 'snake', score: 5, ticks: 0 }, // no steps: ignored
+        { game: 'dino', score: 40, ticks: 3752 }
+    ];
+    const report = arcade.summarizeRuns(runs);
+    assert.deepEqual(report.map((r) => r.game), ['snake', 'dino', 'invaders']);
+    const [snakeRow, dinoRow, invadersRow] = report;
+    assert.equal(snakeRow.runs, 3);
+    assert.equal(snakeRow.p50, 1);
+    assert.equal(snakeRow.max, 1.97);
+    assert.equal(snakeRow.bound, 2);
+    assert.equal(snakeRow.headroom, 1.02, 'the bound sits almost on the fastest run: do not tighten it');
+    assert.equal(snakeRow.nearBound, 1);
+    assert.equal(dinoRow.runs, 1);
+    assert.deepEqual([invadersRow.runs, invadersRow.p99, invadersRow.headroom, invadersRow.nearBound], [0, 0, null, 0], 'a game with no runs reports zeros');
+});

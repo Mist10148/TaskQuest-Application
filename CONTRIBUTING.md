@@ -79,7 +79,7 @@ npm run balance              # the per-class table; add --markdown for the CLASS
 npm test -w @taskquest/shared
 ```
 
-Then update the GAMEPLAY and CLASS_GUIDE text, [design/balance.md](docs/design/balance.md) and the CHANGELOG in the same commit. With real history, `npm run xp-report` shows what each class actually earns per action.
+Then update the GAMEPLAY and CLASS_GUIDE text, [design/balance.md](docs/design/balance.md) and the CHANGELOG in the same commit. With real history, `npm run xp-report` shows what each class actually earns per action, and `npm run arcade-report` how fast real players score in the arcade games (the headroom of the plausibility bound).
 
 ### Browser tests
 

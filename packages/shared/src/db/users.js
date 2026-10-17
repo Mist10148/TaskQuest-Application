@@ -3,7 +3,7 @@
 'use strict';
 
 const { getPool, withTransaction, isUniqueViolation, savepoint } = require('./pool');
-const { LEADERBOARDS, WEEKLY_XP_SOURCES, DAILY } = require('../constants');
+const { LEADERBOARDS, WEEKLY_XP_SOURCES, WEEKLY_BOARD_XP_SOURCES, DAILY } = require('../constants');
 const { errors } = require('../errors');
 const { isValidTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
@@ -204,7 +204,7 @@ async function getUserStats(discordId) {
  *   lifetime  total XP ever earned (never drops when XP is spent)
  *   xp        current spendable balance
  *   streak    daily streak
- *   weekly    XP earned since Monday 00:00 UTC (earning sources only; one global week for everyone, not per viewer)
+ *   weekly    XP earned since Monday 00:00 UTC (earning sources only, not free games; one global week for everyone, not per viewer)
  */
 function scoreSql(by, now = new Date()) {
     switch (by) {
@@ -236,11 +236,11 @@ function scoreSql(by, now = new Date()) {
         }
         case 'weekly': {
             const monday = questPeriod('weekly', now, 'UTC').startsAt; // the board is global, so its week is the UTC week
-            const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
+            const marks = WEEKLY_BOARD_XP_SOURCES.map(() => '?').join(', ');
             return {
                 sql: `(SELECT COALESCE(SUM(t.amount), 0) FROM xp_transactions t
                        WHERE t.discord_id = u.discord_id AND t.amount > 0 AND t.created_at >= ? AND t.source IN (${marks}))`,
-                params: [monday, ...WEEKLY_XP_SOURCES]
+                params: [monday, ...WEEKLY_BOARD_XP_SOURCES]
             };
         }
         case 'lifetime':

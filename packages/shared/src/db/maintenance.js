@@ -3,6 +3,7 @@
  *  - archiveOld moves xp_transactions (and, only when asked, finished game sessions) older than a number of days to
  *    *_archive tables, in batches, each batch in its own transaction.
  *  - xpByClass reports what each class really earned per action, from xp_transactions.player_class.
+ *  - arcadeRuns lists finished arcade runs (replayed score and length) to calibrate the plausibility bound.
  */
 
 'use strict';
@@ -70,4 +71,22 @@ async function xpByClass({ days = 90, now = new Date() } = {}) {
     return rows.map((r) => ({ playerClass: r.player_class, source: r.source, rewards: Number(r.rewards), average: Math.round(Number(r.average) * 10) / 10, total: Number(r.total) }));
 }
 
-module.exports = { archiveOld, xpByClass, MODIFIED_SOURCES };
+/**
+ * Finished arcade runs of the last `days` days, as { game, score, ticks }: the replayed score and the number of simulation steps the
+ * server stored when it paid the run (game_data = { type, seed, score, ticks }). Feed it to arcade.summarizeRuns.
+ */
+async function arcadeRuns({ days = 90, now = new Date() } = {}) {
+    const [rows] = await getPool().query(
+        `SELECT game_type, game_data FROM game_sessions
+          WHERE game_type = ANY(?) AND state IN ('won', 'lost') AND created_at >= ? AND game_data IS NOT NULL`,
+        [['snake', 'dino', 'invaders'], new Date(now.getTime() - days * DAY_MS)]
+    );
+    return rows
+        .map((r) => {
+            const data = typeof r.game_data === 'string' ? JSON.parse(r.game_data) : r.game_data;
+            return { game: r.game_type, score: Number(data && data.score), ticks: Number(data && data.ticks) };
+        })
+        .filter((r) => Number.isFinite(r.score) && Number.isFinite(r.ticks));
+}
+
+module.exports = { archiveOld, xpByClass, arcadeRuns, MODIFIED_SOURCES };

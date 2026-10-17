@@ -962,3 +962,14 @@ test('a time zone change cannot open a second claim for the same real week', asy
     assert.equal(await claimedSince(conn, '1', 'WEEKLY_COMPLETE_15', east.startsAt), true);
     assert.equal(await claimedSince(conn, '1', 'WEEKLY_COMPLETE_15', new Date('2026-10-25T10:00:00Z')), false, 'a claim from before the period does not count');
 });
+
+test('the weekly board leaves out free-game XP, while the review, stats and digest keep it', () => {
+    const { WEEKLY_XP_SOURCES, WEEKLY_BOARD_XP_SOURCES } = require('../src/constants');
+    assert.ok(WEEKLY_XP_SOURCES.includes('game_reward'), 'your own weekly numbers still count arcade and free-game XP');
+    assert.ok(!WEEKLY_BOARD_XP_SOURCES.includes('game_reward'), 'the public ranking does not');
+    assert.deepEqual(
+        WEEKLY_BOARD_XP_SOURCES,
+        WEEKLY_XP_SOURCES.filter((s) => s !== 'game_reward'),
+        'nothing else is dropped, and the order is unchanged'
+    );
+});

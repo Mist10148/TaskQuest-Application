@@ -300,7 +300,7 @@ There are 96 skills in 17 trees (Default plus the sixteen classes).
 
 ### Leaderboard boards
 
-The leaderboard defaults to **lifetime XP** (the never-reset total, so buying a class or skill never lowers your rank and prestiging doesn't either). Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, free-game wins, quests, the bonus sources, focus sessions and the weekly review since Monday 00:00 UTC; bets and refunds don't count. This board is global, so its week is the UTC week for everyone, not yours), **daily streak** (a streak whose claim window has passed shows as 0 instead of lingering until your next claim), and **current balance**. Any board can be filtered by class, and your own rank respects that filter.
+The leaderboard defaults to **lifetime XP** (the never-reset total, so buying a class or skill never lowers your rank and prestiging doesn't either). Other boards: **earned this week** (XP from creating lists and tasks, completing tasks, daily rewards, quests, the bonus sources, focus sessions and the weekly review since Monday 00:00 UTC; bets, refunds and free-game wins (RPS, Hangman, arcade) don't count, so a script cannot rank here. Your own weekly review and Stats still include them. This board is global, so its week is the UTC week for everyone, not yours), **daily streak** (a streak whose claim window has passed shows as 0 instead of lingering until your next claim), and **current balance**. Any board can be filtered by class, and your own rank respects that filter.
 
 ### Streak freeze
 
@@ -504,6 +504,8 @@ You get a random 5–6 letter word and 6 lives. A wrong letter costs a life. Win
 | 👾 Space Invaders | aliens destroyed | 3 | 150 | 3 |
 
 A run must be started on the server before playing; the server issues a random seed and the game is a deterministic simulation from that seed. Your browser records every input with the step it was given on and sends that timeline with the score when the run ends. **The server replays the timeline and pays on the score it derives itself**, so a score cannot simply be edited or made up. A run is rejected (and cancelled) if it does not replay to the claimed score, lasts longer than about 10 minutes, has inputs faster than a person can press them, or does not fit the real time elapsed since it started. A score above `seconds × rate + 1` is also rejected, and each run can be submitted once. If the game page was open before an update, the server asks you to refresh it. Starting a run uses the same 3-second cooldown as RPS and Hangman, and a run that scores 0 is recorded as a loss, not a win.
+
+A run with less than **5 seconds** of play (its recorded steps times the step length) is valid but pays no XP, so tiny runs cannot be farmed; the page tells you when that happens.
 
 The simulations use a fixed time step (Snake 10 steps a second, Dino Runner and Space Invaders 60). Space Invaders' fire rate is therefore counted in steps (one shot per 15 steps, about 4 a second), and the seed shifts its alien formation. Each bullet destroys at most one alien.
 

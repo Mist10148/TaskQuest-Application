@@ -534,6 +534,13 @@ const WEEKLY_XP_SOURCES = [
 ];
 
 /**
+ * What the public weekly board ranks: the same sources minus free-game XP. The board is the one place players compete, and an
+ * arcade score is the only XP a script can still produce without doing the work (arcade anti-cheat, option B), so it stays out
+ * of the ranking. Free games still count for your own weekly review, stats and Monday digest.
+ */
+const WEEKLY_BOARD_XP_SOURCES = WEEKLY_XP_SOURCES.filter((source) => source !== 'game_reward');
+
+/**
  * The weekly modifier: each UTC ISO week (the same week for everyone, like the weekly board) doubles one flat bonus
  * source. The week number mod 4 picks it, so the four rotate. Daily caps still apply to the doubled amount.
  */
@@ -833,6 +840,7 @@ module.exports = {
     PRESTIGE_TITLES,
     LEADERBOARDS,
     WEEKLY_XP_SOURCES,
+    WEEKLY_BOARD_XP_SOURCES,
     SEASONS,
     LIMITS,
     LIST_ROLES,

@@ -33,6 +33,8 @@ import { toast } from "sonner";
 /** Mirrors @taskquest/shared BLACKJACK_CONFIG; the server enforces it. */
 const BLACKJACK_CONFIG = { MIN_BET: 10, MAX_BET_PERCENT: 0.25, HARD_CAP: 1000 };
 const FREE_GAME_DAILY_CAP = 500;
+/** The shortest arcade run that earns XP (TELEMETRY_LIMITS.minPayingRunMs on the server). */
+const ARCADE_MIN_PAYING_SECONDS = 5;
 
 function useNotifyAchievements() {
   const qc = useQueryClient();
@@ -1476,6 +1478,7 @@ const Games = () => {
     try {
       const r = await gamesApi.arcadeFinish(type, sessionId, run);
       if (r.xpGained > 0) toast.success(`🎮 ${GAME_NAMES[type]} +${r.xpGained} XP!`, { description: r.bonusInfo?.details || undefined });
+      else if (r.tooShort && points > 0) toast.info(`${GAME_NAMES[type]}: runs under ${ARCADE_MIN_PAYING_SECONDS} seconds don't pay XP.`);
       else toast.info(points > 0 ? 'Daily free-game XP cap reached.' : `${GAME_NAMES[type]} - Game over! Try again.`);
       notifyAchievements(r.achievements);
       onSettled();

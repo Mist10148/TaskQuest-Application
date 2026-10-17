@@ -280,7 +280,7 @@ All routes are 🔒. Outcomes, shuffles and payouts are decided on the server. C
 | POST | `/api/games/hangman/start` | — | `{sessionId, view}` (cancels any unfinished word) |
 | POST | `/api/games/hangman/guess` | `{letter: "A"–"Z"}` | `{sessionId, view, xpGained, capped?, bonusInfo?, balance, achievements}` |
 | POST | `/api/games/arcade/:type/start` | — (`type` = `snake`\|`dino`\|`invaders`) | `{sessionId, seed}`: the run's seed; the game simulation must be played from it |
-| POST | `/api/games/arcade/:type/finish` | `{sessionId, score, ticks, inputs}`: the recorded run (`inputs` is a flat `[step, code, ...]` array, see below); `score` is in points, not XP | `{sessionId, gameType, score, xpGained, capped, bonusInfo, balance, achievements}` |
+| POST | `/api/games/arcade/:type/finish` | `{sessionId, score, ticks, inputs}`: the recorded run (`inputs` is a flat `[step, code, ...]` array, see below); `score` is in points, not XP | `{sessionId, gameType, score, xpGained, capped, tooShort, bonusInfo, balance, achievements}` (`tooShort`: a valid run under 5 seconds of play, priced at 0) |
 | POST | `/api/games/:type/quit` | — | `{success}` (hangman/arcade only) |
 
 **Arcade runs are verified by replay.** The three arcade games are deterministic fixed-timestep simulators (`packages/shared/src/games/{snake,dino,invaders}.js`, mirrored in `apps/web/src/lib/arcade/`). `start` issues a per-run `seed`. The client plays from it and records each input as `step, code` (flat, ascending steps; an input at step `t` is applied during step `t`, 0-based). `finish` sends the claimed `score`, `ticks` (the run ends by game over on exactly that step) and `inputs`. The server replays them and pays on the score it derives; the claimed score must equal it. A run is rejected (`400 VALIDATION`, and the run is cancelled for good) when:
@@ -289,6 +289,8 @@ All routes are 🔒. Outcomes, shuffles and payouts are decided on the server. C
 - it is longer than the per-game maximum (6,000 steps for Snake, 36,000 for Dino and Invaders), has too many inputs, or gives more inputs per rolling second than a person can (15 / 8 / 20);
 - the recorded play time (`ticks` × step length) exceeds the server-measured time since `start` (5 % plus 2 s of slack), or the measured time exceeds it by more than 10 minutes;
 - the replayed score is above the old plausibility bound (`seconds × rate + 1`);
+
+A run that passes every check but has less than 5 seconds of recorded play (`ticks` × step length) is not rejected: it pays 0 XP and the result says `tooShort: true`.
 - `ticks` or `inputs` are missing (a client from before this check): the error says to refresh the page.
 
 The body limit for `/api/games/arcade/*` is 128 KB (other routes: 16 KB).

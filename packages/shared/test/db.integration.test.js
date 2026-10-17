@@ -662,15 +662,26 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
         // A legitimate recorded run pays on the replayed score, once.
         // CAROL still has her whole daily free-game allowance (BOB's was spent by the cap tests above).
-        const good = await begin(CAROL, 'snake', 6);
+        const good = await begin(CAROL, 'snake', 8); // 8 pellets take at least 5.5 s of play whatever the seed, past the 5 s minimum that pays
         await age(good, 'snake', good.play.ticks);
         const paid = await db.games.finishArcade(CAROL, good.sessionId, claim(good.play));
-        assert.equal(paid.score, 6);
+        assert.equal(paid.score, 8);
+        assert.equal(paid.tooShort, false);
         assert.ok(paid.xpGained > 0);
         const done = await stateOf(good.sessionId);
         assert.equal(done.state, 'won');
-        assert.deepEqual(done.game_data, { type: 'snake', seed: good.seed, score: 6, ticks: good.play.ticks });
+        assert.deepEqual(done.game_data, { type: 'snake', seed: good.seed, score: 8, ticks: good.play.ticks });
         await assert.rejects(db.games.finishArcade(CAROL, good.sessionId, claim(good.play)), { code: 'NOT_FOUND' }, 'double submit');
+
+        // A valid run under 5 seconds of play is accepted, not cancelled, and pays nothing.
+        const quick = await begin(CAROL, 'snake', 1); // one pellet: about 2 s at most, whatever the seed
+        assert.ok(quick.play.ticks * STEP_MS.snake < 5000, 'the bot finishes in under 5 s');
+        await age(quick, 'snake', quick.play.ticks);
+        const brief = await db.games.finishArcade(CAROL, quick.sessionId, claim(quick.play));
+        assert.equal(brief.score, 1);
+        assert.equal(brief.tooShort, true);
+        assert.equal(brief.xpGained, 0);
+        assert.equal((await stateOf(quick.sessionId)).state, 'lost', 'not cancelled: it was a real run');
 
         // A zero-score run is not a win.
         const zero = await begin(BOB, 'dino', 0);
@@ -2649,8 +2660,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.query('UPDATE users SET timezone = ? WHERE discord_id = ?', ['Pacific/Kiritimati', BOARD]);
         await when(BOARD, 'item_add', 4, '2030-06-02T23:00:00Z'); // Sunday in UTC
         await when(BOARD, 'item_add', 9, '2030-06-03T01:00:00Z'); // Monday in UTC
+        await when(BOARD, 'game_reward', 400, '2030-06-03T02:00:00Z'); // arcade XP never counts for the public weekly board
         const board = await db.users.getLeaderboard(100, { by: 'weekly', now: new Date('2030-06-03T12:00:00Z') });
-        assert.equal(Number(board.find((r) => r.discord_id === BOARD).score), 9);
+        assert.equal(Number(board.find((r) => r.discord_id === BOARD).score), 9, 'free-game XP stays off the weekly board');
     });
 
     await t.test('time zones: a zone change is throttled to once per 24 hours', async () => {

@@ -910,6 +910,8 @@ export interface ArcadeResult {
     score: number;
     xpGained: number;
     capped: boolean;
+    /** The run was valid but shorter than the minimum that pays XP. */
+    tooShort?: boolean;
     bonusInfo: BonusInfo | null;
     balance: number;
     achievements: AchievementUnlock[];

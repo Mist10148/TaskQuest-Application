@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Option D implemented** (input replay validation); options B and C were not built. See [Implementation](#implementation-option-d). |
+| **Status** | **Option D implemented** (input replay validation). Option B is **partly built** (weekly board, minimum paying run, calibration report); option C was not built. See [Implementation](#implementation-option-d) and [Option B: what shipped](#option-b-what-shipped). |
 | **Why a design** | Every option has a real cost in complexity or fairness. This note made the trade-off explicit; the sections up to "Metrics to watch" describe the state and options before option D was built. |
 | **Related** | [KNOWN_ISSUES #1](../KNOWN_ISSUES.md), `packages/shared/src/games/arcade.js`, `packages/shared/src/db/games.js` (`startArcade`, `finishArcade`) |
 
@@ -39,7 +39,7 @@ Document the bound (done) and rely on the cap. Cheapest; acceptable while the ca
 - Remove arcade XP from the **weekly leaderboard** sources (`WEEKLY_XP_SOURCES` includes `game_reward`), so cheating cannot affect the visible competition.
 - Per-account cooldown between runs of the same game.
 
-Effort: a few days, low risk. Not built: option D (input replay) shipped instead, and B is now only a hardening idea (see [KNOWN_ISSUES #39](../KNOWN_ISSUES.md)).
+Effort: a few days, low risk. Option D shipped first; B was then built in part, see [Option B: what shipped](#option-b-what-shipped) and [KNOWN_ISSUES #39](../KNOWN_ISSUES.md).
 
 ### C. Signed checkpoints (medium)
 The client reports progress at intervals (for example every 5 seconds: score, tick count). The server signs a chain: `checkpoint[n] = HMAC(secret, run_id || n || score || checkpoint[n-1])`, returns it, and the client must present the last checkpoint with the final score. This stops editing the final score in isolation and enforces a monotonic, time-consistent score curve, but a script can still produce a plausible curve.
@@ -101,4 +101,17 @@ Built for all three games at once, since the simulators share their structure. W
 
 - A bot that *plays* the game (reads the simulator state and sends legitimate inputs in real time at human input rates) earns what a human of that skill would; the per-run caps and the 500 XP a day bound it. Only edited, fabricated, replayed (wrong seed), accelerated or impossible runs are stopped.
 - A script that runs the simulator itself still needs the real time the run would take: it cannot finish faster than playing.
-- Option B (calibrating the bounds, dropping arcade XP from the weekly board, a per-run cooldown) was not part of this change.
+- Option B was not part of this change; it followed, see below.
+
+## Option B: what shipped
+
+Built after replay verification, as far as it could be done without real play data. The rule was to never make an honest player pay for a guess: a bound that is too tight cancels their run.
+
+| Idea from option B | Result |
+|---|---|
+| Drop arcade XP from the weekly leaderboard | **Done.** `WEEKLY_BOARD_XP_SOURCES` (constants.js) is `WEEKLY_XP_SOURCES` without `game_reward`, and only the public weekly board uses it. Your own weekly review, the Stats page and the Monday digest still count free-game XP. A scripted solver can still earn the daily cap, but it can no longer outrank people who did the work. |
+| A minimum per-run duration | **Done, as "pays nothing", not "rejected".** A valid run with less than `TELEMETRY_LIMITS[game].minPayingRunMs` (5 seconds of simulated play) is accepted and priced at 0 (`tooShort` in the result; the page says so). It stops farming the "+1 point" the plausibility bound allows on a run of a few steps, and an honest quick game over cancels nothing. Every recorded bot fixture that scores is longer than 5 s. |
+| Calibrate `maxPointsPerSecond` from real play | **Tooling only.** `npm run arcade-report [-- --days 90]` (`scripts/arcade-report.js`, `arcade.summarizeRuns`) prints, per game, the points per second at the median, p95, p99 and maximum, the current bound, the headroom (bound / p99) and how many runs scored at least 90% of what the bound allows. The numbers stay at 2 / 2 / 3 until the report shows a large headroom: lowering a bound on a guess would reject honest players. |
+| A per-account cooldown between runs of the same game | **Not built, on purpose.** The shared 3 second cooldown between free games and the 500 XP daily cap already bound a spammer; a per-game cooldown would only turn an honest quick retry into an error toast and an unrecorded run. |
+
+Option C (signed checkpoints) stays unbuilt for the reason given above: it adds protocol complexity without closing the real gap (a script can still produce a plausible curve).

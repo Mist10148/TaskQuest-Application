@@ -37,7 +37,7 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `weekly_review` | +40 after finishing at least one task that week | Once a week | No |
 | `quest_reward` | Daily 15 / 25 / 30, weekly 80 / 120 and the rotating quest 50 to 80, monthly boss 400 ([GAMEPLAY §5b](GAMEPLAY.md#5b-quests)) | Once per quest per period | No |
 | `party_quest` | +60 for the party weekly quest | Once per person per week (UTC week), after 6 tasks of your own | No |
-| `game_reward` | RPS win 10 base; Hangman max(10, 10 × lives left) base; arcade points × rate (Snake 2, Dino 1, Invaders 3 per point, max 100 / 100 / 150 per run) | 500 XP a day across all free games, 3 s cooldown | Yes (then trimmed to the remaining allowance) |
+| `game_reward` | RPS win 10 base; Hangman max(10, 10 × lives left) base; arcade points × rate (Snake 2, Dino 1, Invaders 3 per point, max 100 / 100 / 150 per run; a run under 5 seconds of play pays nothing) | 500 XP a day across all free games, 3 s cooldown | Yes (then trimmed to the remaining allowance) |
 | `blackjack_win`, `blackjack_blackjack` | Winnings: 1:1, or 3:2 for a natural | Bet 10 to min(25% of balance, 1000) | No (flat on purpose) |
 
 Task bonuses (`first_of_day` to `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist`, `estimate_accuracy`) are paid only on a task's **first, paid completion**: un-checking and re-checking pays nothing, neither does a completion over the 50-a-day cap, and imported tasks and auto-created repeat copies never earn them. An *early* or *overdue* effect needs a due date that was set at least 24 hours before the completion. Imports, templates and exports never pay XP.

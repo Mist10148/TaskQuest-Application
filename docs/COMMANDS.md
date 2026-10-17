@@ -102,7 +102,7 @@ You can learn skills from the Default tree and from trees of classes you own. Ev
 - **`/summary`**: `mode` defaults to *Today's briefing*, or to *One quest* when you pick a `quest`. *Recap* summarises what you finished today or this week.
 - **`/prioritize`**: when the model is unavailable or your daily AI quota is used, the ranking falls back to deadlines and priority, and the reply says so.
 - **`/ask`**: each use starts a new conversation (continue it on the web Chat page). When the assistant wants to change something, the reply shows the change with **Approve** and **Cancel**. Nothing changes until you approve, and XP and achievements are awarded exactly as if you had done it yourself.
-- All three share the per-user daily AI quota (`AI_DAILY_REQUEST_LIMIT`) with the web app. Replies are marked as AI-generated.
+- All three share the per-user daily AI quota (`AI_DAILY_REQUEST_LIMIT`, refilled at your own midnight) with the web app. Replies are marked as AI-generated.
 
 ### Talking to the bot (@mention, reply or DM)
 

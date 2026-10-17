@@ -95,7 +95,7 @@ function pickAttachment(message) {
 function errorReply(err) {
     switch (err?.code) {
         case 'AI_QUOTA':
-            return "I'm out of energy for today. *yawns* Talk to me again after midnight UTC.";
+            return "I'm out of energy for today. *yawns* Talk to me again after your midnight.";
         case 'AI_OPTED_OUT':
             return 'You turned AI features off for your account, so I have to stay quiet. You can turn them back on in the web app settings.';
         case 'VALIDATION':

@@ -67,7 +67,7 @@ app/
 ├── tools/                chat tools (specs.py) and the Express /internal client (web_client.py)
 ├── chat_service.py       runs a turn and turns graph output into SSE events
 ├── threads.py            chat thread rows
-├── usage.py              daily quota and token accounting
+├── usage.py              daily quota (the user's own day) and token accounting
 ├── prompts/*.md          versioned prompts (the version is logged)
 └── routers/              /v1/* (summary, prioritize, chat, threads) and /internal/* (index, forget)
 ```

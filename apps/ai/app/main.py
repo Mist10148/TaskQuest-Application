@@ -64,7 +64,7 @@ def create_app() -> FastAPI:
     async def _quota(request: Request, exc: QuotaExceeded):
         return JSONResponse(
             status_code=429,
-            content={"error": "Daily AI energy used up. It resets at midnight UTC.", "code": "AI_QUOTA"},
+            content={"error": "Daily AI energy used up. It resets at your midnight.", "code": "AI_QUOTA"},
         )
 
     @app.exception_handler(AIOptedOut)

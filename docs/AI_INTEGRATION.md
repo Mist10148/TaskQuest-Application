@@ -597,7 +597,7 @@ Configuration and deployment are documented in [DEPLOYMENT.md](DEPLOYMENT.md#ai-
 
 - **Model tiering.** Use Flash for router, query rewrite, summaries, chat and titles. Use the Pro/reasoning model only for prioritizer ranking, and only when there are more than 15 open quests (otherwise Flash).
 - **Caching.** Summaries by input hash (`ai_summary_cache`); embeddings by `content_hash` (never re-embed unchanged text); prioritizer results for 5 min, keyed by a hash of the open-task set.
-- **Quotas.** `usage.check(discord_id, feature)` before every LLM call. When over `AI_DAILY_REQUEST_LIMIT`, return `429 AI_QUOTA` and the UI shows "Daily AI energy used up — resets at midnight UTC" (game-flavoured).
+- **Quotas.** `usage.check(discord_id, feature)` before every LLM call. When over `AI_DAILY_REQUEST_LIMIT`, return `429 AI_QUOTA` and the UI shows "Daily AI energy used up — resets at your midnight" (game-flavoured). The day is the user's own (`users.timezone`; UTC until set), the same days as the daily caps and quests.
 - **Token accounting.** Read `usage_metadata` from each response and add it to `ai_usage`.
 - **Logging.** Structured JSON logs with request id (passed from Express as `X-Request-Id`), feature, model, prompt version, latency, tokens and fallback used. **Never log full task text** in production.
 - **Tracing.** LangSmith when the key is set, for graph-level traces during development and evals.

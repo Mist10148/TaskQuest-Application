@@ -1,9 +1,14 @@
-"""Per-user daily quotas and token accounting (``ai_usage``)."""
+"""Per-user daily quotas and token accounting (``ai_usage``).
+
+A "day" is the user's own calendar day: it starts at their local midnight (``users.timezone``, UTC until they set one), so
+the quota refills when their day starts, like the daily caps and quests in the rest of TaskQuest.
+"""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -15,17 +20,40 @@ FEATURES = ("summary", "prioritize", "chat", "embed")
 
 
 class QuotaExceeded(Exception):
-    """The user used up today's AI requests (resets at midnight UTC)."""
+    """The user used up today's AI requests (resets at their local midnight)."""
+
+
+def _now() -> datetime:
+    """The current instant; tests replace it to move the clock."""
+    return datetime.now(UTC)
+
+
+def day_in_zone(zone_name: str | None, now: datetime | None = None) -> str:
+    """The calendar day (``YYYY-MM-DD``) it is in ``zone_name`` at ``now``; UTC for a missing or unknown zone."""
+    zone: tzinfo = UTC
+    if zone_name:
+        try:
+            zone = ZoneInfo(zone_name)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            zone = UTC  # a zone this server cannot resolve must not stop the quota from working
+    return (now or _now()).astimezone(zone).date().isoformat()
 
 
 def today_utc() -> str:
-    return datetime.now(UTC).date().isoformat()
+    return day_in_zone(None)
+
+
+async def user_day(conn: AsyncConnection, discord_id: str) -> str:
+    """Today's date in the user's time zone (the ``day`` key of their ``ai_usage`` rows)."""
+    result = await conn.execute(text("SELECT timezone FROM users WHERE discord_id = :uid"), {"uid": discord_id})
+    row = result.first()
+    return day_in_zone(row[0] if row else None)
 
 
 async def requests_today(conn: AsyncConnection, discord_id: str) -> int:
     result = await conn.execute(
         text("SELECT COALESCE(SUM(requests), 0) FROM ai_usage WHERE discord_id = :uid AND day = :day"),
-        {"uid": discord_id, "day": today_utc()},
+        {"uid": discord_id, "day": await user_day(conn, discord_id)},
     )
     return int(result.scalar() or 0)
 
@@ -53,7 +81,7 @@ async def record(
 
 async def _add(conn: AsyncConnection, discord_id: str, feature: str, requests: int, i: int, o: int) -> None:
     """Atomic upsert (no read-then-write race between concurrent requests)."""
-    params = {"uid": discord_id, "day": today_utc(), "f": feature, "n": requests, "i": i, "o": o}
+    params = {"uid": discord_id, "day": await user_day(conn, discord_id), "f": feature, "n": requests, "i": i, "o": o}
     clause = (
         "ON CONFLICT (discord_id, day, feature) DO UPDATE SET requests = ai_usage.requests + excluded.requests, "
         "input_tokens = ai_usage.input_tokens + excluded.input_tokens, "
@@ -91,7 +119,7 @@ async def release(conn: AsyncConnection, discord_id: str, feature: str) -> None:
             "UPDATE ai_usage SET requests = CASE WHEN requests > 0 THEN requests - 1 ELSE 0 END "
             "WHERE discord_id = :uid AND day = :day AND feature = :f"
         ),
-        {"uid": discord_id, "day": today_utc(), "f": feature},
+        {"uid": discord_id, "day": await user_day(conn, discord_id), "f": feature},
     )
 
 

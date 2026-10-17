@@ -147,7 +147,7 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [A
 | `WEB_INTERNAL_URL` | ai | Base URL of the web service, used by chat tools to make confirmed changes (`/internal/*`) |
 | `GEMINI_API_KEY` | ai | Google AI Studio key. Server-side only, never a `VITE_*` variable. |
 | `GEMINI_CHAT_MODEL`, `GEMINI_REASONING_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM` | ai | Model ids and embedding size (defaults: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-embedding-001`, `768`). **Check them against Google's current model list.** Changing the embedding model re-embeds everything automatically (vectors are stored with the model name). |
-| `AI_DAILY_REQUEST_LIMIT` | ai | Requests per user per UTC day across all features (default `100`) |
+| `AI_DAILY_REQUEST_LIMIT` | ai | Requests per user per day across all features (default `100`). A user's day is their own calendar day (`users.timezone`, UTC until they set one), so the quota refills at their local midnight |
 | `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate Postgres role for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables (plus `USAGE` on the `ai_embeddings` id sequence). It never writes tasks directly. |
 | `LANGSMITH_API_KEY` | ai | Optional tracing |
 | `AI_RECONCILE_MINUTES` | ai | How often missed re-index calls are caught up (default `15`) |

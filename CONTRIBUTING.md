@@ -15,6 +15,8 @@ npm run dev:web      # :8080 (proxies /api)
 npm run dev:bot
 ```
 
+No PostgreSQL yet? `npm run db:up` starts one in Docker (`docker-compose.yml`: pgvector, listening on localhost:5432, and the databases `taskquest`, `taskquest_test` and `taskquest_e2e`); put `DB_PASSWORD=taskquest-dev` in `.env`. `npm run db:down` stops it and `npm run db:reset` starts over with an empty database.
+
 Use a **separate Discord application** for development, register commands to a test guild with `npm run deploy:commands -- --guild=<id>`, and use a local database.
 
 ## Where code belongs
@@ -58,10 +60,11 @@ The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date he
 The service, API and bot-flow tests run against a real PostgreSQL database with the `vector` and `citext` extensions available. They are skipped unless `TEST_DB_NAME` is set. **The target database is wiped** (`DROP SCHEMA public CASCADE`), so use a throwaway one:
 
 ```bash
-docker run -d --name tq-pg -p 5432:5432 -e POSTGRES_PASSWORD=pw pgvector/pgvector:pg16   # or any Postgres 15+ with pgvector
-psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE taskquest_test"
-TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=5432 TEST_DB_USER=postgres TEST_DB_PASSWORD=pw TEST_DB_NAME=taskquest_test npm test
+npm run db:up   # Docker: pgvector/pgvector:pg16 with taskquest_test and taskquest_e2e created for you
+TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=5432 TEST_DB_USER=postgres TEST_DB_PASSWORD=taskquest-dev TEST_DB_NAME=taskquest_test npm test
 ```
+
+Without Docker, use any Postgres 15+ with pgvector and run `CREATE DATABASE taskquest_test` yourself.
 
 CI runs the same suite against the `pgvector/pgvector:pg16` image.
 
@@ -83,7 +86,7 @@ Then update the GAMEPLAY and CLASS_GUIDE text, [design/balance.md](docs/design/b
 `apps/web/e2e` holds a small Playwright suite (Chromium) that drives the built app against a real API and database. It is separate from `npm test` and runs in its own CI job. The seed script **wipes** its database (default `taskquest_e2e`, override with `E2E_DB_HOST`, `E2E_DB_PORT`, `E2E_DB_USER`, `E2E_DB_PASSWORD`, `E2E_DB_NAME`):
 
 ```bash
-psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE taskquest_e2e"
+npm run db:up   # creates taskquest_e2e; E2E_DB_PASSWORD=taskquest-dev, or create the database yourself on another Postgres
 (cd apps/web && npx playwright install chromium)   # once
 npm run build
 npm run test:e2e

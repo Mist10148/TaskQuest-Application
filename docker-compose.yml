@@ -1,0 +1,28 @@
+# Local PostgreSQL for development and tests: `npm run db:up`.
+#
+# One container, three databases:
+#   taskquest       the dev database (.env: DB_PASSWORD=taskquest-dev)
+#   taskquest_test  integration tests; WIPED on every run (TEST_DB_NAME=taskquest_test)
+#   taskquest_e2e   Playwright tests; WIPED on every run (E2E_DB_NAME, the default)
+# The pgvector image ships the `vector` extension; the first migration enables it and citext.
+# Development only: the password is public, so never expose this port beyond localhost.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: taskquest-db
+    environment:
+      POSTGRES_PASSWORD: taskquest-dev
+      POSTGRES_DB: taskquest
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - taskquest-pg:/var/lib/postgresql/data
+      - ./db/dev/init.sql:/docker-entrypoint-initdb.d/10-test-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d taskquest"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  taskquest-pg:

@@ -106,7 +106,7 @@ cd TaskQuest-Application
 npm install
 ```
 
-1. **Create a database.** Use something like `CREATE DATABASE taskquest;` (the first migration enables `citext` and `vector` if your user may; otherwise run `CREATE EXTENSION` for both as an admin).
+1. **Create a database.** With Docker, `npm run db:up` does it for you (set `DB_PASSWORD=taskquest-dev` in `.env`). Otherwise use something like `CREATE DATABASE taskquest;` (the first migration enables `citext` and `vector` if your user may; otherwise run `CREATE EXTENSION` for both as an admin).
 2. **Configure.** One `.env` at the repository root is shared by the bot, the web server and the web build:
    ```bash
    cp .env.example .env
@@ -151,6 +151,7 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run dev:web` / `dev:server` / `dev:bot` | Run each app in watch mode |
 | `npm run build` | Build the web app into `apps/web/dist` |
 | `npm run start:server` / `start:bot` | Production start |
+| `npm run db:up` / `db:down` / `db:reset` | Start, stop, or recreate the local Docker PostgreSQL (`docker-compose.yml`) |
 | `npm run db:migrate` | Apply pending database migrations (`001_baseline` and any later ones; both apps also do it on start) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |

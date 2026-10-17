@@ -16,6 +16,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **A local PostgreSQL in one command.** `docker-compose.yml` runs `pgvector/pgvector:pg16` with the dev, test and browser-test databases (`npm run db:up`, `db:down`, `db:reset`); README, CONTRIBUTING and START_HERE use it.
 - **PostgreSQL on Supabase.** The bot, web server and AI service run on PostgreSQL with pgvector ([MIGRATION_POSTGRES](docs/MIGRATION_POSTGRES.md)):
   - Node uses `pg` behind a small compatibility layer; the AI service uses `asyncpg`.
   - The 26 MySQL migrations are squashed into one `001_baseline`.

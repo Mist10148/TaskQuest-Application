@@ -1249,6 +1249,26 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         void X;
     });
 
+    await t.test('a hand-over and the new owner adding tasks at the same moment both finish', async () => {
+        const A = '100000000000000931';
+        const B = '100000000000000932';
+        for (const id of [A, B]) await db.users.ensureUser(id);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['handoverb', B]);
+        const { list } = await db.tasks.createList(A, { name: 'Race' });
+        const { list: mine } = await db.tasks.createList(B, { name: 'Race mine' });
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [list.id, B, 'editor', require('crypto').randomBytes(6).toString('hex')]);
+        const key = (await db.sharing.listMembers(A, list.id)).members.find((m) => m.name === 'handoverb').memberKey;
+
+        // The new owner is adding to their own quest and to the shared one while the owner hands it over. The hand-over locks
+        // the new owner's account before the list (the order everything else uses), so nothing deadlocks or fails.
+        const work = [db.sharing.transferOwnership(A, list.id, key)];
+        for (let i = 0; i < 6; i++) work.push(db.tasks.addItem(B, i % 2 ? mine.id : list.id, { name: `race ${i}` }));
+        const settled = await Promise.allSettled(work);
+        assert.deepEqual(settled.filter((r) => r.status === 'rejected').map((r) => r.reason.message), [], 'every call finished');
+        assert.equal((await db.query('SELECT discord_id FROM lists WHERE id = ?', [list.id]))[0].discord_id, B, 'the list moved');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM items WHERE list_id IN (?, ?)', [list.id, mine.id]))[0].n), 6, 'all six tasks exist');
+    });
+
     await t.test('party board and the focus quest: minutes together, a board, one claim a week each', async () => {
         const P = '100000000000000921';
         const Q = '100000000000000922';

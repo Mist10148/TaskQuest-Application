@@ -163,6 +163,8 @@ Every XP change goes through `progression.applyXP(conn, user, amount, source, op
 4. Whitelisted extra columns (class counters, ownership flags, streak fields) are updated in the same statement batch.
 5. An `xp_transactions` row records the amount, the source, the before and after balances, and a reference ID.
 
+Handing a shared list over follows the same order: it reads who the new owner is without a lock, locks their user row, then the list, and re-checks the member before counting their lists and tasks ([transfer-locks.test.js](../packages/shared/test/transfer-locks.test.js) pins the order).
+
 Because the user row is locked for the whole operation, two concurrent requests for the same user run one after the other. A double-clicked "Buy class" charges once: the second request sees the ownership flag and fails with `CONFLICT`. A double-clicked "Stand" settles once: the second finds no active session. The integration tests check both cases.
 
 Achievement unlocks happen in the same transaction (`ON CONFLICT DO NOTHING` on the unique key), so a reward and its achievement are never split.

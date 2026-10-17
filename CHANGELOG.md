@@ -152,6 +152,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Hand-over no longer races the new owner's own adds.** Handing a shared list over now locks the new owner's account before the list (user row, then list, like every other writer) and re-checks the member under the lock, so a task the new owner is adding at that moment cannot push them past the 5,000 task limit. A member adding to a different quest the new owner owns is still not serialised (known issue #47, reworded).
 - **Fewer duplicate reminder DMs.** The write that marks a reminder as handled is now tried up to three times (`markWithRetry`) after the DM went out, so a one-off database error no longer repeats the reminder at the next run, and a collapsed reminder that cannot be marked no longer stops the other marks. Known issue #40 is reworded.
 - **Wrong "00:00 UTC" reset times on three web pages.** The Review, Focus and Games pages said their limits reset at 00:00 UTC, but the weekly review, the daily focus-session limit and the free-game cap all follow the player's own time zone; the text now says so. The Party page and the weekly leaderboard keep UTC, because they use one global week.
 - **Three red web API tests.** The prestige and cosmetics tests now clear the 30 s leaderboard cache (`clearBoardCache`) before reading the board, and the skill preview test expects Valor to pay nothing for a non-Hero class, as the balance pass made it Hero-only. Closes known issue #46.

@@ -329,9 +329,21 @@ async function leave(userId, listId) {
  */
 async function transferOwnership(actorId, listId, memberKey) {
     return withTransaction(async (conn) => {
+        // The new owner's lists and tasks are counted below, so their account is locked first: anything they are adding at
+        // this moment finishes before the count, and anything they try afterwards waits for the hand-over. Lock order is user
+        // row, then list (see access.js), so who they are is read without a lock, then the user, then the list, then re-checked.
+        const peeked = await access.forList(conn, actorId, listId, 'manager');
+        if (!peeked.isOwner) throw errors.forbidden('Only the owner can hand this list over.');
+        const asked = String(memberKey || '');
+        if (!/^[a-f0-9]{12}$/.test(asked)) throw errors.notFound('Member not found.');
+        const [[candidate]] = await conn.query('SELECT discord_id FROM list_members WHERE list_id = ? AND public_id = ?', [peeked.list.id, asked]);
+        if (!candidate) throw errors.notFound('Member not found.');
+        await lockUser(conn, candidate.discord_id);
+
         const { list, isOwner } = await access.forList(conn, actorId, listId, 'manager', { lock: true });
         if (!isOwner) throw errors.forbidden('Only the owner can hand this list over.');
         const m = await memberByKey(conn, list.id, memberKey);
+        if (m.discord_id !== candidate.discord_id) throw errors.conflict('The members of this list just changed. Try again.');
         const next = m.discord_id;
         const [[clash]] = await conn.query('SELECT id FROM lists WHERE discord_id = ? AND name = ?', [next, list.name]);
         if (clash) throw errors.conflict('That person already owns a quest with this name. Rename one of them first.');

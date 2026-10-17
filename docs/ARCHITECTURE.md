@@ -61,7 +61,7 @@ flowchart TB
 | `apps/bot` | Node 22, CommonJS, discord.js 14 | Discord commands and components, rendering embeds, background jobs and a health endpoint. |
 | `packages/shared` | Node 22, CommonJS | Every rule, every SQL statement, migrations and the connection pool. |
 | `apps/ai` (optional) | Python 3.12, FastAPI | Private service for the summarizer, prioritizer and chat (Gemini, LangChain, LangGraph). Reads task data through scoped queries; changes tasks only by calling Express `/internal/*` after the user confirms. See [AI_INTEGRATION.md](AI_INTEGRATION.md). |
-| PostgreSQL (Supabase in production) | pgvector, citext | The only state. There is no in-memory game or session state in either app. |
+| PostgreSQL (Supabase in production) | pgvector, citext | The only state. There is no in-memory game or session state in either app; even the Discord browsers (reorder, achievements, class browser) keep their position in the buttons' custom IDs. |
 
 ## 2. The shared package
 

@@ -22,8 +22,6 @@ const { CLASSES, SKILL_TREES, ACHIEVEMENTS, STREAK_FREEZE, STREAK_FREEZE_CACHE, 
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
-const pageState = new Map();
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //  🏓 /ping - STATELESS (No DB access, no side effects)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -362,7 +360,6 @@ async function achievements(interaction) {
     const userAchs = await users.getAchievements(userId);
     const page = 0;
     const total = Math.ceil(Object.keys(ACHIEVEMENTS).length / 8) || 1;
-    pageState.set(userId, page);
 
     await interaction.reply({
         embeds: [ui.achievementsEmbed(userAchs, ACHIEVEMENTS, page)],
@@ -371,18 +368,15 @@ async function achievements(interaction) {
     });
 }
 
+// The target page is part of each button's custom ID (ach_next_2), so paging needs no memory on the bot and
+// survives a restart.
 async function handleAchievementPagination(interaction) {
     const userId = interaction.user.id;
-    const action = interaction.customId;
-    let page = pageState.get(userId) || 0;
     const total = Math.ceil(Object.keys(ACHIEVEMENTS).length / 8) || 1;
+    const m = /^ach_(?:first|prev|next|last)_(\d+)$/.exec(interaction.customId);
+    if (!m) return interaction.deferUpdate();
+    const page = Math.min(Number(m[1]), total - 1);
 
-    if (action === 'ach_first') page = 0;
-    else if (action === 'ach_prev') page = Math.max(0, page - 1);
-    else if (action === 'ach_next') page = Math.min(total - 1, page + 1);
-    else if (action === 'ach_last') page = total - 1;
-
-    pageState.set(userId, page);
     const userAchs = await users.getAchievements(userId);
     await interaction.update({
         embeds: [ui.achievementsEmbed(userAchs, ACHIEVEMENTS, page)],
@@ -398,11 +392,17 @@ const classData = new SlashCommandBuilder()
     .setName('class')
     .setDescription('⚔️ Browse and select classes');
 
-// Store selected class per user for navigation
-const classViewState = new Map();
+// The browser keeps no state on the bot: every button carries the class it shows or leads to in its custom ID
+// (class_next_HERO, class_skills_TANK), so it works after a restart and for several open windows at once.
 
 // List of all classes for browsing
 const CLASS_ORDER = Object.keys(CLASSES);
+
+/** The class key at the end of a custom ID such as `class_next_HERO`, or null when it is not a class. */
+function classKeyFrom(id) {
+    const key = id.slice(id.lastIndexOf('_') + 1);
+    return Object.prototype.hasOwnProperty.call(CLASSES, key) ? key : null;
+}
 
 /** Embed and components of the class browser for one class (loads the user's skills for the counters). */
 async function classView(userId, user, classKey) {
@@ -415,22 +415,24 @@ async function classView(userId, user, classKey) {
     };
 }
 
+/** Embed and components of one class's skill tree, with a way back to the class browser. */
+function skillTreeView(user, userSkills, classKey) {
+    const backRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`class_browse_${classKey}`).setLabel('Back to Classes').setEmoji('◀️').setStyle(ButtonStyle.Secondary)
+    );
+    return {
+        embeds: [ui.skillTreeEmbed(user, classKey, SKILL_TREES, userSkills)],
+        components: [ui.skillSelectMenu(SKILL_TREES[classKey], userSkills, classKey), backRow]
+    };
+}
+
 async function classShop(interaction) {
     const userId = interaction.user.id;
     const user = await users.ensureUser(userId);
 
-    // Start in browse mode with current class selected
-    const currentIndex = CLASS_ORDER.indexOf(user.player_class);
-    classViewState.set(userId, {
-        view: 'browse',
-        selectedClass: user.player_class,
-        browseIndex: currentIndex >= 0 ? currentIndex : 0
-    });
-
-    const classKey = user.player_class;
-
+    // Start in browse mode with the current class selected
     await interaction.reply({
-        ...(await classView(userId, user, classKey)),
+        ...(await classView(userId, user, user.player_class)),
         flags: MessageFlags.Ephemeral
     });
 }
@@ -448,42 +450,14 @@ async function routeClassButton(interaction) {
     const id = interaction.customId;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    //  CLASS BROWSER NAVIGATION
+    //  CLASS BROWSER NAVIGATION (previous, next and back from the skill tree)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    if (id === 'class_prev' || id === 'class_next') {
+    if (id.startsWith('class_prev_') || id.startsWith('class_next_') || id.startsWith('class_browse_')) {
+        const classKey = classKeyFrom(id);
+        if (!classKey) return interaction.deferUpdate();
         const user = await users.getUser(userId);
-        const state = classViewState.get(userId) || { browseIndex: 0 };
-
-        let newIndex = state.browseIndex || 0;
-        if (id === 'class_prev' && newIndex > 0) newIndex--;
-        if (id === 'class_next' && newIndex < CLASS_ORDER.length - 1) newIndex++;
-
-        state.browseIndex = newIndex;
-        state.selectedClass = CLASS_ORDER[newIndex];
-        state.view = 'browse';
-        classViewState.set(userId, state);
-
-        const classKey = CLASS_ORDER[newIndex];
-
-        return interaction.update({
-            ...(await classView(userId, user, classKey))
-        });
-    }
-
-    if (id === 'class_browse') {
-        const user = await users.getUser(userId);
-        const state = classViewState.get(userId) || { browseIndex: 0 };
-        const index = state.browseIndex || 0;
-
-        const classKey = CLASS_ORDER[index];
-
-        state.view = 'browse';
-        classViewState.set(userId, state);
-
-        return interaction.update({
-            ...(await classView(userId, user, classKey))
-        });
+        return interaction.update({ ...(await classView(userId, user, classKey)) });
     }
 
     // Return to default class
@@ -499,13 +473,6 @@ async function routeClassButton(interaction) {
 
         const { user: updatedUser } = await progression.equipClass(userId, 'DEFAULT');
 
-        // Update to show Default class
-        const state = classViewState.get(userId) || {};
-        state.browseIndex = 0;
-        state.selectedClass = 'DEFAULT';
-        classViewState.set(userId, state);
-
-
         await interaction.update({
             ...(await classView(userId, updatedUser, 'DEFAULT'))
         });
@@ -520,63 +487,21 @@ async function routeClassButton(interaction) {
     //  SKILL TREE VIEW (from browser)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    if (id === 'class_skills') {
+    if (id.startsWith('class_skills_') || id.startsWith('skill_back_')) {
         const user = await users.getUser(userId);
         const userSkills = await users.getUserSkills(userId);
-        const state = classViewState.get(userId) || { browseIndex: 0, selectedClass: user.player_class };
-        state.view = 'skills';
-        classViewState.set(userId, state);
-
-        const selectedClass = state.selectedClass || CLASS_ORDER[state.browseIndex] || user.player_class;
+        const selectedClass = classKeyFrom(id) || user.player_class;
 
         const tree = SKILL_TREES[selectedClass];
         if (!tree) {
+            const index = Math.max(0, CLASS_ORDER.indexOf(selectedClass));
             return interaction.update({
                 embeds: [ui.error('No Skill Tree', `No skill tree found for ${selectedClass} class.`)],
-                components: ui.classBrowserButtons(user, selectedClass, CLASSES[selectedClass], state.browseIndex || 0, CLASS_ORDER.length)
+                components: ui.classBrowserButtons(user, selectedClass, CLASSES[selectedClass], index, CLASS_ORDER.length)
             });
         }
 
-        // Create back button that returns to browser
-        const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('class_browse')
-                .setLabel('Back to Classes')
-                .setEmoji('◀️')
-                .setStyle(ButtonStyle.Secondary)
-        );
-
-        return interaction.update({
-            embeds: [ui.skillTreeEmbed(user, selectedClass, SKILL_TREES, userSkills)],
-            components: [
-                ui.skillSelectMenu(SKILL_TREES[selectedClass], userSkills),
-                backRow
-            ]
-        });
-    }
-
-    if (id === 'skill_back') {
-        const user = await users.getUser(userId);
-        const userSkills = await users.getUserSkills(userId);
-        const state = classViewState.get(userId) || { browseIndex: 0, selectedClass: user.player_class };
-        const selectedClass = state.selectedClass || CLASS_ORDER[state.browseIndex] || user.player_class;
-
-        // Create back button that returns to browser
-        const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('class_browse')
-                .setLabel('Back to Classes')
-                .setEmoji('◀️')
-                .setStyle(ButtonStyle.Secondary)
-        );
-
-        return interaction.update({
-            embeds: [ui.skillTreeEmbed(user, selectedClass, SKILL_TREES, userSkills)],
-            components: [
-                ui.skillSelectMenu(SKILL_TREES[selectedClass], userSkills),
-                backRow
-            ]
-        });
+        return interaction.update(skillTreeView(user, userSkills, selectedClass));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -587,17 +512,10 @@ async function routeClassButton(interaction) {
         const skillId = id.replace('skill_unlock_', '');
         // Ownership, prerequisites, max level and cost are enforced atomically.
         const result = await progression.unlockSkill(userId, skillId);
-        const selectedClass = result.treeKey;
         const updatedUser = await users.getUser(userId);
         const updatedSkills = await users.getUserSkills(userId);
 
-        const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('class_browse').setLabel('Back to Classes').setEmoji('◀️').setStyle(ButtonStyle.Secondary)
-        );
-        await interaction.update({
-            embeds: [ui.skillTreeEmbed(updatedUser, selectedClass, SKILL_TREES, updatedSkills)],
-            components: [ui.skillSelectMenu(SKILL_TREES[selectedClass], updatedSkills), backRow]
-        });
+        await interaction.update(skillTreeView(updatedUser, updatedSkills, result.treeKey));
 
         const { skill } = result;
         await interaction.followUp({
@@ -615,8 +533,6 @@ async function routeClassButton(interaction) {
         const classKey = id.replace('cbuy_', '');
         const { user, achievements: newAchs } = await progression.buyClass(userId, classKey);
         const cls = CLASSES[classKey];
-        const classIndex = Math.max(0, CLASS_ORDER.indexOf(classKey));
-        classViewState.set(userId, { browseIndex: classIndex, selectedClass: classKey });
 
         await interaction.update({
             ...(await classView(userId, user, classKey))
@@ -634,8 +550,6 @@ async function routeClassButton(interaction) {
         }
         const { user } = await progression.equipClass(userId, classKey);
         const cls = CLASSES[classKey];
-        const classIndex = Math.max(0, CLASS_ORDER.indexOf(classKey));
-        classViewState.set(userId, { browseIndex: classIndex, selectedClass: classKey });
 
         await interaction.update({
             ...(await classView(userId, user, classKey))
@@ -644,7 +558,7 @@ async function routeClassButton(interaction) {
     }
 }
 
-// Handle class select menu (legacy - now redirects to browser)
+// Handle class select menu (jump straight to a class in the browser)
 async function handleClassSelect(interaction) {
     const userId = interaction.user.id;
     const selectedClass = interaction.values[0];
@@ -653,25 +567,19 @@ async function handleClassSelect(interaction) {
     }
 
     const user = await users.getUser(userId);
-    const classIndex = CLASS_ORDER.indexOf(selectedClass);
-
-    classViewState.set(userId, { browseIndex: classIndex >= 0 ? classIndex : 0, selectedClass: selectedClass });
-
-
     await interaction.update({
         ...(await classView(userId, user, selectedClass))
     });
 }
 
-// Handle skill select menu
+// Handle skill select menu (`skill_select_<CLASS>`: the menu says which tree it belongs to)
 async function handleSkillSelect(interaction) {
     const userId = interaction.user.id;
     const skillId = interaction.values[0];
 
     const user = await users.getUser(userId);
     const userSkills = await users.getUserSkills(userId);
-    const state = classViewState.get(userId) || { view: 'skills', selectedClass: user.player_class };
-    const selectedClass = state.selectedClass || user.player_class;
+    const selectedClass = classKeyFrom(interaction.customId) || user.player_class;
 
     const tree = SKILL_TREES[selectedClass];
     if (!tree || !tree.skills[skillId]) {
@@ -689,7 +597,7 @@ async function handleSkillSelect(interaction) {
 
     await interaction.update({
         embeds: [ui.skillInfoEmbed(skill, skillId, currentLevel, reqMet)],
-        components: [ui.skillActionButtons(skillId, skill, currentLevel, reqMet, user.player_xp)]
+        components: [ui.skillActionButtons(skillId, skill, currentLevel, reqMet, user.player_xp, selectedClass)]
     });
 }
 

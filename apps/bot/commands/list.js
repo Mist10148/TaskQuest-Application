@@ -21,9 +21,6 @@ const ui = require('../utils/ui');
 const aiSync = require('../utils/aiSync');
 const { EPHEMERAL, handleError, sendRewards, idFrom } = require('../utils/respond');
 
-/** Pending two-step reorder selections: `${userId}_${listId}` → first item id. */
-const swapState = new Map();
-
 const data = new SlashCommandBuilder()
     .setName('list')
     .setDescription('📋 View and manage your lists')
@@ -317,17 +314,17 @@ async function routeSelect(interaction) {
         const listId = idFrom(id, 'sel_swap1_');
         const items = await tasks.getItems(userId, listId);
         if (!items) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
-        swapState.set(`${userId}_${listId}`, Number(val));
+        // The first pick travels in the second menu's custom ID, so the reorder survives a bot restart.
         return interaction.update({
             embeds: [ui.info('Reorder', 'Select the SECOND task:')],
-            components: [ui.itemSelect(items.filter((i) => i.id !== Number(val)), `sel_swap2_${listId}`)]
+            components: [ui.itemSelect(items.filter((i) => i.id !== Number(val)), `sel_swap2_${listId}_${Number(val)}`)]
         });
     }
 
     if (id.startsWith('sel_swap2_')) {
-        const listId = idFrom(id, 'sel_swap2_');
-        const firstId = swapState.get(`${userId}_${listId}`);
-        swapState.delete(`${userId}_${listId}`);
+        const ids = /^sel_swap2_(\d+)_(\d+)$/.exec(id);
+        const listId = ids && Number(ids[1]);
+        const firstId = ids && Number(ids[2]);
         if (!firstId) return interaction.update({ embeds: [ui.error('Expired', 'Start the reorder again.')], components: [] });
         await tasks.swapItemPositions(userId, firstId, val);
         aiSync.reindex(userId, listId);
@@ -378,12 +375,12 @@ async function pageSelect(interaction, id, page) {
             components: overviewComponents(lists, { page, withCategoryFilter: view.withCategoryFilter })
         });
     }
-    const m = /^(sel_(?:edit|del|done|desc|details|swap1|swap2))_(\d+)$/.exec(id);
-    if (!m) return interaction.deferUpdate();
+    const m = /^(sel_(?:edit|del|done|desc|details|swap1|swap2))_(\d+)(?:_(\d+))?$/.exec(id);
+    if (!m || (m[3] !== undefined) !== (m[1] === 'sel_swap2')) return interaction.deferUpdate();
     const listId = Number(m[2]);
     let items = await tasks.getItems(userId, listId);
     if (!items) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
-    if (m[1] === 'sel_swap2') items = items.filter((i) => i.id !== swapState.get(`${userId}_${listId}`));
+    if (m[1] === 'sel_swap2') items = items.filter((i) => i.id !== Number(m[3]));
     return interaction.update({ components: [ui.itemSelect(items, id, undefined, { page })] });
 }
 

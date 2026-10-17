@@ -560,11 +560,11 @@ function classButtons(user, classes) {
 
 function achButtons(page, total) {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ach_first').setEmoji('⏮️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-        new ButtonBuilder().setCustomId('ach_prev').setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+        new ButtonBuilder().setCustomId('ach_first_0').setEmoji('⏮️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+        new ButtonBuilder().setCustomId(`ach_prev_${Math.max(0, page - 1)}`).setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
         new ButtonBuilder().setCustomId('ach_x').setLabel(`${page + 1}/${total}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
-        new ButtonBuilder().setCustomId('ach_next').setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(page >= total - 1),
-        new ButtonBuilder().setCustomId('ach_last').setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(page >= total - 1)
+        new ButtonBuilder().setCustomId(`ach_next_${Math.min(total - 1, page + 1)}`).setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(page >= total - 1),
+        new ButtonBuilder().setCustomId(`ach_last_${total - 1}`).setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(page >= total - 1)
     );
 }
 
@@ -942,33 +942,6 @@ function classDetailEmbed(user, classKey, classInfo, skillTree, classIndex, tota
     return embed;
 }
 
-function classNavButtons(user, currentView, selectedClass) {
-    const rows = [];
-    
-    // Main navigation row
-    const navRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('class_overview')
-            .setLabel('All Classes')
-            .setEmoji('📋')
-            .setStyle(currentView === 'overview' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId('class_browse')
-            .setLabel('Browse')
-            .setEmoji('🎮')
-            .setStyle(currentView === 'browse' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId('class_skills')
-            .setLabel('Skill Tree')
-            .setEmoji('🌳')
-            .setStyle(currentView === 'skills' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-            .setDisabled(!selectedClass)
-    );
-    rows.push(navRow);
-    
-    return rows;
-}
-
 // Browser navigation buttons for video game style class browsing
 function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses) {
     const owned = classKey === 'DEFAULT' || user[`owns_${classKey.toLowerCase()}`];
@@ -980,10 +953,13 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     // Jump straight to any class (17 classes fit one select menu, the limit is 25).
     rows.push(classSelectMenu(CLASSES, user, classKey));
     
-    // Navigation row: Previous / Class Count / Next
+    // Navigation row: Previous / Class Count / Next. Each button names the class it leads to, so the browser keeps no state.
+    const classKeys = Object.keys(CLASSES);
+    const prevKey = classKeys[Math.max(0, classIndex - 1)] || classKey;
+    const nextKey = classKeys[Math.min(classKeys.length - 1, classIndex + 1)] || classKey;
     const navRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('class_prev')
+            .setCustomId(`class_prev_${prevKey}`)
             .setLabel('◀')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(classIndex === 0),
@@ -993,7 +969,7 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(true),
         new ButtonBuilder()
-            .setCustomId('class_next')
+            .setCustomId(`class_next_${nextKey}`)
             .setLabel('▶')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(classIndex >= totalClasses - 1)
@@ -1034,7 +1010,7 @@ function classBrowserButtons(user, classKey, classInfo, classIndex, totalClasses
     // View skills button
     actionRow.addComponents(
         new ButtonBuilder()
-            .setCustomId('class_skills')
+            .setCustomId(`class_skills_${classKey}`)
             .setLabel('View Skills')
             .setEmoji('🌳')
             .setStyle(ButtonStyle.Secondary)
@@ -1080,7 +1056,7 @@ function classSelectMenu(classes, user, browsing = null) {
     );
 }
 
-function skillSelectMenu(skillTree, userSkills) {
+function skillSelectMenu(skillTree, userSkills, classKey) {
     const userSkillMap = new Map(userSkills.map(s => [s.skill_id, s.skill_level]));
     const options = [];
     
@@ -1088,7 +1064,7 @@ function skillSelectMenu(skillTree, userSkills) {
         // Return a placeholder if no skills
         return new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
-                .setCustomId('skill_select')
+                .setCustomId(`skill_select_${classKey}`)
                 .setPlaceholder('No skills available')
                 .addOptions([{ label: 'No Skills', value: 'none', description: 'This class has no skills yet' }])
                 .setDisabled(true)
@@ -1113,13 +1089,13 @@ function skillSelectMenu(skillTree, userSkills) {
     
     return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-            .setCustomId('skill_select')
+            .setCustomId(`skill_select_${classKey}`)
             .setPlaceholder('Select a skill to view/unlock...')
             .addOptions(options)
     );
 }
 
-function skillActionButtons(skillId, skill, userSkillLevel, requirementMet, userXP) {
+function skillActionButtons(skillId, skill, userSkillLevel, requirementMet, userXP, classKey) {
     const currentLevel = userSkillLevel || 0;
     const maxed = currentLevel >= skill.maxLevel;
     const canAfford = userXP >= skill.cost;
@@ -1133,7 +1109,7 @@ function skillActionButtons(skillId, skill, userSkillLevel, requirementMet, user
             .setStyle(ButtonStyle.Success)
             .setDisabled(!canUnlock),
         new ButtonBuilder()
-            .setCustomId('skill_back')
+            .setCustomId(`skill_back_${classKey}`)
             .setLabel('Back')
             .setStyle(ButtonStyle.Secondary)
     );
@@ -1152,7 +1128,7 @@ module.exports = {
     success, error, info, warn,
     // Buttons
     viewButtons, editButtons, overviewButtons, confirmButtons, classButtons, achButtons,
-    classNavButtons, classBrowserButtons, skillActionButtons,
+    classBrowserButtons, skillActionButtons,
     // Selects
     listSelect, itemSelect, pageFromValue, SELECT_MAX, catSelect, priSelect, classSelectMenu, skillSelectMenu, categoryFilterSelect,
     // Modals

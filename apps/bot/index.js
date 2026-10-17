@@ -116,10 +116,9 @@ client.once(Events.ClientReady, (c) => {
 
 const LIST_BUTTON_IDS = new Set(['create', 'back', 'filter_cat', 'filter_all', 'filter_current', 'filter_expired', 'filter_completed']);
 const LIST_BUTTON_PREFIXES = ['sort_', 'search_', 'refresh_', 'edit_', 'view_', 'item_', 'list_', 'rename_', 'yes_', 'no_', 'metadone_'];
-const CLASS_BUTTON_IDS = new Set([
-    'class_overview', 'class_skills', 'skill_back', 'class_browse', 'class_prev', 'class_next',
-    'class_return_default', 'skill_back_to_class', 'class_equipped_placeholder', 'class_return_current'
-]);
+// The class browser keeps no state: its buttons carry the class they show (class_next_HERO), so they route by prefix.
+const CLASS_BUTTON_IDS = new Set(['class_return_default']);
+const CLASS_BUTTON_PREFIXES = ['cbuy_', 'ceq_', 'cx_', 'skill_unlock_', 'class_prev_', 'class_next_', 'class_browse_', 'class_skills_', 'skill_back_'];
 
 const COMMANDS = {
     list: listCommand.execute,
@@ -183,7 +182,7 @@ async function route(interaction) {
         if (id.startsWith('shop_')) return shopCommand.handleButton(interaction);
         if (id === 'remind_off' || id.startsWith('remind_snooze_') || id.startsWith('task_remind_snooze_')) return reminders.handleButton(interaction);
         if (LIST_BUTTON_IDS.has(id) || LIST_BUTTON_PREFIXES.some((p) => id.startsWith(p))) return listCommand.handleButton(interaction);
-        if (id.startsWith('cbuy_') || id.startsWith('ceq_') || id.startsWith('cx_') || id.startsWith('skill_unlock_') || CLASS_BUTTON_IDS.has(id)) {
+        if (CLASS_BUTTON_IDS.has(id) || CLASS_BUTTON_PREFIXES.some((p) => id.startsWith(p))) {
             return gamification.handleClassButton(interaction);
         }
         if (id.startsWith('ach_')) return gamification.handleAchievementPagination(interaction);
@@ -199,7 +198,7 @@ async function route(interaction) {
         if (id.startsWith('shop_pick_')) return shopCommand.handleSelect(interaction);
         if (id.startsWith('mem_rm_')) return sharingCommands.handleSelect(interaction);
         if (id === 'class_select') return gamification.handleClassSelect(interaction);
-        if (id === 'skill_select') return gamification.handleSkillSelect(interaction);
+        if (id.startsWith('skill_select_')) return gamification.handleSkillSelect(interaction);
         return listCommand.handleSelectMenu(interaction);
     }
 

@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useSummary } from "@/hooks/useApi";
 import { useAuth } from "@/contexts/AuthContext";
 import type { aiApi } from "@/lib/api";
+import { announceResult } from "@/lib/push";
 import { SummaryCard } from "./SummaryCard";
 import { useSlow } from "./useSlow";
 
@@ -28,7 +29,8 @@ export function SummarizeButton({ body, label = "Summarize", title = "Summary", 
 
   const run = () => {
     setOpen(true);
-    summary.mutate(body);
+    // If the player switched tabs while the AI was thinking, say so when it is done (see announceResult).
+    summary.mutate(body, { onSuccess: (data) => void announceResult({ title: "Your summary is ready", body: data.headline }) });
   };
 
   return (

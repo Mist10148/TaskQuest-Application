@@ -291,7 +291,7 @@ TaskQuest addresses this in three ways:
 | Priority | Item |
 |---|---|
 | Next | Run the AI evals against real Gemini and grow the golden sets. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
-| Later | Push notifications for AI results |
+| Done | Push for AI results where it is useful: the Monday AI recap is also a web push, and a slow summary or ranking shows a local notification when the player switched tabs (no server push per reply; it would need AI jobs that outlive the request) |
 | Later | More component tests for the web app (the first set exists) |
 | Later | Internationalisation: extract the remaining strings into the catalog (`apps/web/src/i18n/messages.ts`) and add a language picker once there is a second catalog; the bot and the AI service are untouched |
 | Later | Screenshots in the README and push delivery tested against real push services (both need a live deployment) |

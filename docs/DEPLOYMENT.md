@@ -174,7 +174,7 @@ Set `AI_ENABLED=true`, `AI_INTERNAL_TOKEN`, `GEMINI_API_KEY` in `.env`, then ope
 
 ### Web push (optional)
 
-Browser notifications for reminders, **off unless all three VAPID values are set** (set one or two and the server refuses to start). Generate a key pair once with `npx web-push generate-vapid-keys` and keep the private key secret. The bot owns the reminder job, so it asks the web server to send the push (the server holds the keys); the push is best effort and never delays or replaces the Discord DM.
+Browser notifications for reminders (and the Monday AI recap headline), **off unless all three VAPID values are set** (set one or two and the server refuses to start). Generate a key pair once with `npx web-push generate-vapid-keys` and keep the private key secret. The bot owns the reminder job, so it asks the web server to send the push (the server holds the keys); the push is best effort and never delays or replaces the Discord DM.
 
 | Variable | Where | Description |
 |---|---|---|

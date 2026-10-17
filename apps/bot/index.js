@@ -79,7 +79,7 @@ const checkDeadlines = job('DEADLINE', async () => {
     await reminders.flushOverflow({ client, log, budget });
 });
 
-const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log }));
+const weeklyDigests = job('DIGEST', () => digest.sendWeeklyDigests({ db, client, log, push }));
 
 const streakWarnings = job('STREAK', () => streakWarning.sendStreakWarnings({ db, client, log, push }));
 

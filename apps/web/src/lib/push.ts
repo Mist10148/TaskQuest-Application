@@ -73,6 +73,36 @@ export async function enablePush(publicKey: string): Promise<void> {
   }
 }
 
+/** Whether a "your AI result is ready" notice should be shown: only when nobody is looking at the page and notifications are allowed. */
+export function shouldAnnounceResult(input: { hidden: boolean; permission: NotificationPermission | "unsupported" }): boolean {
+  return input.hidden && input.permission === "granted";
+}
+
+/**
+ * Tell the player a slow AI result (a summary, a ranking) has arrived while they were on another tab. It is a local
+ * notification shown through the service worker that "Push notifications" in Settings registered, so it needs no server push:
+ * the request is still running in this page, which is the only time it is useful. It never asks for permission and never shows
+ * anything while the page is visible or when push was not turned on; it never throws.
+ * @returns whether a notification was shown
+ */
+export async function announceResult(message: { title: string; body: string }): Promise<boolean> {
+  try {
+    if (typeof document === "undefined") return false;
+    if (!shouldAnnounceResult({ hidden: document.visibilityState === "hidden", permission: currentPermission() })) return false;
+    const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+    if (!registration) return false;
+    await registration.showNotification(message.title.slice(0, 100), {
+      body: message.body.slice(0, 300),
+      icon: "/taskquest-icon.svg",
+      tag: "ai-result", // a second result replaces the first instead of stacking
+      data: { url: window.location.href }, // absolute and ours: the service worker only opens pages of this origin
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Forget this browser on the server, then in the browser. */
 export async function disablePush(): Promise<void> {
   const subscription = await currentSubscription();

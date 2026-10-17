@@ -373,4 +373,4 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
     return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.', flags: MessageFlags.SuppressNotifications });
 }
 
-module.exports = { createBudget, flushOverflow, markWithRetry, MAX_DMS_PER_USER_PER_RUN, sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };
+module.exports = { createBudget, flushOverflow, markWithRetry, pushReminder, MAX_DMS_PER_USER_PER_RUN, sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };

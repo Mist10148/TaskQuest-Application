@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { sendWeeklyDigests, isDigestTime, digestEmbed } = require('../utils/digest');
+const { sendWeeklyDigests, isDigestTime, digestEmbed, pushForRecap } = require('../utils/digest');
 
 const MONDAY_9_UTC = new Date('2030-03-11T09:00:00Z'); // 2030-03-11 is a Monday
 const STATS = { completed: 4, xpEarned: 120, listsOpen: 3, listsOverdue: 1, streak: 5, level: 7 };
@@ -126,4 +126,55 @@ test('the week is claimed atomically before sending, so overlapping runs cannot 
     assert.equal(ra.sent + rb.sent, 1);
     assert.equal(a.sent.length + b.sent.length, 1);
     for (const ctx of [a, b]) assert.equal(ctx.order[0], 'claim', 'claimed before any send');
+});
+
+// ─── web push for the AI recap ─────────────────────────────────────────────────────
+
+const fakePush = () => {
+    const calls = [];
+    return { enabled: true, calls, notify: async (id, message) => calls.push([id, message]) };
+};
+
+test('the AI recap is also offered as a web push once the digest went out', async () => {
+    const ctx = setup({ users: [user()] });
+    const push = fakePush();
+    await sendWeeklyDigests({ ...ctx, push, now: MONDAY_9_UTC });
+    assert.equal(ctx.sent.length, 1);
+    assert.deepEqual(push.calls, [['42', { title: 'Your weekly recap', body: 'Good week', url: '/stats' }]]);
+});
+
+test('no recap, no push: a digest without an AI recap stays a DM only', async () => {
+    const push = fakePush();
+    await sendWeeklyDigests({ ...setup({ users: [user()], recapError: new Error('model down') }), push, now: MONDAY_9_UTC });
+    await sendWeeklyDigests({ ...setup({ users: [user({ ai_enabled: 0 })] }), push, now: MONDAY_9_UTC });
+    assert.deepEqual(push.calls, []);
+});
+
+test('closed DMs still get the push (the digest is final), a temporary error waits for the retry', async () => {
+    const push = fakePush();
+    const closed = setup({ users: [user()], sendError: Object.assign(new Error('closed'), { code: 50007 }) });
+    await sendWeeklyDigests({ ...closed, push, now: MONDAY_9_UTC });
+    assert.equal(push.calls.length, 1, 'DMs can never go out, so the push is the only way');
+
+    const flaky = setup({ users: [user()], sendError: Object.assign(new Error('503'), { code: 0 }) });
+    await sendWeeklyDigests({ ...flaky, push, now: MONDAY_9_UTC });
+    assert.equal(push.calls.length, 1, 'no push while the digest is still being retried');
+});
+
+test('a broken or missing push client never breaks the digest', async () => {
+    const throwing = { enabled: true, notify: async () => { throw new Error('push server down'); } };
+    const ctx = setup({ users: [user()] });
+    const res = await sendWeeklyDigests({ ...ctx, push: throwing, now: MONDAY_9_UTC });
+    assert.equal(res.sent, 1);
+    assert.deepEqual(await sendWeeklyDigests({ ...setup({ users: [user()] }), push: undefined, now: MONDAY_9_UTC }), { sent: 1, skipped: 0, retry: 0 });
+    assert.deepEqual(await sendWeeklyDigests({ ...setup({ users: [user()] }), push: { enabled: false, notify: async () => assert.fail('disabled') }, now: MONDAY_9_UTC }), { sent: 1, skipped: 0, retry: 0 });
+});
+
+test('pushForRecap needs a headline and keeps the body short', () => {
+    assert.equal(pushForRecap(null), null);
+    assert.equal(pushForRecap({}), null);
+    assert.equal(pushForRecap({ headline: '   ' }), null);
+    const long = pushForRecap({ headline: 'x'.repeat(500) });
+    assert.equal(long.body.length, 140);
+    assert.equal(long.url, '/stats');
 });

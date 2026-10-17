@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrioritize, useUpdateList } from "@/hooks/useApi";
 import type { AiRankedTask, Priority } from "@/lib/api";
+import { announceResult } from "@/lib/push";
 import { AiBadge } from "./SummaryCard";
 import { useSlow } from "./useSlow";
 
@@ -17,6 +18,14 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
   const slow = useSlow(isFetching);
 
   if (!user?.features?.ai) return null;
+
+  // A click on Prioritize / Refresh: if the player switched tabs while the AI was thinking, say so when it is done.
+  const run = async () => {
+    const result = await refetch();
+    if (result.data?.ranked.length) {
+      void announceResult({ title: "Your priorities are ready", body: result.data.focusMessage || `Start with ${result.data.ranked[0].name}` });
+    }
+  };
 
   const accept = async (task: AiRankedTask, priority: Priority) => {
     await updateList.mutateAsync({ listId: task.listId, data: { priority } });
@@ -32,7 +41,7 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
           <h2 className="font-heading font-semibold">What should I do next?</h2>
           {data && !data.usedFallback && <AiBadge />}
         </div>
-        <Button size="sm" variant={data ? "outline" : "glow"} onClick={() => refetch()} disabled={isFetching} className="gap-1">
+        <Button size="sm" variant={data ? "outline" : "glow"} onClick={() => void run()} disabled={isFetching} className="gap-1">
           {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {data ? "Refresh" : "Prioritize my quests"}
         </Button>

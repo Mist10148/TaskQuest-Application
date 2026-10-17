@@ -125,7 +125,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 - **Shared lists:** the deadline and task reminders go to the owner **and** to every member with `/automation` on, once each; each person's Snooze applies to them alone, in their own time zone and at their own reminder hour.
 - **Fan-out cap:** you get at most 20 reminder DMs per hourly run (list and task reminders together). Anything over that is collapsed into **one** DM, "N more reminders due: see /list", and counted as handled, so a big or hostile shared list cannot flood you. Names in reminders are escaped and a reminder never pings anyone.
 - **Abandoned games:** expired every 5 minutes; an unfinished Blackjack hand is settled as a stand, not refunded.
-- **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out).
+- **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out). When web push is set up, the recap's headline is also sent as a web push (best effort, once the digest is final).
 - **Streak warning:** checked hourly; on the evening (from 18:00 your time) of the last day a streak of 3 or more days can still be saved, a player who has not claimed the daily reward gets one DM (and a web push when push is set up). At most one a day, and never for players with reminders (`/automation`) or XP turned off.
 
 ## Interaction IDs (for developers)

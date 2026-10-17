@@ -72,7 +72,7 @@ At **level 30** you can prestige (profile, or `/prestige`), up to 10 times. You 
 
 ## Push notifications
 
-Push sends your reminders to your browser as well as to Discord, and only exists if the server's operator enabled it ([DEPLOYMENT.md](DEPLOYMENT.md#web-push-optional)). If **Settings → Push notifications** is shown: turn it on in each browser you want to use and allow notifications when your browser asks. The site must use HTTPS. You can switch it off in Settings at any time (your browsers stay registered but stop receiving). A push never replaces the Discord DM, and a browser that unsubscribes at the browser level is removed automatically.
+Push sends your reminders to your browser as well as to Discord, and only exists if the server's operator enabled it ([DEPLOYMENT.md](DEPLOYMENT.md#web-push-optional)). If **Settings → Push notifications** is shown: turn it on in each browser you want to use and allow notifications when your browser asks. The site must use HTTPS. You can switch it off in Settings at any time (your browsers stay registered but stop receiving). A push never replaces the Discord DM, and a browser that unsubscribes at the browser level is removed automatically. With push on, two AI results also reach you: the headline of your Monday AI recap (if you use `/weekly` and AI is on), and a notice when a summary or "what should I do next?" you asked for finishes while you are on another tab. Nothing else from the AI is pushed.
 
 ## Blackjack and the other games
 

@@ -290,15 +290,16 @@ TaskQuest addresses this in three ways:
 
 | Priority | Item |
 |---|---|
-| Next | Run the AI evals against real Gemini and grow the golden sets. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
+| Next | Run the AI evals against real Gemini and grow the golden sets from real data. Ready: `python -m app.preflight --check-models`, `python -m tests.evals.compare`, 70 / 10 / 10 golden cases. Needs a staging key. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
 | Done | Push for AI results where it is useful: the Monday AI recap is also a web push, and a slow summary or ranking shows a local notification when the player switched tabs (no server push per reply; it would need AI jobs that outlive the request) |
-| Later | More component tests for the web app (the first set exists) |
+| Later | More component tests for the web app (the shared states, game cards, quests card and Review page are covered; the Games, Skills and Classes pages and the dialogs are not) |
 | Later | Internationalisation: extract the remaining strings into the catalog (`apps/web/src/i18n/messages.ts`) and add a language picker once there is a second catalog; the bot and the AI service are untouched |
-| Later | Screenshots in the README and push delivery tested against real push services (both need a live deployment) |
+| Later | Screenshots in the README (the capture spec exists, the images do not) and push delivery tested against real push services (needs a live deployment) |
 | Done | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |
 | Done | The class rebalance, five new classes and 96 skills; task bonuses, streak chests, achievement rewards, habit streaks, focus sessions, the weekly review, the monthly boss, rotating quests and prestige; the cosmetics shop |
 | Done | CSV import, templates, task search, stats; per-task reminders; per-user days; optional web push |
 | Done | Ownership transfer for shared lists; a party board and a focus quest; a Today page, weekly goal and reflection; board and calendar views; previews and skill reset; streak warnings; an archive job and a per-class XP report |
+| Done | The October 2026 follow-up pass: bot browsers without memory, a skill reset in the bot, retried reminder marks, shared prioritizer cache, the AI quota at the user's midnight, arcade option B (weekly board, minimum run, report), a locked hand-over, `users.skill_points` dropped, an i18n scaffold, a local Postgres quickstart ([CHANGELOG](../CHANGELOG.md#unreleased)) |
 | Done | Shared lists and parties ([shared-lists](design/shared-lists.md)); arcade anti-cheat by replay ([arcade-anti-cheat](design/arcade-anti-cheat.md)); Tailwind 4 ([tailwind-4-migration](design/tailwind-4-migration.md)); Playwright smoke tests |
 
 ## 12. Risks and assumptions

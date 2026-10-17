@@ -110,6 +110,19 @@ python -m tests.evals.run                         # offline eval pipeline (also 
 
 `pytest tests/postgres` runs the service's SQL (asyncpg, pgvector search, `EmbeddingStore`, `SqlCheckpointSaver`) against a real Postgres with the Node migrations applied (the `ai-postgres` CI job: run `npm run db:migrate` against a scratch database first, then set `AI_TEST_DB_URL=postgresql://user:pw@host:5432/db`). Nothing in the suite calls Gemini; the live runbook is in [docs/OPERATIONS.md](docs/OPERATIONS.md#first-live-gemini-run).
 
+### README screenshots
+
+The README has no images yet (known issue #26), because a screenshot needs a signed-in session with some data. The browser-test setup already has both, so the pages can be captured without a Discord login:
+
+```bash
+npm run db:up                  # the throwaway taskquest_e2e database (E2E_DB_PASSWORD=taskquest-dev)
+(cd apps/web && npx playwright install chromium)   # once
+npm run build
+CAPTURE_SCREENSHOTS=1 npm run e2e -w @taskquest/web -- screenshots
+```
+
+`apps/web/e2e/screenshots.e2e.ts` is skipped unless `CAPTURE_SCREENSHOTS=1`. It signs in as the seeded player (level 4 with a few quests, the same data the other browser tests use), opens twelve pages at 1280 x 800 in the dark theme with animations off, and writes `docs/images/<page>.png`. Look at the images before committing them: the seeded player has little history, so Stats and the leaderboard look sparse. For a richer picture, run the same spec against a staging deployment's database instead. Then add the ones you want to the README, for example `![Dashboard](docs/images/dashboard.png)`, and close #26.
+
 ### Trying the web app locally without Discord
 
 Discord login needs a real application, which is overkill for checking a UI change. For a quick manual check, serve the built app from the real server against a **scratch database** and sign in with a seeded session (the same trick the API integration tests use):

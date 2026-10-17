@@ -7,6 +7,8 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 ### Upgrade notes
 
 - **The database is now PostgreSQL (Supabase), and it starts empty.** MySQL, MariaDB and TiDB are no longer supported, and nothing is copied from the old database: players link again on their first command or web login. Create a Supabase project, set `DB_URL` to its **Session pooler** URL (port 5432) with `DB_SSL=true`, and deploy; the single migration `001_baseline` runs on start. Follow [MIGRATION_POSTGRES.md](docs/MIGRATION_POSTGRES.md) for the runbook and rollback. Do not deploy this release against the old MySQL database: it can no longer talk to it.
+- **Two new migrations run on start** (`002_drop_skill_points`, `003_ai_prioritize_cache`). `002` drops a column the previous version still reads, so rolling back to the previous version after it ran is not supported; take a backup first if that matters (see OPERATIONS).
+- **The AI service has a new dependency, `tzdata`** (`pip install -e .` in `apps/ai`), and its daily quota now follows each user's own day. Run `python -m app.preflight` before enabling AI on a new environment.
 - **Old class-browser, achievement and reorder buttons expire.** Their custom IDs changed (the position is now in the ID), so such a message that is still open when the bot restarts on this version answers "This button has expired"; run the command again.
 - **Re-register slash commands** (`npm run deploy:commands`): `/review`, `/prestige`, `/shop`, `/share`, `/invites`, `/members`, `/leave` and `/party` are new, and `/list` gained a Details button.
 - **New optional environment variables** for web push: `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` (set all three or none), plus `WEB_PUSH_ALLOWED_HOSTS`, `WEB_PUSH_INTERNAL_URL`, `WEB_PUSH_INTERNAL_TOKEN` and `WEB_PUSH_TIMEOUT_MS`. Nothing changes while they are unset. See [DEPLOYMENT.md](docs/DEPLOYMENT.md#web-push-optional).
@@ -17,6 +19,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **A README screenshot capture spec.** `apps/web/e2e/screenshots.e2e.ts` (skipped unless `CAPTURE_SCREENSHOTS=1`) signs in as the seeded player and saves twelve pages to `docs/images`; the images themselves are not captured yet (known issue #26).
 - **Live-Gemini preparation.** `python -m app.preflight [--check-models] [--url ...]` checks the key, token, model ids, `EMBED_DIM` against the pgvector column and the AI tables, optionally asks Google which configured model ids exist and can do the job (a header, never the URL, carries the key), and exits 1 on any failure; `python -m tests.evals.compare report.json [--baseline earlier.json]` judges a saved eval report against the live targets and flags regressions. The golden sets grew to 70 retrieval queries (incl. a cross-user bait query), 10 summary and 10 prioritizer cases, with four new seeded users, and the red-team set grew too; they still pass offline. Nothing here calls Gemini: the default model ids are unchanged, and known issues #17 and #18 stay open until a real run.
 - **Push for AI results, where it helps.** The Monday digest's AI recap headline is also sent as a web push when push is set up (only when a recap was written, once the digest is final, best effort), and a summary or "what should I do next?" that finishes while the player is on another tab shows a local notification through the service worker (`announceResult`: only when the page is hidden, notifications are already allowed and push was turned on; it never asks for permission). A server push per AI reply is deliberately not built: the answer already reaches the open page.
 - **A shared prioritizer cache.** Migration `003_ai_prioritize_cache` adds `ai_prioritize_cache`; the AI service keeps a ranking in memory and in that table for 5 minutes (key: user, limit and a hash of the open-task features), so a second AI instance reuses it instead of asking the model again. A missing table or a database error is only a cache miss, a user's cached rankings are removed with the rest of their AI data on `/forget`, and fallback results are still never cached. On PostgreSQL the vector search already runs in SQL, so nothing needed sharing there. Closes known issue #20.
@@ -219,6 +222,10 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - A shared in-memory SQLite connection made the chat confirmation tests fail on Python 3.12.
 - The AI reconcile job now notices edits to a quest itself (name, deadline, priority), not only to its subtasks. New migration `004_lists_updated_at` adds `lists.updated_at`.
 
+### Removed
+
+- **`users.skill_points`.** Migration `002_drop_skill_points` drops the legacy column; `GET /api/skills` no longer returns `skillPoints` (it was always 0) and the web types lose `skill_points`. Closes known issue #16. The apps run the migration on start; rolling back to the previous version afterwards is not supported, because it still reads the column.
+
 ### Security
 
 - Web push endpoints are accepted only for the browsers' own push services (or hosts listed in `WEB_PUSH_ALLOWED_HOSTS`), on port 443, and never for IP literals or internal names, so a subscription cannot point the server at an internal address.
@@ -334,7 +341,6 @@ The Discord bot (`taskquest-botv2` v3.8.3) and the web app (`taskquest-web_deplo
 
 ### Removed
 
-- **`users.skill_points`.** Migration `002_drop_skill_points` drops the legacy column; `GET /api/skills` no longer returns `skillPoints` (it was always 0) and the web types lose `skill_points`. Closes known issue #16. The apps run the migration on start; rolling back to the previous version afterwards is not supported, because it still reads the column.
 - `POST /api/games/result` (replaced by the server-authoritative game endpoints).
 - The per-app `render.yaml`, docs and duplicated game logic.
 - `express-mysql-session`, `cors` and `lovable-tagger` dependencies.

@@ -30,8 +30,9 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | Migration | Purpose |
 |---|---|
 | `001_baseline` | Creates the whole schema (every table below, the `citext` and `vector` extensions) with `CREATE … IF NOT EXISTS`. It is the schema the 26 MySQL-era migrations ended at, squashed into one Postgres baseline; those files stay in git history. |
+| `002_drop_skill_points` | Drops the unused `users.skill_points` column (`DROP COLUMN IF EXISTS`, so it is safe to repeat). The baseline still creates it on a new database. |
 
-New migrations continue from `002`. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
+New migrations continue from `003`. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
 
 The scripts in [`db/legacy/`](../db/legacy) are MySQL-era history, kept for reference. **Do not run them.**
 
@@ -73,7 +74,6 @@ Every per-user table has a foreign key to `users(discord_id)` with `ON DELETE CA
 | `monk_day` | DATE NULL | Last day (in the user's time zone) the Monk acted (Rhythm counts consecutive days). Cleared on class switch. |
 | `assassin_bleed` | INT | Actions left with the Bleed bonus after a crit. Not tied to a class, so it survives a class switch; cleared by a progress reset. |
 | `total_lists_created`, `total_items_added`, `total_items_completed` | INT | Monotonic counters for achievements |
-| `skill_points` | INT | Legacy. Unused, kept for compatibility. |
 | `timezone` | VARCHAR(64) NULL | IANA zone (NULL = UTC), validated with `Intl`. Defines the user's day for daily caps, quests, the weekly review, stats and reminders. Changing it moves the day from then on (nothing is rewritten) and is limited to once per 24 hours. |
 | `timezone_changed_at` | TIMESTAMPTZ NULL | When the zone last changed (NULL: never set). Enforces the 24-hour limit. |
 | `reminder_hour` | SMALLINT, default 9 | Local hour reminders and the digest are sent |

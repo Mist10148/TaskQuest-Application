@@ -79,7 +79,6 @@ skillsRouter.get(
                 classOwned: owns(user, classKey),
                 skills: Object.entries(tree.skills).map(([id, skill]) => ({ id, ...skill, currentLevel: levels.get(id) || 0 }))
             })),
-            skillPoints: Number(user.skill_points) || 0,
             userXP: Number(user.player_xp),
             playerClass: user.player_class
         });

@@ -536,7 +536,6 @@ export interface User {
     prestige_title?: string;
     player_level: number;
     player_class: PlayerClass;
-    skill_points: number;
     gamification_enabled: boolean | number;
     automation_enabled: boolean | number;
     auto_delete_old_lists: boolean | number;
@@ -766,7 +765,6 @@ export interface SkillTree {
 
 export interface SkillsData {
     skillTrees: SkillTree[];
-    skillPoints: number;
     userXP: number;
     playerClass: PlayerClass;
 }

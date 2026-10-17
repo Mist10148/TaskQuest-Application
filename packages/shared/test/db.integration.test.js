@@ -73,6 +73,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         for (const c of ['timezone', 'reminder_hour', 'weekly_digest', 'last_digest_at', 'calendar_token', 'streak_freezes', 'xp_spent', 'owns_bard', 'owns_warden', 'bard_recent', 'alchemist_mix', 'assassin_last_at', 'last_chest_streak', 'prestige', 'lifetime_xp_total']) {
             assert.ok(users.includes(c), `users.${c}`);
         }
+        assert.ok(!users.includes('skill_points'), 'users.skill_points was dropped by 002');
         const lists = await cols('lists');
         for (const c of ['remind_at', 'cleared_at']) assert.ok(lists.includes(c), `lists.${c}`);
         for (const table of ['quest_claims', 'focus_sessions', 'xp_transactions_archive', 'game_sessions_archive', 'ai_embeddings']) assert.ok(await tableExists(table), table);

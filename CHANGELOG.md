@@ -328,6 +328,7 @@ The Discord bot (`taskquest-botv2` v3.8.3) and the web app (`taskquest-web_deplo
 
 ### Removed
 
+- **`users.skill_points`.** Migration `002_drop_skill_points` drops the legacy column; `GET /api/skills` no longer returns `skillPoints` (it was always 0) and the web types lose `skill_points`. Closes known issue #16. The apps run the migration on start; rolling back to the previous version afterwards is not supported, because it still reads the column.
 - `POST /api/games/result` (replaced by the server-authoritative game endpoints).
 - The per-app `render.yaml`, docs and duplicated game logic.
 - `express-mysql-session`, `cors` and `lovable-tagger` dependencies.

@@ -50,6 +50,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     const { validateConfig } = await import('../config.js');
     validateConfig();
     const { createApp } = await import('../app.js');
+    const { clearBoardCache } = await import('../routes/progression.js');
     const server = createApp().listen(0);
     const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -429,7 +430,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('GET', '/api/classes/hero/preview?level=0', { cookie: mallory })).status, 400);
         assert.equal((await call('GET', '/api/classes/hero/preview?extra=1', { cookie: mallory })).status, 400);
         const skills = await (await call('GET', '/api/skills/preview', { cookie: mallory })).json();
-        assert.equal(skills.gains.hero_valor, 10, 'Valor is a flat +10 for any class');
+        assert.equal(skills.gains.hero_valor, 0, 'Valor only pays the Hero, and this player is a Default class');
         assert.ok(skills.gains.default_xp_boost >= 0, 'a 5% boost on a 10 XP task rounds down: the preview is honest about that');
         assert.equal(typeof skills.average, 'number');
         assert.ok(Object.keys(skills.gains).length >= 80, 'every skill that is not maxed is listed');
@@ -468,6 +469,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const profile = await (await call('GET', '/api/user', { cookie: P })).json();
         assert.equal(profile.user.prestige, 1);
         assert.equal(profile.user.prestige_title, 'Veteran');
+        clearBoardCache();
         const board = await (await call('GET', '/api/leaderboard?by=lifetime')).json();
         const me = board.find((r) => r.username === 'pres');
         assert.deepEqual([me.prestige, me.prestigeTitle, me.level], [1, 'Veteran', 1]);
@@ -690,6 +692,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await equip({ kind: 'title', id: 'title_diligent' })).status, 200);
         assert.equal((await equip({ kind: 'title', id: 'title_diligent' }, await login(db, '200000000000000022'))).status, 403, 'ownership is per user');
 
+        clearBoardCache();
         const board = await (await call('GET', '/api/leaderboard')).json();
         const row = board.find((r) => r.username === 'carol');
         assert.equal(row.cosmetics.title, 'the Diligent');

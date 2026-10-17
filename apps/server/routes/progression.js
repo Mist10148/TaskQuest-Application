@@ -155,6 +155,11 @@ achievementsRouter.get(
 const BOARD_TTL_MS = 30_000;
 const boardCache = new Map(); // `${by}:${class}` -> { at, rows }
 
+/** Forget every cached board (tests read the board right after changing a player's standing). */
+export function clearBoardCache() {
+    boardCache.clear();
+}
+
 /** The ranking queries are heavy and the route is anonymous, so share one result per board for a short while. */
 async function cachedBoard(by, playerClass) {
     const cacheKey = `${by}:${playerClass || ''}`;

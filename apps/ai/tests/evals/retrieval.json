@@ -358,6 +358,147 @@
       "relevant": [
         "doc:gameplay:dealer"
       ]
+    },
+    {
+      "q": "when is the tax return due",
+      "scope": "tasks",
+      "relevant": [
+        "list:taxes"
+      ]
+    },
+    {
+      "q": "what gift should I get for mom",
+      "scope": "tasks",
+      "relevant": [
+        "list:birthday"
+      ]
+    },
+    {
+      "q": "write the methods section for the lab",
+      "scope": "tasks",
+      "relevant": [
+        "list:physics"
+      ]
+    },
+    {
+      "q": "find five sources for the history paper",
+      "scope": "tasks",
+      "relevant": [
+        "list:history"
+      ]
+    },
+    {
+      "q": "donate the old bikes",
+      "scope": "tasks",
+      "relevant": [
+        "list:garage"
+      ]
+    },
+    {
+      "q": "export my bank statement as a csv",
+      "scope": "tasks",
+      "relevant": [
+        "list:budget"
+      ]
+    },
+    {
+      "q": "learn the G major chord",
+      "scope": "tasks",
+      "relevant": [
+        "list:guitar"
+      ]
+    },
+    {
+      "q": "schedule a visit to the dentist",
+      "scope": "tasks",
+      "relevant": [
+        "list:dentist"
+      ]
+    },
+    {
+      "q": "update the CV with my new job",
+      "scope": "tasks",
+      "relevant": [
+        "list:resume"
+      ]
+    },
+    {
+      "q": "pull day at the gym",
+      "scope": "tasks",
+      "relevant": [
+        "list:gym"
+      ]
+    },
+    {
+      "q": "chapters 6-10 of the novel",
+      "scope": "tasks",
+      "relevant": [
+        "list:novel"
+      ]
+    },
+    {
+      "q": "return the keys after the move",
+      "scope": "tasks",
+      "relevant": [
+        "list:moving"
+      ]
+    },
+    {
+      "q": "take screenshots for my site",
+      "scope": "tasks",
+      "relevant": [
+        "list:portfolio"
+      ]
+    },
+    {
+      "q": "hidden roadmap for groceries and taxes",
+      "scope": "tasks",
+      "relevant": [
+        "list:groceries",
+        "list:taxes"
+      ]
+    },
+    {
+      "q": "how many XP per completed subtask",
+      "scope": "docs",
+      "relevant": [
+        "doc:gameplay:25 XP"
+      ]
+    },
+    {
+      "q": "does a blackjack natural pay more",
+      "scope": "docs",
+      "relevant": [
+        "doc:gameplay:3:2"
+      ]
+    },
+    {
+      "q": "how often can I claim the daily reward",
+      "scope": "docs",
+      "relevant": [
+        "doc:gameplay:every 24 hours"
+      ]
+    },
+    {
+      "q": "a reminder DM when a quest is due",
+      "scope": "docs",
+      "relevant": [
+        "doc:commands:sends you a DM"
+      ]
+    },
+    {
+      "q": "which command shows the top players",
+      "scope": "docs",
+      "relevant": [
+        "doc:commands:most XP"
+      ]
+    },
+    {
+      "q": "what is the level formula",
+      "scope": "docs",
+      "relevant": [
+        "doc:gameplay:100 lifetime XP"
+      ]
     }
   ]
 }

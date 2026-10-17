@@ -146,6 +146,15 @@ Status today: the AI service has only ever run against **fake models** (offline 
 
 ### Steps
 
+0. **Run the pre-flight checks.** They cost no model quota and catch most first-run problems (a retired model id, a short token, a vector column that does not match `EMBED_DIM`, a missing migration):
+
+   ```bash
+   cd apps/ai
+   python -m app.preflight --check-models
+   ```
+
+   It exits 1 when anything failed. Fix every FAIL before going on (a retired id: set `GEMINI_*_MODEL` to one it lists). Run it again with `--url http://localhost:8000` once the service is up.
+
 1. **Start the service** and check it is healthy:
 
    ```bash
@@ -177,7 +186,7 @@ Status today: the AI service has only ever run against **fake models** (offline 
    python -m tests.evals.run --live --judge --report evals-live-judge.json   # adds p95 latency and LLM-judged faithfulness
    ```
 
-   Compare against the targets in [apps/ai/README.md](../apps/ai/README.md#evals) and the goals in [AI_INTEGRATION.md §1](AI_INTEGRATION.md#1-goals-and-non-goals): retrieval recall@5 ≥ 0.85 with **0 cross-user leaks**, summaries 100 % faithful (no unknown ids), prioritizer top-3 agreement ≥ 0.8 with 100 % valid ids.
+   Judge the report with `python -m tests.evals.compare evals-live-judge.json` (add `--baseline <an earlier report>` after a prompt or model change to see regressions). It applies the live targets and exits 1 when one is missed. The targets, by hand: see [apps/ai/README.md](../apps/ai/README.md#evals) and the goals in [AI_INTEGRATION.md §1](AI_INTEGRATION.md#1-goals-and-non-goals): retrieval recall@5 ≥ 0.85 with **0 cross-user leaks**, summaries 100 % faithful (no unknown ids), prioritizer top-3 agreement ≥ 0.8 with 100 % valid ids.
 
 5. **Hand-test the user-facing paths** with a test account (web and Discord):
    - `/summary`, `/prioritize`, then ask in chat "What is due this week?" and "How do I earn XP?".

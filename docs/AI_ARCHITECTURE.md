@@ -232,7 +232,7 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 | Suite | What | Runs on |
 |---|---|---|
 | `tests/unit`, `tests/graphs` | Chunking, store, retriever, summarizer, prioritizer, chat and converse graphs, tools, security and persona red-team, images | Temporary SQLite files and fake models (`tests/fakes.py`) |
-| `tests/evals` | Retrieval (50 queries), summary (with p95 latency and an optional `--judge`), prioritize golden sets | Offline in CI; `--live` with Gemini |
+| `tests/evals` | Retrieval (70 queries), summary (10 cases, with p95 latency and an optional `--judge`), prioritize (10 cases) golden sets, the red-team strings, and `compare.py` (judges a saved report against the live targets and an earlier report) | Offline in CI; `--live` with Gemini |
 | `tests/postgres` | Real schema, foreign keys, checkpointer round trip, usage SQL, embeddings and pgvector search | PostgreSQL with pgvector and the Node migrations applied (`AI_TEST_DB_URL=postgresql://...`; CI job `ai-postgres` on `pgvector/pgvector:pg16`) |
 | `apps/bot/test/chat.test.js` | Mention, reply and DM handling, splitting, cooldown, opt-out, embeds | Node, with the AI client stubbed |
 

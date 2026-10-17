@@ -6,6 +6,10 @@
     { "name": "no deadlines", "user": "911", "gold_top3": ["list:s2_spanish", "list:s2_blog", "list:s2_bike"] },
     { "name": "overdue low priority vs urgent high priority", "user": "912", "gold_top3": ["list:s3_passport", "list:s3_grandma", "list:s3_plants"] },
     { "name": "several overdue", "user": "913", "gold_top3": ["list:s4_power", "list:s4_timesheet", "list:s4_emails"] },
-    { "name": "work and health deadlines", "user": "914", "gold_top3": ["list:s5_report", "list:s5_doctor", "list:s5_car"] }
+    { "name": "work and health deadlines", "user": "914", "gold_top3": ["list:s5_report", "list:s5_doctor", "list:s5_car"] },
+    { "name": "three things due today and one far away", "user": "915", "gold_top3": ["list:s6_rent", "list:s6_mail", "list:s6_gym"] },
+    { "name": "overdue and urgent beat undated low priority", "user": "916", "gold_top3": ["list:s7_tax", "list:s7_lease", "list:s7_conf"] },
+    { "name": "everything is weeks away", "user": "917", "gold_top3": ["list:s8_a", "list:s8_b", "list:s8_c"] },
+    { "name": "partly done work still outranks a distant read", "user": "918", "gold_top3": ["list:s9_mail", "list:s9_report", "list:s9_deck"] }
   ]
 }

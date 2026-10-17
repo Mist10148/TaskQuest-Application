@@ -40,7 +40,19 @@ Golden sets for retrieval, the summarizer and the prioritizer live in `tests/eva
 python -m tests.evals.run                      # offline: fake models, checks the pipeline (also runs in CI)
 python -m tests.evals.run --live               # real Gemini: needs GEMINI_API_KEY, uses quota
 python -m tests.evals.run --suite retrieval --report evals.json
+python -m tests.evals.compare evals-live.json                        # judge a saved report against the live targets
+python -m tests.evals.compare evals-live.json --baseline before.json # ...and flag anything worse than an earlier report
 ```
+
+Before the first live run, check the environment (no model quota is spent):
+
+```bash
+python -m app.preflight                       # key, model ids, token, EMBED_DIM, database tables and the vector column
+python -m app.preflight --check-models        # also asks Google which of the configured model ids exist and can do the job
+python -m app.preflight --url http://localhost:8000   # also checks a running service's /health
+```
+
+It prints ok / warn / FAIL per check and exits 1 on any failure.
 
 | Suite | Metrics | Live target |
 |---|---|---|
@@ -68,6 +80,7 @@ app/
 ├── chat_service.py       runs a turn and turns graph output into SSE events
 ├── threads.py            chat thread rows
 ├── usage.py              daily quota (the user's own day) and token accounting
+├── preflight.py          pre-flight checks for the first live run (python -m app.preflight)
 ├── prompts/*.md          versioned prompts (the version is logged)
 └── routers/              /v1/* (summary, prioritize, chat, threads) and /internal/* (index, forget)
 ```

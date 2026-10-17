@@ -89,6 +89,14 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+async def dispose_engine() -> None:
+    """Close the pool if one was created (for command-line tools that exit right after using it)."""
+    global _engine
+    if _engine is not None:
+        engine, _engine = _engine, None
+        await engine.dispose()
+
+
 def set_engine(engine: AsyncEngine | None) -> None:
     """Swap the engine (tests use in-memory SQLite)."""
     global _engine

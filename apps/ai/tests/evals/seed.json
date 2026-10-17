@@ -189,6 +189,41 @@
           "items": [{ "name": "Collect numbers", "done_hours_ago": 5 }, { "name": "Write summary" }] },
         { "key": "s5_closet", "name": "Clear out closet", "priority": "LOW", "deadline": 40, "items": [{ "name": "Bag old clothes" }] }
       ]
+    },
+    "915": {
+      "lists": [
+        { "key": "s6_rent", "name": "Pay rent", "priority": "HIGH", "deadline": 0, "items": [] },
+        { "key": "s6_mail", "name": "Answer mail", "priority": "MEDIUM", "deadline": 0, "items": [{ "name": "Reply to the landlord" }] },
+        { "key": "s6_gym", "name": "Gym session", "priority": "LOW", "deadline": 0, "items": [] },
+        { "key": "s6_wedding", "name": "Wedding gift", "priority": "HIGH", "deadline": 40, "items": [{ "name": "Pick a registry item" }] }
+      ]
+    },
+    "916": {
+      "lists": [
+        { "key": "s7_tax", "name": "Pay quarterly tax", "priority": "HIGH", "deadline": -4, "items": [{ "name": "Log in to the portal" }] },
+        { "key": "s7_lease", "name": "Sign the lease", "priority": "HIGH", "deadline": 2, "items": [{ "name": "Read the contract" }] },
+        { "key": "s7_conf", "name": "Book conference", "priority": "MEDIUM", "deadline": 25, "items": [{ "name": "Compare hotels" }] },
+        { "key": "s7_blog", "name": "Draft newsletter", "priority": "LOW", "items": [{ "name": "Pick a topic" }] },
+        { "key": "s7_socks", "name": "Buy socks", "priority": "LOW", "items": [] }
+      ]
+    },
+    "917": {
+      "lists": [
+        { "key": "s8_a", "name": "Prepare conference talk", "priority": "HIGH", "deadline": 10, "items": [{ "name": "Slides outline" }] },
+        { "key": "s8_b", "name": "Renew car insurance", "priority": "MEDIUM", "deadline": 12, "items": [] },
+        { "key": "s8_c", "name": "Plan the garden", "priority": "LOW", "deadline": 45, "items": [{ "name": "Order seeds" }] },
+        { "key": "s8_d", "name": "Repaint the shed", "priority": "LOW", "deadline": 90, "items": [{ "name": "Buy paint" }] }
+      ]
+    },
+    "918": {
+      "lists": [
+        { "key": "s9_mail", "name": "Email Bob about the contract", "priority": "MEDIUM", "deadline": -1, "items": [] },
+        { "key": "s9_report", "name": "Finish the report", "priority": "HIGH", "deadline": 2,
+          "items": [{ "name": "Gather data", "done_hours_ago": 20 }, { "name": "Draw the charts", "done_hours_ago": 8 }, { "name": "Write conclusions" }] },
+        { "key": "s9_deck", "name": "Build the presentation", "priority": "HIGH", "deadline": 2,
+          "items": [{ "name": "Outline" }, { "name": "Design slides" }, { "name": "Rehearse" }] },
+        { "key": "s9_paper", "name": "Read the research paper", "priority": "LOW", "deadline": 15, "items": [{ "name": "Skim the abstract" }] }
+      ]
     }
   },
   "docs": {

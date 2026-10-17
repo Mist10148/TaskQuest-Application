@@ -37,6 +37,30 @@
       "mode": "recap", "range": "day",
       "must_mention": ["list:groceries"],
       "must_not_mention": ["list:novel", "list:moving"]
+    },
+    {
+      "name": "single quest: birthday plan",
+      "mode": "list", "list": "birthday",
+      "must_mention": ["list:birthday"],
+      "must_not_mention": ["list:moving"]
+    },
+    {
+      "name": "single quest: tax return",
+      "mode": "list", "list": "taxes",
+      "must_mention": ["list:taxes"],
+      "must_not_mention": ["list:novel", "list:secret"]
+    },
+    {
+      "name": "single quest: gym routine",
+      "mode": "list", "list": "gym",
+      "must_mention": ["list:gym"],
+      "must_not_mention": ["list:physics"]
+    },
+    {
+      "name": "digest never reaches into other people's quests",
+      "mode": "digest",
+      "must_mention": ["list:physics"],
+      "must_not_mention": ["list:secret", "list:s1_chem", "list:s3_passport"]
     }
   ]
 }

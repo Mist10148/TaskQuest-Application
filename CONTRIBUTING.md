@@ -53,7 +53,7 @@ npm run typecheck
 npm run build
 ```
 
-The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop, CSV, stats, sharing and party helpers and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). There are no component tests; browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
+The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop, CSV, stats, sharing and party helpers and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). Component tests (jsdom and Testing Library, `*.test.tsx` next to the component) cover the shared building blocks and a few pages: mock `@/hooks/useApi` with `vi.mock` and render the component, as `QuestsCard.test.tsx` and `Review.test.tsx` do. Browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
 
 ### Integration tests
 

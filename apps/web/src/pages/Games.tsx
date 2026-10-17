@@ -1539,10 +1539,10 @@ const Games = () => {
             </div>
             <p className="mt-2 text-xs text-foreground-muted">
               {allowance && allowance.remainingXP === 0
-                ? "You've reached today's cap: wins pay nothing until 00:00 UTC."
+                ? "You've reached today's cap: wins pay nothing until midnight in your time zone."
                 : allowance
-                  ? `${allowance.remainingXP} XP left to earn. Resets at 00:00 UTC.`
-                  : "Resets at 00:00 UTC."}
+                  ? `${allowance.remainingXP} XP left to earn. Resets at midnight in your time zone.`
+                  : "Resets at midnight in your time zone."}
             </p>
           </div>
           <button

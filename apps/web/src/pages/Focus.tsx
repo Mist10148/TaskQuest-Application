@@ -110,7 +110,7 @@ const Starter = ({ status }: { status: FocusStatus }) => {
         </Button>
       </form>
       {invalidCustom && <p id="focus-custom-error" className="mt-2 text-sm text-destructive-text">Enter a whole number from {minMinutes} to {maxMinutes}.</p>}
-      {full && <p className="mt-3 text-sm text-foreground-muted">You finished all {status.config.sessionsPerDay} sessions for today. The limit resets at 00:00 UTC.</p>}
+      {full && <p className="mt-3 text-sm text-foreground-muted">You finished all {status.config.sessionsPerDay} sessions for today. The limit resets at midnight in your time zone.</p>}
     </section>
   );
 };

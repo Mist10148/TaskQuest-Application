@@ -52,7 +52,7 @@ const ReviewCard = ({ review }: { review: WeeklyReview }) => {
           </Button>
         )}
         <p className="mt-4 text-xs text-foreground-muted">
-          Week of {shortDate(review.weekStart)} · resets in {formatLongCountdown(left)} (Monday 00:00 UTC)
+          Week of {shortDate(review.weekStart)} · resets in {formatLongCountdown(left)} (Monday 00:00 in your time zone)
         </p>
       </div>
     </div>

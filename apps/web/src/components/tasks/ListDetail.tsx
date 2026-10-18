@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, Plus, Scroll, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { TaskRow } from "./TaskRow";
 import { TaskBoard } from "./TaskBoard";
 import { TaskCalendar } from "./TaskCalendar";
 import { TaskDetailSheet } from "./TaskDetailSheet";
+import { BulkEditDialog } from "./BulkEditDialog";
+import type { BulkEditValues } from "@/lib/bulkEdit";
 import { TASK_VIEWS, type TaskView } from "@/lib/taskViews";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
@@ -39,6 +41,8 @@ interface Props {
   onDeleteItem: (itemId: number) => void;
   onBulkComplete: (itemIds: number[]) => Promise<unknown>;
   onBulkDelete: (itemIds: number[]) => void;
+  /** Applies the same priority / due date change to every id; resolves when done. */
+  onBulkEdit: (itemIds: number[], values: BulkEditValues) => Promise<unknown>;
   /** Saves the full new order of every task id in the list. */
   onReorder: (itemIds: number[]) => Promise<unknown>;
 }
@@ -50,7 +54,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onReorder }: Props) => {
+export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -103,6 +107,8 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   // The task shown in the detail drawer (looked up by id, so it follows edits and completion).
   const [detailId, setDetailId] = useState<number | null>(null);
   const detailItem = detailId !== null ? items.find((i) => i.id === detailId) ?? null : null;
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEditing, setBulkEditing] = useState(false);
   const quickAddRef = useRef<HTMLInputElement>(null);
   const lastSelectedRef = useRef<number | null>(null);
   // Rows in the order they are drawn (each task followed by its subtasks), for Shift-click ranges.
@@ -323,6 +329,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           <Button size="sm" className="gap-1" disabled={openIds.length === 0} onClick={async () => { await onBulkComplete(openIds); leaveSelectMode(); }}>
             <CheckCheck className="h-4 w-4" /> Complete{openIds.length ? ` (${openIds.length})` : ""}
           </Button>
+          <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === 0} onClick={() => setBulkEditOpen(true)}>
+            <SlidersHorizontal className="h-4 w-4" aria-hidden /> Edit{selectedIds.length ? ` (${selectedIds.length})` : ""}
+          </Button>
           <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { onBulkDelete(deletableIds); leaveSelectMode(); }}>
             <Trash2 className="h-4 w-4" /> Delete{deletableIds.length && deletableIds.length < selectedIds.length ? ` (${deletableIds.length})` : ""}
           </Button>
@@ -335,6 +344,22 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           <Keyboard className="h-3.5 w-3.5" aria-hidden /> Keyboard shortcuts (?)
         </button>
       </p>
+      <BulkEditDialog
+        open={bulkEditOpen}
+        onOpenChange={setBulkEditOpen}
+        count={selectedIds.length}
+        pending={bulkEditing}
+        onApply={async (values) => {
+          setBulkEditing(true);
+          try {
+            await onBulkEdit(selectedIds, values);
+            setBulkEditOpen(false);
+            leaveSelectMode();
+          } finally {
+            setBulkEditing(false);
+          }
+        }}
+      />
       <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
       <TaskDetailSheet
         item={detailItem}

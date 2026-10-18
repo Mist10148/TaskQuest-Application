@@ -22,6 +22,7 @@ import { ConfirmDeleteDialog } from "@/components/tasks/ConfirmDeleteDialog";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { TemplatesDialog } from "@/components/tasks/TemplatesDialog";
 import { SaveTemplateDialog } from "@/components/tasks/SaveTemplateDialog";
+import { bulkPatch, type BulkEditValues } from "@/lib/bulkEdit";
 import { saveTemplateProblem } from "@/lib/templates";
 import { MembersDialog } from "@/components/tasks/MembersDialog";
 import { canEditTasks, isAccessLost, roleOf } from "@/lib/sharing";
@@ -214,6 +215,23 @@ const Tasks = () => {
     refetchList();
   };
 
+  // One update per task (the same endpoint as the edit form), one toast at the end.
+  const editItems = async (ids: number[], values: BulkEditValues) => {
+    const data = bulkPatch(values);
+    if (!data) return;
+    let done = 0;
+    for (const id of ids) {
+      try {
+        await updateItem.mutateAsync({ itemId: id, data });
+        done += 1;
+      } catch {
+        break; // error toast shown by the mutation hook
+      }
+    }
+    if (done > 0) toast.success(`✏️ ${done} ${done === 1 ? "task" : "tasks"} updated${done < ids.length ? ` (${ids.length - done} not changed)` : ""}`);
+    refetchList();
+  };
+
   // Send the wanted state explicitly and ignore clicks while that task's toggle is in flight.
   const togglingIds = useRef(new Set<number>());
   const handleToggleItem = (id: number) => {
@@ -257,6 +275,7 @@ const Tasks = () => {
           onDeleteItem={(id) => deleteItems([id])}
           onBulkComplete={completeItems}
           onBulkDelete={deleteItems}
+          onBulkEdit={editItems}
           onReorder={(itemIds) => reorderItems.mutateAsync({ listId: detail.id, itemIds })}
         />
       ) : selectedListId ? (

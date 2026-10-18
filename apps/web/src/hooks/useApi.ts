@@ -427,6 +427,7 @@ export function useDeleteItem() {
 export function useReorderItems() {
     const qc = useQueryClient();
     return useMutation({
+        mutationKey: ['reorderItems'],
         mutationFn: ({ listId, itemIds }: { listId: number; itemIds: number[] }) => listsApi.reorder(listId, itemIds),
         // Optimistic: the list reorders at once and is rolled back if the server refuses. No success toast per drop.
         onMutate: async ({ listId, itemIds }) => {
@@ -439,7 +440,11 @@ export function useReorderItems() {
             if (context?.previous) qc.setQueryData(['lists', listId], context.previous);
             showError(error);
         },
-        onSettled: (_items, _error, { listId }) => qc.invalidateQueries({ queryKey: ['lists', listId] }),
+        // While a later reorder is still in flight, refetching would show the older server order for a moment (a flicker); the last one to settle refetches.
+        onSettled: (_items, _error, { listId }) => {
+            if (qc.isMutating({ mutationKey: ['reorderItems'] }) > 1) return;
+            return qc.invalidateQueries({ queryKey: ['lists', listId] });
+        },
     });
 }
 

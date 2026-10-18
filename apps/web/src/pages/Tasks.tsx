@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { itemsApi, type Item, type ListWithItems } from "@/lib/api";
@@ -39,9 +39,18 @@ const Tasks = () => {
   const reorderItems = useReorderItems();
   const deleteItem = useDeleteItem();
 
-  // /tasks?list=42 opens a quest directly (used by links from AI answers).
+  // The open quest lives in the URL (/tasks?list=42): links from AI answers open it, refresh keeps it,
+  // and the browser's Back button returns to the quest log. Opening adds a history entry; closing replaces it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedListId, setSelectedListId] = useState<number | null>(() => Number(searchParams.get("list")) || null);
+  const selectedListId: number | null = Number(searchParams.get("list")) || null;
+  const setSelectedListId = useCallback((id: number | null) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (id) next.set("list", String(id));
+      else next.delete("list");
+      return next;
+    }, { replace: id === null });
+  }, [setSearchParams]);
   const { data: selectedList, refetch: refetchList, isLoading: listLoading, isError: listFailed, error: listError, isFetching: listFetching } = useList(selectedListId || 0);
   const filters = useListFilters(lists);
 
@@ -63,7 +72,7 @@ const Tasks = () => {
     void qc.invalidateQueries({ queryKey: ["lists"] });
     setMembersOpen(false);
     setSelectedListId(null);
-  }, [accessLost, selectedListId, qc]);
+  }, [accessLost, selectedListId, qc, setSelectedListId]);
   const itemDeletes = useUndoableDelete(
     async (id) => {
       await deleteItem.mutateAsync(id);

@@ -43,7 +43,13 @@ const Chat = () => {
   }, [chat.createdThreadId, chat.isStreaming, routeThreadId, navigate]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
+    // Follow the conversation only while the reader is at (or near) the bottom, or just sent something: scrolling up to
+    // reread must not be undone by every streamed token.
+    const end = bottomRef.current;
+    const scroller = end?.parentElement;
+    const nearBottom = !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 240;
+    const justSent = chat.messages[chat.messages.length - 1]?.role === "user";
+    if (nearBottom || justSent) end?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
   }, [chat.messages, chat.pending.length, reduceMotion]);
 
   if (!enabled) return <Navigate to="/dashboard" replace />;

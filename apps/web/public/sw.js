@@ -35,7 +35,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: String(data.body || "").slice(0, 300),
-      icon: "/taskquest-icon.svg",
+      // PNG: notification icons are unreliable as SVG (Android in particular).
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       data: { url: safeTarget(data.url) },
     }),
   );

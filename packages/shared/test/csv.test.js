@@ -98,3 +98,22 @@ test('csvToImport: caps the reported errors but counts them all', () => {
     assert.equal(r.errors.length, 100);
     assert.equal(r.errorCount, 150);
 });
+
+test('toCsv and csvToImport round-trip names that start with an apostrophe, and descriptions', () => {
+    const { toCsv } = require('../src/db/transfer');
+    const exported = {
+        lists: [{
+            name: 'L', description: null, category: null, priority: null, deadline: null,
+            items: [
+                { id: 1, parent_id: null, name: "'=x", description: 'a note, with comma', completed: false, due_date: null, priority: null, tags: null, recurrence: null },
+                { id: 2, parent_id: null, name: '=SUM(1)', description: null, completed: false, due_date: null, priority: null, tags: null, recurrence: null }
+            ]
+        }]
+    };
+    const back = csvToImport(toCsv(exported));
+    assert.equal(back.errorCount, 0);
+    const items = back.data.lists[0].items;
+    assert.equal(items[0].name, "'=x");
+    assert.equal(items[0].description, 'a note, with comma');
+    assert.equal(items[1].name, '=SUM(1)');
+});

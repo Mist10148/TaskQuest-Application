@@ -116,7 +116,7 @@ function mapHeader(header) {
 }
 
 /** The export prefixes cells that look like formulas with an apostrophe; take it off again. */
-const unquoteFormula = (s) => (/^'[=+\-@\t\r]/.test(s) ? s.slice(1) : s);
+const unquoteFormula = (s) => (/^''?[=+\-@\t\r]/.test(s) ? s.slice(1) : s);
 
 const TRUE_WORDS = new Set(['true', 'yes', 'y', '1', 'done', 'x', '✓']);
 const FALSE_WORDS = new Set(['false', 'no', 'n', '0', '']);

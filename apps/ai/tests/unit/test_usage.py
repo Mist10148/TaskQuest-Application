@@ -153,3 +153,11 @@ async def test_an_unknown_user_or_zone_still_gets_a_working_quota(engine, clock)
         await usage.reserve(conn, UID, "chat")
     async with engine.connect() as conn:
         assert await usage.requests_today(conn, UID) == 1
+
+
+async def test_user_today_is_the_users_calendar_date(seeded, clock):
+    clock.set("2030-03-12T20:00:00")  # 04:00 on the 13th in Manila, still the 12th in UTC
+    assert (await usage.user_today(UID)).isoformat() == "2030-03-12"
+    await set_zone(seeded, UID, "Asia/Manila")
+    assert (await usage.user_today(UID)).isoformat() == "2030-03-13"
+    assert (await usage.user_today("999999")).isoformat() == "2030-03-12", "an unknown user falls back to UTC"

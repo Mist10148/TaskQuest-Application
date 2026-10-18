@@ -20,6 +20,10 @@ describe("csvErrorLines", () => {
     expect(lines[10]).toBe("…and 30 more.");
     expect(csvErrorLines(errors.slice(0, 2), 2)).toEqual(["Row 2: bad", "Row 3: bad"]);
   });
+
+  it("shows a whole-file problem (row 0) without a row prefix", () => {
+    expect(csvErrorLines([{ row: 0, message: "lists[0]: at most 500 tasks per list." }], 1)).toEqual(["lists[0]: at most 500 tasks per list."]);
+  });
 });
 
 describe("csvCounts", () => {

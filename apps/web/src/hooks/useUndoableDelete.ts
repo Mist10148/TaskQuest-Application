@@ -9,13 +9,16 @@ interface Pending {
 /**
  * Delete with a way back. `request` hides the rows at once and shows an Undo toast;
  * only when the toast times out is `run` called for real. If the page is left while
- * deletions are pending they are carried out immediately, never silently dropped.
+ * deletions are pending they are carried out immediately, never silently dropped. Closing or reloading the tab
+ * (`pagehide`) does the same through `flush`, which should send a keepalive request that outlives the page.
  */
-export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs = 6000) {
+export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs = 6000, flush?: (id: number) => Promise<unknown>) {
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const pending = useRef(new Map<string, Pending>());
   const runRef = useRef(run);
   runRef.current = run;
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
 
   const unhide = useCallback((ids: number[]) => {
     setHidden((prev) => {
@@ -61,7 +64,17 @@ export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs
   // Leaving the page commits what is pending.
   useEffect(() => {
     const current = pending.current;
+    // The toast says "Deleted", so a reload or tab close inside the undo window must not bring the task back.
+    const onPageHide = () => {
+      current.forEach(({ timer, ids }) => {
+        clearTimeout(timer);
+        ids.forEach((id) => void (flushRef.current ?? runRef.current)(id)?.catch(() => undefined));
+      });
+      current.clear();
+    };
+    window.addEventListener("pagehide", onPageHide);
     return () => {
+      window.removeEventListener("pagehide", onPageHide);
       current.forEach(({ timer, ids }) => {
         clearTimeout(timer);
         ids.forEach((id) => void runRef.current(id).catch(() => undefined));

@@ -8,7 +8,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
-import { inviteLimiter, inviteIpLimiter } from '../lib/security.js';
+import { inviteLimiter, inviteIpLimiter, inviteDailyLimiter, inviteIpDailyLimiter } from '../lib/security.js';
 import { idParam, inviteBody, memberRoleBody, memberKeyParam, transferBody } from '../lib/schemas.js';
 
 export const listSharingRouter = Router();
@@ -26,6 +26,8 @@ listSharingRouter.post(
     '/:id/invites',
     inviteIpLimiter,
     inviteLimiter,
+    inviteIpDailyLimiter,
+    inviteDailyLimiter,
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
         const body = parse(inviteBody, req.body);

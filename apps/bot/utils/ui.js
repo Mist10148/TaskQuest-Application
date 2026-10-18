@@ -276,13 +276,16 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
     }
     
     let desc = '';
-    lists.forEach((l, i) => {
+    let shown = 0;
+    for (let i = 0; i < lists.length; i++) {
+        const l = lists[i];
+        let entry = '';
         // Priority indicator
         const priorityDot = PRIORITY_DOT[l.priority] || '⚪';
         
         // Build clean list entry
         // Line 1: Priority dot + List Name
-        desc += `${priorityDot} **${escapeDiscord(l.name, { max: 100 })}**${l.shared ? ' 👥' : ''}\n`;
+        entry += `${priorityDot} **${escapeDiscord(l.name, { max: 100 })}**${l.shared ? ' 👥' : ''}\n`;
         
         // Line 2: Metadata (category + deadline) in muted text
         const metaParts = [];
@@ -303,13 +306,19 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
         if (l.shared) metaParts.push(l.is_owner ? `shared with ${Number(l.member_count) - 1}` : `${l.role} · by ${escapeDiscord(l.owner_name, { max: 60 }) || 'someone'}`);
 
         if (metaParts.length > 0) {
-            desc += `-# ${metaParts.join(' · ')}\n`;
+            entry += `-# ${metaParts.join(' · ')}\n`;
         }
         
         // Spacing between lists
-        if (i < lists.length - 1) desc += '\n';
-    });
-    
+        entry += '\n';
+        // An embed description holds 4096 characters: stop before it overflows (about 110 lists with a category and
+        // a deadline) and say how many are left, instead of letting the whole command fail.
+        if (desc.length + entry.length > DESCRIPTION_BUDGET - 80) break;
+        desc += entry;
+        shown++;
+    }
+    if (shown < lists.length) desc += `\n*…and ${lists.length - shown} more. Use the menu, search or filters below.*`;
+
     embed.setDescription(desc.trim());
     return embed;
 }

@@ -288,7 +288,7 @@ export function useDeleteList() {
     return useMutation({
         mutationFn: (listId: number) => listsApi.delete(listId),
         onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['lists'] });
+            invalidateTaskViews(qc); // lists, plus Today and the stats that listed this quest's tasks
             qc.invalidateQueries({ queryKey: ['auth'] });
         },
         onError: showError,
@@ -454,7 +454,7 @@ export function useToggleItem() {
             invalidateProgress(qc);
             if (result.completed) {
                 // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing.
-                const undo = () => itemsApi.toggle(result.id, false).then(() => qc.invalidateQueries({ queryKey: ['lists'] })).catch(showError);
+                const undo = () => itemsApi.toggle(result.id, false).then(() => invalidateTaskViews(qc)).catch(showError);
                 showXPNotification(result, 'Task done!', '✨', undo);
             }
             if (result.nextItem) {

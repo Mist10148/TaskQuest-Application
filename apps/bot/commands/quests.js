@@ -28,16 +28,17 @@ function render(list) {
         .setColor(0x5865f2)
         .setTitle('📜 Quests')
         .addFields({ name: 'Today', value: section('daily') }, { name: 'This week', value: section('weekly') })
-        .setFooter({ text: 'Daily quests reset at your midnight (see /timezone), weekly ones on Monday.' });
+        .setFooter({ text: 'Daily quests reset at your midnight (see /timezone), weekly ones on Monday, the monthly boss on the 1st.' });
+    const monthly = section('monthly');
+    if (monthly) embed.addFields({ name: 'This month', value: monthly });
 
-    const claimable = list.filter((q) => q.claimable).slice(0, 5);
-    const components = claimable.length
-        ? [
-              new ActionRowBuilder().addComponents(
-                  claimable.map((q) => new ButtonBuilder().setCustomId(`quest_claim_${q.key}`).setLabel(`Claim ${q.name}`).setEmoji('🎁').setStyle(ButtonStyle.Success))
-              )
-          ]
-        : [];
+    // A row holds 5 buttons and a message 5 rows, so every ready quest gets a button (the monthly boss used to be cut off).
+    const buttons = list
+        .filter((q) => q.claimable)
+        .slice(0, 25)
+        .map((q) => new ButtonBuilder().setCustomId(`quest_claim_${q.key}`).setLabel(`Claim ${q.name}`).setEmoji('🎁').setStyle(ButtonStyle.Success));
+    const components = [];
+    for (let i = 0; i < buttons.length; i += 5) components.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
     return { embeds: [embed], components };
 }
 

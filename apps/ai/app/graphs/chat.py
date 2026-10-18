@@ -33,6 +33,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field, ValidationError
 
+from app import usage
 from app.config import get_settings
 from app.llm import BLOCKED_REPLY, is_blocked
 from app.llm_call import structured_call
@@ -183,13 +184,13 @@ def build_chat_graph(
     tools = [] if public else [t for t in langchain_tools() if not (read_only and TOOLS[t.name].write)]
     max_rounds = get_settings().max_tool_iterations
 
-    def ctx_for(state: ChatState) -> ToolContext:
+    async def ctx_for(state: ChatState) -> ToolContext:
         return ToolContext(
             discord_id=state["discord_id"],  # trusted: set by the service, never by the model
             llm_factory=deps.llm_factory,
             web=deps.web,
             retriever=deps.retriever,
-            today=datetime.now(UTC).date(),
+            today=await usage.user_today(state["discord_id"]),
         )
 
     async def fold_memory(state: ChatState) -> dict:
@@ -313,7 +314,7 @@ def build_chat_graph(
 
     async def confirm(state: ChatState) -> dict:
         """Pause for the user. Nothing is written before this returns (the node re-runs on resume)."""
-        ctx = ctx_for(state)
+        ctx = await ctx_for(state)
         pending: list[dict[str, Any]] = []
         decisions: dict[str, Any] = {}
         for call in pending_tool_calls(state["messages"]):
@@ -340,7 +341,7 @@ def build_chat_graph(
         return {"approvals": decisions}
 
     async def tools_node(state: ChatState) -> dict:
-        ctx = ctx_for(state)
+        ctx = await ctx_for(state)
         approvals = state.get("approvals") or {}
         results: list[ToolMessage] = []
         events: list[dict[str, Any]] = []

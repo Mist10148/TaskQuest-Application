@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { SettingRow, SwitchRow } from "./SettingsSection";
 
 const selectClass =
-  "h-9 w-full sm:w-64 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
+  "h-9 w-full sm:w-64 rounded-md border border-input bg-background px-3 text-base md:text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 type Supported = { supportedValuesOf?: (key: string) => string[] };
 
@@ -34,6 +34,10 @@ export const ReminderSettings = ({ user, automation, weeklyDigest, autoDelete, o
   const zones = useMemo(listTimeZones, []);
   const zone = user.timezone || "";
   const detected = detectedZone();
+  // A zone change is locked for 24 hours, so picking one in the list (or arrowing past it with the keyboard) must not
+  // save it: the choice is a draft until Save is pressed.
+  const [draft, setDraft] = useState(zone);
+  useEffect(() => setDraft(zone), [zone]);
 
   return (
     <div>
@@ -43,17 +47,22 @@ export const ReminderSettings = ({ user, automation, weeklyDigest, autoDelete, o
           <select
             aria-label="Time zone"
             className={selectClass}
-            value={zone}
+            value={draft}
             disabled={busy("timezone")}
-            onChange={(e) => onSave({ timezone: e.target.value || null })}
+            onChange={(e) => setDraft(e.target.value)}
           >
             <option value="">UTC (not set)</option>
             {zones.map((z) => (
               <option key={z} value={z}>{z}</option>
             ))}
           </select>
-          {detected && detected !== zone && (
-            <Button type="button" variant="ghost" size="sm" disabled={busy("timezone")} onClick={() => onSave({ timezone: detected })}>
+          {draft !== zone && (
+            <Button type="button" size="sm" disabled={busy("timezone")} onClick={() => onSave({ timezone: draft || null })}>
+              Save time zone (locked for 24 hours)
+            </Button>
+          )}
+          {detected && detected !== zone && detected !== draft && (
+            <Button type="button" variant="ghost" size="sm" disabled={busy("timezone")} onClick={() => setDraft(detected)}>
               Use this device's zone ({detected})
             </Button>
           )}

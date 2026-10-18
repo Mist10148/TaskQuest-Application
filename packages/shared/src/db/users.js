@@ -5,7 +5,7 @@
 const { getPool, withTransaction, isUniqueViolation, savepoint } = require('./pool');
 const { LEADERBOARDS, WEEKLY_XP_SOURCES, WEEKLY_BOARD_XP_SOURCES, DAILY } = require('../constants');
 const { errors } = require('../errors');
-const { isValidTimeZone, todayInZone } = require('../dates');
+const { canonicalTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
 const { prestigeTitle } = require('../xp');
 const { describeEquipped } = require('../cosmetics');
@@ -93,8 +93,9 @@ async function updateSettings(discordId, settings, now = new Date()) {
         }
     }
     if (settings.timezone !== undefined) {
-        if (settings.timezone !== null && !isValidTimeZone(settings.timezone)) throw errors.validation('Unknown time zone. Use a name like Europe/Paris or Asia/Manila.');
-        timezoneChange = settings.timezone;
+        const canonical = settings.timezone === null ? null : canonicalTimeZone(settings.timezone);
+        if (settings.timezone !== null && canonical === null) throw errors.validation('Unknown time zone. Use a name like Europe/Paris or Asia/Manila.');
+        timezoneChange = canonical;
     }
     if (settings.reminder_hour !== undefined) {
         const hour = settings.reminder_hour;
@@ -105,6 +106,9 @@ async function updateSettings(discordId, settings, now = new Date()) {
     await ensureUser(discordId);
     if (timezoneChange !== undefined) {
         await withTransaction(async (conn) => {
+            // Copies: withTransaction re-runs this callback after a deadlock, so it must not grow the outer arrays.
+            const txSets = [...sets];
+            const txValues = [...values];
             const user = await lockUser(conn, discordId);
             if (timezoneChange !== (user.timezone || null)) {
                 const last = user.timezone_changed_at ? new Date(user.timezone_changed_at).getTime() : null;
@@ -115,10 +119,10 @@ async function updateSettings(discordId, settings, now = new Date()) {
                         `You changed your time zone recently. It sets when your day starts for daily limits and quests, so it can only change once every 24 hours. Try again in ${Math.floor(minutes / 60)}h ${minutes % 60}m.`
                     );
                 }
-                sets.push('timezone = ?', 'timezone_changed_at = ?');
-                values.push(timezoneChange, now);
+                txSets.push('timezone = ?', 'timezone_changed_at = ?');
+                txValues.push(timezoneChange, now);
             }
-            if (sets.length) await run(conn, `UPDATE users SET ${sets.join(', ')} WHERE discord_id = ?`, [...values, String(discordId)]);
+            if (txSets.length) await run(conn, `UPDATE users SET ${txSets.join(', ')} WHERE discord_id = ?`, [...txValues, String(discordId)]);
         });
     } else if (sets.length) await run(null, `UPDATE users SET ${sets.join(', ')} WHERE discord_id = ?`, [...values, String(discordId)]);
     return getUser(discordId);

@@ -43,7 +43,13 @@ const Chat = () => {
   }, [chat.createdThreadId, chat.isStreaming, routeThreadId, navigate]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
+    // Follow the conversation only while the reader is at (or near) the bottom, or just sent something: scrolling up to
+    // reread must not be undone by every streamed token.
+    const end = bottomRef.current;
+    const scroller = end?.parentElement;
+    const nearBottom = !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 240;
+    const justSent = chat.messages[chat.messages.length - 1]?.role === "user";
+    if (nearBottom || justSent) end?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
   }, [chat.messages, chat.pending.length, reduceMotion]);
 
   if (!enabled) return <Navigate to="/dashboard" replace />;
@@ -72,7 +78,7 @@ const Chat = () => {
 
   return (
     <DashboardLayout>
-      <div className="relative flex gap-4 h-[calc(100vh-7rem)] min-h-[480px]">
+      <div className="relative flex gap-4 h-[calc(100dvh-11rem)] min-h-[480px] lg:h-[calc(100dvh-7rem)]">
         <aside className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-0 w-auto lg:static" : "hidden lg:flex")}>
           <Button size="sm" variant="glow" className="gap-1" onClick={() => { navigate("/chat"); setShowThreads(false); }}>
             <MessageSquarePlus className="h-4 w-4" /> New chat

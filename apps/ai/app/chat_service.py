@@ -128,6 +128,14 @@ async def stream_turn(
                                     yield sse("sources", sources)
             except Exception:
                 log.exception("chat turn failed")
+                if not any(deps.tokens):
+                    # The model never answered (an outage, a bad key): the request was not used, so retrying must not
+                    # eat the daily quota. Once tokens were spent the request stays booked.
+                    try:
+                        async with pool.connection() as conn:
+                            await usage.release(conn, discord_id, "chat")
+                    except Exception:  # noqa: BLE001 - the error event below matters more than the refund
+                        log.exception("could not refund the request")
                 yield sse("error", {"message": "Something went wrong talking to the AI. Please try again."})
     finally:
         if not rejected:

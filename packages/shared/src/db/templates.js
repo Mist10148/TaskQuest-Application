@@ -164,11 +164,14 @@ async function applyTemplate(discordId, templateId, { listName, listId } = {}) {
         'SELECT COUNT(DISTINCT l.id) AS lists, COUNT(i.id) AS items FROM lists l LEFT JOIN items i ON i.list_id = l.id WHERE l.discord_id = ?',
         [id]
     );
-    if (Number(have.items) + template.itemCount > LIMITS.MAX_ITEMS_PER_USER) {
+    const intoExisting = listId !== undefined && listId !== null;
+    // Adding to an existing quest is checked against that quest's OWNER by addItems (it may be a shared list, and the
+    // caller's own count says nothing then); only a new quest grows the caller's own data.
+    if (!intoExisting && Number(have.items) + template.itemCount > LIMITS.MAX_ITEMS_PER_USER) {
         throw errors.validation(`You can have at most ${LIMITS.MAX_ITEMS_PER_USER} tasks; this template would exceed that.`);
     }
 
-    if (listId !== undefined && listId !== null) {
+    if (intoExisting) {
         const added = await tasks.addItems(discordId, listId, template.items);
         const list = await tasks.getList(discordId, listId);
         return {

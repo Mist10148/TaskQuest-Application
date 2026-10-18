@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { pushStatus, urlBase64ToUint8Array } from "./push";
 
 describe("urlBase64ToUint8Array", () => {
@@ -30,5 +30,22 @@ describe("pushStatus", () => {
     expect(pushStatus({ ...base, permission: "granted", subscribed: false })).toBe("off");
     expect(pushStatus({ ...base, subscribed: true })).toBe("off");
     expect(pushStatus(base)).toBe("off");
+  });
+});
+
+describe("enablePush permission answers", () => {
+  it("tells a dismissed prompt apart from a blocked site", async () => {
+    const { enablePush, PUSH_DISMISSED_TEXT, PUSH_STATUS_TEXT } = await import("./push");
+    const original = { ...window.navigator };
+    Object.defineProperty(window.navigator, "serviceWorker", { value: {}, configurable: true });
+    Object.defineProperty(window, "PushManager", { value: class {}, configurable: true });
+    const Notif = Object.assign(vi.fn(), { permission: "default", requestPermission: vi.fn() });
+    vi.stubGlobal("Notification", Notif);
+    Notif.requestPermission.mockResolvedValueOnce("default");
+    await expect(enablePush("key")).rejects.toThrow(PUSH_DISMISSED_TEXT);
+    Notif.requestPermission.mockResolvedValueOnce("denied");
+    await expect(enablePush("key")).rejects.toThrow(PUSH_STATUS_TEXT.denied);
+    vi.unstubAllGlobals();
+    void original;
   });
 });

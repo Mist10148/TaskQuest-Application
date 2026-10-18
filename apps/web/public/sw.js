@@ -35,7 +35,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: String(data.body || "").slice(0, 300),
-      icon: "/taskquest-icon.svg",
+      // PNG: notification icons are unreliable as SVG (Android in particular).
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       data: { url: safeTarget(data.url) },
     }),
   );
@@ -49,9 +51,47 @@ self.addEventListener("notificationclick", (event) => {
       for (const win of windows) {
         if (win.url === url && "focus" in win) return win.focus();
       }
-      const open = windows.find((win) => "navigate" in win && "focus" in win);
-      if (open) return open.navigate(url).then((w) => (w || open).focus());
+      // Reuse the tab the person is looking at, not whichever window happens to be first (a background tab
+      // in the middle of a game or a form).
+      const open = windows.find((win) => win.focused && "navigate" in win) || windows.find((win) => win.visibilityState === "visible" && "navigate" in win);
+      // navigate() rejects for a window this worker does not control: fall back to a new one instead of doing nothing.
+      if (open) return open.navigate(url).then((w) => (w || open).focus()).catch(() => self.clients.openWindow(url));
       return self.clients.openWindow(url);
     }),
+  );
+});
+
+function keyBytes(value) {
+  const padded = value + "=".repeat((4 - (value.length % 4)) % 4);
+  const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+/**
+ * The browser rotated or expired this subscription. Without a new one reminders stop silently (the server keeps a dead
+ * endpoint), so subscribe again with the server's public key and tell the server. Best effort: if the person is signed
+ * out the request is refused and the next time they open Settings they can turn push on again.
+ */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const config = await (await fetch("/api/push/config", { credentials: "include" })).json();
+        if (!config.enabled || !config.publicKey) return;
+        const subscription =
+          event.newSubscription ||
+          (await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(config.publicKey) }));
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ subscription: subscription.toJSON() }),
+        });
+      } catch {
+        /* nothing more to do from a worker */
+      }
+    })(),
   );
 });

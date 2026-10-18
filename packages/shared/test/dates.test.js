@@ -30,6 +30,16 @@ test('isValidTimeZone', () => {
     assert.equal(isValidTimeZone(''), false);
 });
 
+test('canonicalTimeZone fixes capitalisation and refuses offsets', () => {
+    const { canonicalTimeZone } = require('../src/dates');
+    assert.equal(canonicalTimeZone('europe/paris'), 'Europe/Paris');
+    assert.equal(canonicalTimeZone('Asia/Manila'), 'Asia/Manila');
+    assert.equal(canonicalTimeZone('+05:30'), null);
+    assert.equal(canonicalTimeZone('-08:00'), null);
+    assert.equal(canonicalTimeZone('Mars/Olympus'), null);
+    assert.equal(canonicalTimeZone(null), null);
+});
+
 test('nextOccurrence: daily, weekly and monthly with month-end clamping', () => {
     const { nextOccurrence, nextDueOnOrAfter } = require('../src/dates');
     assert.equal(nextOccurrence('2030-01-31', 'daily'), '2030-02-01');

@@ -33,3 +33,18 @@ test('finished quests get one button each, with a stable custom id', () => {
     const ids = out.components[0].toJSON().components.map((c) => c.custom_id);
     assert.deepEqual(ids, ['quest_claim_DAILY_COMPLETE_3', 'quest_claim_DAILY_HIGH_1']);
 });
+
+test('the monthly boss is shown and every ready quest gets a button (rows of five)', () => {
+    const ready = (key, period) => quest({ key, period, claimable: true, progress: 3 });
+    const list = [
+        ready('D1', 'daily'), ready('D2', 'daily'), ready('D3', 'daily'),
+        ready('W1', 'weekly'), ready('W2', 'weekly'), ready('W3', 'weekly'),
+        ready('BOSS_COMPLETE_50', 'monthly')
+    ];
+    const out = render(list);
+    const ids = out.components.flatMap((row) => row.toJSON().components.map((c) => c.custom_id));
+    assert.equal(ids.length, 7);
+    assert.ok(ids.includes('quest_claim_BOSS_COMPLETE_50'));
+    assert.deepEqual(out.components.map((row) => row.toJSON().components.length), [5, 2]);
+    assert.match(JSON.stringify(out.embeds[0].toJSON()), /This month/);
+});

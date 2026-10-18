@@ -43,6 +43,26 @@ const AUTOCOMPLETE_FILTER = {
     leave: (l) => !l.is_owner
 };
 
+/**
+ * The menu entries for `lists` that pass `keep` and match `q`. A name that more than one of your lists shares (your own
+ * "Work" and one shared with you) is offered as `#<id>` with the owner in the label, so choosing it picks that list and
+ * not whichever the name lookup finds first.
+ */
+function autocompleteChoices(lists, keep, q) {
+    const seen = new Map();
+    for (const l of lists) seen.set(l.name, (seen.get(l.name) || 0) + 1);
+    return lists
+        .filter((l) => keep(l) && l.name.toLowerCase().includes(q))
+        .slice(0, 25)
+        .map((l) => {
+            if (seen.get(l.name) > 1) {
+                const who = l.is_owner ? 'yours' : `by ${l.owner_name || 'someone'}`;
+                return { name: `${l.name.slice(0, 80)} (${who})`.slice(0, 100), value: `#${l.id}` };
+            }
+            return { name: l.name.slice(0, 100), value: l.name.slice(0, 100) };
+        });
+}
+
 async function autocomplete(interaction) {
     try {
         const focused = interaction.options.getFocused(true);
@@ -50,12 +70,7 @@ async function autocomplete(interaction) {
         const q = String(focused.value || '').toLowerCase();
         const keep = AUTOCOMPLETE_FILTER[interaction.commandName] || (() => true);
         const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
-        return await interaction.respond(
-            lists
-                .filter((l) => keep(l) && l.name.toLowerCase().includes(q))
-                .slice(0, 25)
-                .map((l) => ({ name: l.name.slice(0, 100), value: l.name.slice(0, 100) }))
-        );
+        return await interaction.respond(autocompleteChoices(lists, keep, q));
     } catch {
         return interaction.respond([]).catch(() => {});
     }
@@ -63,7 +78,9 @@ async function autocomplete(interaction) {
 
 async function resolveList(interaction) {
     await users.ensureUser(interaction.user.id);
-    const list = await tasks.getListByName(interaction.user.id, interaction.options.getString('list'));
+    const value = String(interaction.options.getString('list') || '');
+    const byId = /^#(\d{1,12})$/.exec(value);
+    const list = byId ? await tasks.getList(interaction.user.id, byId[1]) : await tasks.getListByName(interaction.user.id, value);
     if (!list) {
         await interaction.editReply({ embeds: [ui.error('List not found', 'Pick one of your lists from the suggestions.')] });
         return null;
@@ -269,6 +286,7 @@ module.exports = {
     members,
     leave,
     autocomplete,
+    autocompleteChoices,
     handleInviteButton,
     handleLeaveButton,
     handleSelect,

@@ -20,6 +20,7 @@ function answer(text, { memberRow = { discord_id: N, public_id: KEY, role: 'edit
     if (text.startsWith('SELECT discord_id FROM list_members')) return memberRow ? [{ discord_id: memberRow.discord_id }] : [];
     if (text.startsWith('SELECT * FROM list_members')) return memberRow ? [memberRow] : [];
     if (text.startsWith('SELECT * FROM users')) return [{ discord_id: N }];
+    if (text.startsWith('SELECT deadline_notified')) return [{ deadline_notified: 0, overdue_notified: 0, remind_at: null }];
     if (text.includes('COUNT(*)')) return [{ n: items }];
     return [];
 }

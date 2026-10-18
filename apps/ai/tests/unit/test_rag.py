@@ -201,6 +201,20 @@ async def test_reconcile_finds_missing_and_stale(seeded):
         assert {lid for _, lid in await indexer.stale_lists(conn, store)} == {1, 2, 3}
 
 
+async def test_reconcile_keeps_going_when_one_list_cannot_be_embedded(seeded):
+    class PickyEmbedder(FakeEmbedder):
+        async def aembed_documents(self, texts, **kwargs):
+            if any("Secret" in t for t in texts):
+                raise RuntimeError("provider 429")
+            return await super().aembed_documents(texts, **kwargs)
+
+    store, emb = make_store(), PickyEmbedder()
+    async with seeded.begin() as conn:
+        fixed = await indexer.reconcile(conn, store, emb)
+        assert fixed == 3, "the three healthy lists are indexed even though one failed"
+        assert {lid for _, lid in await indexer.stale_lists(conn, store)} == {4}
+
+
 async def test_reconcile_catches_list_only_edits(seeded):
     store, emb = make_store(), FakeEmbedder()
     async with seeded.begin() as conn:

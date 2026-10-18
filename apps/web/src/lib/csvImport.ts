@@ -18,7 +18,7 @@ export function csvFileProblem(file: { name: string; size: number }): string | n
 
 /** "Row 3: Due date must be…" lines for the first few errors, plus a count of the rest. */
 export function csvErrorLines(errors: CsvRowError[], total: number, show = 10): string[] {
-  const lines = errors.slice(0, show).map((e) => `Row ${e.row}: ${e.message}`);
+  const lines = errors.slice(0, show).map((e) => (e.row > 0 ? `Row ${e.row}: ${e.message}` : e.message));
   if (total > lines.length) lines.push(`…and ${total - lines.length} more.`);
   return lines;
 }

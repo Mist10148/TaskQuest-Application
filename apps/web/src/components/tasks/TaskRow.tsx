@@ -37,12 +37,14 @@ interface Props {
   drag?: DragProps;
   /** A viewer of a shared quest: the checkbox is disabled and the row has no actions. */
   readOnly?: boolean;
+  /** The keyboard cursor (j / k) is on this row. */
+  focused?: boolean;
 }
 
-const iconButton = "p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
+const iconButton = "p-2.5 sm:p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
-export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly }: Props) => {
+export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
   const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
@@ -71,6 +73,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
   return (
     <div
       data-task-row
+      data-task-id={item.id}
       onTouchStart={swipeable ? onTouchStart : undefined}
       onTouchMove={swipeable ? onTouchMove : undefined}
       onTouchEnd={swipeable ? onTouchEnd : undefined}
@@ -83,6 +86,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         "group flex items-start gap-2 sm:gap-3 rounded-lg border bg-card p-3 sm:p-4 transition-all duration-200 focus-within:border-primary/50",
         isSubtask && "ml-6 sm:ml-10 p-2.5 sm:p-3",
         completed && "bg-card/60",
+        focused && "ring-2 ring-primary/70",
         selected && "border-primary bg-primary/5",
         drag?.isDragOver ? "border-primary bg-primary/10" : !selected && "border-border hover:border-primary/30",
         drag?.isDragging && "opacity-50 scale-[0.98]"

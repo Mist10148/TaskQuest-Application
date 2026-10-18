@@ -60,21 +60,24 @@ async function exportAll(discordId) {
     };
 }
 
-/** A cell that a spreadsheet could execute as a formula gets a leading apostrophe. */
+/**
+ * A cell that a spreadsheet could execute as a formula gets a leading apostrophe. So does one that already starts
+ * with an apostrophe before such a character, because the importer strips exactly one apostrophe there.
+ */
 function csvCell(value) {
     let s = value === null || value === undefined ? '' : String(value);
-    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    if (/^'?[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** One row per task: list, task, subtask-of, done, due date, priority, tags, repeat. */
+/** One row per task: list, task, subtask-of, done, due date, priority, tags, repeat, list deadline and category, description. */
 function toCsv(data) {
-    const rows = [['list', 'task', 'subtask_of', 'done', 'due_date', 'priority', 'tags', 'repeat', 'list_deadline', 'list_category']];
+    const rows = [['list', 'task', 'subtask_of', 'done', 'due_date', 'priority', 'tags', 'repeat', 'list_deadline', 'list_category', 'description']];
     for (const l of data.lists) {
         const names = new Map(l.items.map((i) => [i.id, i.name]));
-        if (!l.items.length) rows.push([l.name, '', '', '', '', '', '', '', l.deadline, l.category]);
+        if (!l.items.length) rows.push([l.name, '', '', '', '', '', '', '', l.deadline, l.category, '']);
         for (const i of l.items) {
-            rows.push([l.name, i.name, i.parent_id ? names.get(i.parent_id) || '' : '', i.completed ? 'yes' : 'no', i.due_date, i.priority, i.tags, i.recurrence, l.deadline, l.category]);
+            rows.push([l.name, i.name, i.parent_id ? names.get(i.parent_id) || '' : '', i.completed ? 'yes' : 'no', i.due_date, i.priority, i.tags, i.recurrence, l.deadline, l.category, i.description]);
         }
     }
     return rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';

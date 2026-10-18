@@ -119,6 +119,9 @@ export function createApp() {
     // ── Frontend (single origin: the SPA and the API share cookies) ─────────
     if (config.serveFrontend) {
         app.use(express.static(WEB_DIST, { index: false, maxAge: '1h' }));
+        // A hashed asset that no longer exists (a tab from before a deploy) must be a real 404: serving index.html with a 200 gives
+        // the browser HTML where it expected JavaScript, and the page dies with a confusing syntax error.
+        app.get('/assets/*', (req, res) => res.status(404).type('text/plain').send('Not found'));
         app.get('*', (req, res) => res.sendFile(path.join(WEB_DIST, 'index.html')));
     }
 

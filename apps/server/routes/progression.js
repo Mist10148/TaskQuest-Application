@@ -85,6 +85,10 @@ skillsRouter.get(
     })
 );
 
+const PREVIEW_CACHE_MS = 10 * 60 * 1000;
+const PREVIEW_CACHE_MAX = 500;
+const previewCache = new Map(); // key (class, level, mix, owned skills) -> { body, expires }
+
 /**
  * What each skill's next level would add to the average XP of a task, for the class you have equipped at your level
  * (a simulation of the real rules; `gain` is XP per 10 base XP task, 0 for a skill that does nothing for your class).
@@ -99,6 +103,10 @@ skillsRouter.get(
         const mix = q.mix || FAVOURABLE[cls] || 'plain';
         const rows = await db.users.getUserSkills(uid(req));
         const levels = new Map(rows.map((s) => [s.skill_id, Number(s.skill_level)]));
+        // The simulation is ~0.3 s of CPU for the whole catalogue, so identical inputs share one result for a while.
+        const cacheKey = `${cls}|${level}|${mix}|${[...levels].sort(([a], [b]) => (a < b ? -1 : 1)).map(([id, n]) => `${id}:${n}`).join(',')}`;
+        const cached = previewCache.get(cacheKey);
+        if (cached && cached.expires > Date.now()) return res.json(cached.body);
         const asRows = (m) => [...m].map(([skill_id, skill_level]) => ({ skill_id, skill_level }));
         const avg = (m) => simulateAverage(cls, asRows(m), { level, mix });
         const base = avg(levels);
@@ -111,7 +119,10 @@ skillsRouter.get(
                 gains[id] = Math.round((avg(next) - base) * 10) / 10;
             }
         }
-        res.json({ classKey: cls, level, mix, base: 10, average: Math.round(base * 10) / 10, gains });
+        const body = { classKey: cls, level, mix, base: 10, average: Math.round(base * 10) / 10, gains };
+        if (previewCache.size >= PREVIEW_CACHE_MAX) previewCache.clear();
+        previewCache.set(cacheKey, { body, expires: Date.now() + PREVIEW_CACHE_MS });
+        res.json(body);
     })
 );
 
@@ -157,7 +168,12 @@ const boardCache = new Map(); // `${by}:${class}` -> { at, rows }
 /** Forget every cached board (tests read the board right after changing a player's standing). */
 export function clearBoardCache() {
     boardCache.clear();
+    rankCache.clear();
 }
+
+const RANK_TTL_MS = 10_000;
+const RANK_CACHE_MAX = 2000;
+const rankCache = new Map(); // `${user}:${by}:${class}` -> { at, rank }
 
 /** The ranking queries are heavy and the route is anonymous, so share one result per board for a short while. */
 async function cachedBoard(by, playerClass) {
@@ -224,6 +240,13 @@ leaderboardRouter.get(
     requireAuth,
     asyncRoute(async (req, res) => {
         const { by, class: playerClass } = parse(leaderboardQuery, req.query);
-        res.json({ rank: await db.users.getRank(uid(req), by, { playerClass }) });
+        // Ranking runs correlated subqueries over every player, so a user polling this route shares one answer for a few seconds.
+        const key = `${uid(req)}:${by}:${playerClass || ''}`;
+        const hit = rankCache.get(key);
+        if (hit && Date.now() - hit.at < RANK_TTL_MS) return res.json({ rank: hit.rank });
+        const rank = await db.users.getRank(uid(req), by, { playerClass });
+        if (rankCache.size >= RANK_CACHE_MAX) rankCache.clear();
+        rankCache.set(key, { at: Date.now(), rank });
+        res.json({ rank });
     })
 );

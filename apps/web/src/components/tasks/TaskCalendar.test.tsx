@@ -20,6 +20,13 @@ describe("TaskCalendar", () => {
     expect(screen.getByRole("gridcell", { name: "2030-01-20, 0 open of 1" })).toHaveTextContent("done");
   });
 
+  it("says overdue in words, not only in colour, and groups days into rows", () => {
+    render(<TaskCalendar items={[item(1, "2030-01-05")]} onToggle={() => {}} onEdit={() => {}} />);
+    const day = screen.getByRole("gridcell", { name: "2030-01-05, 1 open of 1, overdue" });
+    expect(day).toHaveTextContent("1 overdue");
+    expect(day.closest('[role="row"]')).not.toBeNull();
+  });
+
   it("lists the tasks of the picked day and completes one", async () => {
     const onToggle = vi.fn();
     render(<TaskCalendar items={[item(1, "2030-01-15"), item(2, "2030-01-16")]} onToggle={onToggle} onEdit={() => {}} />);

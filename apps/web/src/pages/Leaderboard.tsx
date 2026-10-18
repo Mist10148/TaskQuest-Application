@@ -164,7 +164,7 @@ const Leaderboard = () => {
             id="class-filter"
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9 rounded-md border border-input bg-background px-3 text-base md:text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="ALL">All classes</option>
             {classOptions.map((c) => (

@@ -16,6 +16,7 @@ import { TaskCalendar } from "./TaskCalendar";
 import { TASK_VIEWS, type TaskView } from "@/lib/taskViews";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
+import { stepCursor } from "@/lib/cursor";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { canDeleteList, canEditTasks, canManageList, peopleLabel, roleLabel, roleOf } from "@/lib/sharing";
 
@@ -124,7 +125,22 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   // An editor may only delete tasks they added; the rest of a selection is left alone.
   const deletableIds = items.filter((i) => selected.has(i.id) && i.can_delete !== false).map((i) => i.id);
 
+  // The keyboard cursor: j and k move over the rows, x completes, e edits, d deletes (list view only).
+  const [cursorId, setCursorId] = useState<number | null>(null);
+  const cursorRow = cursorId !== null ? items.find((i) => i.id === cursorId) : undefined;
+  const moveCursor = (direction: 1 | -1) => {
+    if (view !== "list" || selectMode) return;
+    const next = stepCursor(visibleOrder, cursorId, direction);
+    setCursorId(next);
+    if (next !== null) requestAnimationFrame(() => document.querySelector(`[data-task-id="${next}"]`)?.scrollIntoView({ block: "nearest" }));
+  };
+
   useHotkeys({
+    j: () => moveCursor(1),
+    k: () => moveCursor(-1),
+    x: () => { if (editable && cursorRow) onToggleItem(cursorRow.id); },
+    e: (e) => { if (editable && cursorRow) { e.preventDefault(); onEditItem(cursorRow.id); } },
+    d: () => { if (editable && cursorRow && cursorRow.can_delete !== false) onDeleteItem(cursorRow.id); },
     n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
     "/": (e) => { if (!editable) return; e.preventDefault(); quickAddRef.current?.focus(); },
     s: () => { if (!editable) return; if (selectMode) leaveSelectMode(); else setSelectMode(true); },
@@ -160,6 +176,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         onEdit={onEditItem}
         onDelete={onDeleteItem}
         readOnly={!editable}
+        focused={view === "list" && cursorId === item.id}
         onAddSubtask={(id) => onAddItem(id)}
         onMove={(id, dir) => move(id, dir, siblings)}
         canMoveUp={index > 0}
@@ -197,7 +214,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
               {list.deadline && <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due: {formatDeadline(list.deadline)}</span>}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <SummarizeButton body={{ mode: "list", listId: list.id }} title={`Summary: ${list.name}`} />
             <Button variant="outline" size="sm" onClick={onOpenMembers} className="gap-1" title={list.shared ? `Shared with ${peopleLabel(list.memberCount)}` : "Invite people to this quest"}>
               <Users className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Members</span>
@@ -252,13 +269,12 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       {editable && <QuickAddBar ref={quickAddRef} pending={quickAddPending} aiEnabled={aiEnabled} onAdd={onQuickAdd} />}
 
       {items.length > 0 && (
-        <div role="tablist" aria-label="How to show the tasks" className="mb-4 inline-flex rounded-lg border border-border bg-card p-0.5">
+        <div role="group" aria-label="How to show the tasks" className="mb-4 inline-flex rounded-lg border border-border bg-card p-0.5">
           {TASK_VIEWS.map((v) => (
             <button
               key={v.value}
               type="button"
-              role="tab"
-              aria-selected={view === v.value}
+              aria-pressed={view === v.value}
               onClick={() => setView(v.value)}
               className={cn("rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring", view === v.value ? "bg-primary text-primary-foreground" : "text-foreground-muted hover:text-foreground")}
             >
@@ -293,7 +309,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       )}
 
       {selectMode && editable && (
-        <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
+        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 mt-4 flex lg:bottom-4 flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
           <span className="text-sm font-medium mr-auto" aria-live="polite">{selectedIds.length} selected</span>
           <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === items.length} onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
             Select all

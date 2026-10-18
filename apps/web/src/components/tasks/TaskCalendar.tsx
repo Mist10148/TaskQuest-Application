@@ -37,34 +37,38 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
         {WEEKDAYS.map((d) => <div key={d}>{d}</div>)}
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1" role="grid" aria-label={`${MONTHS[view.month - 1]} ${view.year}`}>
-        {weeks.flat().map((cell) => {
-          const tasks = byDate.get(cell.date) ?? [];
-          const open = tasks.filter((t) => !t.completed).length;
-          const overdue = open > 0 && cell.date < today;
-          return (
-            <button
-              key={cell.date}
-              type="button"
-              role="gridcell"
-              aria-selected={picked === cell.date}
-              aria-label={`${cell.date}${tasks.length ? `, ${open} open of ${tasks.length}` : ""}`}
-              onClick={() => setPicked(cell.date)}
-              className={cn(
-                "flex min-h-14 flex-col items-start rounded-md border p-1 text-left text-xs transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20",
-                cell.inMonth ? "border-border bg-card" : "border-transparent bg-card/30 text-foreground-muted",
-                cell.date === today && "ring-1 ring-primary",
-                picked === cell.date && "border-primary bg-primary/10"
-              )}
-            >
-              <span className="font-medium">{Number(cell.date.slice(8, 10))}</span>
-              {tasks.length > 0 && (
-                <span className={cn("mt-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
-                  {open > 0 ? `${open} open` : "done"}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {weeks.map((week) => (
+          <div key={week[0].date} role="row" className="contents">
+            {week.map((cell) => {
+              const tasks = byDate.get(cell.date) ?? [];
+              const open = tasks.filter((t) => !t.completed).length;
+              const overdue = open > 0 && cell.date < today;
+              return (
+                <button
+                  key={cell.date}
+                  type="button"
+                  role="gridcell"
+                  aria-selected={picked === cell.date}
+                  aria-label={`${cell.date}${tasks.length ? `, ${open} open of ${tasks.length}${overdue ? ", overdue" : ""}` : ""}`}
+                  onClick={() => setPicked(cell.date)}
+                  className={cn(
+                    "flex min-h-14 flex-col items-start rounded-md border p-1 text-left text-xs transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20",
+                    cell.inMonth ? "border-border bg-card" : "border-transparent bg-card/30 text-foreground-muted",
+                    cell.date === today && "ring-1 ring-primary",
+                    picked === cell.date && "border-primary bg-primary/10"
+                  )}
+                >
+                  <span className="font-medium">{Number(cell.date.slice(8, 10))}</span>
+                  {tasks.length > 0 && (
+                    <span className={cn("mt-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
+                      {overdue ? `${open} overdue` : open > 0 ? `${open} open` : "done"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       <section className="mt-4 rounded-xl border border-border bg-card/60 p-3" aria-label={`Tasks due ${picked}`}>

@@ -8,6 +8,8 @@ import React, { createContext, useContext, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi, ApiError, type UserData, type DiscordUser } from '@/lib/api';
 import { disablePush } from '@/lib/push';
+import { isSessionExpired } from '@/lib/session';
+import { toast } from 'sonner';
 
 interface AuthContextType {
     user: UserData | null;
@@ -48,10 +50,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // This browser must stop receiving the signed-out player's notifications (it needs the session, so before logging out).
             await disablePush().catch(() => {});
             await authApi.logout();
-        } finally {
-            qc.clear();
-            qc.setQueryData(['auth', 'me'], null);
+        } catch (err) {
+            // A failed request leaves the cookie valid: showing the signed-out screen would be a lie (the next refetch
+            // signs the person straight back in). Only a session that is already gone counts as logged out.
+            if (!isSessionExpired(err)) {
+                toast.error('Could not sign out. Check your connection and try again.');
+                return;
+            }
         }
+        qc.clear();
+        qc.setQueryData(['auth', 'me'], null);
     }, [qc]);
 
     const refresh = useCallback(async () => {

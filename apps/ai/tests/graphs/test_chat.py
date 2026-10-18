@@ -9,6 +9,7 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
+from sqlalchemy import text as sql_text
 
 from app import chat_service
 from app.config import get_settings
@@ -232,6 +233,29 @@ async def test_agent_failure_becomes_an_error_event(seeded):
     llm = Boom(messages=iter([]), structured=[RouterOut(intent="chitchat")])
     events = await collect(chat_service.stream_turn(deps_for(llm), UID, "t10", chat_service.user_input(UID, "hi")))
     assert "error" in kinds(events) and kinds(events)[-1] == "done"
+
+
+async def test_a_failure_before_the_model_answers_hands_the_request_back(seeded):
+    from app import usage as usage_mod
+
+    class Boom(FakeChatLLM):
+        async def _agenerate(self, *a, **kw):
+            raise RuntimeError("gemini 500")
+
+        def _generate(self, *a, **kw):
+            raise RuntimeError("gemini 500")
+
+        def _stream(self, *a, **kw):
+            raise RuntimeError("gemini 500")
+
+    async with pool.connection() as conn:
+        await usage_mod.reserve(conn, UID, "chat")
+    llm = Boom(messages=iter([]), structured=[RuntimeError("router down")])  # the model never answers at all
+    events = await collect(chat_service.stream_turn(deps_for(llm), UID, "t10b", chat_service.user_input(UID, "hi")))
+    assert "error" in kinds(events)
+    async with pool.get_engine().connect() as conn:
+        n = (await conn.execute(sql_text("SELECT COALESCE(SUM(requests), 0) FROM ai_usage WHERE feature = 'chat'"))).scalar()
+    assert int(n) == 0, "no tokens were spent, so the reserved request is refunded"
 
 
 async def test_long_conversations_are_folded_into_a_summary(seeded):

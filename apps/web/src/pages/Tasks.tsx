@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import type { Item, ListWithItems } from "@/lib/api";
+import { itemsApi, type Item, type ListWithItems } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { dateOnly } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,10 +64,14 @@ const Tasks = () => {
     setMembersOpen(false);
     setSelectedListId(null);
   }, [accessLost, selectedListId, qc]);
-  const itemDeletes = useUndoableDelete(async (id) => {
-    await deleteItem.mutateAsync(id);
-    refetchList();
-  });
+  const itemDeletes = useUndoableDelete(
+    async (id) => {
+      await deleteItem.mutateAsync(id);
+      refetchList();
+    },
+    undefined,
+    (id) => itemsApi.delete(id, { keepalive: true }),
+  );
 
   // /tasks?new=quest or ?new=task comes from the command palette: open the matching dialog, then drop the param.
   const wantsNew = searchParams.get("new");

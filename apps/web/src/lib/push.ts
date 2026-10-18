@@ -34,6 +34,9 @@ export const PUSH_STATUS_TEXT: Record<PushStatus, string> = {
   off: "Off for this browser.",
 };
 
+/** The permission prompt was closed without an answer (not the same as blocking the site). */
+export const PUSH_DISMISSED_TEXT = "Notifications were not turned on because the permission prompt was closed. Try again and choose Allow.";
+
 /** The VAPID public key (base64url) as the bytes pushManager.subscribe expects. */
 export function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
   const padded = value + "=".repeat((4 - (value.length % 4)) % 4);
@@ -59,7 +62,7 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 export async function enablePush(publicKey: string): Promise<void> {
   if (!browserSupportsPush()) throw new Error(PUSH_STATUS_TEXT.unsupported);
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") throw new Error(PUSH_STATUS_TEXT.denied);
+  if (permission !== "granted") throw new Error(permission === "default" ? PUSH_DISMISSED_TEXT : PUSH_STATUS_TEXT.denied);
   const registration = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
   const subscription =

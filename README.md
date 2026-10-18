@@ -39,7 +39,7 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 | **Games** | Blackjack (bet XP, with double down, flat payouts), Rock Paper Scissors and Hangman on both platforms; Snake, Dino Runner and Space Invaders on the web, verified by server replay. Every outcome is decided by the server. |
 | **Automation** | Deadline and per-task reminder DMs at your own reminder hour and time zone (with Snooze), an overdue notice, an opt-in weekly summary DM, optional browser push, and optional clean-up of finished lists. |
 | **Your data** | JSON and CSV export, reward-free JSON and CSV import, and a private calendar feed (`.ics`) of deadlines and due dates. |
-| **Web app** | Dashboard, Stats, Focus, Review, Shop and Party pages, light and dark themes, a Ctrl+K command palette, keyboard shortcuts, a responsive layout with an accessible mobile drawer, reduce-motion setting, on-screen game controls. |
+| **Web app** | Dashboard, Stats, Focus, Review, Shop and Party pages, light and dark themes, a Ctrl+K command palette, keyboard shortcuts (including `j`/`k`/`x`/`e`/`d` on tasks), an installable home-screen app, a responsive layout with an accessible mobile drawer, reduce-motion setting, on-screen game controls. |
 | **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create, update, break down or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
 | **Leaderboard** | Boards for lifetime XP, XP earned this week, streaks and balance, filterable by class. Discord IDs are never exposed. |
 

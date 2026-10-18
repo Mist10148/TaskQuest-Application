@@ -228,10 +228,21 @@ async def reconcile(conn: AsyncConnection, store: EmbeddingStore, embedder: Embe
     await purge_opted_out(conn)
     fixed = 0
     for discord_id, list_id in await stale_lists(conn, store):
-        await index_list(conn, store, embedder, discord_id, list_id)
+        try:
+            await index_list(conn, store, embedder, discord_id, list_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - one bad list (an embedding error, a provider 429) must not stop the others
+            log.exception("reconcile could not index list %s", list_id)
+            continue
         fixed += 1
     for discord_id in await stale_history_users(conn, store):
-        await index_history(conn, store, embedder, discord_id)
+        try:
+            await index_history(conn, store, embedder, discord_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            log.exception("reconcile could not index the history of a user")
     return fixed
 
 

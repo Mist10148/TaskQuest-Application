@@ -20,7 +20,13 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 ## Smaller things (October 2026 review)
 
 - **Install it.** Add TaskQuest to your phone's home screen from the browser menu; it opens like an app.
-- **Keyboard:** inside a quest, `j` and `k` move through the tasks, `x` completes, `e` edits, `d` deletes (press `?` for the list).
+- **Keyboard:** inside a quest, `j` and `k` move through the tasks, `x` completes, `i` opens the details, `e` edits, `d` deletes (press `?` for the list).
+- **Task details.** The info button on a task opens a drawer with everything about it, including subtasks.
+- **Bulk edit.** Select several tasks, then change their priority or due date in one go.
+- **Search from anywhere.** Ctrl+K now also finds your tasks.
+- **Streak strip.** The Today page shows your last seven days of streak as flames.
+- **Easier to read.** Settings has a high-contrast switch and a text size (normal, large, larger).
+- **Fewer surprises.** Finishing several tasks at once gives one message, the quest you have open stays open after a refresh (and Back returns to your quests), and the welcome tour picks up where you left it.
 - **Safer on a phone:** dialogs scroll, the bulk bar no longer hides behind the bottom bar, and buttons are easier to hit.
 - **Clearer problems:** an "offline" banner, a Reload card instead of a blank page after an update, and a time zone you now confirm with Save (it locks for 24 hours).
 

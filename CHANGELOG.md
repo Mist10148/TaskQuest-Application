@@ -22,6 +22,11 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **A task detail drawer.** An info button on each task (and `i` on the highlighted one) opens a side drawer with the full description, priority, due date, repeat, estimate, tags and subtasks, with Mark done / Reopen and Edit for anyone who can edit. A viewer of a shared quest can read it too.
+- **Bulk edit.** In select mode an **Edit** button changes the priority and due date of the selected tasks together (keep, set or clear each), through the existing update endpoint with one summary toast. Moving tasks to another quest is not built (it needs a server endpoint).
+- **The command palette finds tasks.** Ctrl+K lists tasks whose name or description match (two or more characters, the same search as the quest log) with their quest, and opens that quest.
+- **A streak strip on the Today page.** The last seven days as flames, from the streak the page already returns.
+- **High contrast and text size.** Two per-device settings under Settings > Appearance: stronger text and border colours, and a normal / large / larger page scale.
 - **An installable web app.** `manifest.webmanifest`, 192 and 512 px icons, a maskable icon, an Apple touch icon and a theme colour (all drawn from the existing SVG mark), so the app can be added to a phone's home screen. Push notifications use the PNG icon. The service worker is still push-only and caches nothing.
 - **An offline banner and a plain network error.** A notice shows while the browser is offline, and a request that fails before reaching the server says "You appear to be offline" instead of "Failed to fetch". Nothing is queued offline, so rewards stay server-authoritative.
 - **A keyboard cursor over tasks.** Inside a quest, `j` and `k` move a highlighted row, `x` completes or reopens it, `e` edits it and `d` deletes it (with Undo). Listed in the `?` dialog.
@@ -168,6 +173,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Web rough edges from the October review** (known issue #53): the welcome tour resumes at its step on the next page instead of restarting; finishing several tasks at once shows one summary toast instead of one per task; the open quest is in the URL (`/tasks?list=42`), so refresh keeps it and the browser's Back button returns to the quest log; and two quick reorders no longer flicker (only the last one to settle refetches).
 - **Shared and server fixes from the October review.**
   - Repeating tasks respect the task quota and keep `estimate_minutes` on the next copy.
   - The CSV import preview applies the real import limits (it said OK for 1,001 rows in one list, which the import refuses), and the export round-trips names that start with an apostrophe.

@@ -17,6 +17,13 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **Cosmetics, prestige and the shop.** Titles, frames and accent colours for XP; prestige at level 30 for a permanent bonus.
 - **An optional AI assistant** that can summarise, rank and (after you confirm) change your quests.
 
+## Smaller things (October 2026 review)
+
+- **Install it.** Add TaskQuest to your phone's home screen from the browser menu; it opens like an app.
+- **Keyboard:** inside a quest, `j` and `k` move through the tasks, `x` completes, `e` edits, `d` deletes (press `?` for the list).
+- **Safer on a phone:** dialogs scroll, the bulk bar no longer hides behind the bottom bar, and buttons are easier to hit.
+- **Clearer problems:** an "offline" banner, a Reload card instead of a blank page after an update, and a time zone you now confirm with Save (it locks for 24 hours).
+
 ## The balance pass (October 2026)
 
 The rules were checked with a simulator against every class, and a few numbers were wrong.

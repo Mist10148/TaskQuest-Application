@@ -292,6 +292,9 @@ TaskQuest addresses this in three ways:
 |---|---|
 | Next | Run the AI evals against real Gemini and grow the golden sets from real data. Ready: `python -m app.preflight --check-models`, `python -m tests.evals.compare`, 70 / 10 / 10 golden cases. Needs a staging key. Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) |
 | Done | Push for AI results where it is useful: the Monday AI recap is also a web push, and a slow summary or ranking shows a local notification when the player switched tabs (no server push per reply; it would need AI jobs that outlive the request) |
+| Next | Review follow-ups not yet built: the web rough edges in [KNOWN_ISSUES #53](KNOWN_ISSUES.md), a thread and checkpoint retention job and an embed debounce for the AI service (#51), and a decision on auto-delete versus quest progress (#49) |
+| Done | The October review pass: installable app, offline banner, route error boundary, keyboard task cursor, and the fixes listed under Fixed in the [CHANGELOG](../CHANGELOG.md#unreleased) |
+| Later | Board drag between priority columns, a global search that finds tasks, bulk edit (priority, due date, tags, move), a task detail drawer, streak visualisation, high-contrast and text-size modes |
 | Later | More component tests for the web app (the shared states, game cards, quests card and Review page are covered; the Games, Skills and Classes pages and the dialogs are not) |
 | Later | Internationalisation: extract the remaining strings into the catalog (`apps/web/src/i18n/messages.ts`) and add a language picker once there is a second catalog; the bot and the AI service are untouched |
 | Later | Screenshots in the README (the capture spec exists, the images do not) and push delivery tested against real push services (needs a live deployment) |

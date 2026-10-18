@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Command, CornerDownLeft, ListPlus, Moon, Plus, Search, Settings } from "lucide-react";
+import { Command, CornerDownLeft, ListPlus, Moon, Plus, Scroll, Search, Settings } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { filterCommands, moveActive, OPEN_PALETTE_EVENT, type PaletteCommand } from "@/lib/commands";
 import { NAV_ITEMS, AI_NAV_ITEM } from "./navItems";
+import { useTaskSearch } from "@/hooks/useApi";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { searchableQuery } from "@/lib/taskSearch";
 
-type Entry = PaletteCommand & { icon: React.ElementType; run: () => void };
+/** `hint` is a muted note on the right (a task's quest). */
+type Entry = PaletteCommand & { icon: React.ElementType; run: () => void; hint?: string };
+
+/** Most task matches shown under the commands. */
+const MAX_TASK_HITS = 8;
 
 /** Ctrl+K / Cmd+K command palette: go to a page, start a quest or task, switch theme. */
 export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
@@ -48,7 +55,22 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
     ];
   }, [aiEnabled, navigate, resolvedTheme, setTheme]);
 
-  const results = useMemo(() => filterCommands(entries, query), [entries, query]);
+  // Tasks whose name or description match (the server does the matching); only asked while the palette is open.
+  const debouncedQuery = useDebouncedValue(query);
+  const taskQuery = useTaskSearch(open ? searchableQuery(debouncedQuery) : null);
+  const taskEntries = useMemo<Entry[]>(
+    () =>
+      (searchableQuery(query) ? taskQuery.data?.tasks ?? [] : []).slice(0, MAX_TASK_HITS).map((t): Entry => ({
+        id: `task:${t.id}`,
+        label: t.name,
+        group: "Tasks",
+        icon: Scroll,
+        hint: t.list_name,
+        run: () => navigate(`/tasks?list=${t.list_id}`),
+      })),
+    [query, taskQuery.data, navigate],
+  );
+  const results = useMemo(() => [...filterCommands(entries, query), ...taskEntries], [entries, query, taskEntries]);
   const activeIndex = Math.min(active, Math.max(0, results.length - 1));
 
   const choose = (entry: Entry | undefined) => {
@@ -68,14 +90,14 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setQuery(""); setActive(0); } }}>
       <DialogContent className="top-[20%] translate-y-0 gap-0 p-0 sm:max-w-lg" onKeyDown={onKeyDown}>
         <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <DialogDescription className="sr-only">Type to search pages and actions, use the arrow keys and Enter to choose.</DialogDescription>
+        <DialogDescription className="sr-only">Type to search pages, actions and tasks, use the arrow keys and Enter to choose.</DialogDescription>
         <div className="flex items-center gap-2 border-b border-border px-4">
           <Search className="h-4 w-4 shrink-0 text-foreground-muted" aria-hidden />
           <input
             autoFocus
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActive(0); }}
-            placeholder="Search pages and actions…"
+            placeholder="Search pages, actions and tasks…"
             role="combobox"
             aria-expanded
             aria-controls="palette-list"
@@ -102,6 +124,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
                 >
                   <Icon className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="flex-1 truncate">{r.label}</span>
+                  {r.hint && <span className={cn("max-w-[40%] truncate text-xs", i === activeIndex ? "opacity-80" : "text-foreground-muted")}>{r.hint}</span>}
                   {i === activeIndex && <CornerDownLeft className="h-3.5 w-3.5 opacity-80" aria-hidden />}
                 </div>
               </li>

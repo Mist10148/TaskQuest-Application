@@ -10,6 +10,7 @@ import { PreferencesProvider, usePreferences } from "@/contexts/PreferencesConte
 import { CelebrationHost } from "@/components/feedback/CelebrationHost";
 import { RouteFallback } from "@/components/RouteFallback";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { AuthGate } from "@/components/AuthGate";
 import { isAccessLost } from "@/lib/sharing";
 import { isSessionExpired } from "@/lib/session";
@@ -75,6 +76,7 @@ const App = () => (
     <AuthProvider>
       <TooltipProvider>
         <CelebrationHost />
+        <OfflineBanner />
         <Sonner />
         <BrowserRouter>
           <AuthGate>

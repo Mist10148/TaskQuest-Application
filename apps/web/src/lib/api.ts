@@ -8,6 +8,7 @@
  */
 
 import type { ListRole, MemberLike, SharingFields } from './sharing';
+import { isNetworkFailure, OFFLINE_MESSAGE } from './online';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
@@ -20,16 +21,23 @@ export class ApiError extends Error {
 
 async function apiFetch<T>(endpoint: string, options: RequestInit & { json?: unknown } = {}): Promise<T> {
     const { json, headers, ...rest } = options;
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-        ...rest,
-        credentials: 'include',
-        headers: {
-            Accept: 'application/json',
-            ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}),
-            ...headers,
-        },
-        body: json !== undefined ? JSON.stringify(json) : rest.body,
-    });
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE}${endpoint}`, {
+            ...rest,
+            credentials: 'include',
+            headers: {
+                Accept: 'application/json',
+                ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}),
+                ...headers,
+            },
+            body: json !== undefined ? JSON.stringify(json) : rest.body,
+        });
+    } catch (err) {
+        // fetch rejects with a bare TypeError ("Failed to fetch") when the network is down: say so in words.
+        if (isNetworkFailure(err)) throw new ApiError(OFFLINE_MESSAGE, 0, 'NETWORK');
+        throw err;
+    }
 
     if (!response.ok) {
         const body = await response.json().catch(() => ({}));

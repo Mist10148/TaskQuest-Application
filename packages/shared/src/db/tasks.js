@@ -405,7 +405,7 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
     const user = await lockUser(conn, discordId);
     const { list, isOwner } = await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
     // The quota is the list OWNER's: a member adding to a shared list grows the owner's data. (Repeat copies from
-    // spawnNextOccurrence are not counted against it: each one replaces the task just completed.)
+    // spawnNextOccurrence stops at the same limit: the completed task stays, so a copy is a new row.)
     const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [list.discord_id]);
     if (Number(owned.n) >= LIMITS.MAX_ITEMS_PER_USER) {
         throw errors.validation(`That quest's owner is at the limit of ${LIMITS.MAX_ITEMS_PER_USER} tasks. Delete some first.`);
@@ -552,11 +552,18 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0, isOwner = 
     const anchor = item.recurrence === 'monthly' ? item.repeat_anchor_day || Number(base.slice(8, 10)) : null;
     const due = nextDueOnOrAfter(base, item.recurrence, today, anchor);
     if (!due) return null;
+    // A repeat copy is a new row (the completed task stays), so it counts against the list owner's quota like any
+    // other add; at the limit the series simply stops instead of growing without bound.
+    const [[owned]] = await conn.query(
+        'SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = (SELECT discord_id FROM lists WHERE id = ?)',
+        [item.list_id]
+    );
+    if (Number(owned.n) >= LIMITS.MAX_ITEMS_PER_USER) return null;
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) RETURNING id`,
-        [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
+        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) RETURNING id`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.estimate_minutes ?? null, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
     return shapeItem(created, isOwner);

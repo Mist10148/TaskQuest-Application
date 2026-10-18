@@ -4015,11 +4015,11 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         // A member adding to the capped owner's list is refused too: the owner's data grows.
         await db.query("INSERT INTO list_members (list_id, discord_id, role, public_id, added_by) VALUES (?, ?, 'editor', 'abcdef012345', ?)", [base.id, M, Q]);
         await assert.rejects(db.tasks.addItem(M, base.id, { name: 'member over' }), { code: 'VALIDATION' });
-        // Finishing a repeating task at the cap still spawns its next copy (it replaces the one just completed).
+        // Finishing a repeating task at the cap does not spawn a next copy: the completed task stays, so a copy is a new row.
         const done = await db.tasks.setItemCompleted(Q, recurring.id);
-        assert.ok(done.nextItem, 'the next occurrence is created at the cap');
+        assert.equal(done.nextItem, null, 'no next occurrence at the cap');
         // Deleting makes room.
-        await db.tasks.deleteItem(Q, done.nextItem.id);
+        await db.tasks.deleteItem(Q, recurring.id);
         await db.tasks.deleteItem(Q, parent.id);
         await db.tasks.addItem(Q, base.id, { name: 'fits now' });
     });

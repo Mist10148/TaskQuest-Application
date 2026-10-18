@@ -26,7 +26,7 @@ interface Props {
 }
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+  "h-9 rounded-md border border-input bg-background px-2 text-base md:text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 
 const RoleBadge = ({ role }: { role: ListRole }) => (
   <span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", role === "manager" ? "border-primary/40 bg-primary/10 text-primary-text" : "border-border text-foreground-muted")}>

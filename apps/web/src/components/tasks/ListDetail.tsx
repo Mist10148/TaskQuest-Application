@@ -197,7 +197,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
               {list.deadline && <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Due: {formatDeadline(list.deadline)}</span>}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <SummarizeButton body={{ mode: "list", listId: list.id }} title={`Summary: ${list.name}`} />
             <Button variant="outline" size="sm" onClick={onOpenMembers} className="gap-1" title={list.shared ? `Shared with ${peopleLabel(list.memberCount)}` : "Invite people to this quest"}>
               <Users className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Members</span>
@@ -293,7 +293,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       )}
 
       {selectMode && editable && (
-        <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
+        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 mt-4 flex lg:bottom-4 flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
           <span className="text-sm font-medium mr-auto" aria-live="polite">{selectedIds.length} selected</span>
           <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === items.length} onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
             Select all

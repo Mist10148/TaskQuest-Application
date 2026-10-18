@@ -1,5 +1,4 @@
 import { Suspense, lazy } from "react";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -10,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { PreferencesProvider, usePreferences } from "@/contexts/PreferencesContext";
 import { CelebrationHost } from "@/components/feedback/CelebrationHost";
 import { RouteFallback } from "@/components/RouteFallback";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { AuthGate } from "@/components/AuthGate";
 import { isAccessLost } from "@/lib/sharing";
 import { isSessionExpired } from "@/lib/session";
@@ -74,11 +74,11 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
-        <Toaster />
         <CelebrationHost />
         <Sonner />
         <BrowserRouter>
           <AuthGate>
+          <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -103,6 +103,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          </RouteErrorBoundary>
           </AuthGate>
         </BrowserRouter>
       </TooltipProvider>

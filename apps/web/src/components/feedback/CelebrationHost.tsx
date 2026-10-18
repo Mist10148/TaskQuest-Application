@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { onCelebrate, type CelebrationKind } from "@/lib/celebrate";
+import { usePreferences } from "@/contexts/PreferencesContext";
 
 const COLORS = ["hsl(var(--xp))", "hsl(var(--primary))", "hsl(var(--success))", "hsl(var(--destructive))", "hsl(var(--primary-glow))"];
 const PIECES = 28;
@@ -17,7 +18,9 @@ interface Burst {
  */
 export const CelebrationHost = () => {
   const [bursts, setBursts] = useState<Burst[]>([]);
-  const reduced = useReducedMotion();
+  // The OS setting or the app's own "Reduce motion" switch (useReducedMotion reads only the OS one).
+  const { reduceMotion } = usePreferences();
+  const reduced = useReducedMotion() || reduceMotion;
 
   useEffect(() => {
     let next = 0;

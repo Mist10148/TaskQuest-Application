@@ -41,7 +41,7 @@ export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit }: P
                     disabled={readOnly}
                     onClick={() => onToggle(item.id)}
                     aria-label={item.completed ? `Mark "${item.name}" not done` : `Mark "${item.name}" done`}
-                    className="mt-0.5 shrink-0 text-foreground-muted hover:text-success focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-full disabled:cursor-default disabled:hover:text-foreground-muted"
+                    className="-m-2 mt-[-0.375rem] shrink-0 p-2 text-foreground-muted hover:text-success focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-full disabled:cursor-default disabled:hover:text-foreground-muted"
                   >
                     {item.completed ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Circle className="h-4 w-4" aria-hidden />}
                   </button>

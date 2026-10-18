@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, ListPlus, Pencil, Repeat, Timer, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Info, ListPlus, Pencil, Repeat, Timer, Trash2 } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,8 @@ interface Props {
   onToggle: (id: number) => void;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
+  /** Opens the detail drawer (also for a viewer, who has no other row actions). */
+  onOpenDetails?: (id: number) => void;
   onAddSubtask?: (id: number) => void;
   onMove?: (id: number, direction: -1 | 1) => void;
   canMoveUp?: boolean;
@@ -44,7 +46,7 @@ interface Props {
 const iconButton = "p-2.5 sm:p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
-export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
+export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
   const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
@@ -173,6 +175,12 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           </div>
         )}
       </div>
+
+      {onOpenDetails && (
+        <button type="button" aria-label={`Details of "${item.name}"`} onClick={() => onOpenDetails(item.id)} className={cn(iconButton, "shrink-0 hover:bg-background-secondary hover:text-primary-text")}>
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {!readOnly && <div className="shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (

@@ -13,6 +13,7 @@ import { QuickAddBar } from "./QuickAddBar";
 import { TaskRow } from "./TaskRow";
 import { TaskBoard } from "./TaskBoard";
 import { TaskCalendar } from "./TaskCalendar";
+import { TaskDetailSheet } from "./TaskDetailSheet";
 import { TASK_VIEWS, type TaskView } from "@/lib/taskViews";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
@@ -99,6 +100,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       /* the choice just is not remembered */
     }
   };
+  // The task shown in the detail drawer (looked up by id, so it follows edits and completion).
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const detailItem = detailId !== null ? items.find((i) => i.id === detailId) ?? null : null;
   const quickAddRef = useRef<HTMLInputElement>(null);
   const lastSelectedRef = useRef<number | null>(null);
   // Rows in the order they are drawn (each task followed by its subtasks), for Shift-click ranges.
@@ -139,6 +143,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
     j: () => moveCursor(1),
     k: () => moveCursor(-1),
     x: () => { if (editable && cursorRow) onToggleItem(cursorRow.id); },
+    i: () => { if (view === "list" && !selectMode && cursorRow) setDetailId(cursorRow.id); },
     e: (e) => { if (editable && cursorRow) { e.preventDefault(); onEditItem(cursorRow.id); } },
     d: () => { if (editable && cursorRow && cursorRow.can_delete !== false) onDeleteItem(cursorRow.id); },
     n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
@@ -175,6 +180,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         onToggle={onToggleItem}
         onEdit={onEditItem}
         onDelete={onDeleteItem}
+        onOpenDetails={setDetailId}
         readOnly={!editable}
         focused={view === "list" && cursorId === item.id}
         onAddSubtask={(id) => onAddItem(id)}
@@ -330,6 +336,15 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         </button>
       </p>
       <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
+      <TaskDetailSheet
+        item={detailItem}
+        subtasks={detailItem ? childrenOf.get(detailItem.id) || [] : []}
+        readOnly={!editable}
+        onOpenChange={(open) => { if (!open) setDetailId(null); }}
+        onToggle={onToggleItem}
+        onEdit={(id) => { setDetailId(null); onEditItem(id); }}
+        onOpenSubtask={setDetailId}
+      />
 
       {editable && <button onClick={() => onAddItem()} className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 text-foreground-muted text-sm transition-all group">
         <Plus className="h-5 w-5 group-hover:scale-110 transition-transform" /> Add New Task

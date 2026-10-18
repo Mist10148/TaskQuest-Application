@@ -244,3 +244,11 @@ def test_a_subtask_due_soon_raises_the_urgency_of_a_quest_without_a_deadline():
 def test_the_feature_table_shows_subtask_dates_and_priorities():
     table = P._feature_table([feats(next_item_due="2026-10-15", days_to_next_item=1, high_items=2)])
     assert "next_subtask_due=2026-10-15" in table and "high_priority_subtasks=2" in table
+
+
+def test_the_ranking_token_budget_grows_with_the_number_of_quests():
+    from app.graphs.prioritize import ranking_token_budget
+
+    assert ranking_token_budget(5) > 800
+    assert ranking_token_budget(40) > ranking_token_budget(20) > ranking_token_budget(5)
+    assert ranking_token_budget(10_000) == 8192

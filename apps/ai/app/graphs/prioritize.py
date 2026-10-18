@@ -38,6 +38,12 @@ log = logging.getLogger("taskquest.ai.prioritize")
 
 PRIORITY_WEIGHT = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
 REASONING_THRESHOLD = 15  # use the Pro model only above this many open quests
+
+
+def ranking_token_budget(n_tasks: int) -> int:
+    """Output tokens a full ranking of ``n_tasks`` needs: the answer lists every id (about 60 tokens each) and thinking
+    models spend part of the same limit, so the default 800 only fitted about a dozen quests."""
+    return min(8192, 1024 + 80 * n_tasks)
 CACHE_TTL_SECONDS = 300
 # Level 1: this process's memory. Level 2 is ai_prioritize_cache, which other AI instances share.
 _cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=500, ttl=CACHE_TTL_SECONDS)
@@ -232,7 +238,7 @@ def build_graph(llm_factory: Callable[..., Any], *, reserved: bool = False):
             if not reserved:
                 async with pool.connection() as conn:
                     await usage.check(conn, state["discord_id"])
-            llm = llm_factory(reasoning=len(tasks) > REASONING_THRESHOLD)
+            llm = llm_factory(reasoning=len(tasks) > REASONING_THRESHOLD, max_output_tokens=ranking_token_budget(len(tasks)))
         except (usage.QuotaExceeded, AIUnavailable) as err:
             log.info("prioritize fallback: %s", type(err).__name__)
             return {"llm_ranking": None, "llm_failed": True, "errors": [type(err).__name__]}

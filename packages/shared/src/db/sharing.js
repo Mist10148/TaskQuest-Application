@@ -354,11 +354,18 @@ async function transferOwnership(actorId, listId, memberKey) {
         if (Number(theirs.n) + Number(here.n) > LIMITS.MAX_ITEMS_PER_USER) throw errors.validation('That person would go over the task limit with this quest.');
 
         const former = String(actorId);
+        // The old owner's reminder state lives on the list row; as a member it moves to list_reminders, so they are not
+        // told about a deadline they were already told about.
+        const [[state]] = await conn.query('SELECT deadline_notified, overdue_notified, remind_at FROM lists WHERE id = ?', [list.id]);
         await conn.query('UPDATE lists SET discord_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, list.id]);
         // The new owner is no longer a member; their member-only reminder state goes with the row. The invitations they sent stay valid.
         await dropMember(conn, list.id, next, { keepInvites: true });
         const key = crypto.randomBytes(6).toString('hex');
         await conn.query("INSERT INTO list_members (list_id, discord_id, role, public_id, added_by) VALUES (?, ?, 'manager', ?, ?)", [list.id, former, key, next]);
+        await conn.query(
+            'INSERT INTO list_reminders (list_id, discord_id, deadline_notified, overdue_notified, remind_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (list_id, discord_id) DO NOTHING',
+            [list.id, former, Number(state.deadline_notified) || 0, Number(state.overdue_notified) || 0, state.remind_at || null]
+        );
         return { listId: list.id, role: 'manager', memberKey: key };
     });
 }

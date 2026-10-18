@@ -9,24 +9,33 @@
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const validZones = new Map(); // zone string -> boolean; bounded because the strings can come from user input
+const validZones = new Map(); // zone string -> canonical name or null; bounded because the strings can come from user input
 const dayFormatters = new Map(); // valid zone -> Intl.DateTimeFormat
 const CACHE_LIMIT = 500;
 
-/** True when `tz` is an IANA zone name this runtime understands. */
-function isValidTimeZone(tz) {
-    if (!tz || typeof tz !== 'string') return false;
-    const known = validZones.get(tz);
-    if (known !== undefined) return known;
-    let ok = true;
+/**
+ * The canonical spelling of an IANA zone name ("europe/paris" becomes "Europe/Paris"), or null when `tz` is not one.
+ * Offset zones ("+05:30") are refused: they are valid for Intl but are not zone names, and the AI service (Python
+ * zoneinfo) would not understand them, nor a lower-case name.
+ */
+function canonicalTimeZone(tz) {
+    if (!tz || typeof tz !== 'string') return null;
+    if (validZones.has(tz)) return validZones.get(tz);
+    let canonical = null;
     try {
-        new Intl.DateTimeFormat('en-US', { timeZone: tz });
+        const resolved = new Intl.DateTimeFormat('en-US', { timeZone: tz }).resolvedOptions().timeZone;
+        if (resolved && !/^[+-]/.test(resolved)) canonical = resolved;
     } catch {
-        ok = false;
+        canonical = null;
     }
     if (validZones.size >= CACHE_LIMIT) validZones.clear();
-    validZones.set(tz, ok);
-    return ok;
+    validZones.set(tz, canonical);
+    return canonical;
+}
+
+/** True when `tz` is an IANA zone name this runtime understands (any capitalisation; see canonicalTimeZone). */
+function isValidTimeZone(tz) {
+    return canonicalTimeZone(tz) !== null;
 }
 
 /** The calendar date ("YYYY-MM-DD") it is right now in `tz` (UTC when omitted or unknown). */
@@ -138,4 +147,4 @@ function daysBetween(from, to) {
     return Math.round((parse(String(to)) - parse(String(from))) / 86400e3);
 }
 
-module.exports = { daysBetween, isValidTimeZone, hourInZone, weekdayInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };
+module.exports = { daysBetween, canonicalTimeZone, isValidTimeZone, hourInZone, weekdayInZone, todayInZone, isPastDeadline, formatDeadline, nextOccurrence, nextDueOnOrAfter };

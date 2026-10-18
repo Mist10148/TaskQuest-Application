@@ -122,3 +122,19 @@ test('paging the list select keeps the sort, filter and category row of the mess
         db.tasks.getLists = realGetLists;
     }
 });
+
+test('the lists overview stays under the embed limit for a user with hundreds of lists', () => {
+    const lists = Array.from({ length: 200 }, (_, i) => ({
+        name: `Quest number ${i} ${'x'.repeat(40)}`,
+        priority: 'HIGH',
+        category: 'Work',
+        deadline: '2030-05-05',
+        shared: false
+    }));
+    const embed = ui.listsOverviewEmbed(lists);
+    const text = embed.toJSON().description;
+    assert.ok(text.length <= 4096);
+    assert.match(text, /…and \d+ more/);
+    const few = ui.listsOverviewEmbed(lists.slice(0, 3)).toJSON().description;
+    assert.doesNotMatch(few, /more\./);
+});

@@ -367,8 +367,14 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
         const until = new Date(now.getTime() + SNOOZE_MS);
         if (isTask) await database.tasks.snoozeTask(userId, targetId, until);
         else await database.tasks.snoozeList(userId, targetId, until);
-    } catch {
-        return interaction.update({ components: [], content: `That ${isTask ? 'task' : 'list'} no longer exists.` });
+    } catch (err) {
+        // Only a list or task that is really gone strips the buttons; a temporary failure (a database blip) keeps them so
+        // the player can press Snooze again.
+        if (['NOT_FOUND', 'FORBIDDEN', 'VALIDATION'].includes(err?.code)) {
+            return interaction.update({ components: [], content: `That ${isTask ? 'task' : 'list'} no longer exists.` });
+        }
+        console.error('Snooze failed:', err);
+        return interaction.reply({ content: 'Could not snooze that right now. Try the button again in a moment.', flags: MessageFlags.Ephemeral });
     }
     return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.', flags: MessageFlags.SuppressNotifications });
 }

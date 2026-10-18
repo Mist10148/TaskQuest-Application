@@ -139,6 +139,25 @@ test('the snooze button defers 24 hours; stop turns reminders off', async () => 
     assert.deepEqual(calls[1], ['settings', '42', { automation_enabled: false }]);
 });
 
+test('a snooze that fails for a temporary reason keeps the buttons; a vanished list removes them', async () => {
+    const mk = (error) => ({ tasks: { snoozeList: async () => { throw error; } } });
+    const replies = [];
+    const updates = [];
+    const interaction = { customId: 'remind_snooze_7', user: { id: '42' }, update: async (r) => updates.push(r), reply: async (r) => replies.push(r) };
+    const quiet = console.error;
+    console.error = () => {};
+    try {
+        await handleButton(interaction, { db: mk(new Error('connection reset')), now: NOW });
+    } finally {
+        console.error = quiet;
+    }
+    assert.equal(updates.length, 0, 'the message and its buttons are left alone');
+    assert.match(replies[0].content, /Could not snooze/);
+    await handleButton(interaction, { db: mk(Object.assign(new Error('Not found.'), { code: 'NOT_FOUND' })), now: NOW });
+    assert.deepEqual(updates[0].components, []);
+    assert.match(updates[0].content, /no longer exists/);
+});
+
 test('a due snooze or first due reminder is skipped when every task is already done', () => {
     const done = { items_done: 2, items_total: 2 };
     assert.equal(decideReminder(list({ ...done, deadline_notified: 1, overdue_notified: 1, remind_at: '2030-03-09T03:00:00Z' }), NOW), 'snooze_done');

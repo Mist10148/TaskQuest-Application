@@ -86,6 +86,14 @@ export const inviteLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 *
  */
 export const inviteIpLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, limit: 60, keyGenerator: (req) => `ip:${ipKey(req.ip)}` });
 
+/**
+ * A daily ceiling on the same lookups. The 15 minute limits alone allow thousands of username probes a day per
+ * account; a real person needs a handful (the confirmation step and the send itself), and the invitation count
+ * (30 a day) only sees invitations that were created.
+ */
+export const inviteDailyLimiter = rateLimit({ ...limiterDefaults, windowMs: 24 * 60 * 60 * 1000, limit: 100, keyGenerator: keyByUser });
+export const inviteIpDailyLimiter = rateLimit({ ...limiterDefaults, windowMs: 24 * 60 * 60 * 1000, limit: 300, keyGenerator: (req) => `ip:${ipKey(req.ip)}` });
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function originOf(value) {

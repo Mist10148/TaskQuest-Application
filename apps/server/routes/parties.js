@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
-import { inviteLimiter, inviteIpLimiter } from '../lib/security.js';
+import { inviteLimiter, inviteIpLimiter, inviteDailyLimiter, inviteIpDailyLimiter } from '../lib/security.js';
 import { idParam, createPartyBody, partyInviteBody, partyMemberKeyParam } from '../lib/schemas.js';
 
 const router = Router();
@@ -33,6 +33,8 @@ router.post(
     '/invites',
     inviteIpLimiter,
     inviteLimiter,
+    inviteIpDailyLimiter,
+    inviteDailyLimiter,
     asyncRoute(async (req, res) => {
         const inv = await db.parties.invite(uid(req), parse(partyInviteBody, req.body));
         if (inv.dryRun) return res.json({ name: inv.name, avatarUrl: inv.avatarUrl });

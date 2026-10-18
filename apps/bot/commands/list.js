@@ -144,7 +144,7 @@ async function routeButton(interaction) {
     if (id === 'create') return interaction.showModal(ui.listModal());
 
     // LIST_VIEW (read-only)
-    const viewSorts = { sort_az_: ['name', 'ASC'], sort_za_: ['name', 'DESC'], sort_pri_: ['completed', 'ASC'] };
+    const viewSorts = { sort_az_: ['name', 'ASC'], sort_za_: ['name', 'DESC'], sort_pri_: ['priority', 'DESC'] };
     for (const [prefix, [sortBy, order]] of Object.entries(viewSorts)) {
         if (id.startsWith(prefix)) {
             const listId = idFrom(id, prefix);

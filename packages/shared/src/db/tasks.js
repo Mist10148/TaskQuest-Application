@@ -29,7 +29,13 @@ const LIST_SORTS = {
     category: ['l.category IS NULL', 'l.category'],
     priority: ['l.priority IS NULL', "CASE l.priority WHEN 'LOW' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'HIGH' THEN 3 END"]
 };
-const ITEM_SORTS = { position: ['i.position'], name: ['i.name'], completed: ['i.completed'], created_at: ['i.created_at'] };
+const ITEM_SORTS = {
+    position: ['i.position'],
+    name: ['i.name'],
+    completed: ['i.completed'],
+    created_at: ['i.created_at'],
+    priority: ['i.priority IS NULL', "CASE i.priority WHEN 'LOW' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'HIGH' THEN 3 END"]
+};
 
 function orderClause(map, sortBy, order, fallback) {
     const exprs = map[sortBy] || map[fallback];

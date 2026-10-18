@@ -168,7 +168,12 @@ const boardCache = new Map(); // `${by}:${class}` -> { at, rows }
 /** Forget every cached board (tests read the board right after changing a player's standing). */
 export function clearBoardCache() {
     boardCache.clear();
+    rankCache.clear();
 }
+
+const RANK_TTL_MS = 10_000;
+const RANK_CACHE_MAX = 2000;
+const rankCache = new Map(); // `${user}:${by}:${class}` -> { at, rank }
 
 /** The ranking queries are heavy and the route is anonymous, so share one result per board for a short while. */
 async function cachedBoard(by, playerClass) {
@@ -235,6 +240,13 @@ leaderboardRouter.get(
     requireAuth,
     asyncRoute(async (req, res) => {
         const { by, class: playerClass } = parse(leaderboardQuery, req.query);
-        res.json({ rank: await db.users.getRank(uid(req), by, { playerClass }) });
+        // Ranking runs correlated subqueries over every player, so a user polling this route shares one answer for a few seconds.
+        const key = `${uid(req)}:${by}:${playerClass || ''}`;
+        const hit = rankCache.get(key);
+        if (hit && Date.now() - hit.at < RANK_TTL_MS) return res.json({ rank: hit.rank });
+        const rank = await db.users.getRank(uid(req), by, { playerClass });
+        if (rankCache.size >= RANK_CACHE_MAX) rankCache.clear();
+        rankCache.set(key, { at: Date.now(), rank });
+        res.json({ rank });
     })
 );

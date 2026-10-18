@@ -138,3 +138,19 @@ test('the lists overview stays under the embed limit for a user with hundreds of
     const few = ui.listsOverviewEmbed(lists.slice(0, 3)).toJSON().description;
     assert.doesNotMatch(few, /more\./);
 });
+
+test('sharing autocomplete offers a shared list that shares a name with your own by id', () => {
+    const { autocompleteChoices } = require('../commands/sharing');
+    const lists = [
+        { id: 1, name: 'Work', is_owner: true, shared: false },
+        { id: 2, name: 'Work', is_owner: false, shared: true, owner_name: 'bob' },
+        { id: 3, name: 'Home', is_owner: false, shared: true, owner_name: 'amy' }
+    ];
+    const leave = autocompleteChoices(lists, (l) => !l.is_owner, '');
+    assert.deepEqual(leave, [
+        { name: 'Work (by bob)', value: '#2' },
+        { name: 'Home', value: 'Home' }
+    ]);
+    const share = autocompleteChoices(lists, () => true, 'wor');
+    assert.deepEqual(share.map((c) => c.value), ['#1', '#2']);
+});

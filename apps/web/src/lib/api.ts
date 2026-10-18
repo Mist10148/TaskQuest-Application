@@ -40,7 +40,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit & { json?: unk
 
 const post = <T>(endpoint: string, json?: unknown) => apiFetch<T>(endpoint, { method: 'POST', json: json ?? {} });
 const patch = <T>(endpoint: string, json?: unknown) => apiFetch<T>(endpoint, { method: 'PATCH', json: json ?? {} });
-const del = <T>(endpoint: string) => apiFetch<T>(endpoint, { method: 'DELETE' });
+const del = <T>(endpoint: string, init: RequestInit = {}) => apiFetch<T>(endpoint, { ...init, method: 'DELETE' });
 
 // ─── Auth & user ─────────────────────────────────────────────────────────────
 
@@ -291,7 +291,8 @@ export const itemsApi = {
     update: (id: number, data: Partial<ItemInput> & { position?: number }) => patch<Item>(`/api/items/${id}`, data),
     toggle: (id: number, completed?: boolean) =>
         patch<Item & RewardFields & { nextItem?: Item | null }>(`/api/items/${id}/toggle`, completed === undefined ? undefined : { completed }),
-    delete: (id: number) => del<{ success: boolean }>(`/api/items/${id}`),
+    /** `init.keepalive` lets the request finish while the page is being closed. */
+    delete: (id: number, init?: RequestInit) => del<{ success: boolean }>(`/api/items/${id}`, init),
 };
 
 // ─── AI (optional feature; see docs/AI_INTEGRATION.md) ───────────────────────

@@ -408,7 +408,7 @@ async def prioritize(
     ``reserved``: the request was reserved up front; it is handed back when the model gave no answer
     (cache hit, nothing to rank, provider failure).
     """
-    today = today or datetime.now(UTC).date()
+    today = today or await usage.user_today(discord_id)
     graph = build_graph(llm_factory, reserved=reserved)
 
     async def give_back() -> None:

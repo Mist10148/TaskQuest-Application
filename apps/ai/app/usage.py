@@ -6,7 +6,7 @@ the quota refills when their day starts, like the daily caps and quests in the r
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, date, datetime, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
+from app.db import pool
 from app.db.dialect import is_postgres
 
 FEATURES = ("summary", "prioritize", "chat", "embed")
@@ -48,6 +49,15 @@ async def user_day(conn: AsyncConnection, discord_id: str) -> str:
     result = await conn.execute(text("SELECT timezone FROM users WHERE discord_id = :uid"), {"uid": discord_id})
     row = result.first()
     return day_in_zone(row[0] if row else None)
+
+
+async def user_today(discord_id: str) -> date:
+    """The user's calendar date, for "overdue" and "due soon". A lookup failure means UTC rather than no answer."""
+    try:
+        async with pool.connection() as conn:
+            return date.fromisoformat(await user_day(conn, discord_id))
+    except Exception:  # noqa: BLE001 - never block a summary or a chat turn on the time zone lookup
+        return _now().date()
 
 
 async def requests_today(conn: AsyncConnection, discord_id: str) -> int:

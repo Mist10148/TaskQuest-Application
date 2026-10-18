@@ -266,7 +266,7 @@ async def summarize(
             async with pool.connection() as conn:
                 await usage.release(conn, discord_id, "summary")
 
-    today = today or datetime.now(UTC).date()
+    today = today or await usage.user_today(discord_id)
     try:
         async with pool.connection() as conn:
             rendered = await render_input(conn, discord_id, mode, list_id=list_id, range_=range_, today=today)

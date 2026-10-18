@@ -16,6 +16,7 @@ import { TaskCalendar } from "./TaskCalendar";
 import { TASK_VIEWS, type TaskView } from "@/lib/taskViews";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
+import { stepCursor } from "@/lib/cursor";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { canDeleteList, canEditTasks, canManageList, peopleLabel, roleLabel, roleOf } from "@/lib/sharing";
 
@@ -124,7 +125,22 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   // An editor may only delete tasks they added; the rest of a selection is left alone.
   const deletableIds = items.filter((i) => selected.has(i.id) && i.can_delete !== false).map((i) => i.id);
 
+  // The keyboard cursor: j and k move over the rows, x completes, e edits, d deletes (list view only).
+  const [cursorId, setCursorId] = useState<number | null>(null);
+  const cursorRow = cursorId !== null ? items.find((i) => i.id === cursorId) : undefined;
+  const moveCursor = (direction: 1 | -1) => {
+    if (view !== "list" || selectMode) return;
+    const next = stepCursor(visibleOrder, cursorId, direction);
+    setCursorId(next);
+    if (next !== null) requestAnimationFrame(() => document.querySelector(`[data-task-id="${next}"]`)?.scrollIntoView({ block: "nearest" }));
+  };
+
   useHotkeys({
+    j: () => moveCursor(1),
+    k: () => moveCursor(-1),
+    x: () => { if (editable && cursorRow) onToggleItem(cursorRow.id); },
+    e: (e) => { if (editable && cursorRow) { e.preventDefault(); onEditItem(cursorRow.id); } },
+    d: () => { if (editable && cursorRow && cursorRow.can_delete !== false) onDeleteItem(cursorRow.id); },
     n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
     "/": (e) => { if (!editable) return; e.preventDefault(); quickAddRef.current?.focus(); },
     s: () => { if (!editable) return; if (selectMode) leaveSelectMode(); else setSelectMode(true); },
@@ -160,6 +176,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         onEdit={onEditItem}
         onDelete={onDeleteItem}
         readOnly={!editable}
+        focused={view === "list" && cursorId === item.id}
         onAddSubtask={(id) => onAddItem(id)}
         onMove={(id, dir) => move(id, dir, siblings)}
         canMoveUp={index > 0}

@@ -15,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 from app import chat_service, threads, usage
 from app.db import pool
 from app.deps import AIAccess, Caller, get_caller, require_ai
-from app.graphs.chat import ChatDeps
+from app.graphs.chat import ChatDeps, text_of
 from app.graphs.checkpointer import SqlCheckpointSaver
 from app.llm import AIUnavailable, chat_model
 from app.rag import runtime
@@ -65,7 +65,7 @@ async def _title_in_background(deps: ChatDeps, discord_id: str, thread_id: str, 
                 ("human", message),
             ]
         )
-        title = str(reply.content).strip().strip('"')[:80]
+        title = text_of(reply.content).strip().strip('"')[:80]
         i, o = usage.tokens_from(reply)
         async with pool.connection() as conn:
             await usage.record(conn, discord_id, "chat", input_tokens=i, output_tokens=o, requests=0)

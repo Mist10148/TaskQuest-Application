@@ -21,12 +21,12 @@ type Filters = ReturnType<typeof useListFilters>;
 /** Tabs, search box, filter menu and sort menu for the quest overview. */
 export const ListFilters = ({ filters }: { filters: Filters }) => (
   <>
-    <div className="flex flex-wrap gap-2 mb-6 p-1 bg-background-secondary rounded-lg w-fit max-w-full" role="tablist" aria-label="Quest status">
+    <div className="flex flex-wrap gap-2 mb-6 p-1 bg-background-secondary rounded-lg w-fit max-w-full" role="group" aria-label="Quest status">
       {TABS.map(({ value, label, icon: Icon }) => (
         <button
           key={value}
-          role="tab"
-          aria-selected={filters.activeTab === value}
+          type="button"
+          aria-pressed={filters.activeTab === value}
           onClick={() => filters.setActiveTab(value)}
           className={cn(
             "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
@@ -86,21 +86,21 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
             <div className="p-2">
               <label className="text-xs text-foreground-muted block mb-1">Category</label>
               <Select value={filters.categoryFilter} onValueChange={filters.setCategoryFilter}>
-                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8" aria-label="Category"><SelectValue /></SelectTrigger>
                 <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.emoji} {c.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="p-2">
               <label className="text-xs text-foreground-muted block mb-1">Priority</label>
               <Select value={filters.priorityFilter} onValueChange={filters.setPriorityFilter}>
-                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8" aria-label="Priority"><SelectValue /></SelectTrigger>
                 <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.emoji} {p.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="p-2">
               <label className="text-xs text-foreground-muted block mb-1">Status</label>
               <Select value={filters.statusFilter} onValueChange={filters.setStatusFilter}>
-                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8" aria-label="Status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="active">Active</SelectItem>

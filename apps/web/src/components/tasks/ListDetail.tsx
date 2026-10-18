@@ -252,13 +252,12 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       {editable && <QuickAddBar ref={quickAddRef} pending={quickAddPending} aiEnabled={aiEnabled} onAdd={onQuickAdd} />}
 
       {items.length > 0 && (
-        <div role="tablist" aria-label="How to show the tasks" className="mb-4 inline-flex rounded-lg border border-border bg-card p-0.5">
+        <div role="group" aria-label="How to show the tasks" className="mb-4 inline-flex rounded-lg border border-border bg-card p-0.5">
           {TASK_VIEWS.map((v) => (
             <button
               key={v.value}
               type="button"
-              role="tab"
-              aria-selected={view === v.value}
+              aria-pressed={view === v.value}
               onClick={() => setView(v.value)}
               className={cn("rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring", view === v.value ? "bg-primary text-primary-foreground" : "text-foreground-muted hover:text-foreground")}
             >

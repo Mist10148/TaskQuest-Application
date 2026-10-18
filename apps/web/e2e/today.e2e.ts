@@ -58,12 +58,12 @@ test('a quest can be shown as a board and as a calendar', async ({ page }) => {
     await page.getByLabel('Quick add a task').press('Enter');
     await expect(page.getByRole('button', { name: 'Mark "A board task" as done' })).toBeVisible();
 
-    const views = page.getByRole('tablist', { name: 'How to show the tasks' });
-    await views.getByRole('tab', { name: 'Board' }).click();
+    const views = page.getByRole('group', { name: 'How to show the tasks' });
+    await views.getByRole('button', { name: 'Board' }).click();
     await expect(page.getByTestId('task-board')).toBeVisible();
     await expect(page.getByRole('region', { name: 'No priority' }).getByText('A board task')).toBeVisible();
 
-    await views.getByRole('tab', { name: 'Calendar' }).click();
+    await views.getByRole('button', { name: 'Calendar' }).click();
     await expect(page.getByTestId('task-calendar')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Next month' })).toBeVisible();
 
@@ -71,6 +71,6 @@ test('a quest can be shown as a board and as a calendar', async ({ page }) => {
     await page.reload();
     await page.getByRole('button', { name: new RegExp(quest) }).click();
     await expect(page.getByTestId('task-calendar')).toBeVisible();
-    await page.getByRole('tablist', { name: 'How to show the tasks' }).getByRole('tab', { name: 'List' }).click();
+    await page.getByRole('group', { name: 'How to show the tasks' }).getByRole('button', { name: 'List' }).click();
     await expect(page.getByRole('button', { name: 'Mark "A board task" as done' })).toBeVisible();
 });

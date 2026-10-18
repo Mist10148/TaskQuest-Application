@@ -447,11 +447,17 @@ export function useToggleItem() {
     const qc = useQueryClient();
     return useMutation({
         // `completed` makes the request idempotent (a double click cannot flip the task back).
-        mutationFn: (arg: number | { itemId: number; completed?: boolean }) =>
+        // `quiet` is for a batch: the caller shows one summary toast instead of one per task.
+        mutationFn: (arg: number | { itemId: number; completed?: boolean; quiet?: boolean }) =>
             typeof arg === 'number' ? itemsApi.toggle(arg) : itemsApi.toggle(arg.itemId, arg.completed),
-        onSuccess: (result) => {
+        onSuccess: (result, arg) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
             invalidateProgress(qc);
+            const quiet = typeof arg !== 'number' && arg.quiet === true;
+            if (quiet) {
+                showAchievementNotifications(result.newAchievements, qc);
+                return;
+            }
             if (result.completed) {
                 // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing.
                 const undo = () => itemsApi.toggle(result.id, false).then(() => invalidateTaskViews(qc)).catch(showError);

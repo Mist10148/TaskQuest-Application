@@ -186,14 +186,22 @@ const Tasks = () => {
     itemDeletes.request(ids, ids.length === 1 ? `Deleted "${nameOf(ids[0])}"` : `Deleted ${ids.length} tasks`);
 
   // Complete one after another so each task pays its own XP and achievements.
+  // The reward toasts are folded into one summary for the batch.
   const completeItems = async (ids: number[]) => {
+    let done = 0;
+    let xp = 0;
     for (const id of ids) {
       try {
-        await toggleItem.mutateAsync(id);
+        const result = await toggleItem.mutateAsync({ itemId: id, quiet: true });
+        if (result.completed) {
+          done += 1;
+          xp += result.xpResult?.finalXP ?? 0;
+        }
       } catch {
         break; // error toast shown by the mutation hook
       }
     }
+    if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`);
     refetchList();
   };
 

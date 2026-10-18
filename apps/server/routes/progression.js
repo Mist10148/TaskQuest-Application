@@ -85,6 +85,10 @@ skillsRouter.get(
     })
 );
 
+const PREVIEW_CACHE_MS = 10 * 60 * 1000;
+const PREVIEW_CACHE_MAX = 500;
+const previewCache = new Map(); // key (class, level, mix, owned skills) -> { body, expires }
+
 /**
  * What each skill's next level would add to the average XP of a task, for the class you have equipped at your level
  * (a simulation of the real rules; `gain` is XP per 10 base XP task, 0 for a skill that does nothing for your class).
@@ -99,6 +103,10 @@ skillsRouter.get(
         const mix = q.mix || FAVOURABLE[cls] || 'plain';
         const rows = await db.users.getUserSkills(uid(req));
         const levels = new Map(rows.map((s) => [s.skill_id, Number(s.skill_level)]));
+        // The simulation is ~0.3 s of CPU for the whole catalogue, so identical inputs share one result for a while.
+        const cacheKey = `${cls}|${level}|${mix}|${[...levels].sort(([a], [b]) => (a < b ? -1 : 1)).map(([id, n]) => `${id}:${n}`).join(',')}`;
+        const cached = previewCache.get(cacheKey);
+        if (cached && cached.expires > Date.now()) return res.json(cached.body);
         const asRows = (m) => [...m].map(([skill_id, skill_level]) => ({ skill_id, skill_level }));
         const avg = (m) => simulateAverage(cls, asRows(m), { level, mix });
         const base = avg(levels);
@@ -111,7 +119,10 @@ skillsRouter.get(
                 gains[id] = Math.round((avg(next) - base) * 10) / 10;
             }
         }
-        res.json({ classKey: cls, level, mix, base: 10, average: Math.round(base * 10) / 10, gains });
+        const body = { classKey: cls, level, mix, base: 10, average: Math.round(base * 10) / 10, gains };
+        if (previewCache.size >= PREVIEW_CACHE_MAX) previewCache.clear();
+        previewCache.set(cacheKey, { body, expires: Date.now() + PREVIEW_CACHE_MS });
+        res.json(body);
     })
 );
 

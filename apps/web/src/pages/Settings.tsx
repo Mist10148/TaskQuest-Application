@@ -16,7 +16,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePreferences } from "@/contexts/PreferencesContext";
+import { TEXT_SIZES, usePreferences, type TextSize } from "@/contexts/PreferencesContext";
 import { useUpdateSettings, useResetProgress, usePushConfig } from "@/hooks/useApi";
 import { resetTour, startTour } from "@/lib/tour";
 
@@ -40,7 +40,7 @@ const Settings = () => {
   // Hidden unless the server has VAPID keys (web push is optional).
   const pushAvailable = Boolean(usePushConfig().data?.enabled);
   const resetProgress = useResetProgress();
-  const { reduceMotion, setReduceMotion, sound, setSound } = usePreferences();
+  const { reduceMotion, setReduceMotion, sound, setSound, highContrast, setHighContrast, textSize, setTextSize } = usePreferences();
   const [confirmText, setConfirmText] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
 
@@ -96,6 +96,22 @@ const Settings = () => {
             <ThemeToggle />
           </SettingRow>
           <SwitchRow label="Reduce motion" description="Turn off animations and the confetti. Your system setting is respected too." checked={reduceMotion} onChange={setReduceMotion} />
+          <SwitchRow label="High contrast" description="Stronger text and border colours." checked={highContrast} onChange={setHighContrast} />
+          <SettingRow label="Text size" description="Scales the whole page.">
+            <div role="group" aria-label="Text size" className="inline-flex rounded-lg border border-border bg-card p-0.5">
+              {TEXT_SIZES.map((size: TextSize) => (
+                <button
+                  key={size}
+                  type="button"
+                  aria-pressed={textSize === size}
+                  onClick={() => setTextSize(size)}
+                  className={`rounded-md px-3 py-1 text-sm font-medium capitalize transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${textSize === size ? "bg-primary text-primary-foreground" : "text-foreground-muted hover:text-foreground"}`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </SettingRow>
           <SwitchRow label="Game sounds" description="Short sound effects in the arcade games." checked={sound} onChange={setSound} />
           <SettingRow label="Welcome tour" description="A four-step intro to quests, XP, classes and shortcuts.">
             <Button variant="outline" size="sm" onClick={() => { resetTour(); startTour(); }}>Replay tour</Button>

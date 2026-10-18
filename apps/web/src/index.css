@@ -872,3 +872,27 @@
 .cos-accent-bar {
   background: var(--cos-accent);
 }
+
+/* Display preferences (Settings > Appearance, per device). Unlayered, so they win over the token layers above. */
+html[data-text-size="large"] { font-size: 112.5%; }
+html[data-text-size="larger"] { font-size: 125%; }
+
+html[data-contrast="high"] {
+  --foreground: 0 0% 100%;
+  --foreground-muted: 210 25% 88%;
+  --muted-foreground: 210 25% 84%;
+  --border: 215 20% 55%;
+  --input: 215 20% 55%;
+  --primary-text: 235 100% 85%;
+  --destructive-text: 0 100% 80%;
+}
+
+html[data-contrast="high"].light {
+  --foreground: 0 0% 0%;
+  --foreground-muted: 222 30% 18%;
+  --muted-foreground: 222 30% 22%;
+  --border: 222 20% 35%;
+  --input: 222 20% 35%;
+  --primary-text: 235 80% 32%;
+  --destructive-text: 0 80% 35%;
+}

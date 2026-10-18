@@ -54,4 +54,17 @@ describe("useLocale", () => {
     render(<Bare />);
     expect(screen.getByTestId("bare")).toHaveTextContent("en");
   });
+
+  it("applies high contrast and text size to the page and remembers them", () => {
+    window.localStorage.setItem(KEY, JSON.stringify({ highContrast: true, textSize: "large" }));
+    render(<PreferencesProvider><Probe /></PreferencesProvider>);
+    expect(document.documentElement.dataset.contrast).toBe("high");
+    expect(document.documentElement.dataset.textSize).toBe("large");
+  });
+
+  it("ignores an unknown text size", () => {
+    window.localStorage.setItem(KEY, JSON.stringify({ textSize: "huge" }));
+    render(<PreferencesProvider><Probe /></PreferencesProvider>);
+    expect(document.documentElement.dataset.textSize).toBe("normal");
+  });
 });

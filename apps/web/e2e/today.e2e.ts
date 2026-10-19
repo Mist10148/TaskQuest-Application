@@ -14,8 +14,8 @@ test('Today lists what is due, completes it, takes a reflection and a weekly goa
     await page.getByRole('button', { name: 'Add Task' }).first().click();
     const form = page.getByRole('dialog');
     await form.getByLabel('Task name').fill(task).catch(async () => form.getByRole('textbox').first().fill(task));
-    const today = new Date();
-    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // The seeded player has no time zone, so the server's "today" is the UTC day (the machine's local day can differ).
+    const iso = new Date().toISOString().slice(0, 10);
     await form.getByLabel('Due date').fill(iso);
     await form.getByRole('button', { name: /^(Add|Create|Save)/ }).last().click();
     await expect(page.getByText(task).first()).toBeVisible();
@@ -67,9 +67,9 @@ test('a quest can be shown as a board and as a calendar', async ({ page }) => {
     await expect(page.getByTestId('task-calendar')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Next month' })).toBeVisible();
 
-    // the choice is remembered
+    // the choice is remembered (and the open quest stays open after a reload: it is in the URL)
     await page.reload();
-    await page.getByRole('button', { name: new RegExp(quest) }).click();
+    await expect(page.getByRole('heading', { name: quest })).toBeVisible();
     await expect(page.getByTestId('task-calendar')).toBeVisible();
     await page.getByRole('group', { name: 'How to show the tasks' }).getByRole('button', { name: 'List' }).click();
     await expect(page.getByRole('button', { name: 'Mark "A board task" as done' })).toBeVisible();

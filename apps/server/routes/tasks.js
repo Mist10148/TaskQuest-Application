@@ -126,6 +126,15 @@ itemsRouter.post(
     })
 );
 
+// A task's history, newest first (at most 50 entries). Anyone on the quest may read it.
+itemsRouter.get(
+    '/:id/activity',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        res.json({ activity: await db.activity.getActivity(uid(req), id) });
+    })
+);
+
 itemsRouter.patch(
     '/:id/toggle',
     asyncRoute(async (req, res) => {

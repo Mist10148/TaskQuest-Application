@@ -47,7 +47,7 @@ const push = require('@taskquest/shared/push');   // asks the web server to send
 |---|---|
 | `src/db/index.js` | Entry point: exports the pool, migrations and the services below (`extras.js` is internal to `tasks.js`, `assignees.js` to `tasks.js` and `sharing.js`) |
 | `src/db/pool.js` | `pg` connection pool behind a mysql2-style layer (`?` placeholders, `[rows]` results, `insertId` via `RETURNING id`), `withTransaction` (retries `40P01` / `40001`), `savepoint`, `isUniqueViolation`, `isUndefinedTable` |
-| `src/db/migrate.js`, `src/db/migrations/*` | Versioned schema migrations (`npm run db:migrate`): `001_baseline` creates the whole Postgres schema, `002` onwards follow (`004_item_assignee`: task assignees) |
+| `src/db/migrate.js`, `src/db/migrations/*` | Versioned schema migrations (`npm run db:migrate`): `001_baseline` creates the whole Postgres schema, `002` onwards follow (`004_item_assignee`: task assignees, `005_item_activity`: task history) |
 | `src/db/access.js` | The one rule for who may touch a list or task (`forList`, `forItem`, `accessSql`): owner or member, strangers get `NOT_FOUND` |
 | `src/db/users.js` | Users, settings, stats, leaderboard, reset |
 | `src/db/progression.js` | `applyXP`, rewards, achievements, daily, classes, skills |
@@ -59,6 +59,7 @@ const push = require('@taskquest/shared/push');   // asks the web server to send
 | `src/db/goals.js` | Daily reflection and weekly goal |
 | `src/db/today.js` | The Today screen in one read-only query set |
 | `src/db/focus.js` | Server-timed focus sessions that pay XP for measured time |
+| `src/db/activity.js` | A task's history (`item_activity`): written by `tasks.js` inside each change, `getActivity` for anyone on the quest |
 | `src/db/assignees.js` | Task assignees: member key to person and back (`'owner'` or `list_members.public_id`, never a Discord ID out), clean-up when someone leaves or a task moves |
 | `src/db/extras.js` | Engagement bonuses on a task's first paid completion (perfect day, inbox zero, boss, welcome back, estimate, party assist) |
 | `src/db/stats.js` | Read-only statistics for the web Stats page |
@@ -67,6 +68,6 @@ const push = require('@taskquest/shared/push');   // asks the web server to send
 | `src/db/cosmetics.js` | Buying and equipping cosmetics with XP |
 | `src/db/push.js` | Web push subscriptions (one row per browser) |
 | `src/db/games.js` | Server-authoritative games |
-| `src/db/maintenance.js` | Archiving old XP and game rows, per-class XP report, arcade run data for calibration |
+| `src/db/maintenance.js` | Archiving old XP and game rows, pruning old task history, per-class XP report, arcade run data for calibration |
 
 Rules and formulas are described in [docs/GAMEPLAY.md](../../docs/GAMEPLAY.md).

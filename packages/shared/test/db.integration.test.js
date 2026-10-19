@@ -4637,5 +4637,114 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual((await db.today.getToday(M)).tasks.map((x) => x.id), [mineDue.id], 'gone once I leave the quest');
     });
 
+
+    // ─── A task's history ─────────────────────────────────────────────────────────
+
+    const AV = { owner: '100000000000001901', editor: '100000000000001902', viewer: '100000000000001903', stranger: '100000000000001904', gone: '100000000000001905' };
+    const avMember = async (listId, userId, role) => {
+        const key = require('crypto').randomBytes(6).toString('hex');
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, key]);
+        return key;
+    };
+    const kinds = async (who, itemId) => (await db.activity.getActivity(who, itemId)).map((a) => [a.kind, a.from, a.to]);
+
+    await t.test('activity: each kind is written in the change itself, only for a real change, and read newest first by name', async () => {
+        for (const [name, id] of Object.entries(AV)) await db.users.ensureUser(id, { username: `av_${name}`, handle: `av_${name}`, avatar: null });
+        const home = (await db.tasks.createList(AV.owner, { name: 'Home' })).list;
+        const work = (await db.tasks.createList(AV.owner, { name: 'Work' })).list;
+        const edKey = await avMember(home.id, AV.editor, 'editor');
+        await avMember(work.id, AV.editor, 'editor');
+        await avMember(home.id, AV.viewer, 'viewer');
+        const task = (await db.tasks.addItem(AV.owner, home.id, { name: 'Taxes' })).item;
+        assert.deepEqual(await kinds(AV.owner, task.id), [['created', null, null]]);
+
+        const T = db.tasks;
+        await T.updateItem(AV.owner, task.id, { name: 'Taxes' }); // the same name: no entry
+        await T.updateItem(AV.owner, task.id, { name: 'File taxes' });
+        await T.updateItem(AV.owner, task.id, { priority: 'HIGH' });
+        await T.updateItem(AV.owner, task.id, { priority: 'HIGH', description: 'by April' }); // same priority, and a field with no history
+        await T.updateItem(AV.owner, task.id, { priority: null });
+        await T.updateItem(AV.owner, task.id, { due_date: '2031-04-15' });
+        await T.updateItem(AV.owner, task.id, { due_date: '2031-04-15', tags: 'money' });
+        await T.updateItem(AV.editor, task.id, { assignee: edKey });
+        await T.updateItem(AV.editor, task.id, { assignee: edKey });
+        await T.updateItem(AV.editor, task.id, { assignee: null });
+        await T.setItemCompleted(AV.editor, task.id, true);
+        await T.setItemCompleted(AV.editor, task.id, true); // already done: nothing changes, nothing is written
+        await T.setItemCompleted(AV.editor, task.id, false);
+        await T.moveItemToList(AV.owner, task.id, work.id);
+        assert.deepEqual(await kinds(AV.editor, task.id), [
+            ['moved', 'Home', 'Work'],
+            ['reopened', null, null],
+            ['completed', null, null],
+            ['assigned', 'av_editor', null],
+            ['assigned', null, 'av_editor'],
+            ['due', null, '2031-04-15'],
+            ['priority', 'HIGH', null],
+            ['priority', null, 'HIGH'],
+            ['renamed', 'Taxes', 'File taxes'],
+            ['created', null, null]
+        ]);
+        const read = await db.activity.getActivity(AV.editor, task.id);
+        assert.deepEqual(read[1].actor, { name: 'av_editor', isYou: true });
+        assert.deepEqual(read[0].actor, { name: 'av_owner', isYou: false });
+        assert.ok(read[0].createdAt instanceof Date && typeof read[0].id === 'number');
+        assert.deepEqual(Object.keys(read[0]).sort(), ['actor', 'createdAt', 'from', 'id', 'kind', 'to']);
+        for (const id of Object.values(AV)) assert.equal(JSON.stringify(read).includes(id), false, 'no Discord IDs');
+        await T.updateItem(AV.owner, task.id, { due_date: null });
+        assert.deepEqual((await kinds(AV.owner, task.id))[0], ['due', '2031-04-15', null]);
+
+        // Readers: anyone on the task's quest now. The viewer is on Home only, and the task moved to Work.
+        await assert.rejects(db.activity.getActivity(AV.viewer, task.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.activity.getActivity(AV.stranger, task.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.activity.getActivity(AV.owner, 99999999), { code: 'NOT_FOUND' });
+        const homeTask = (await T.addItem(AV.editor, home.id, { name: 'Plants' })).item;
+        assert.deepEqual(await kinds(AV.viewer, homeTask.id), [['created', null, null]], 'a viewer reads it');
+
+        // Subtasks: a break-down records each one, and a move records every row that moved.
+        const sub = (await T.addSubtasks(AV.owner, task.id, ['Receipts'])).items[0].item;
+        await T.moveItemToList(AV.owner, task.id, home.id);
+        assert.deepEqual(await kinds(AV.owner, sub.id), [['moved', 'Work', 'Home'], ['created', null, null]]);
+    });
+
+    await t.test('activity: bulk creation writes no history, a deleted account reads as nobody, at most 50 entries, gone with the task', async () => {
+        const { list, items } = await db.tasks.createListWithItems(AV.owner, { name: 'Bulk' }, ['a', 'b']);
+        const added = await db.tasks.addItems(AV.owner, list.id, [{ name: 'c' }]);
+        const ids = [...items.map((r) => r.item.id), added[0].item.id];
+        await db.transfer.importAll(AV.owner, { lists: [{ name: 'Imported quest', items: [{ name: 'i' }] }] });
+        const [imported] = await db.query("SELECT i.id FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ? AND l.name = 'Imported quest'", [AV.owner]);
+        for (const id of [...ids, imported.id]) assert.deepEqual(await kinds(AV.owner, id), [], 'no created row for bulk adds');
+
+        await avMember(list.id, AV.gone, 'editor');
+        await db.tasks.setItemCompleted(AV.gone, ids[0], true);
+        await db.query('DELETE FROM users WHERE discord_id = ?', [AV.gone]);
+        const [entry] = await db.activity.getActivity(AV.owner, ids[0]);
+        assert.deepEqual([entry.kind, entry.actor], ['completed', null], 'the account is gone, the entry stays');
+
+        await db.query("INSERT INTO item_activity (item_id, actor_id, kind, created_at) SELECT ?, ?, 'renamed', CURRENT_TIMESTAMP - make_interval(mins => g) FROM generate_series(1, 60) AS g", [ids[1], AV.owner]);
+        assert.equal((await db.activity.getActivity(AV.owner, ids[1])).length, 50);
+        await db.tasks.deleteItem(AV.owner, ids[1]);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM item_activity WHERE item_id = ?', [ids[1]]))[0].n), 0);
+        // The value columns hold what the UI shows, clipped to 255 characters.
+        await db.activity.record(db.getPool(), ids[2], AV.owner, 'renamed', 'x'.repeat(300), '');
+        const [clip] = await db.query('SELECT from_value, to_value FROM item_activity WHERE item_id = ? ORDER BY id DESC LIMIT 1', [ids[2]]);
+        assert.deepEqual([clip.from_value.length, clip.to_value], [255, null]);
+        await assert.rejects(db.query("INSERT INTO item_activity (item_id, kind) VALUES (?, 'deleted')", [ids[2]]), 'the kinds are checked by the database');
+    });
+
+    await t.test('activity: npm run archive deletes history older than the window, a dry run counts it', async () => {
+        const { list } = await db.tasks.createList(AV.owner, { name: 'Old history' });
+        const task = (await db.tasks.addItem(AV.owner, list.id, { name: 'old' })).item;
+        await db.tasks.updateItem(AV.owner, task.id, { name: 'renamed' });
+        await db.query("UPDATE item_activity SET created_at = CURRENT_TIMESTAMP - make_interval(days => 400) WHERE item_id = ? AND kind = 'created'", [task.id]);
+        const dry = await db.maintenance.archiveOld({ days: 365, dryRun: true });
+        assert.ok(dry.itemActivity >= 1);
+        assert.equal((await kinds(AV.owner, task.id)).length, 2, 'a dry run deletes nothing');
+        const run = await db.maintenance.archiveOld({ days: 365, batch: 1 });
+        assert.ok(run.itemActivity >= 1);
+        assert.deepEqual(await kinds(AV.owner, task.id), [['renamed', 'old', 'renamed']], 'the recent entry stays');
+        assert.equal((await db.maintenance.archiveOld({ days: 365 })).itemActivity, 0);
+    });
+
     await db.closePool();
 });

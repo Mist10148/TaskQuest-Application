@@ -153,7 +153,7 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run start:server` / `start:bot` | Production start |
 | `npm run db:up` / `db:down` / `db:reset` | Start, stop, or recreate the local Docker PostgreSQL (`docker-compose.yml`) |
 | `npm run db:migrate` | Apply pending database migrations (`001_baseline` and any later ones; both apps also do it on start) |
-| `npm run archive` | Move old XP transactions (and, with `-- --games`, finished game sessions) to the `*_archive` tables (`-- --days 365 --batch 5000 --dry-run`; take a backup first) |
+| `npm run archive` | Move old XP transactions (and, with `-- --games`, finished game sessions) to the `*_archive` tables, and delete task history older than the window (`-- --days 365 --batch 5000 --dry-run`; take a backup first) |
 | `npm run xp-report` | What each class really earned per action, from the XP log (`-- --days 90`) |
 | `npm run balance` | Deterministic class balance tables from the shared XP functions (`scripts/balance-sim.js`, see [docs/design/balance.md](docs/design/balance.md)) |
 | `npm run arcade-report` | How fast real players score in the arcade games, to check the plausibility bound (needs run history) |

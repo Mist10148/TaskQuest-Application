@@ -19,6 +19,7 @@ const v = require('../validation');
 const { nextDueOnOrAfter, todayInZone, daysBetween } = require('../dates');
 const access = require('./access');
 const assignees = require('./assignees');
+const activity = require('./activity');
 
 const run = async (sql, params = []) => (await getPool().query(sql, params))[0];
 
@@ -408,7 +409,11 @@ function parseItemInput(listId, input) {
 /** @param {{ ownerOnly?: boolean }} [scope] see writableList */
 async function addItem(discordId, listId, input, scope = {}) {
     const parsed = parseItemInput(listId, input);
-    return withTransaction((conn) => addItemIn(conn, discordId, parsed, scope));
+    return withTransaction(async (conn) => {
+        const added = await addItemIn(conn, discordId, parsed, scope);
+        await activity.record(conn, added.item.id, discordId, 'created');
+        return added;
+    });
 }
 
 /**
@@ -427,7 +432,11 @@ async function addSubtasks(discordId, parentId, names, scope = {}) {
         const { item: parent, isOwner } = await writableItem(conn, discordId, pid, 'editor', scope);
         if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
         const items = [];
-        for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid }));
+        for (const p of parsed) {
+            const added = await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid });
+            await activity.record(conn, added.item.id, discordId, 'created');
+            items.push(added);
+        }
         return { parent: shapeItem(parent, isOwner), items };
     });
 }
@@ -497,7 +506,8 @@ async function updateItem(discordId, itemId, input, scope = {}) {
     await withTransaction(async (conn) => {
         const { item } = await writableItem(conn, discordId, id, 'editor', scope);
         if (keys.length) await writeItemFields(conn, item, fields, keys, parentGiven);
-        if (assigneeGiven) await writeAssignee(conn, item, input.assignee);
+        if (keys.length) await activity.recordEdit(conn, item, fields, discordId);
+        if (assigneeGiven) await writeAssignee(conn, item, input.assignee, discordId);
         if (position !== undefined) await moveItemIn(conn, item, position);
     });
     const item = await getItem(discordId, id);
@@ -506,10 +516,11 @@ async function updateItem(discordId, itemId, input, scope = {}) {
 }
 
 /** Assign the locked `item` to a member key of its list ('owner' or list_members.public_id), or to nobody (null). */
-async function writeAssignee(conn, item, key) {
+async function writeAssignee(conn, item, key, actorId) {
     const next = await assignees.resolveAssignee(conn, item.list_id, key);
     if ((item.assignee_id || null) === next) return;
     await conn.query('UPDATE items SET assignee_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, item.id]);
+    await activity.recordAssigned(conn, item.id, actorId, item.assignee_id || null, next);
 }
 
 /** The field part of updateItem, on the locked `item` (the row as it was before this edit). */
@@ -671,6 +682,7 @@ async function moveItemToList(discordId, itemId, targetListId) {
         );
         await moveReminderState(conn, ids, { targetId, sourceOwner: String(source.discord_id), targetOwner: String(target.discord_id), ownerChanges });
         await assignees.clearOutsiders(conn, targetId, ids);
+        await activity.recordMoves(conn, ids, me, source.name, target.name);
         // A finished task arriving does not get the target cleared for free: the clear bonus is for finishing a list's tasks there.
         if (Number(item.completed)) {
             await conn.query('UPDATE lists SET cleared_at = CURRENT_TIMESTAMP, cleared_by = ? WHERE id = ? AND cleared_at IS NULL', [CLEARED_BY_MOVE, targetId]);
@@ -891,6 +903,7 @@ async function setItemCompleted(discordId, itemId, completed, scope = {}) {
         // Re-sending the state an item is already in changes nothing: it must not re-attribute the completion or move its time.
         if (target !== Boolean(item.completed)) {
             await conn.query('UPDATE items SET completed = ?, completed_at = ?, completed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [target ? 1 : 0, target ? now : null, target ? user.discord_id : null, id]);
+            await activity.record(conn, id, user.discord_id, target ? 'completed' : 'reopened');
         }
 
         let xp = null;

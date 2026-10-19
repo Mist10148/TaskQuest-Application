@@ -1196,6 +1196,47 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await J('GET', '/api/today', 'ed')).body.tasks.length, 0);
     });
 
+
+    await t.test('a task history: GET /api/items/:id/activity, newest first, names but no ids, members only', async () => {
+        const ids = { own: '200000000000001901', vw: '200000000000001902', st: '200000000000001903' };
+        const cookies = {};
+        for (const [k, id] of Object.entries(ids)) {
+            cookies[k] = await login(db, id);
+            await db.users.ensureUser(id, { username: `hist_${k}`, handle: `hist_${k}`, avatar: null });
+        }
+        const J = async (method, path, who, body) => {
+            const res = await call(method, path, { cookie: cookies[who], body });
+            const text = await res.text();
+            return { status: res.status, text, body: text ? JSON.parse(text) : null };
+        };
+        const list = (await J('POST', '/api/lists', 'own', { name: 'With history' })).body;
+        const task = (await J('POST', `/api/lists/${list.id}/items`, 'own', { name: 'Draft' })).body;
+        await J('PATCH', `/api/items/${task.id}`, 'own', { name: 'Final draft', priority: 'LOW', due_date: '2031-02-01' });
+        await J('PATCH', `/api/items/${task.id}/toggle`, 'own');
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [list.id, ids.vw, 'viewer', crypto.randomBytes(6).toString('hex')]);
+
+        const r = await J('GET', `/api/items/${task.id}/activity`, 'vw');
+        assert.equal(r.status, 200, r.text);
+        assert.deepEqual(Object.keys(r.body), ['activity']);
+        assert.deepEqual(r.body.activity.map((a) => [a.kind, a.from, a.to]), [
+            ['completed', null, null],
+            ['due', null, '2031-02-01'],
+            ['priority', null, 'LOW'],
+            ['renamed', 'Draft', 'Final draft'],
+            ['created', null, null]
+        ]);
+        const [first] = r.body.activity;
+        assert.deepEqual(Object.keys(first).sort(), ['actor', 'createdAt', 'from', 'id', 'kind', 'to']);
+        assert.deepEqual(first.actor, { name: 'hist_own', isYou: false });
+        assert.equal(typeof first.id, 'number');
+        assert.ok(!Number.isNaN(Date.parse(first.createdAt)), 'createdAt is an ISO time');
+        for (const id of Object.values(ids)) assert.equal(r.text.includes(id), false, 'no Discord ID');
+        assert.equal((await J('GET', `/api/items/${task.id}/activity`, 'own')).body.activity[0].actor.isYou, true);
+        assert.equal((await J('GET', `/api/items/${task.id}/activity`, 'st')).status, 404);
+        assert.equal((await J('GET', '/api/items/abc/activity', 'own')).status, 400);
+        assert.equal((await call('GET', `/api/items/${task.id}/activity`)).status, 401);
+    });
+
     // Last on purpose: it uses up the per-address invite budget.
     await t.test('invite lookups are limited per address as well as per account', async () => {
         // Each account makes a single call (far below its own limit of 30), so only the address limit can answer 429.

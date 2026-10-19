@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Move old XP transactions (and, with --games, finished game sessions) to the *_archive tables.
+ * Move old XP transactions (and, with --games, finished game sessions) to the *_archive tables, and delete task history
+ * (item_activity) older than the same window.
  *
  *   node scripts/archive.js [--days 365] [--batch 5000] [--games] [--dry-run]
  *
@@ -26,6 +27,7 @@ const value = (name, fallback) => {
         const r = await db.maintenance.archiveOld({ days: value('--days', 365), batch: value('--batch', 5000), games: flag('--games'), dryRun: flag('--dry-run') });
         const verb = r.dryRun ? 'would move' : 'moved';
         console.log(`Cutoff ${r.cutoff.toISOString()}: ${verb} ${r.xpTransactions} xp_transactions` + (r.gameSessions === null ? '' : ` and ${r.gameSessions} game_sessions`) + '.');
+        console.log(`Task history: ${r.dryRun ? 'would delete' : 'deleted'} ${r.itemActivity} item_activity rows.`);
     } catch (err) {
         console.error('✗ archive failed:', err.message);
         process.exitCode = 1;

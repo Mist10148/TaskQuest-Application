@@ -27,5 +27,6 @@ const parties = require('./parties');
 const goals = require('./goals');
 const today = require('./today');
 const maintenance = require('./maintenance');
+const activity = require('./activity');
 
-module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates, cosmetics, push, access, sharing, parties, goals, today, maintenance };
+module.exports = { ...pool, ...migrate, users, progression, tasks, games, quests, transfer, focus, review, stats, templates, cosmetics, push, access, sharing, parties, goals, today, maintenance, activity };

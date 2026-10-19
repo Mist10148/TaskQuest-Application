@@ -71,7 +71,7 @@ A backup you have never restored is a hope, not a backup. Once a quarter, restor
 
 ### Retention and size
 
-`xp_transactions` and `game_sessions` grow without bound ([KNOWN_ISSUES](KNOWN_ISSUES.md)). Only today's rows matter for caps, and the last 50 for the history view, so older rows can be archived (see [DATABASE.md](DATABASE.md#backups-and-maintenance)). The Render blueprint runs `npm run archive -- --days 365` every Sunday at 03:00 UTC as the cron job `taskquest-archive` (a paid plan); on another host schedule the same command yourself, and look at the output of a first `--dry-run` before relying on it. `ai_usage` and `quest_claims` are small.
+`xp_transactions` and `game_sessions` grow without bound ([KNOWN_ISSUES](KNOWN_ISSUES.md)). Only today's rows matter for caps, and the last 50 for the history view, so older rows can be archived (see [DATABASE.md](DATABASE.md#backups-and-maintenance)); the same command deletes task history (`item_activity`) older than the window. The Render blueprint runs `npm run archive -- --days 365` every Sunday at 03:00 UTC as the cron job `taskquest-archive` (a paid plan); on another host schedule the same command yourself, and look at the output of a first `--dry-run` before relying on it. `ai_usage` and `quest_claims` are small.
 
 ---
 

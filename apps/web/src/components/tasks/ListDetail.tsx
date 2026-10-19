@@ -12,6 +12,9 @@ import { CATEGORIES } from "./constants";
 import { QuickAddBar } from "./QuickAddBar";
 import { TaskRow } from "./TaskRow";
 import { TaskBoard } from "./TaskBoard";
+import { TaskFilterBar } from "./TaskFilterBar";
+import { DEFAULT_FILTER, filterTasks, groupTasks, isFiltering, loadFilterPrefs, saveFilterPrefs, tagsIn, type GroupBy, type TaskFilter } from "@/lib/taskFilters";
+import { localToday } from "@/lib/dates";
 import { TaskCalendar } from "./TaskCalendar";
 import { TaskDetailSheet } from "./TaskDetailSheet";
 import { BulkEditDialog } from "./BulkEditDialog";
@@ -78,6 +81,26 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
     return { topLevel: top, childrenOf: kids };
   }, [items]);
 
+  // Filters and grouping (remembered per browser). A tag this quest does not use counts as "any tag".
+  const [prefs, setPrefs] = useState(loadFilterPrefs);
+  const questTags = useMemo(() => tagsIn(items), [items]);
+  const filter: TaskFilter = useMemo(
+    () => (prefs.filter.tag && !questTags.includes(prefs.filter.tag) ? { ...prefs.filter, tag: "" } : prefs.filter),
+    [prefs.filter, questTags]
+  );
+  const groupBy = prefs.groupBy;
+  const updatePrefs = (next: { filter?: TaskFilter; groupBy?: GroupBy }) => {
+    const merged = { filter: next.filter ?? filter, groupBy: next.groupBy ?? groupBy };
+    setPrefs(merged);
+    saveFilterPrefs(merged.filter, merged.groupBy);
+  };
+  const today = localToday();
+  const shown = useMemo(() => filterTasks(topLevel, childrenOf, filter, list.priority, today), [topLevel, childrenOf, filter, list.priority, today]);
+  const shownItems = useMemo(() => shown.topLevel.flatMap((t) => [t, ...(shown.childrenOf.get(t.id) ?? [])]), [shown]);
+  const groups = useMemo(() => groupTasks(shown.topLevel, groupBy, list.priority, today), [shown.topLevel, groupBy, list.priority, today]);
+  // Reordering a partial or regrouped view would be guesswork, so it is only offered on the plain list.
+  const reorderable = !isFiltering(filter) && groupBy === "none";
+
   // Reordering moves whole groups: the parent order changes, subtasks keep their order under their parent.
   // The server needs every task id of the list, so tasks hidden by a pending undo-delete are appended last.
   const reorderAll = (visibleOrder: number[]) => onReorder(completeOrder(visibleOrder, (list.items || []).map((i: Item) => i.id)));
@@ -114,7 +137,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   const quickAddRef = useRef<HTMLInputElement>(null);
   const lastSelectedRef = useRef<number | null>(null);
   // Rows in the order they are drawn (each task followed by its subtasks), for Shift-click ranges.
-  const visibleOrder = topLevel.flatMap((t) => [t.id, ...(childrenOf.get(t.id) || []).map((c) => c.id)]);
+  const visibleOrder = groups.flatMap((g) => g.items).flatMap((t) => [t.id, ...(shown.childrenOf.get(t.id) || []).map((c) => c.id)]);
   const toggleSelected = (id: number, range = false) => {
     const anchor = lastSelectedRef.current;
     lastSelectedRef.current = id;
@@ -192,11 +215,11 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         readOnly={!editable}
         focused={view === "list" && cursorId === item.id}
         onAddSubtask={(id) => onAddItem(id)}
-        onMove={(id, dir) => move(id, dir, siblings)}
+        onMove={reorderable ? (id, dir) => move(id, dir, siblings) : undefined}
         canMoveUp={index > 0}
         canMoveDown={index < siblings.length - 1}
         drag={
-          isSubtask || !editable
+          isSubtask || !editable || !reorderable
             ? undefined
             : { draggable: !selectMode, isDragOver: drag.dragOverItemId === item.id, isDragging: drag.draggedItemId === item.id, ...drag.handlers }
         }
@@ -298,26 +321,52 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         </div>
       )}
 
+      {items.length > 0 && (
+        <TaskFilterBar
+          filter={filter}
+          onFilter={(next) => updatePrefs({ filter: next })}
+          tags={questTags}
+          groupBy={view === "list" ? groupBy : undefined}
+          onGroupBy={(next) => updatePrefs({ groupBy: next })}
+          shown={shownItems.length}
+          total={items.length}
+        />
+      )}
+
       {items.length === 0 ? (
         <div className="text-center py-12 text-foreground-muted">
           <Scroll className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>{editable ? "No tasks yet. Type one above or press Add Task." : "No tasks yet."}</p>
         </div>
+      ) : shownItems.length === 0 ? (
+        <div className="text-center py-12 text-foreground-muted">
+          <p>No tasks match these filters.</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => updatePrefs({ filter: DEFAULT_FILTER })}>Clear filters</Button>
+        </div>
       ) : view === "board" ? (
-        <TaskBoard items={items} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onSetPriority={onSetPriority} />
+        <TaskBoard items={shownItems} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onSetPriority={onSetPriority} />
       ) : view === "calendar" ? (
-        <TaskCalendar items={items} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} />
+        <TaskCalendar items={shownItems} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} />
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-foreground-muted mb-3 flex items-center gap-2">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
-            {editable ? "Drag the grip (or use the arrows) to reorder. Shift-click selects a range." : "View only: you can read this quest but not change it."}
+            {!editable ? "View only: you can read this quest but not change it." : reorderable ? "Drag the grip (or use the arrows) to reorder. Shift-click selects a range." : "Clear the filters and grouping to reorder. Shift-click selects a range."}
           </p>
-          {topLevel.map((item) => (
-            <div key={item.id} className="space-y-2">
-              {row(item, topLevel, false)}
-              {(childrenOf.get(item.id) || []).map((child) => row(child, childrenOf.get(item.id) || [], true))}
-            </div>
+          {groups.map((group) => (
+            <section key={group.key} aria-label={group.label || undefined} className="space-y-2">
+              {group.label && (
+                <h3 className="flex items-center gap-2 pt-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+                  {group.label} <span className="font-normal normal-case">({group.items.length})</span>
+                </h3>
+              )}
+              {group.items.map((item) => (
+                <div key={item.id} className="space-y-2">
+                  {row(item, topLevel, false)}
+                  {(shown.childrenOf.get(item.id) || []).map((child) => row(child, childrenOf.get(item.id) || [], true))}
+                </div>
+              ))}
+            </section>
           ))}
         </div>
       )}
@@ -325,7 +374,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
       {selectMode && editable && (
         <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 mt-4 flex lg:bottom-4 flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
           <span className="text-sm font-medium mr-auto" aria-live="polite">{selectedIds.length} selected</span>
-          <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === items.length} onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
+          <Button size="sm" variant="outline" className="gap-1" disabled={shownItems.every((i) => selected.has(i.id))} onClick={() => setSelected(new Set(shownItems.map((i) => i.id)))}>
             Select all
           </Button>
           <Button size="sm" className="gap-1" disabled={openIds.length === 0} onClick={async () => {

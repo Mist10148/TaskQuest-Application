@@ -85,6 +85,7 @@ In production, set the variables in your host's dashboard instead. Because the b
 | `NODE_ENV` | prod | `development` | `production` enables secure cookies, HSTS, static serving and the strict config checks |
 | `SERVER_PORT` / `PORT` | | `3001` | Listen port (`SERVER_PORT` wins) |
 | `PUBLIC_URL` | prod | `http://localhost:8080` in dev | The origin users open. Used for OAuth redirects and CSRF origin checks. In production it must start with `https://` (the session cookie is `Secure`); startup refuses anything else except `localhost`. |
+| `FRONTEND_URL` | | — | Older name for `PUBLIC_URL`, read only when `PUBLIC_URL` is unset. Prefer `PUBLIC_URL`. |
 | `ALLOWED_ORIGINS` | | — | Extra comma-separated origins allowed to make write requests |
 | `SESSION_SECRET` | prod | random per run in dev | ≥ 32 characters. `openssl rand -base64 48` |
 | `DISCORD_CLIENT_ID` | ✓ | — | Application ID |
@@ -187,6 +188,15 @@ Browser notifications for reminders (and the Monday AI recap headline), **off un
 | `WEB_PUSH_TIMEOUT_MS` | bot | How long the bot waits for the web server per push (default `5000`) |
 
 Users then turn it on per browser under **Settings → Push notifications**. The service worker (`/sw.js`) is only registered at that point, shows the notification, opens the right page on click and caches nothing. Push needs HTTPS (or `localhost`). Subscriptions are stored in `push_subscriptions`; dead ones are removed when the push service answers 404 or 410.
+
+### Tests (local and CI only)
+
+Not used by the running apps. Set them in your shell or CI: both are read from the real environment only, not from `.env`. The Node integration tests use `TEST_DB_*` and the browser tests `E2E_DB_*` (see [CONTRIBUTING.md](../CONTRIBUTING.md#testing)).
+
+| Variable | Default | Description |
+|---|---|---|
+| `E2E_PORT` | `3101` | Port the Playwright suite starts the API server on (`apps/web/e2e/env.mjs`); the tests open `http://localhost:<E2E_PORT>` |
+| `AI_TEST_DB_URL` | — | `postgresql://…` URL of a scratch database migrated with `npm run db:migrate`. `pytest tests/postgres` in `apps/ai` runs only when it is set (the `ai-postgres` CI job). |
 
 ## 4. Deploying on Render
 

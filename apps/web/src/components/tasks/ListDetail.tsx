@@ -246,8 +246,8 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
               </Button>
             )}
             {manageable && (
-              <Button variant="outline" size="sm" onClick={onEditList} className="gap-1">
-                <Pencil className="h-4 w-4" /><span className="hidden sm:inline">Edit</span>
+              <Button variant="outline" size="sm" onClick={onEditList} className="gap-1" aria-label="Edit quest">
+                <Pencil className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Edit</span>
               </Button>
             )}
             {deletable && (
@@ -326,7 +326,14 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === items.length} onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
             Select all
           </Button>
-          <Button size="sm" className="gap-1" disabled={openIds.length === 0} onClick={async () => { await onBulkComplete(openIds); leaveSelectMode(); }}>
+          <Button size="sm" className="gap-1" disabled={openIds.length === 0} onClick={async () => {
+            try {
+              await onBulkComplete(openIds);
+            } catch {
+              // The mutation hooks already showed the error.
+            }
+            leaveSelectMode();
+          }}>
             <CheckCheck className="h-4 w-4" /> Complete{openIds.length ? ` (${openIds.length})` : ""}
           </Button>
           <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === 0} onClick={() => setBulkEditOpen(true)}>
@@ -355,6 +362,8 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
             await onBulkEdit(selectedIds, values);
             setBulkEditOpen(false);
             leaveSelectMode();
+          } catch {
+            // The mutation hooks already showed the error; keep the dialog open so the choice can be retried.
           } finally {
             setBulkEditing(false);
           }

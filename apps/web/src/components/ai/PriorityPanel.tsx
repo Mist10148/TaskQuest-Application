@@ -28,9 +28,13 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
   };
 
   const accept = async (task: AiRankedTask, priority: Priority) => {
-    await updateList.mutateAsync({ listId: task.listId, data: { priority } });
+    try {
+      await updateList.mutateAsync({ listId: task.listId, data: { priority } });
+    } catch {
+      return; // useUpdateList already showed the error; the suggestion stays so it can be tried again
+    }
     setDismissed((s) => new Set(s).add(task.id));
-    refetch();
+    void refetch();
   };
 
   return (
@@ -69,7 +73,7 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
                   {task.suggestedPriority && !dismissed.has(task.id) && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <span>Change priority to <b>{task.suggestedPriority}</b>?</span>
-                      <Button size="sm" variant="outline" className="h-6 px-2" disabled={updateList.isPending} onClick={() => accept(task, task.suggestedPriority as Priority)}><Check className="h-3 w-3 mr-1" />Accept</Button>
+                      <Button size="sm" variant="outline" className="h-6 px-2" disabled={updateList.isPending} onClick={() => void accept(task, task.suggestedPriority as Priority)}><Check className="h-3 w-3 mr-1" />Accept</Button>
                       <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => setDismissed((s) => new Set(s).add(task.id))}><X className="h-3 w-3 mr-1" />Reject</Button>
                     </div>
                   )}

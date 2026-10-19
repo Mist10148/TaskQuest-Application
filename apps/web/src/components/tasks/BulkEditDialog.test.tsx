@@ -31,4 +31,16 @@ describe("BulkEditDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onApply).toHaveBeenCalledWith({ priority: "keep", dueMode: "set", dueDate: "2026-11-01" });
   });
+
+  it("starts blank again after Cancel closes it", async () => {
+    const props = { onOpenChange: vi.fn(), count: 2, pending: false, onApply: vi.fn() };
+    const { rerender } = render(<BulkEditDialog open {...props} />);
+    await userEvent.selectOptions(screen.getByLabelText("Priority"), "HIGH");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
+    rerender(<BulkEditDialog open={false} {...props} />);
+    rerender(<BulkEditDialog open {...props} />);
+    expect(screen.getByLabelText("Priority")).toHaveValue("keep");
+  });
 });
+

@@ -49,8 +49,8 @@ export const QuickAddBar = forwardRef<HTMLInputElement, Props>(({ pending, aiEna
             className="pl-10"
           />
         </div>
-        <Button type="submit" disabled={!parsed.name || pending} className="gap-1">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+        <Button type="submit" disabled={!parsed.name || pending} className="gap-1" aria-label={pending ? "Adding task" : undefined}>
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : "Add"}
         </Button>
         {aiEnabled && text.trim() && (
           <Button asChild type="button" variant="outline" className="gap-1" title="Ask the AI assistant to add this">

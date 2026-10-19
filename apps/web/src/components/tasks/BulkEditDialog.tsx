@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,8 +21,13 @@ export const BulkEditDialog = ({ open, onOpenChange, count, pending, onApply }: 
   const valid = bulkPatch(values) !== null;
   const set = (patch: Partial<BulkEditValues>) => setValues((v) => ({ ...v, ...patch }));
 
+  // Every way of closing (Cancel, Apply, Escape) must leave the next opening blank.
+  useEffect(() => {
+    if (!open) setValues(EMPTY_BULK_EDIT);
+  }, [open]);
+
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) setValues(EMPTY_BULK_EDIT); onOpenChange(next); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Edit {count} {count === 1 ? "task" : "tasks"}</DialogTitle>
@@ -56,7 +61,7 @@ export const BulkEditDialog = ({ open, onOpenChange, count, pending, onApply }: 
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={!valid || pending}>{pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : "Apply"}</Button>
+            <Button type="submit" disabled={!valid || pending} aria-label={pending ? "Applying changes" : undefined}>{pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : "Apply"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

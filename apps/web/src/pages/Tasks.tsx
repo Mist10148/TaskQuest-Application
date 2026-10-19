@@ -202,7 +202,7 @@ const Tasks = () => {
     let xp = 0;
     for (const id of ids) {
       try {
-        const result = await toggleItem.mutateAsync({ itemId: id, quiet: true });
+        const result = await toggleItem.mutateAsync({ itemId: id, completed: true, quiet: true });
         if (result.completed) {
           done += 1;
           xp += result.xpResult?.finalXP ?? 0;

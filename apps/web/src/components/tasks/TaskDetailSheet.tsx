@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { parseTags } from "@/lib/tags";
 
 interface Props {
   /** The task to show; null keeps the drawer closed. */
@@ -27,7 +28,7 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 /** A side drawer with everything about one task, so it can be read without opening the edit form. */
 export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onToggle, onEdit, onOpenSubtask }: Props) => {
   const completed = Boolean(item?.completed);
-  const tags = item?.tags ? item.tags.split(",").filter(Boolean) : [];
+  const tags = parseTags(item?.tags);
   const overdue = item ? !completed && isPastDeadline(item.due_date) : false;
   const doneSubtasks = subtasks.filter((s) => s.completed).length;
 

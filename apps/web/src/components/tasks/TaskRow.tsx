@@ -4,6 +4,7 @@ import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import { swipeAction, swipeOffset } from "@/lib/swipe";
+import { parseTags } from "@/lib/tags";
 
 const DOT: Record<string, string> = { HIGH: "bg-red-500", MEDIUM: "bg-yellow-500", LOW: "bg-blue-500" };
 
@@ -49,7 +50,7 @@ const iconButton = "p-2.5 sm:p-1.5 rounded-md text-foreground-muted transition-c
 export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
-  const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
+  const tags = parseTags(item.tags);
   const overdue = !completed && isPastDeadline(item.due_date);
 
   // Touch: swipe a task to the right to complete it (the checkbox and the keyboard still work as before).

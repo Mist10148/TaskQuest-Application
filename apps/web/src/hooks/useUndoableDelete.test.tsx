@@ -1,8 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { useUndoableDelete } from "./useUndoableDelete";
 
-vi.mock("sonner", () => ({ toast: vi.fn() }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(() => "toast-1"), { dismiss: vi.fn() }) }));
 
 describe("useUndoableDelete", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -33,5 +34,14 @@ describe("useUndoableDelete", () => {
     });
     expect(run).not.toHaveBeenCalled();
     expect(flush).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes the Undo toast when leaving the page commits the delete", () => {
+    const run = vi.fn().mockResolvedValue(undefined);
+    const { result, unmount } = renderHook(() => useUndoableDelete(run, 6000));
+    act(() => result.current.request([3], "Deleted"));
+    unmount();
+    expect(run).toHaveBeenCalledWith(3);
+    expect(toast.dismiss).toHaveBeenCalledWith("toast-1");
   });
 });

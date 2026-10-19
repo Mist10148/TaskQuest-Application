@@ -4262,6 +4262,36 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.tasks.getLists(U)).length, listsBefore, 'a refused import writes nothing');
     });
 
+    await t.test('a progress reset also clears reflections, goals, member reminder state and push subscriptions, and withdraws sent invitations', async () => {
+        const U = '100000000000000658';
+        const OTHER = '100000000000000659';
+        const INVITEE = '100000000000000660';
+        for (const id of [U, OTHER, INVITEE]) await db.users.ensureUser(id);
+        const { list } = await db.tasks.createList(OTHER, { name: "Someone else's" });
+        const { item } = await db.tasks.addItem(OTHER, list.id, { name: 'theirs', due_date: dayOffset(1) });
+        await db.query("INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, 'manager', ?)", [list.id, U, require('crypto').randomBytes(6).toString('hex')]);
+        await db.tasks.snoozeList(U, list.id, new Date(Date.now() + 3600e3));
+        await db.tasks.snoozeTask(U, item.id, new Date(Date.now() + 3600e3));
+        await db.query('INSERT INTO reflections (discord_id, day, note) VALUES (?, ?, ?)', [U, dayOffset(0), 'a good day']);
+        await db.query('INSERT INTO weekly_goals (discord_id, week_key, target) VALUES (?, ?, 10)', [U, dayOffset(0)]);
+        await db.query("INSERT INTO push_subscriptions (discord_id, endpoint, endpoint_hash, p256dh, auth) VALUES (?, 'https://push.example/x', ?, 'k', 'a')", [U, 'f'.repeat(64)]);
+        const expires = new Date(Date.now() + 86400e3);
+        await db.query("INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, expires_at) VALUES (?, ?, 'viewer', ?, ?)", [list.id, INVITEE, U, expires]);
+        await db.query("INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, status, expires_at) VALUES (?, ?, 'viewer', ?, 'declined', ?)", [list.id, OTHER, U, expires]);
+        const [[party]] = await pool.query("INSERT INTO parties (name, owner_id) VALUES ('Not mine', ?) RETURNING id", [OTHER]).then(([res]) => [res.rows]);
+        await db.query('INSERT INTO party_invites (party_id, invitee_discord_id, invited_by, expires_at) VALUES (?, ?, ?, ?)', [party.id, INVITEE, U, expires]);
+
+        await db.users.resetProgress(U);
+        const count = async (sql) => Number((await db.query(sql, [U]))[0].n);
+        for (const table of ['reflections', 'weekly_goals', 'push_subscriptions', 'list_reminders', 'item_reminders', 'list_members']) {
+            assert.equal(await count(`SELECT COUNT(*) AS n FROM ${table} WHERE discord_id = ?`), 0, table);
+        }
+        assert.equal(await count("SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND status = 'pending'"), 0, 'pending list invitations are withdrawn');
+        assert.equal(await count("SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ? AND status = 'pending'"), 0, 'pending party invitations are withdrawn');
+        assert.equal(await count("SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND status = 'declined'"), 1, 'a decline still counts for the cooldown');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM items WHERE id = ?', [item.id]))[0].n), 1, "the other person's list is untouched");
+    });
+
     await t.test('reordering a long list writes every position in a few statements and leaves unmoved rows alone', async () => {
         const U = '100000000000000662';
         await db.users.ensureUser(U);

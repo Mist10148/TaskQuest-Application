@@ -423,16 +423,23 @@ async function progressFloor(conn, discordId, from) {
     return at && at.getTime() > from.getTime() ? at : from;
 }
 
-/** Delete all of a user's progress and content (lists, items, games, XP). */
+/** Delete all of a user's progress and content (lists, items, games, XP, reflections, goals, reminders, push subscriptions). */
 async function resetProgress(discordId) {
     const id = String(discordId);
     return withTransaction(async (conn) => {
         await lockUser(conn, id);
-        for (const table of ['lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates', 'user_cosmetics', 'list_members']) {
+        for (const table of [
+            'lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates', 'user_cosmetics', 'list_members',
+            'list_reminders', 'item_reminders', 'reflections', 'weekly_goals', 'push_subscriptions'
+        ]) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }
         await conn.query('DELETE FROM list_invites WHERE invitee_discord_id = ?', [id]);
         await conn.query('DELETE FROM party_invites WHERE invitee_discord_id = ?', [id]);
+        // Invitations the user sent are withdrawn, not deleted: the rows are what the daily invitation limit and the decline
+        // cooldown count, so deleting them would let a reset lift both. (Those for the user's own lists and party go with them.)
+        await conn.query("UPDATE list_invites SET status = 'revoked' WHERE invited_by = ? AND status = 'pending'", [id]);
+        await conn.query("UPDATE party_invites SET status = 'revoked' WHERE invited_by = ? AND status = 'pending'", [id]);
         await conn.query('DELETE FROM parties WHERE owner_id = ?', [id]); // a party the user owns goes with them
         await conn.query('DELETE FROM party_members WHERE discord_id = ?', [id]);
         await conn.query(

@@ -53,6 +53,26 @@ function isDuplicate(err) {
     return isUniqueViolation(err);
 }
 
+/** The scope asOwner passes: only the list's owner may write, anyone else gets NOT_FOUND like a stranger. */
+const OWNER_ONLY = Object.freeze({ ownerOnly: true });
+
+/**
+ * forList for a write, with the list row locked. With `ownerOnly` (the asOwner services) it admits the owner alone, decided on
+ * the locked row, so a hand-over that commits first is always seen and a former owner's write never lands.
+ */
+async function writableList(conn, discordId, listId, min, { ownerOnly = false } = {}) {
+    const found = await access.forList(conn, discordId, listId, ownerOnly ? 'viewer' : min, { lock: true });
+    if (ownerOnly && !found.isOwner) throw errors.notFound('List not found.');
+    return found;
+}
+
+/** forItem for a write (its list and the item locked), with the same `ownerOnly` rule as writableList. */
+async function writableItem(conn, discordId, itemId, min, { ownerOnly = false } = {}) {
+    const found = await access.forItem(conn, discordId, itemId, ownerOnly ? 'viewer' : min, { lock: true });
+    if (ownerOnly && !found.isOwner) throw errors.notFound('Task not found.');
+    return found;
+}
+
 // ─── Lists ───────────────────────────────────────────────────────────────────
 
 /** Columns that hold other people's Discord IDs never leave this module. */
@@ -217,14 +237,15 @@ function rearmAllowed(row, dateChanged, now = new Date()) {
     return { rearm_count: used + 1, rearm_day: today };
 }
 
-async function updateList(discordId, listId, input) {
+/** @param {{ ownerOnly?: boolean }} [scope] see writableList */
+async function updateList(discordId, listId, input, scope = {}) {
     const id = unwrap(v.id(listId));
     const fields = parseListInput(input, { partial: true });
     const keys = Object.keys(fields);
     if (!keys.length) throw errors.validation('Nothing to update.');
     try {
         await withTransaction(async (conn) => {
-            const { list } = await access.forList(conn, discordId, id, 'manager', { lock: true });
+            const { list } = await writableList(conn, discordId, id, 'manager', scope);
             // A deadline that really changed re-arms every reminder (due, overdue and any snooze), the owner's and every member's, but at
             // most REMINDER_REARMS_PER_DAY times a day: an edit that keeps the date, or the fourth change today, leaves them alone.
             const rearm = keys.includes('deadline') && rearmAllowed(list, String(list.deadline || '').slice(0, 10) !== (fields.deadline || ''));
@@ -368,9 +389,10 @@ function parseItemInput(listId, input) {
     };
 }
 
-async function addItem(discordId, listId, input) {
+/** @param {{ ownerOnly?: boolean }} [scope] see writableList */
+async function addItem(discordId, listId, input, scope = {}) {
     const parsed = parseItemInput(listId, input);
-    return withTransaction((conn) => addItemIn(conn, discordId, parsed));
+    return withTransaction((conn) => addItemIn(conn, discordId, parsed, scope));
 }
 
 /**
@@ -379,14 +401,14 @@ async function addItem(discordId, listId, input) {
  * any other (with the usual daily cap).
  * @returns {Promise<{ parent: object, items: Array<{ item: object, xp: object, achievements: Array }> }>}
  */
-async function addSubtasks(discordId, parentId, names) {
+async function addSubtasks(discordId, parentId, names, scope = {}) {
     const pid = unwrap(v.id(parentId));
     if (!Array.isArray(names) || !names.length || names.length > 20) throw errors.validation('Give between 1 and 20 subtask names.');
     const parsed = names.map((name) => parseItemInput(0, { name }));
     return withTransaction(async (conn) => {
         // Lock order is the user row first, then list and item rows (as addItemIn and setItemCompleted do), or two requests deadlock.
         await lockUser(conn, discordId);
-        const { item: parent, isOwner } = await access.forItem(conn, discordId, pid, 'editor', { lock: true });
+        const { item: parent, isOwner } = await writableItem(conn, discordId, pid, 'editor', scope);
         if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
         const items = [];
         for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid }));
@@ -407,9 +429,9 @@ async function addItems(discordId, listId, inputs) {
     });
 }
 
-async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }) {
+async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }, scope = {}) {
     const user = await lockUser(conn, discordId);
-    const { list, isOwner } = await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
+    const { list, isOwner } = await writableList(conn, user.discord_id, lid, 'editor', scope);
     // The quota is the list OWNER's: a member adding to a shared list grows the owner's data. (Repeat copies from
     // spawnNextOccurrence stops at the same limit: the completed task stays, so a copy is a new row.)
     const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [list.discord_id]);
@@ -436,7 +458,8 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
     return { item: shapeItem(item, isOwner), xp, achievements };
 }
 
-async function updateItem(discordId, itemId, input) {
+/** @param {{ ownerOnly?: boolean }} [scope] see writableList */
+async function updateItem(discordId, itemId, input, scope = {}) {
     const id = unwrap(v.id(itemId));
     const fields = {};
     if (input.name !== undefined) fields.name = unwrap(v.itemName(input.name));
@@ -452,40 +475,56 @@ async function updateItem(discordId, itemId, input) {
     const keys = Object.keys(fields);
     if (!keys.length && position === undefined) throw errors.validation('Nothing to update.');
 
-    if (keys.length) {
-        await withTransaction(async (conn) => {
-            const { item } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
-            if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
-            // A new due date or rule starts a new monthly anchor.
-            // A new due date also re-arms the task's reminder (due-day DM and any snooze).
-            let cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
-            const dateChanged = keys.includes('due_date') && String(item.due_date || '').slice(0, 10) !== (fields.due_date || '');
-            // Only a changed date restarts the 24-hour clock that early/overdue effects need (see trustedDueDate).
-            if (dateChanged) {
-                fields.due_date_set_at = fields.due_date ? new Date() : null;
-                cols = [...cols, 'due_date_set_at'];
-            }
-            // A changed date also re-arms the task's reminder (due-day DM and any snooze) for the owner and every member, but at most
-            // REMINDER_REARMS_PER_DAY times a day: re-saving the same date, or the fourth change today, leaves everyone's state alone.
-            const rearm = rearmAllowed(item, dateChanged);
-            if (rearm) {
-                Object.assign(fields, rearm);
-                cols = [...cols, 'reminded_at', 'remind_at', 'rearm_count', 'rearm_day'];
-            }
-            await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
-            if (rearm) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
-        });
-    }
-    if (position !== undefined) await moveItem(discordId, id, position);
+    // The field changes and the move are one transaction: a move that fails rolls the field changes back too.
+    await withTransaction(async (conn) => {
+        const { item } = await writableItem(conn, discordId, id, 'editor', scope);
+        if (keys.length) await writeItemFields(conn, item, fields, keys, parentGiven);
+        if (position !== undefined) await moveItemIn(conn, item, position);
+    });
     const item = await getItem(discordId, id);
     if (!item) throw errors.notFound('Task not found.');
     return item;
 }
 
-/** Rewrite a list's positions as 0..n-1 in the given item-id order (inside a transaction). */
-async function writePositions(conn, orderedIds) {
-    for (let i = 0; i < orderedIds.length; i++) {
-        await conn.query('UPDATE items SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND position <> ?', [i, orderedIds[i], i]);
+/** The field part of updateItem, on the locked `item` (the row as it was before this edit). */
+async function writeItemFields(conn, item, fields, keys, parentGiven) {
+    const id = item.id;
+    if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
+    const dateChanged = keys.includes('due_date') && String(item.due_date || '').slice(0, 10) !== (fields.due_date || '');
+    const ruleChanged = keys.includes('recurrence') && (item.recurrence || null) !== fields.recurrence;
+    // A new due date or rule starts a new monthly anchor. Re-saving the same date and rule keeps it, so a task that repeats
+    // on the 31st (and is due on the 30th this month) is not moved to the 30th for good by an unrelated edit.
+    let cols = dateChanged || ruleChanged ? [...keys, 'repeat_anchor_day'] : keys;
+    // Only a changed date restarts the 24-hour clock that early/overdue effects need (see trustedDueDate).
+    if (dateChanged) {
+        fields.due_date_set_at = fields.due_date ? new Date() : null;
+        cols = [...cols, 'due_date_set_at'];
+    }
+    // A changed date also re-arms the task's reminder (due-day DM and any snooze) for the owner and every member, but at most
+    // REMINDER_REARMS_PER_DAY times a day: re-saving the same date, or the fourth change today, leaves everyone's state alone.
+    const rearm = rearmAllowed(item, dateChanged);
+    if (rearm) {
+        Object.assign(fields, rearm);
+        cols = [...cols, 'reminded_at', 'remind_at', 'rearm_count', 'rearm_day'];
+    }
+    await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
+    if (rearm) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
+}
+
+/** Rows per UPDATE in writePositions: two parameters each, far below Postgres's 65535-parameter limit. */
+const POSITION_CHUNK = 1000;
+
+/** Rewrite a list's positions as 0..n-1 in the given item-id order (inside a transaction, with the list's items locked). */
+async function writePositions(conn, listId, orderedIds) {
+    for (let start = 0; start < orderedIds.length; start += POSITION_CHUNK) {
+        const chunk = orderedIds.slice(start, start + POSITION_CHUNK);
+        // Only rows whose position really changes are written (and get a new updated_at).
+        await conn.query(
+            `UPDATE items SET position = v.pos, updated_at = CURRENT_TIMESTAMP
+             FROM (VALUES ${chunk.map(() => '(?::int, ?::int)').join(', ')}) AS v(id, pos)
+             WHERE items.id = v.id AND items.list_id = ? AND items.position <> v.pos`,
+            [...chunk.flatMap((itemId, i) => [itemId, start + i]), listId]
+        );
     }
 }
 
@@ -498,11 +537,7 @@ async function moveItem(discordId, itemId, position) {
     if (!Number.isSafeInteger(position) || position < 0) throw errors.validation('Position must be a non-negative integer.');
     return withTransaction(async (conn) => {
         const { item } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
-        const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
-        const ids = rows.map((r) => r.id).filter((x) => x !== id);
-        ids.splice(Math.min(position, ids.length), 0, id);
-        await writePositions(conn, ids);
-        return ids;
+        return moveItemIn(conn, item, position);
     });
 }
 
@@ -510,6 +545,15 @@ async function moveItem(discordId, itemId, position) {
 async function reorderItems(discordId, listId, orderedIds) {
     const lid = unwrap(v.id(listId));
     if (!Array.isArray(orderedIds) || orderedIds.length > 5000) throw errors.validation('Provide the task ids in their new order.');
+/** moveItem on an item whose list the caller has already locked. @returns {Promise<number[]>} the list's new order */
+async function moveItemIn(conn, item, position) {
+    const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
+    const ids = rows.map((r) => r.id).filter((x) => x !== item.id);
+    ids.splice(Math.min(position, ids.length), 0, item.id);
+    await writePositions(conn, item.list_id, ids);
+    return ids;
+}
+
     const wanted = orderedIds.map((x) => unwrap(v.id(x)));
     return withTransaction(async (conn) => {
         await access.forList(conn, discordId, lid, 'editor', { lock: true });
@@ -518,7 +562,7 @@ async function reorderItems(discordId, listId, orderedIds) {
         if (wanted.length !== have.size || new Set(wanted).size !== wanted.length || !wanted.every((x) => have.has(x))) {
             throw errors.validation('The order must list every task in this list exactly once.');
         }
-        await writePositions(conn, wanted);
+        await writePositions(conn, lid, wanted);
         return wanted;
     });
 }
@@ -718,11 +762,11 @@ function habitOutcome(item, ctx) {
  * Completion XP and the completion counter are granted only the first time
  * an item is ever completed, so toggling cannot farm XP.
  */
-async function setItemCompleted(discordId, itemId, completed) {
+async function setItemCompleted(discordId, itemId, completed, scope = {}) {
     const id = unwrap(v.id(itemId));
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
-        const { item, isOwner } = await access.forItem(conn, user.discord_id, id, 'editor', { lock: true });
+        const { item, isOwner } = await writableItem(conn, user.discord_id, id, 'editor', scope);
 
         const target = completed === undefined ? !item.completed : Boolean(completed);
         const now = new Date();
@@ -786,7 +830,7 @@ async function swapItemPositions(discordId, itemIdA, itemIdB) {
         const ids = all.map((r) => r.id);
         const [ia, ib] = [ids.indexOf(a), ids.indexOf(b)];
         [ids[ia], ids[ib]] = [ids[ib], ids[ia]];
-        await writePositions(conn, ids);
+        await writePositions(conn, rows[0].list_id, ids);
         return true;
     });
 }
@@ -1019,33 +1063,18 @@ async function cleanupOldLists(days = 5, { onCandidates } = {}) {
 }
 
 /**
- * The writing services restricted to lists the user OWNS, for callers that must never reach a list the user merely belongs to:
- * the AI service's tools (routes/internal.js) use these, so sharing never widens what the AI can read or change. A member's
- * call on someone else's list is NOT_FOUND, exactly like a stranger's.
+ * The writing services restricted to lists the user OWNS (shared ones included), for the AI service's write tools
+ * (routes/internal.js): a member's call on someone else's list is NOT_FOUND, exactly like a stranger's. Ownership is decided
+ * inside each write's transaction on the locked list row (see writableList), so a hand-over cannot slip in between the check and
+ * the write.
  */
-async function requireOwnedList(discordId, listId) {
-    const { isOwner } = await access.forList(getPool(), discordId, listId);
-    if (!isOwner) throw errors.notFound('List not found.');
-}
-async function requireOwnedItem(discordId, itemId) {
-    const { isOwner } = await access.forItem(getPool(), discordId, itemId);
-    if (!isOwner) throw errors.notFound('Task not found.');
-}
-const ownedList = (fn) => async (discordId, listId, ...rest) => {
-    await requireOwnedList(discordId, listId);
-    return fn(discordId, listId, ...rest);
-};
-const ownedItem = (fn) => async (discordId, itemId, ...rest) => {
-    await requireOwnedItem(discordId, itemId);
-    return fn(discordId, itemId, ...rest);
-};
 const asOwner = {
-    createListWithItems: (...args) => createListWithItems(...args),
-    addItem: ownedList(addItem),
-    updateList: ownedList(updateList),
-    updateItem: ownedItem(updateItem),
-    setItemCompleted: ownedItem(setItemCompleted),
-    addSubtasks: ownedItem(addSubtasks)
+    createListWithItems: (discordId, input, names) => createListWithItems(discordId, input, names),
+    addItem: (discordId, listId, input) => addItem(discordId, listId, input, OWNER_ONLY),
+    updateList: (discordId, listId, input) => updateList(discordId, listId, input, OWNER_ONLY),
+    updateItem: (discordId, itemId, input) => updateItem(discordId, itemId, input, OWNER_ONLY),
+    setItemCompleted: (discordId, itemId, completed) => setItemCompleted(discordId, itemId, completed, OWNER_ONLY),
+    addSubtasks: (discordId, parentId, names) => addSubtasks(discordId, parentId, names, OWNER_ONLY)
 };
 
 module.exports = {

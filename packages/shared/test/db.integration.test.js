@@ -4078,5 +4078,123 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(row.remind_at, null);
     });
 
+    await t.test('a monthly task re-saved with the same date and rule keeps its anchor day; a real change starts a new one', async () => {
+        const U = '100000000000000651';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Rent on the 31st' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'Rent', due_date: '2031-04-30', recurrence: 'monthly' });
+        // As a copy spawned from a task due on the 31st would be: due on the 30th (April), anchored on the 31st.
+        await db.query('UPDATE items SET repeat_anchor_day = 31 WHERE id = ?', [item.id]);
+        const anchor = async () => (await db.query('SELECT repeat_anchor_day AS a FROM items WHERE id = ?', [item.id]))[0].a;
+
+        await db.tasks.updateItem(U, item.id, { name: 'Rent!', due_date: '2031-04-30', recurrence: 'monthly' });
+        assert.equal(await anchor(), 31, 'the edit form re-sends the same date and rule');
+        await db.tasks.updateItem(U, item.id, { recurrence: 'Monthly' });
+        assert.equal(await anchor(), 31, 'the same rule, spelled differently');
+        await db.tasks.updateItem(U, item.id, { due_date: '2031-05-15' });
+        assert.equal(await anchor(), null, 'a new date starts a new anchor');
+        await db.query('UPDATE items SET repeat_anchor_day = 15 WHERE id = ?', [item.id]);
+        await db.tasks.updateItem(U, item.id, { recurrence: 'weekly' });
+        assert.equal(await anchor(), null, 'so does a new rule');
+    });
+
+    await t.test('a task edit and its move are one transaction: a move that fails keeps the old fields', async () => {
+        const U = '100000000000000652';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Atomic edit' });
+        const a = (await db.tasks.addItem(U, list.id, { name: 'a' })).item;
+        await db.tasks.addItem(U, list.id, { name: 'b' });
+        // Make the move fail half-way (its position UPDATE throws), as a lost connection or a deadlock in the middle of it would.
+        const probe = await pool.getConnection();
+        const Connection = Object.getPrototypeOf(probe);
+        probe.release();
+        const query = Connection.query;
+        Connection.query = function (sql, params) {
+            if (/^UPDATE items SET position/.test(String(sql).trim())) return Promise.reject(new Error('move refused'));
+            return query.call(this, sql, params);
+        };
+        try {
+            await assert.rejects(db.tasks.updateItem(U, a.id, { name: 'renamed', priority: 'HIGH', position: 1 }), /move refused/);
+        } finally {
+            Connection.query = query;
+        }
+        const row = (await db.query('SELECT name, priority, position FROM items WHERE id = ?', [a.id]))[0];
+        assert.deepEqual({ ...row }, { name: 'a', priority: null, position: 0 }, 'nothing of the edit was kept');
+
+        const done = await db.tasks.updateItem(U, a.id, { name: 'renamed', position: 1 });
+        assert.equal(done.name, 'renamed');
+        assert.equal(done.position, 1);
+    });
+
+    await t.test('an AI (owner-only) write waiting on the list sees a hand-over that commits first, and is refused', async () => {
+        const O = '100000000000000653';
+        const N = '100000000000000654';
+        for (const id of [O, N]) await db.users.ensureUser(id);
+        const { list } = await db.tasks.createList(O, { name: 'Handed over mid-write' });
+        const { item } = await db.tasks.addItem(O, list.id, { name: 'existing' });
+        const count = async () => Number((await db.query('SELECT COUNT(*) AS n FROM items WHERE list_id = ?', [list.id]))[0].n);
+
+        for (const [label, write] of [
+            ['addItem', () => db.tasks.asOwner.addItem(O, list.id, { name: 'from the AI' })],
+            ['updateItem', () => db.tasks.asOwner.updateItem(O, item.id, { name: 'renamed by the AI' })],
+            ['setItemCompleted', () => db.tasks.asOwner.setItemCompleted(O, item.id, true)],
+            ['addSubtasks', () => db.tasks.asOwner.addSubtasks(O, item.id, ['one', 'two'])],
+            ['updateList', () => db.tasks.asOwner.updateList(O, list.id, { priority: 'HIGH' })]
+        ]) {
+            await db.query('UPDATE lists SET discord_id = ? WHERE id = ?', [O, list.id]);
+            await db.query('DELETE FROM list_members WHERE list_id = ?', [list.id]);
+            const before = await count();
+            // Another session holds the list (as a hand-over does) and gives it to N, keeping O on it as a manager.
+            const conn = await pool.getConnection();
+            let pending;
+            try {
+                await conn.beginTransaction();
+                await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [list.id]);
+                pending = write().then(
+                    (value) => ({ value }),
+                    (error) => ({ error })
+                );
+                await new Promise((resolve) => setTimeout(resolve, 150)); // the write has checked what it can and waits on the list
+                await conn.query('UPDATE lists SET discord_id = ? WHERE id = ?', [N, list.id]);
+                await conn.query("INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, 'manager', ?)", [list.id, O, require('crypto').randomBytes(6).toString('hex')]);
+                await conn.commit();
+            } finally {
+                conn.release();
+            }
+            const outcome = await pending;
+            assert.equal(outcome.error && outcome.error.code, 'NOT_FOUND', `${label}: refused once the list is someone else's`);
+            assert.equal(await count(), before, `${label}: nothing was added`);
+        }
+        const row = (await db.query('SELECT name, completed FROM items WHERE id = ?', [item.id]))[0];
+        assert.deepEqual({ ...row }, { name: 'existing', completed: 0 });
+        assert.equal((await db.query('SELECT priority FROM lists WHERE id = ?', [list.id]))[0].priority, null);
+    });
+
+    await t.test('reordering a long list writes every position in a few statements and leaves unmoved rows alone', async () => {
+        const U = '100000000000000662';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Long list' });
+        const N = 2345; // three chunks of the batched UPDATE
+        await db.query("INSERT INTO items (list_id, name, position) SELECT ?, 't' || g, g FROM generate_series(0, ?) AS g", [list.id, N - 1]);
+        const ids = (await db.query('SELECT id FROM items WHERE list_id = ? ORDER BY position', [list.id])).map((r) => r.id);
+        await db.query("UPDATE items SET updated_at = '2020-01-01 00:00:00' WHERE list_id = ?", [list.id]);
+
+        const reversed = [...ids].reverse();
+        await db.tasks.reorderItems(U, list.id, reversed);
+        const after = await db.query('SELECT id, position FROM items WHERE list_id = ? ORDER BY position', [list.id]);
+        assert.deepEqual(after.map((r) => r.id), reversed);
+        assert.deepEqual(after.map((r) => r.position), reversed.map((_, i) => i));
+        // The middle row of an odd-length list keeps its position, so it is not written.
+        const untouched = await db.query("SELECT COUNT(*) AS n FROM items WHERE list_id = ? AND updated_at = '2020-01-01 00:00:00'", [list.id]);
+        assert.equal(Number(untouched[0].n), 1);
+
+        // A move inside the long list goes through the same writer.
+        await db.tasks.moveItem(U, reversed[N - 1], 0);
+        const moved = await db.query('SELECT id, position FROM items WHERE list_id = ? ORDER BY position', [list.id]);
+        assert.equal(moved[0].id, reversed[N - 1]);
+        assert.deepEqual(moved.map((r) => r.position), moved.map((_, i) => i));
+        await db.query('DELETE FROM lists WHERE id = ?', [list.id]);
+    });
+
     await db.closePool();
 });

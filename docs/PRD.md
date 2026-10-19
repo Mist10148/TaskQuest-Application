@@ -74,7 +74,7 @@ TaskQuest addresses this in three ways:
 
 ### Non-goals
 
-- **Heavy team collaboration.** Lists can be shared (viewer, editor and manager roles) and small parties share a weekly quest, but there is no task assignment, comments, chat or an activity feed. (The owner can hand a list to one of its members; see [shared-lists](design/shared-lists.md).)
+- **Heavy team collaboration.** Lists can be shared (viewer, editor and manager roles), tasks on a shared list can be assigned to one person and carry comments and a change history, and small parties share a weekly quest. There is no team chat, workspace-wide activity feed, @mentions or real-time editing. (The owner can hand a list to one of its members; see [shared-lists](design/shared-lists.md).)
 - **Real money.** XP has no cash value and can't be bought, sold or transferred.
 - **A full calendar.** Tasks and lists have due dates, tasks can repeat, and reminders arrive once on the due day at the user's reminder hour (Discord DM, optionally a browser push). There are no times of day, and the calendar is a read-only `.ics` feed.
 - **Native mobile apps.** The web app is responsive, and push notifications are optional and browser-based, but there is no app-store product.
@@ -295,7 +295,8 @@ TaskQuest addresses this in three ways:
 | Next | Review follow-ups not yet built: an offline write queue ([KNOWN_ISSUES #53](KNOWN_ISSUES.md)), a thread and checkpoint retention job and an embed debounce for the AI service (#51), and a decision on auto-delete versus quest progress (#49) |
 | Done | The October review pass: installable app, offline banner, route error boundary, keyboard task cursor, and the fixes listed under Fixed in the [CHANGELOG](../CHANGELOG.md#unreleased) |
 | Done | Web follow-ups: the tour resumes, one toast for bulk completion, the open quest in the URL, no reorder flicker; a task detail drawer, bulk edit of priority and due date, tasks in the command palette, a streak strip on Today, high-contrast and text-size preferences |
-| Later | Board drag between priority columns, bulk edit of tags and moving tasks between quests (needs a server endpoint), streak visualisation on the dashboard |
+| Done | Collaboration and organisation (monday.com-style): move tasks between quests, assignees on shared quests, comments and an activity history per task, filters and grouping, board drag between priority columns, bulk tag edit, the streak strip on the dashboard |
+| Later | Custom statuses beyond done / not done, start dates with a timeline view, task dependencies, simple automations ("when a task is done, ..."), real-time updates and edit conflicts on shared quests |
 | Later | More component tests for the web app (the shared states, game cards, quests card and Review page are covered; the Games, Skills and Classes pages and the dialogs are not) |
 | Later | Internationalisation: extract the remaining strings into the catalog (`apps/web/src/i18n/messages.ts`) and add a language picker once there is a second catalog; the bot and the AI service are untouched |
 | Later | Screenshots in the README (the capture spec exists, the images do not) and push delivery tested against real push services (needs a live deployment) |

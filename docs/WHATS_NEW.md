@@ -17,6 +17,15 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **Cosmetics, prestige and the shop.** Titles, frames and accent colours for XP; prestige at level 30 for a permanent bonus.
 - **An optional AI assistant** that can summarise, rank and (after you confirm) change your quests.
 
+## Working together on a quest (October 2026)
+
+- **Assign tasks.** On a shared quest, give a task to its owner or a member from the task's details; your row shows who has it, and tasks assigned to you show on your Today page.
+- **Comments and history.** Each task's details have a Comments tab for notes to each other and an Activity tab listing every change (who finished it, who moved the due date, and so on).
+- **Move tasks between quests.** From a task's details, or select several and pick **Move to…**. Subtasks go along.
+- **Filter and group.** Show only open, overdue, high-priority, tagged or "assigned to me" tasks, and group the list by priority, due date or tag.
+- **Drag on the board** to change a task's priority, and **bulk edit tags** on many tasks at once.
+- **Your streak on the dashboard,** the same seven-day strip as on the Today page.
+
 ## Smaller things (October 2026 review)
 
 - **Install it.** Add TaskQuest to your phone's home screen from the browser menu; it opens like an app.

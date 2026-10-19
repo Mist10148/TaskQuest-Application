@@ -21,11 +21,23 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **A repeating task stops repeating at the 5,000 task limit.** Its copy is a new row (the completed task stays), so it now counts against the list owner's quota; at the limit completing it pays as usual but creates no next copy until you delete some tasks.
 - **Time zones are stored in canonical form.** `europe/paris` is saved as `Europe/Paris`, and offset zones such as `+05:30` are refused. A value saved earlier is left as it is; the AI service falls back to UTC for a name it cannot resolve.
 - **The CSV export has a `description` column** (last, so older readers still work).
+- **Three more migrations run on start** (`004_item_assignee`, `005_item_activity`, `006_item_comments`): task assignees, a per-task history and task comments. They only add a column and two tables.
+- **Quest progress counts top-level tasks.** `itemsTotal` / `itemsCompleted` in `GET /api/lists` no longer count subtasks, so a quest's progress bar matches when it counts as cleared.
 
 ### Added
 
+- **Move tasks between quests.** "Move to another quest" in the task drawer and a bulk **Move to…** in select mode move a task with its subtasks to the end of another quest you can edit (`POST /api/items/:id/move`).
+- **Assignees on shared quests.** A task on a shared quest can be assigned to its owner or a member (task drawer), shows who has it on its row, can be filtered by "Assigned to me" or "Unassigned", and a task assigned to you on someone else's quest shows on your Today page.
+- **Comments and activity on a task.** The task drawer has a **Comments** tab (anyone who can edit the quest can comment; the author or a manager can delete) and an **Activity** tab with every change: created, renamed, done or reopened, priority, due date, assignee and moves. Rows show a comment count.
+- **Filters and groups.** A filter bar above a quest narrows the tasks by status, priority, due window (overdue, today, next 7 days, none), tag and assignee in every view, and the list view can group tasks by priority, due window or tag. Remembered per browser.
+- **Drag on the board.** Drag an open card to another priority column (or use its priority menu, which works by keyboard and touch) to change its priority.
+- **Bulk edit of tags.** The bulk edit dialog can add, remove or replace tags on the selected tasks.
+- **A streak strip on the dashboard.** The Today page's seven-day strip also shows under the dashboard stats.
+- **Calendar keyboard navigation.** The calendar is one tab stop; arrows, Home/End and PageUp/PageDown move between days and months.
+- **Repository templates.** GitHub issue and pull request templates, and Dependabot for npm, pip and GitHub Actions.
+
 - **A task detail drawer.** An info button on each task (and `i` on the highlighted one) opens a side drawer with the full description, priority, due date, repeat, estimate, tags and subtasks, with Mark done / Reopen and Edit for anyone who can edit. A viewer of a shared quest can read it too.
-- **Bulk edit.** In select mode an **Edit** button changes the priority and due date of the selected tasks together (keep, set or clear each), through the existing update endpoint with one summary toast. Moving tasks to another quest is not built (it needs a server endpoint).
+- **Bulk edit.** In select mode an **Edit** button changes the priority, due date and (see above) tags of the selected tasks together (keep, set or clear each), through the existing update endpoint with one summary toast.
 - **The command palette finds tasks.** Ctrl+K lists tasks whose name or description match (two or more characters, the same search as the quest log) with their quest, and opens that quest.
 - **A streak strip on the Today page.** The last seven days as flames, from the streak the page already returns.
 - **High contrast and text size.** Two per-device settings under Settings > Appearance: stronger text and border colours, and a normal / large / larger page scale.
@@ -174,6 +186,18 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - LangChain, LangGraph and `langgraph-checkpoint` are pinned to their tested major versions.
 
 ### Fixed
+
+- **Chat:** after a new conversation got its URL, opening another thread or "New chat" bounced back to it; Enter while a reply streamed cleared the draft without sending; a long conversation opened at the top; history had no loading or error state; a failed delete toasted twice. Thread ids are URL-encoded and a dropped stream says "offline".
+- **Monthly repeats keep their day.** Re-saving a monthly task with the same date (bulk edit does) reset its anchor, so a task on the 31st moved to the 28th for good after February.
+- **A task edit with a move is one transaction**, so a failed move no longer leaves half the edit applied.
+- **The AI's owner-only writes are decided on the locked list row**, so a hand-over that commits first is always respected.
+- **Ownership transfer keeps each person's reminder state**: nobody misses a due notice or gets one twice after a hand-over.
+- **Import no longer depends on row order** for subtasks, and refuses duplicate ids and subtasks of subtasks clearly.
+- **Progress reset also clears** reflections, weekly goals, reminder rows and push subscriptions, and withdraws pending invitations you sent.
+- **Arcade finish checks the game type** of the route.
+- **Limits from one place:** the API's tag limit (it allowed 10 tags of 30 characters) now matches the service (5 of 20), the import body is validated, and copied names use the real list name limit.
+- **Reorder is one statement per 1000 tasks** instead of one per task.
+- **Web:** bulk complete never reopens a task finished elsewhere; the bulk edit dialog starts blank every time; the heatmap ends on your own today (not UTC); the command palette opens blank and says when it is still searching; Escape that closes the tour no longer also leaves the quest; Undo toasts disappear once leaving a page made the delete final; tags are trimmed and de-duplicated; a second deploy in the same tab reloads too; several buttons and the focus timer have proper screen reader names.
 
 - **Web rough edges from the October review** (known issue #53): the welcome tour resumes at its step on the next page instead of restarting; finishing several tasks at once shows one summary toast instead of one per task; the open quest is in the URL (`/tasks?list=42`), so refresh keeps it and the browser's Back button returns to the quest log; and two quick reorders no longer flicker (only the last one to settle refetches).
 - **Shared and server fixes from the October review.**

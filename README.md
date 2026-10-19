@@ -153,11 +153,15 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run start:server` / `start:bot` | Production start |
 | `npm run db:up` / `db:down` / `db:reset` | Start, stop, or recreate the local Docker PostgreSQL (`docker-compose.yml`) |
 | `npm run db:migrate` | Apply pending database migrations (`001_baseline` and any later ones; both apps also do it on start) |
+| `npm run archive` | Move old XP transactions (and, with `-- --games`, finished game sessions) to the `*_archive` tables (`-- --days 365 --batch 5000 --dry-run`; take a backup first) |
+| `npm run xp-report` | What each class really earned per action, from the XP log (`-- --days 90`) |
+| `npm run balance` | Deterministic class balance tables from the shared XP functions (`scripts/balance-sim.js`, see [docs/design/balance.md](docs/design/balance.md)) |
 | `npm run arcade-report` | How fast real players score in the arcade games, to check the plausibility bound (needs run history) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |
 | `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |
 | `npm run check` | `node --check` every Node source file |
+| `npm run test:db` | Prints how to run the integration tests against the local Docker database (`db:up`, then `TEST_DB_PASSWORD=taskquest-dev TEST_DB_NAME=taskquest_test npm test`; that database is wiped) |
 | `npm test` | Unit tests (Node packages, the docs consistency test and the web app's Vitest suite). Integration tests also run when `TEST_DB_NAME` is set (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
 
 ## Configuration
@@ -175,6 +179,8 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 | Document | Contents |
 |---|---|
 | [docs/README.md](docs/README.md) | Index of every document, with the date it was last checked against the code |
+| [docs/START_HERE.md](docs/START_HERE.md) | A short path for players and one for contributors |
+| [docs/WHATS_NEW.md](docs/WHATS_NEW.md) | A player's view of what changed in 4.0 and the balance pass that followed |
 | [docs/PRD.md](docs/PRD.md) | Product requirements: goals, personas, user stories, requirements, roadmap |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, transactions, security design |
 | [docs/API.md](docs/API.md) | Every REST endpoint with request and response shapes |

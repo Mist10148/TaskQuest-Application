@@ -7,6 +7,7 @@ The TaskQuest Discord bot (discord.js 14, CommonJS). It is a thin Discord view o
 # configure the shared root .env (cp ../../.env.example ../../.env)
 npm run deploy -- --guild=ID    # register slash commands (omit --guild for global)
 npm run dev                     # run with auto-reload
+npm test                        # node:test (from the repo root: npm test -w @taskquest/bot); DB flows need TEST_DB_NAME
 ```
 
 | Path | Purpose |
@@ -15,7 +16,7 @@ npm run dev                     # run with auto-reload
 | `deploy-commands.js` | Slash command registration |
 | `commands/list.js` | `/list`: lists and tasks |
 | `commands/game.js` | `/game`: Blackjack, RPS, Hangman |
-| `commands/gamification.js` | `/daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping` |
+| `commands/gamification.js` | `/daily /freeze /profile /achievements /class /leaderboard /toggle /automation /help /app /ping` |
 | `commands/quests.js`, `commands/review.js`, `commands/prestige.js` | `/quests`, `/review` (weekly bonus), `/prestige` (two-step reset) |
 | `commands/shop.js` | `/shop`: titles, frames and accents bought with XP |
 | `commands/sharing.js`, `commands/party.js` | `/share /invites /members /leave` (shared lists) and `/party` (parties and the weekly party quest) |

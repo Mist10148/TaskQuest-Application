@@ -19,6 +19,9 @@ npm test                # integration tests need TEST_DB_NAME (see CONTRIBUTING.
 | `lib/schemas.js` | zod request schemas |
 | `lib/push.js`, `lib/pushConfig.js` | Web push sending and the optional VAPID configuration |
 | `lib/aiClient.js`, `lib/http.js` | The AI service client and shared HTTP helpers |
+| `lib/avatarProxy.js` | Opaque, AES-256-GCM sealed avatar tokens for the public leaderboard (`/api/leaderboard/avatar/:token` fetches the image server-side, so no Discord ID leaks) |
+| `lib/trustProxy.js` | Parses `TRUST_PROXY` for Express's `trust proxy` setting; a typo fails startup |
+| `routes/engagement.js` | `/api/today` (the Today screen), `/api/reflection` (daily reflection) and `/api/goal` (weekly goal) |
 | `routes/*` | auth, user, tasks, sharing (list members and invitations), parties, templates, import, progression (classes, skills, achievements, leaderboard), quests, cosmetics, focus, review, stats, push, calendar, games, ai, internal |
 
 See [docs/API.md](../../docs/API.md) and [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md).

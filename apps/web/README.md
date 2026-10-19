@@ -11,7 +11,7 @@ npm run dev         # needs apps/server running (npm run dev:server from the rep
 npm run build       # outputs dist/
 npm run lint
 npm run typecheck
-npm test            # Vitest unit tests for the pure logic in src/lib
+npm test            # Vitest unit and component tests (*.test.ts / *.test.tsx next to the code; jsdom + Testing Library)
 npm run e2e         # Playwright smoke tests (seeds a throwaway database; see CONTRIBUTING.md)
 ```
 
@@ -20,6 +20,6 @@ npm run e2e         # Playwright smoke tests (seeds a throwaway database; see CO
 | `src/lib/api.ts` | Typed API client |
 | `src/hooks/useApi.ts` | React Query hooks and toast notifications |
 | `src/contexts/AuthContext.tsx` / `src/components/AuthGate.tsx` | Session state and login screen |
-| `src/pages/*` | Dashboard, Tasks, Games, Classes, Skills, Shop, Achievements, Leaderboard, Focus, Stats, Weekly review, Party, Chat, Profile, Settings |
+| `src/pages/*` | Today, Dashboard, Tasks, Games, Classes, Skills, Shop, Achievements, Leaderboard, Focus, Stats, Weekly review, Party, Chat, Profile, Settings, NotFound (404) |
 
 The API is documented in [docs/API.md](../../docs/API.md).

@@ -4330,5 +4330,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.query('DELETE FROM lists WHERE id = ?', [list.id]);
     });
 
+    await t.test('an arcade run finished on the route of another game is not found, and stays open', async () => {
+        const U = '100000000000000663';
+        await db.users.ensureUser(U);
+        const { sessionId } = await db.games.startArcade(U, 'dino');
+        await assert.rejects(db.games.finishArcade(U, sessionId, { score: 0, ticks: 1, inputs: [] }, { type: 'snake' }), { code: 'NOT_FOUND' });
+        assert.equal((await db.query('SELECT state FROM game_sessions WHERE id = ?', [sessionId]))[0].state, 'active');
+    });
+
     await db.closePool();
 });

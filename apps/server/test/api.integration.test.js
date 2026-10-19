@@ -2,7 +2,7 @@
  * End-to-end API tests against a real database. Skipped unless TEST_DB_NAME
  * is set (the database is wiped):
  *
- *   TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=3307 TEST_DB_NAME=tq_test npm test -w @taskquest/server
+ *   TEST_DB_HOST=127.0.0.1 TEST_DB_PORT=5432 TEST_DB_NAME=tq_test npm test -w @taskquest/server
  */
 
 import test from 'node:test';
@@ -181,6 +181,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         const good = await begin('dino', 3);
         await age(good, (good.play.ticks * 1000) / 60);
         const body = { sessionId: good.sessionId, score: good.play.score, ticks: good.play.ticks, inputs: good.play.inputs };
+        assert.equal((await finish(body, alice, 'snake')).status, 404, 'a dino run sent to the snake route is not found, and left alone');
         const ok = await finish(body);
         assert.equal(ok.status, 200);
         assert.equal((await ok.json()).score, 3);
@@ -312,8 +313,8 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal(imp.status, 201);
         assert.ok((await imp.json()).lists >= 1);
         assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: { lists: [{ name: 'x', deadline: 'soon' }] } })).status, 400);
-        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: data, origin: 'https://evil.example' })).status, 403);
         for (const body of [{}, { lists: 'x' }, { lists: [1] }]) assert.equal((await call('POST', '/api/user/import', { cookie: alice, body })).status, 400, JSON.stringify(body));
+        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: data, origin: 'https://evil.example' })).status, 403);
 
         assert.equal((await call('GET', `/api/calendar/${'a'.repeat(32)}.ics`)).status, 404);
         assert.equal((await call('GET', '/api/calendar/whatever.ics')).status, 404);

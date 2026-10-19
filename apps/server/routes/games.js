@@ -104,9 +104,9 @@ router.post(
 router.post(
     '/arcade/:type/finish',
     asyncRoute(async (req, res) => {
-        parse(arcadeParam, req.params);
+        const { type } = parse(arcadeParam, req.params);
         const { sessionId, score, ticks, inputs } = parse(arcadeFinishBody, req.body);
-        res.json(await db.games.finishArcade(uid(req), sessionId, { score, ticks, inputs }));
+        res.json(await db.games.finishArcade(uid(req), sessionId, { score, ticks, inputs }, { type }));
     })
 );
 

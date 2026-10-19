@@ -13,10 +13,9 @@ const { lockUser } = require('./users');
 const { errors } = require('../errors');
 const v = require('../validation');
 const { parseDone } = require('../csv');
-const { LIMITS: USER_LIMITS } = require('../constants');
+const { LIMITS: USER_LIMITS, TEXT_LIMITS, IMPORT_LIMITS: LIMITS } = require('../constants');
 const access = require('./access');
 
-const LIMITS = { LISTS: 100, ITEMS_PER_LIST: 500, ITEMS_TOTAL: 1000 };
 const FORMAT_VERSION = 1;
 
 const isoDate = (value) => (value ? String(value).slice(0, 10) : null);
@@ -143,7 +142,7 @@ function parseImport(data) {
 
 /** A free list name: "Name", then "Name (imported)", "Name (imported 2)", ... within the 100-character limit. */
 function freeName(base, taken) {
-    const fit = (suffix) => `${base.slice(0, 100 - suffix.length)}${suffix}`;
+    const fit = (suffix) => `${base.slice(0, TEXT_LIMITS.LIST_NAME - suffix.length)}${suffix}`;
     if (!taken.has(base.toLowerCase())) return base;
     for (let n = 1; n < 1000; n++) {
         const candidate = fit(n === 1 ? ' (imported)' : ` (imported ${n})`);

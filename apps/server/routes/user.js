@@ -4,7 +4,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
-import { settingsBody, resetBody, prestigeBody } from '../lib/schemas.js';
+import { settingsBody, resetBody, prestigeBody, jsonImportBody } from '../lib/schemas.js';
 import aiClient from '../lib/aiClient.js';
 
 const router = Router();
@@ -91,7 +91,7 @@ router.get(
 router.post(
     '/import',
     asyncRoute(async (req, res) => {
-        const result = await db.transfer.importAll(uid(req), req.body);
+        const result = await db.transfer.importAll(uid(req), parse(jsonImportBody, req.body));
         aiClient.syncUser(uid(req));
         res.status(201).json({ success: true, ...result });
     })

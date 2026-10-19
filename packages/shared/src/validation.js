@@ -5,7 +5,7 @@
 
 'use strict';
 
-const { TEXT_LIMITS, PRIORITIES, LIMITS } = require('./constants');
+const { TEXT_LIMITS, TAG_LIMITS, PRIORITIES, LIMITS } = require('./constants');
 
 const LIMITS_REFLECTION_MAX = LIMITS.REFLECTION_MAX_LENGTH;
 
@@ -84,8 +84,7 @@ function recurrence(value) {
     return RECURRENCES.includes(v) ? ok(v) : fail(`Repeat must be one of ${RECURRENCES.join(', ')}.`);
 }
 
-const MAX_TAGS = 5;
-const MAX_TAG_LENGTH = 20;
+const { MAX_TAGS, MAX_LENGTH: MAX_TAG_LENGTH } = TAG_LIMITS;
 
 /**
  * Tags arrive as an array or a comma/space separated string ("#work, home").

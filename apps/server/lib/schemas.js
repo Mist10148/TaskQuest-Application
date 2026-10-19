@@ -7,7 +7,7 @@
 import { z } from 'zod';
 import shared from '@taskquest/shared';
 
-const { TEXT_LIMITS, PRIORITIES, GAME_TYPES } = shared;
+const { TEXT_LIMITS, TAG_LIMITS, IMPORT_LIMITS, PRIORITIES, GAME_TYPES } = shared;
 
 export const idParam = z.object({ id: z.coerce.number().int().positive() });
 export const listIdParam = z.object({ listId: z.coerce.number().int().positive() });
@@ -48,6 +48,19 @@ export const settingsBody = z
     })
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
+
+/**
+ * A JSON import (the shape GET /api/user/export writes). Only the top level is checked here; parseImport in the shared service
+ * validates every list and task, with error messages that say which one.
+ */
+export const jsonImportBody = z
+    .object({
+        app: z.string().max(40).optional(),
+        version: z.number().int().positive().optional(),
+        exportedAt: z.string().max(40).optional(),
+        lists: z.array(z.record(z.unknown())).max(IMPORT_LIMITS.LISTS)
+    })
+    .strip(); // like parseImport, other top-level fields are ignored
 
 /** A spreadsheet import: the CSV text itself (1 MB), optionally just checked without writing. */
 export const csvImportBody = z.object({ csv: z.string().min(1).max(1_000_000), dryRun: z.boolean().optional() }).strict();
@@ -95,7 +108,15 @@ export const updateListBody = z
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
-const tagsField = z.union([z.string().max(200), z.array(z.string().max(30)).max(10)]).nullable().optional();
+// The service's tag limits (TAG_LIMITS), with room for what it strips before measuring: a leading # on each tag, and the
+// ", " between tags in the string form. The service checks the cleaned tags exactly.
+const tagsField = z
+    .union([
+        z.string().max(TAG_LIMITS.MAX_TAGS * (TAG_LIMITS.MAX_LENGTH + 3)),
+        z.array(z.string().max(TAG_LIMITS.MAX_LENGTH + 1)).max(TAG_LIMITS.MAX_TAGS)
+    ])
+    .nullable()
+    .optional();
 const itemExtras = {
     due_date: nullableEmpty(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional()),
     priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),

@@ -313,6 +313,7 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.ok((await imp.json()).lists >= 1);
         assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: { lists: [{ name: 'x', deadline: 'soon' }] } })).status, 400);
         assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: data, origin: 'https://evil.example' })).status, 403);
+        for (const body of [{}, { lists: 'x' }, { lists: [1] }]) assert.equal((await call('POST', '/api/user/import', { cookie: alice, body })).status, 400, JSON.stringify(body));
 
         assert.equal((await call('GET', `/api/calendar/${'a'.repeat(32)}.ics`)).status, 404);
         assert.equal((await call('GET', '/api/calendar/whatever.ics')).status, 404);

@@ -769,6 +769,19 @@ const TEXT_LIMITS = {
     PARTY_NAME: 40
 };
 
+/** A task's tags: how many, and how long each (after the leading # is stripped). The API's request schema is derived from these. */
+const TAG_LIMITS = {
+    MAX_TAGS: 5,
+    MAX_LENGTH: 20
+};
+
+/** The most one JSON import may hold (the per-user list and task quotas in LIMITS apply on top). */
+const IMPORT_LIMITS = {
+    LISTS: 100,
+    ITEMS_PER_LIST: 500,
+    ITEMS_TOTAL: 1000
+};
+
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];
 
 // ─── Games ────────────────────────────────────────────────────────────────────
@@ -849,6 +862,8 @@ module.exports = {
     INVITE_NEUTRAL_MESSAGE,
     DAILY,
     TEXT_LIMITS,
+    TAG_LIMITS,
+    IMPORT_LIMITS,
     PRIORITIES,
     BLACKJACK_CONFIG,
     HANGMAN_CONFIG,

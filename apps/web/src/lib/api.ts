@@ -307,13 +307,19 @@ export const itemsApi = {
 
 /** Streams an SSE response from a POST endpoint, calling onEvent for each event. */
 async function sseFetch(endpoint: string, json: unknown, onEvent: (event: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
-        body: JSON.stringify(json),
-        signal,
-    });
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+            body: JSON.stringify(json),
+            signal,
+        });
+    } catch (err) {
+        if (isNetworkFailure(err)) throw new ApiError(OFFLINE_MESSAGE, 0, 'NETWORK');
+        throw err;
+    }
     if (!response.ok || !response.body) {
         const body = await response.json().catch(() => ({}));
         throw new ApiError(body.error || `Request failed (HTTP ${response.status})`, response.status, body.code, body.details);
@@ -332,6 +338,8 @@ async function sseFetch(endpoint: string, json: unknown, onEvent: (event: ChatEv
             if (event) onEvent(event);
         }
     }
+    // Flush any bytes the decoder held back (a multi-byte character split across the last chunk).
+    buffer += decoder.decode();
     const tail = parseSseFrame(buffer);
     if (tail) onEvent(tail);
 }
@@ -357,12 +365,12 @@ export const aiApi = {
         post<AiSummary>('/api/ai/summary', body),
     prioritize: (limit?: number) => post<AiPriorityResult>('/api/ai/prioritize', limit ? { limit } : {}),
     threads: () => apiFetch<{ threads: AiThread[] }>('/api/ai/threads'),
-    thread: (id: string) => apiFetch<AiThreadDetail>(`/api/ai/threads/${id}`),
-    deleteThread: (id: string) => del<{ success: boolean }>(`/api/ai/threads/${id}`),
+    thread: (id: string) => apiFetch<AiThreadDetail>(`/api/ai/threads/${encodeURIComponent(id)}`),
+    deleteThread: (id: string) => del<{ success: boolean }>(`/api/ai/threads/${encodeURIComponent(id)}`),
     chatStream: (body: { threadId?: string; message: string }, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) =>
         sseFetch('/api/ai/chat', body, onEvent, signal),
     resumeStream: (threadId: string, approved: boolean, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) =>
-        sseFetch(`/api/ai/chat/${threadId}/resume`, { approved }, onEvent, signal),
+        sseFetch(`/api/ai/chat/${encodeURIComponent(threadId)}/resume`, { approved }, onEvent, signal),
 };
 
 // ─── Progression ─────────────────────────────────────────────────────────────

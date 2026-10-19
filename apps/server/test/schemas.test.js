@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.SESSION_SECRET ||= 'x'.repeat(40);
-const { createItemBody, updateItemBody, reorderBody, focusStartBody, focusFinishBody, createTemplateBody, jsonImportBody, moveItemBody } = await import('../lib/schemas.js');
+const { createItemBody, updateItemBody, reorderBody, focusStartBody, focusFinishBody, createTemplateBody, jsonImportBody, moveItemBody, commentBody } = await import('../lib/schemas.js');
 const { default: shared } = await import('@taskquest/shared');
 
 test('createItemBody accepts the per-task fields and normalises empties to null', () => {
@@ -76,4 +76,16 @@ test('updateItemBody: assignee is a member key or null, and creating a task take
     assert.deepEqual(updateItemBody.parse({ assignee: null }), { assignee: null });
     for (const assignee of [7, true, ['owner'], { key: 'owner' }, 'x'.repeat(65)]) assert.throws(() => updateItemBody.parse({ assignee }), JSON.stringify(assignee));
     assert.throws(() => createItemBody.parse({ name: 'x', assignee: 'owner' }), 'assign after creating');
+});
+
+test('commentBody: text of 1 to TEXT_LIMITS.COMMENT characters, nothing else', () => {
+    const max = shared.TEXT_LIMITS.COMMENT;
+    assert.equal(max, 1000);
+    assert.deepEqual(commentBody.parse({ body: 'Looks good' }), { body: 'Looks good' });
+    assert.equal(commentBody.parse({ body: 'x'.repeat(max) }).body.length, max);
+    for (const body of [{}, { body: '' }, { body: 'x'.repeat(max + 1) }, { body: 3 }, { body: null }, { body: 'a', author: 'me' }]) {
+        assert.throws(() => commentBody.parse(body), JSON.stringify(body).slice(0, 40));
+    }
+    assert.equal(shared.validation.comment('  hi  ').value, 'hi', 'the service trims and strips control characters');
+    assert.equal(shared.validation.comment('   ').ok, false);
 });

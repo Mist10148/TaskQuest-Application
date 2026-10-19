@@ -766,7 +766,9 @@ const TEXT_LIMITS = {
     ITEM_NAME: 200,
     CATEGORY: 50,
     DESCRIPTION: 1000,
-    PARTY_NAME: 40
+    PARTY_NAME: 40,
+    /** A comment on a task (also a CHECK in migration 006). */
+    COMMENT: 1000
 };
 
 /** A task's tags: how many, and how long each (after the leading # is stripped). The API's request schema is derived from these. */

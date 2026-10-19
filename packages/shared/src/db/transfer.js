@@ -15,12 +15,16 @@ const v = require('../validation');
 const { parseDone } = require('../csv');
 const { LIMITS: USER_LIMITS, TEXT_LIMITS, IMPORT_LIMITS: LIMITS } = require('../constants');
 const access = require('./access');
+const comments = require('./comments');
 
 const FORMAT_VERSION = 1;
 
 const isoDate = (value) => (value ? String(value).slice(0, 10) : null);
 
-/** Everything the user OWNS, in a portable shape. Lists shared with them are not theirs to export. */
+/**
+ * Everything the user OWNS, in a portable shape. Lists shared with them are not theirs to export. `comments` are the comments the user
+ * wrote, on any quest (with the quest and task name): theirs to take along, though an import does not bring them back.
+ */
 async function exportAll(discordId) {
     const id = String(discordId);
     const [lists] = await getPool().query('SELECT * FROM lists WHERE discord_id = ? ORDER BY id', [id]);
@@ -55,7 +59,8 @@ async function exportAll(discordId) {
             priority: l.priority,
             deadline: isoDate(l.deadline),
             items: byList.get(l.id) || []
-        }))
+        })),
+        comments: await comments.ownComments(id)
     };
 }
 

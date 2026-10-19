@@ -91,7 +91,7 @@ packages/shared/src
 └── db/
     ├── pool.js      pg (node-postgres) pool behind a mysql2-style layer (`?` placeholders, [rows] results, insertId via RETURNING id; UTC, DATE as string, TLS), withTransaction (retries deadlocks and serialization failures), savepoint
     ├── migrate.js   runner (advisory lock, one transaction per migration) + information_schema helpers
-    ├── migrations/  001_baseline (the whole Postgres schema), 002_drop_skill_points, 003_ai_prioritize_cache, 004_item_assignee, 005_item_activity; new migrations continue from 006
+    ├── migrations/  001_baseline (the whole Postgres schema), 002_drop_skill_points, 003_ai_prioritize_cache, 004_item_assignee, 005_item_activity, 006_item_comments; new migrations continue from 007
     ├── users.js     profile, settings, stats, leaderboard boards, weekly digest data, reset
     ├── progression.js  applyXP, rewardAction, awardFlat, achievements, daily and streak chests, streak freezes, classes, skills, prestige
     ├── access.js    the one rule for who may touch a list or task (owner, or a member with a sufficient role); everything else calls it
@@ -99,6 +99,7 @@ packages/shared/src
     ├── parties.js   parties, invitations and the shared weekly quest
     ├── tasks.js     lists/items/subtasks (own and shared, through access.js), ordering, moving between lists, recurrence, bonuses, reminders, clean-up
     ├── activity.js  a task's history: written inside each change, read newest first by anyone on the quest
+    ├── comments.js  comments on tasks: read by anyone on the quest, written by editors, deleted by the author or a manager
     ├── assignees.js who a task is assigned to (member keys in and out, never a Discord ID), clean-up when someone leaves (internal)
     ├── quests.js    daily/weekly/monthly/rotating quest progress and atomic claims
     ├── focus.js     server-timed focus sessions
@@ -200,7 +201,7 @@ Achievement unlocks happen in the same transaction (`ON CONFLICT DO NOTHING` on 
 | Login CSRF | OAuth `state` bound to the session and compared in constant time. |
 | IDOR | Access is decided in one place (`access.js`: ownership or a membership row with a sufficient role) and a stranger gets 404. Discord IDs of other people are never sent to a client (members are addressed by an opaque key, tasks expose display names). |
 | XSS / clickjacking | helmet CSP (`script-src 'self'`, `frame-ancestors 'none'`, `img-src 'self' cdn.discordapp.com`). React escapes output. |
-| Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games). |
+| Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games), 30 comments per minute. |
 | Mass assignment / bad input | `.strict()` zod schemas, then service-level validation. 16 KB body limit. |
 | Information leaks | Generic 500s. The health check reveals no error text. The leaderboard has no Discord IDs. |
 | Weak secrets | The server refuses to start in production without a SESSION_SECRET of 32+ characters. No fallback secret. |

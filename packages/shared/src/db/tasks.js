@@ -20,6 +20,7 @@ const { nextDueOnOrAfter, todayInZone, daysBetween } = require('../dates');
 const access = require('./access');
 const assignees = require('./assignees');
 const activity = require('./activity');
+const comments = require('./comments');
 
 const run = async (sql, params = []) => (await getPool().query(sql, params))[0];
 
@@ -87,7 +88,7 @@ const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by',
  */
 const MEMBER_ITEM_FIELDS = [
     'id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id',
-    'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority', 'assignee'
+    'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority', 'assignee', 'comment_count'
 ];
 /** The same for a list: the fields the UI draws, the sharing fields, and the item counts. No reminder or notification state. */
 const MEMBER_LIST_FIELDS = [
@@ -96,6 +97,11 @@ const MEMBER_LIST_FIELDS = [
 ];
 
 const pick = (row, fields) => Object.fromEntries(fields.filter((f) => f in row).map((f) => [f, row[f]]));
+
+/** What item rows carry besides their columns: the assignee as a person (./assignees) and how many comments they have (./comments). */
+async function decorate(conn, rows, me) {
+    return comments.withCommentCounts(conn, await assignees.withAssignees(conn, rows, me));
+}
 
 /** @param {boolean} [isOwner] false for a member: they get only MEMBER_ITEM_FIELDS */
 function shapeItem(row, isOwner = true) {
@@ -346,7 +352,7 @@ async function listItems(discordId, listId, { sortBy = 'position', order = 'ASC'
         `SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ?${one} ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`,
         itemId === null ? [list.id] : [list.id, itemId]
     );
-    const people = await assignees.withAssignees(getPool(), rows, discordId);
+    const people = await decorate(getPool(), rows, discordId);
     // can_delete tells the UI which delete buttons to offer (the server decides again on every delete).
     return people.map((row) => ({ ...shapeItem({ ...row, can_delete: mayDelete(list.role, row, discordId) }, list.is_owner), ...(list.is_owner ? { can_delete: true } : {}) }));
 }
@@ -355,7 +361,7 @@ async function listItems(discordId, listId, { sortBy = 'position', order = 'ASC'
 async function getItem(discordId, itemId) {
     try {
         const { item, role, isOwner } = await access.forItem(getPool(), discordId, itemId);
-        const [withPerson] = await assignees.withAssignees(getPool(), [item], discordId);
+        const [withPerson] = await decorate(getPool(), [item], discordId);
         return shapeItem({ ...withPerson, can_delete: mayDelete(role, item, discordId) }, isOwner);
     } catch (err) {
         if (err.code === 'NOT_FOUND') return null;
@@ -480,7 +486,7 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
     });
     const achievements = await unlockAchievements(conn, user);
     const [[item]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    const [withPerson] = await assignees.withAssignees(conn, [item], user.discord_id);
+    const [withPerson] = await decorate(conn, [item], user.discord_id);
     return { item: shapeItem(withPerson, isOwner), xp, achievements };
 }
 
@@ -745,7 +751,7 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0, isOwner = 
         [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.estimate_minutes ?? null, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id, item.assignee_id || null]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    const [withPerson] = await assignees.withAssignees(conn, [created], user.discord_id);
+    const [withPerson] = await decorate(conn, [created], user.discord_id);
     return shapeItem(withPerson, isOwner);
 }
 
@@ -942,7 +948,7 @@ async function setItemCompleted(discordId, itemId, completed, scope = {}) {
             if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user, habit.streak, isOwner);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
-        const [withPerson] = await assignees.withAssignees(conn, [updated], user.discord_id);
+        const [withPerson] = await decorate(conn, [updated], user.discord_id);
         return { item: shapeItem(withPerson, isOwner), completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }

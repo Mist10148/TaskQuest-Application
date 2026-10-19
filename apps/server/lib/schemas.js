@@ -148,6 +148,8 @@ export const updateItemBody = z
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
 export const reorderBody = z.object({ itemIds: z.array(z.number().int().positive()).max(5000) }).strict();
+/** POST /api/items/:id/comments. The service trims it, strips control characters and checks 1 to TEXT_LIMITS.COMMENT characters again. */
+export const commentBody = z.object({ body: z.string().min(1).max(TEXT_LIMITS.COMMENT) }).strict();
 /** POST /api/items/:id/move: the quest a top-level task (and its subtasks) moves to. */
 export const moveItemBody = z.object({ listId: z.number().int().positive() }).strict();
 

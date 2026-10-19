@@ -47,6 +47,7 @@ function estimate(value) {
 const reflection = (v) => requiredText(v, LIMITS_REFLECTION_MAX, 'Reflection');
 const itemName = (v) => requiredText(v, TEXT_LIMITS.ITEM_NAME, 'Task name');
 const description = (v) => optionalText(v, TEXT_LIMITS.DESCRIPTION, 'Description');
+const comment = (v) => requiredText(v, TEXT_LIMITS.COMMENT, 'Comment');
 const category = (v) => optionalText(v, TEXT_LIMITS.CATEGORY, 'Category');
 
 function priority(value) {
@@ -132,6 +133,7 @@ function escapeLike(value) {
 
 module.exports = {
     cleanText,
+    comment,
     partyName,
     listName,
     itemName,

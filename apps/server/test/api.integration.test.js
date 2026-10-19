@@ -1237,6 +1237,76 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('GET', `/api/items/${task.id}/activity`)).status, 401);
     });
 
+
+    await t.test('comments over the API: list, post, delete, counts, the export, roles and the rate limit', async () => {
+        const ids = { own: '200000000000002001', ed: '200000000000002002', vw: '200000000000002003', st: '200000000000002004' };
+        const cookies = {};
+        for (const [k, id] of Object.entries(ids)) {
+            cookies[k] = await login(db, id);
+            await db.users.ensureUser(id, { username: `talk_${k}`, handle: `talk_${k}`, avatar: null });
+        }
+        const J = async (method, path, who, body) => {
+            const res = await call(method, path, { cookie: cookies[who], body });
+            const text = await res.text();
+            return { status: res.status, text, body: text ? JSON.parse(text) : null };
+        };
+        const noIds = (r, what) => {
+            for (const id of Object.values(ids)) assert.equal(r.text.includes(id), false, `${what}: a Discord ID leaked`);
+        };
+        const list = (await J('POST', '/api/lists', 'own', { name: 'Discussed' })).body;
+        const task = (await J('POST', `/api/lists/${list.id}/items`, 'own', { name: 'Pick a date' })).body;
+        assert.equal(task.comment_count, 0);
+        for (const [who, role] of [['ed', 'editor'], ['vw', 'viewer']]) {
+            await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [list.id, ids[who], role, crypto.randomBytes(6).toString('hex')]);
+        }
+
+        for (const body of [{}, { body: '' }, { body: 'x'.repeat(1001) }, { body: 5 }, { body: 'hi', extra: 1 }, { body: '   ' }]) {
+            assert.equal((await J('POST', `/api/items/${task.id}/comments`, 'ed', body)).status, 400, JSON.stringify(body).slice(0, 40));
+        }
+        assert.equal((await J('POST', `/api/items/${task.id}/comments`, 'vw', { body: 'hi' })).status, 403);
+        assert.equal((await J('POST', `/api/items/${task.id}/comments`, 'st', { body: 'hi' })).status, 404);
+        assert.equal((await call('POST', `/api/items/${task.id}/comments`, { body: { body: 'hi' } })).status, 401);
+        assert.equal((await call('POST', `/api/items/${task.id}/comments`, { cookie: cookies.ed, body: { body: 'hi' }, origin: 'https://evil.example' })).status, 403);
+
+        const posted = await J('POST', `/api/items/${task.id}/comments`, 'ed', { body: '  Saturday?  ' });
+        assert.equal(posted.status, 201, posted.text);
+        assert.deepEqual(Object.keys(posted.body).sort(), ['author', 'body', 'canDelete', 'createdAt', 'id']);
+        assert.deepEqual([posted.body.body, posted.body.author, posted.body.canDelete], ['Saturday?', { name: 'talk_ed', isYou: true }, true]);
+        assert.ok(!Number.isNaN(Date.parse(posted.body.createdAt)));
+        noIds(posted, 'POST');
+        await J('POST', `/api/items/${task.id}/comments`, 'own', { body: 'Sunday.' });
+
+        const read = await J('GET', `/api/items/${task.id}/comments`, 'vw');
+        assert.equal(read.status, 200);
+        assert.deepEqual(Object.keys(read.body), ['comments']);
+        assert.deepEqual(read.body.comments.map((c) => [c.body, c.author.name, c.canDelete]), [['Saturday?', 'talk_ed', false], ['Sunday.', 'talk_own', false]]);
+        noIds(read, 'GET');
+        assert.equal((await J('GET', `/api/items/${task.id}/comments`, 'st')).status, 404);
+        assert.equal((await J('GET', `/api/lists/${list.id}`, 'vw')).body.items[0].comment_count, 2);
+
+        const exported = (await J('GET', '/api/user/export', 'ed')).body;
+        assert.deepEqual(exported.comments.map((c) => [c.list, c.task, c.body]), [['Discussed', 'Pick a date', 'Saturday?']]);
+
+        assert.equal((await J('DELETE', `/api/comments/${posted.body.id}`, 'vw')).status, 403);
+        assert.equal((await J('DELETE', `/api/comments/${posted.body.id}`, 'st')).status, 404);
+        assert.equal((await J('DELETE', '/api/comments/abc', 'ed')).status, 400);
+        assert.equal((await call('DELETE', `/api/comments/${posted.body.id}`)).status, 401);
+        const gone = await J('DELETE', `/api/comments/${posted.body.id}`, 'ed');
+        assert.deepEqual([gone.status, gone.body], [200, { success: true }]);
+        assert.equal((await J('DELETE', `/api/comments/${posted.body.id}`, 'own')).status, 404);
+        const ownerOne = (await J('GET', `/api/items/${task.id}/comments`, 'own')).body.comments[0];
+        assert.equal(ownerOne.canDelete, true);
+
+        // 30 comments a minute per account.
+        let limited = 0;
+        for (let n = 0; n < 32 && !limited; n++) {
+            const res = await J('POST', `/api/items/${task.id}/comments`, 'own', { body: `note ${n}` });
+            if (res.status === 429) limited = n;
+        }
+        assert.ok(limited >= 28 && limited <= 30, `the comment limit kicked in (after ${limited} more)`);
+        assert.equal((await J('POST', `/api/items/${task.id}/comments`, 'ed', { body: 'someone else may still talk' })).status, 201, 'per account');
+    });
+
     // Last on purpose: it uses up the per-address invite budget.
     await t.test('invite lookups are limited per address as well as per account', async () => {
         // Each account makes a single call (far below its own limit of 30), so only the address limit can answer 429.

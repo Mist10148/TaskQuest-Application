@@ -34,6 +34,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `003_ai_prioritize_cache` | Adds `ai_prioritize_cache`, the prioritizer's result cache shared between AI service instances. |
 | `004_item_assignee` | Adds `items.assignee_id` (VARCHAR(32) NULL → `users(discord_id)` ON DELETE SET NULL) and its index `idx_items_assignee`. |
 | `005_item_activity` | Adds `item_activity`, a task's history (see the table below). |
+| `006_item_comments` | Adds `item_comments`, comments on tasks (see the table below). |
 
 New migrations continue from the next free number. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
 
@@ -106,6 +107,10 @@ Indexes `(list_id, position)`, `(parent_id)`, `(due_date)`, `(created_by, create
 ### `item_activity`
 
 A task's history: `id` BIGSERIAL PK · `item_id` INT NOT NULL FK → `items(id)` CASCADE · `actor_id` VARCHAR(32) NULL FK → `users` ON DELETE SET NULL (who made the change; NULL once the account is gone) · `kind` VARCHAR(16) CHECK (`created`, `renamed`, `completed`, `reopened`, `priority`, `due`, `assigned`, `moved`) · `from_value`, `to_value` VARCHAR(255) NULL (the old and new value as the UI shows it: a name, a priority, a `YYYY-MM-DD` date, a person's display name at the time, a quest name) · `created_at` TIMESTAMPTZ(3). Indexes `(item_id, created_at DESC)` (the history of one task), `(actor_id)` (the foreign key) and `(created_at)` (pruning). Written by `db/activity.js` inside the transaction of the change itself, only when the value changed; tasks created in bulk (import, templates, the AI create-list tool) and repeat copies get no `created` row. Not exported, not archived: `npm run archive` deletes rows older than its window.
+
+### `item_comments`
+
+`id` BIGSERIAL PK · `item_id` INT NOT NULL FK → `items(id)` CASCADE · `author_id` VARCHAR(32) NULL FK → `users` ON DELETE SET NULL (the comment stays without an author when the account goes) · `body` TEXT NOT NULL CHECK (`char_length(body) BETWEEN 1 AND 1000`, `TEXT_LIMITS.COMMENT`) · `created_at` TIMESTAMPTZ(3). Indexes `(item_id, created_at)` (a task's thread and its `comment_count`) and `(author_id)` (the foreign key, and the export of a person's own comments). Written and deleted by `db/comments.js` only. A progress reset does not delete a person's comments (they are the quest's content), but comments on the lists it deletes go with those lists.
 
 ### `list_members`
 

@@ -3529,7 +3529,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.snoozeList(O, list.id, new Date(Date.now() + 3600e3));
         await db.tasks.setItemCompleted(O, item.id, true); // xp_awarded, first_completed_*, the repeat copy
 
-        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority', 'assignee'];
+        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority', 'assignee', 'comment_count'];
         const PRIVATE_ITEM = ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'first_completed_by', 'first_completed_high', 'first_completed_early', 'first_completed_overdue', 'due_date_set_at', 'repeat_anchor_day', 'habit_streak', 'rearm_count', 'rearm_day', 'created_by', 'completed_by', 'assignee_id'];
         const PRIVATE_LIST = ['remind_at', 'deadline_notified', 'overdue_notified', 'cleared_at', 'cleared_by', 'rearm_count', 'rearm_day', 'discord_id'];
 
@@ -4744,6 +4744,130 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(run.itemActivity >= 1);
         assert.deepEqual(await kinds(AV.owner, task.id), [['renamed', 'old', 'renamed']], 'the recent entry stays');
         assert.equal((await db.maintenance.archiveOld({ days: 365 })).itemActivity, 0);
+    });
+
+
+    // ─── Comments on a task ───────────────────────────────────────────────────────
+
+    const CM = { owner: '100000000000002001', editor: '100000000000002002', viewer: '100000000000002003', manager: '100000000000002004', stranger: '100000000000002005', gone: '100000000000002006' };
+    const cmMember = async (listId, userId, role) => {
+        const key = require('crypto').randomBytes(6).toString('hex');
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, key]);
+        return key;
+    };
+    let cmFixture;
+    async function commentFixture() {
+        if (cmFixture) return cmFixture;
+        for (const [name, id] of Object.entries(CM)) await db.users.ensureUser(id, { username: `cm_${name}`, handle: `cm_${name}`, avatar: null });
+        const { list } = await db.tasks.createList(CM.owner, { name: 'Talked about' });
+        await cmMember(list.id, CM.editor, 'editor');
+        await cmMember(list.id, CM.viewer, 'viewer');
+        await cmMember(list.id, CM.manager, 'manager');
+        const task = (await db.tasks.addItem(CM.owner, list.id, { name: 'Paint the fence' })).item;
+        cmFixture = { list, task };
+        return cmFixture;
+    }
+
+    await t.test('comments: editors write, everyone on the quest reads oldest first, cleaned text, limits and strangers', async () => {
+        const { list, task } = await commentFixture();
+        const C = db.comments;
+        const first = await C.addComment(CM.editor, task.id, '  Which colour?\u0007  ');
+        assert.deepEqual(Object.keys(first).sort(), ['author', 'body', 'canDelete', 'createdAt', 'id']);
+        assert.equal(first.body, 'Which colour?', 'trimmed, control characters gone');
+        assert.deepEqual(first.author, { name: 'cm_editor', isYou: true });
+        assert.equal(first.canDelete, true);
+        assert.ok(first.createdAt instanceof Date && typeof first.id === 'number');
+        const second = await C.addComment(CM.owner, task.id, 'Green.');
+        await C.addComment(CM.manager, task.id, 'x'.repeat(1000));
+
+        for (const body of ['', '   ', 'x'.repeat(1001), 7, null, undefined]) {
+            await assert.rejects(C.addComment(CM.editor, task.id, body), { code: 'VALIDATION' }, JSON.stringify(body));
+        }
+        await assert.rejects(C.addComment(CM.viewer, task.id, 'hi'), { code: 'FORBIDDEN' }, 'a viewer reads but does not write');
+        await assert.rejects(C.addComment(CM.stranger, task.id, 'hi'), { code: 'NOT_FOUND' });
+        await assert.rejects(C.listComments(CM.stranger, task.id), { code: 'NOT_FOUND' });
+        await assert.rejects(C.addComment(CM.owner, 99999999, 'hi'), { code: 'NOT_FOUND' });
+
+        const seen = await C.listComments(CM.viewer, task.id);
+        assert.deepEqual(seen.map((c) => c.body.slice(0, 13)), ['Which colour?', 'Green.', 'xxxxxxxxxxxxx'], 'oldest first');
+        assert.deepEqual(seen.map((c) => [c.author.name, c.author.isYou, c.canDelete]), [['cm_editor', false, false], ['cm_owner', false, false], ['cm_manager', false, false]]);
+        assert.deepEqual((await C.listComments(CM.manager, task.id)).map((c) => c.canDelete), [true, true, true], 'a manager may delete any');
+        assert.deepEqual((await C.listComments(CM.owner, task.id)).map((c) => c.canDelete), [true, true, true], 'so may the owner');
+        assert.deepEqual((await C.listComments(CM.editor, task.id)).map((c) => c.canDelete), [true, false, false], 'an editor only their own');
+        for (const id of Object.values(CM)) assert.equal(JSON.stringify(seen).includes(id), false, 'no Discord IDs');
+
+        // Every task read carries the count.
+        assert.equal((await db.tasks.getItems(CM.viewer, list.id)).find((i) => i.id === task.id).comment_count, 3);
+        assert.equal((await db.tasks.getItems(CM.owner, list.id)).find((i) => i.id === task.id).comment_count, 3);
+        assert.equal((await db.tasks.getItem(CM.editor, task.id)).comment_count, 3);
+        assert.equal((await db.tasks.updateItem(CM.editor, task.id, { description: 'white?' })).comment_count, 3);
+        assert.equal((await db.tasks.addItem(CM.editor, list.id, { name: 'no talk' })).item.comment_count, 0);
+        assert.ok(second.id > first.id);
+    });
+
+    await t.test('comments: the author or a manager deletes; strangers and unknown ids are not found', async () => {
+        const { task } = await commentFixture();
+        const C = db.comments;
+        const byEditor = await C.addComment(CM.editor, task.id, 'mine');
+        const byOwner = await C.addComment(CM.owner, task.id, 'the owner says');
+        await assert.rejects(C.deleteComment(CM.viewer, byEditor.id), { code: 'FORBIDDEN' });
+        await assert.rejects(C.deleteComment(CM.editor, byOwner.id), { code: 'FORBIDDEN', message: /your own comments/ });
+        await assert.rejects(C.deleteComment(CM.stranger, byEditor.id), { code: 'NOT_FOUND', message: 'Comment not found.' });
+        await assert.rejects(C.deleteComment(CM.owner, 99999999), { code: 'NOT_FOUND' });
+        await assert.rejects(C.deleteComment(CM.owner, 'abc'), { code: 'NOT_FOUND' });
+        assert.equal(await C.deleteComment(CM.editor, byEditor.id), true);
+        await assert.rejects(C.deleteComment(CM.editor, byEditor.id), { code: 'NOT_FOUND' }, 'already gone');
+        assert.equal(await C.deleteComment(CM.manager, byOwner.id), true, "a manager deletes the owner's");
+        // An author who was demoted to viewer can still take their own comment back.
+        const later = await C.addComment(CM.editor, task.id, 'second thoughts');
+        await db.query("UPDATE list_members SET role = 'viewer' WHERE discord_id = ?", [CM.editor]);
+        assert.equal((await C.listComments(CM.editor, task.id)).find((c) => c.id === later.id).canDelete, true);
+        assert.equal(await C.deleteComment(CM.editor, later.id), true);
+        await db.query("UPDATE list_members SET role = 'editor' WHERE discord_id = ?", [CM.editor]);
+    });
+
+    await t.test('comments: shared content survives a reset, a deleted author reads as nobody, the export holds my own, a deleted task takes them', async () => {
+        const { list, task } = await commentFixture();
+        const C = db.comments;
+        const kept = await C.addComment(CM.editor, task.id, 'before my reset');
+        await db.users.resetProgress(CM.editor);
+        const [still] = await db.query('SELECT body, author_id FROM item_comments WHERE id = ?', [kept.id]);
+        assert.deepEqual([still.body, still.author_id], ['before my reset', CM.editor], 'a reset keeps comments: they belong to the quest');
+
+        await cmMember(list.id, CM.gone, 'editor');
+        const orphan = await C.addComment(CM.gone, task.id, 'I will delete my account');
+        await db.query('DELETE FROM users WHERE discord_id = ?', [CM.gone]);
+        const read = (await C.listComments(CM.manager, task.id)).find((c) => c.id === orphan.id);
+        assert.deepEqual([read.author, read.canDelete], [{ name: null, isYou: false }, true]);
+        assert.equal((await C.listComments(CM.viewer, task.id)).find((c) => c.id === orphan.id).canDelete, false);
+
+        // The export: my own comments wherever I wrote them (with the quest and task), nobody else's; an import ignores them.
+        await cmMember(list.id, CM.stranger, 'editor');
+        await C.addComment(CM.stranger, task.id, 'from a member');
+        const mine = await db.transfer.exportAll(CM.stranger);
+        assert.deepEqual(mine.lists, [], 'the quest is not theirs');
+        assert.deepEqual(mine.comments.map((c) => [c.list, c.task, c.body]), [['Talked about', 'Paint the fence', 'from a member']]);
+        assert.ok(mine.comments[0].createdAt instanceof Date);
+        const owners = await db.transfer.exportAll(CM.owner);
+        assert.equal(owners.comments.some((c) => c.body === 'from a member'), false);
+        assert.ok(owners.lists.some((l) => l.name === 'Talked about'));
+        await db.transfer.importAll(CM.stranger, JSON.parse(JSON.stringify({ ...mine, lists: [{ name: 'Re-imported', items: [{ name: 'x' }] }] })));
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM item_comments WHERE author_id = ?', [CM.stranger]))[0].n), 1, 'an import writes no comments');
+
+        // At most 200, the newest, oldest first.
+        const busy = (await db.tasks.addItem(CM.owner, list.id, { name: 'Busy thread' })).item;
+        await db.query("INSERT INTO item_comments (item_id, author_id, body, created_at) SELECT ?, ?, 'c' || g, CURRENT_TIMESTAMP - make_interval(mins => 300 - g) FROM generate_series(1, 205) AS g", [busy.id, CM.owner]);
+        const page = await C.listComments(CM.owner, busy.id);
+        assert.equal(page.length, 200);
+        assert.deepEqual([page[0].body, page[199].body], ['c6', 'c205']);
+        assert.equal((await db.tasks.getItem(CM.owner, busy.id)).comment_count, 205, 'the count is the real number');
+        await db.tasks.deleteItem(CM.owner, busy.id);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM item_comments WHERE item_id = ?', [busy.id]))[0].n), 0, 'they go with the task');
+
+        // The database keeps the length rule as well.
+        for (const body of ['', 'x'.repeat(1001)]) {
+            await assert.rejects(db.query('INSERT INTO item_comments (item_id, author_id, body) VALUES (?, ?, ?)', [task.id, CM.owner, body]), String(body.length));
+        }
     });
 
     await db.closePool();

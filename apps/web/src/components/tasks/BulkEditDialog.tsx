@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { bulkPatch, EMPTY_BULK_EDIT, type BulkEditValues } from "@/lib/bulkEdit";
+import { bulkPatch, bulkTagProblem, EMPTY_BULK_EDIT, type BulkEditValues } from "@/lib/bulkEdit";
 
 interface Props {
   open: boolean;
@@ -15,10 +15,11 @@ interface Props {
 
 const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
-/** Change the priority and due date of the selected tasks together. */
+/** Change the priority, due date and tags of the selected tasks together. */
 export const BulkEditDialog = ({ open, onOpenChange, count, pending, onApply }: Props) => {
   const [values, setValues] = useState<BulkEditValues>(EMPTY_BULK_EDIT);
   const valid = bulkPatch(values) !== null;
+  const tagProblem = values.tags.trim() || values.tagMode === "add" || values.tagMode === "remove" ? bulkTagProblem(values) : null;
   const set = (patch: Partial<BulkEditValues>) => setValues((v) => ({ ...v, ...patch }));
 
   // Every way of closing (Cancel, Apply, Escape) must leave the next opening blank.
@@ -58,6 +59,30 @@ export const BulkEditDialog = ({ open, onOpenChange, count, pending, onApply }: 
               <option value="clear">Remove the date</option>
             </select>
             {values.dueMode === "set" && <Input aria-label="New due date" type="date" value={values.dueDate} onChange={(e) => set({ dueDate: e.target.value })} />}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="bulk-tag-mode" className="text-sm font-medium">Tags</label>
+            <select id="bulk-tag-mode" className={selectClass} value={values.tagMode} onChange={(e) => set({ tagMode: e.target.value as BulkEditValues["tagMode"] })}>
+              <option value="keep">Keep as they are</option>
+              <option value="add">Add tags</option>
+              <option value="remove">Remove tags</option>
+              <option value="replace">Replace all tags</option>
+            </select>
+            {values.tagMode !== "keep" && (
+              <>
+                <Input
+                  aria-label={values.tagMode === "remove" ? "Tags to remove" : values.tagMode === "add" ? "Tags to add" : "New tags"}
+                  aria-invalid={tagProblem ? true : undefined}
+                  aria-describedby="bulk-tag-help"
+                  placeholder={values.tagMode === "replace" ? "Leave empty to remove all tags" : "work, errands"}
+                  value={values.tags}
+                  onChange={(e) => set({ tags: e.target.value })}
+                />
+                <p id="bulk-tag-help" className={tagProblem ? "text-xs text-destructive-text" : "text-xs text-foreground-muted"}>
+                  {tagProblem ?? "Separate tags with commas or spaces. A task keeps at most 5 tags."}
+                </p>
+              </>
+            )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

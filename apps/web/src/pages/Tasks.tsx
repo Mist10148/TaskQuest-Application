@@ -22,7 +22,8 @@ import { ConfirmDeleteDialog } from "@/components/tasks/ConfirmDeleteDialog";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { TemplatesDialog } from "@/components/tasks/TemplatesDialog";
 import { SaveTemplateDialog } from "@/components/tasks/SaveTemplateDialog";
-import { bulkPatch, type BulkEditValues } from "@/lib/bulkEdit";
+import { bulkPatch, tooManyTags, type BulkEditValues } from "@/lib/bulkEdit";
+import { MAX_TAGS, parseTags } from "@/lib/tags";
 import { saveTemplateProblem } from "@/lib/templates";
 import { MembersDialog } from "@/components/tasks/MembersDialog";
 import { canEditTasks, isAccessLost, roleOf } from "@/lib/sharing";
@@ -217,10 +218,18 @@ const Tasks = () => {
 
   // One update per task (the same endpoint as the edit form), one toast at the end.
   const editItems = async (ids: number[], values: BulkEditValues) => {
-    const data = bulkPatch(values);
-    if (!data) return;
+    if (!bulkPatch(values)) return;
     let done = 0;
+    let tooMany = 0;
     for (const id of ids) {
+      // Adding or removing tags depends on each task's own tags, so every task gets its own patch.
+      const current = parseTags(selectedList?.items.find((i: Item) => i.id === id)?.tags);
+      if (tooManyTags(values, current)) {
+        tooMany += 1;
+        continue;
+      }
+      const data = bulkPatch(values, current);
+      if (!data) continue; // nothing would change for this task
       try {
         await updateItem.mutateAsync({ itemId: id, data });
         done += 1;
@@ -229,6 +238,7 @@ const Tasks = () => {
       }
     }
     if (done > 0) toast.success(`✏️ ${done} ${done === 1 ? "task" : "tasks"} updated${done < ids.length ? ` (${ids.length - done} not changed)` : ""}`);
+    if (tooMany > 0) toast.warning(`${tooMany} ${tooMany === 1 ? "task was" : "tasks were"} skipped: a task can have at most ${MAX_TAGS} tags.`);
     refetchList();
   };
 

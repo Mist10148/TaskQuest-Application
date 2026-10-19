@@ -126,7 +126,7 @@ Surfaces: web (Members dialog, invitation banner, read-only view for viewers), b
 
 ### Parties (minimal)
 
-Built on the same invitation rules: `parties`, `party_members` (UNIQUE per user: one party each, up to 6), `party_invites`. The weekly **party quest** is 12 first completions per member over the global UTC ISO week, summed over the members, with +60 XP claimable once per person per week (`quest_claims` key `PARTY_<id>`, and one party reward per person per week across parties). It is not in `QUESTS` because its target depends on the member count. See [GAMEPLAY](../GAMEPLAY.md#5h-parties) and [API.md](../API.md#parties).
+Built on the same invitation rules: `parties`, `party_members` (UNIQUE per user: one party each, up to 6), `party_invites`. The weekly **party quest** is 12 first completions per member over the global UTC ISO week, summed over the members, with +60 XP claimable once per person per week (`quest_claims` key `PARTY_<id>`, and one party reward per person per week across parties). It is not in `QUESTS` because its target depends on the member count. See [GAMEPLAY](../GAMEPLAY.md#5i-parties) and [API.md](../API.md#parties).
 
 ### Still open for a human
 

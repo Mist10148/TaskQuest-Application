@@ -263,10 +263,10 @@ The LangChain/LangGraph internals (RAG pipeline, graphs, checkpointer, persona, 
 | Services | `packages/shared/test/db.integration.test.js`: ownership, farming, races, escrow, refunds, caps | Yes |
 | HTTP | `apps/server/test/api.integration.test.js`: headers, auth, CSRF, validation, IDOR, games, privacy | Yes |
 | Bot | `apps/bot/test/flows.integration.test.js`: every command flow with fake interactions | Yes |
-| Docs | `packages/shared/test/docs.test.js`: the tables in `docs/GAMEPLAY.md` against `constants.js` | No |
-| Web | `tsc` + ESLint + `vite build`, Vitest unit tests for pure logic (`apps/web/src/lib/*.test.ts`, incl. theme contrast) | No |
+| Docs | `packages/shared/test/docs.test.js`: the tables in `docs/GAMEPLAY.md` against `constants.js`, the class and skill description texts against `CLASS_RULES` and the skill tables, and the build tables in `docs/CLASS_GUIDE.md` against the balance simulator | No |
+| Web | `tsc` + ESLint + `vite build`, Vitest unit tests for pure logic (`apps/web/src/lib/*.test.ts`, incl. theme contrast) and component tests with Testing Library in jsdom (`*.test.tsx` next to the components and pages) | No |
 | Browser | `apps/web/e2e` (Playwright): the main flows against the built app, a real API and a seeded database; `npm run test:e2e` and its own CI job | Yes |
 | AI client, internal token, AI schemas | `apps/server/test/ai.test.js` against a stub AI service | No |
-| AI service | `apps/ai/tests`: chunking, vector store, indexer, summarizer, prioritizer paths, chat graph (routing, tools, confirmation, memory), checkpointer, red-team prompts. Offline, with fake models and in-memory SQLite. | No |
+| AI service | `apps/ai/tests`: chunking, vector store, indexer, summarizer, prioritizer paths, chat graph (routing, tools, confirmation, memory), checkpointer, red-team prompts. Offline, with fake models and temporary SQLite files; `apps/ai/tests/postgres` runs the SQL on a migrated PostgreSQL (`AI_TEST_DB_URL`, the `ai-postgres` CI job). | No (Yes for `tests/postgres`) |
 
 Integration tests are skipped unless `TEST_DB_NAME` points at a throwaway database. CI provides a Postgres service (`pgvector/pgvector:pg16`). See [CONTRIBUTING.md](../CONTRIBUTING.md#testing).

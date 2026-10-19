@@ -6,6 +6,8 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Upgrade notes
 
+> **Migration numbers in this section.** Entries below that name a migration from `004` up to `026` (for example `018`, `021`, `024`) refer to the pre-squash MySQL migration names. Those migrations are folded into `001_baseline`; only `001_baseline`, `002_drop_skill_points` and `003_ai_prioritize_cache` exist in `packages/shared/src/db/migrations`.
+
 - **The database is now PostgreSQL (Supabase), and it starts empty.** MySQL, MariaDB and TiDB are no longer supported, and nothing is copied from the old database: players link again on their first command or web login. Create a Supabase project, set `DB_URL` to its **Session pooler** URL (port 5432) with `DB_SSL=true`, and deploy; the single migration `001_baseline` runs on start. Follow [MIGRATION_POSTGRES.md](docs/MIGRATION_POSTGRES.md) for the runbook and rollback. Do not deploy this release against the old MySQL database: it can no longer talk to it.
 - **Two new migrations run on start** (`002_drop_skill_points`, `003_ai_prioritize_cache`). `002` drops a column the previous version still reads, so rolling back to the previous version after it ran is not supported; take a backup first if that matters (see OPERATIONS).
 - **The AI service has a new dependency, `tzdata`** (`pip install -e .` in `apps/ai`), and its daily quota now follows each user's own day. Run `python -m app.preflight` before enabling AI on a new environment.

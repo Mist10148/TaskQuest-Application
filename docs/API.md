@@ -153,7 +153,7 @@ All routes are 🔒. A user is in at most one party (up to 6 people, the owner i
 | POST | `/api/parties/claim` | — | `{success:true, weekStart, xp, balance, level, leveledUp, newAchievements}`. Flat +60 XP, once per person per week; `400` while the quest is unfinished or you have not finished at least `minToClaim` (6) tasks yourself since joining, `409` if you already claimed a party reward this week, `403` when XP is off. |
 | POST 🔒 | `/api/parties/focus/claim` | — | Claim the party focus quest reward: `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. +40 XP once a week; `400` until the party has focused its target minutes or when you have under 20 focus minutes of your own; `409` once claimed; `403` when XP is off; `404` without a party. |
 
-The party quest is described in [GAMEPLAY](GAMEPLAY.md#5h-parties).
+The party quest is described in [GAMEPLAY](GAMEPLAY.md#5i-parties).
 
 ## Templates
 

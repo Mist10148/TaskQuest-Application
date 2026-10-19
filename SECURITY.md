@@ -69,7 +69,7 @@ This monorepo was created **without importing either history**, and `.gitignore`
 | Unvalidated input: empty PATCH produced `SET WHERE`, impossible dates, oversized names, `__proto__` class keys | zod `.strict()` schemas + service validation + `Object.hasOwn` look-ups |
 | `/api/health` leaked database error messages | Generic `503` |
 | Leaderboard exposed Discord IDs | Server-built avatar URL, no IDs |
-| In-memory session store (sessions lost on restart, memory growth) | MySQL session store (`web_sessions`) |
+| In-memory session store (sessions lost on restart, memory growth) | Database-backed session store in PostgreSQL (`web_sessions`, `apps/server/lib/sessionStore.js`) |
 | Logout didn't clear the cookie; OAuth errors redirected to the API host | Cookie cleared; errors redirect to `PUBLIC_URL/?error=…` |
 | `DB_URL` ignored TLS settings; `DB_SSL_REJECT_UNAUTHORIZED=false` in examples | TLS applies to `DB_URL`; verification on by default with a warning when off |
 | `LIKE` wildcards in search not escaped | `escapeLike` with `ESCAPE '\\'` |
@@ -84,9 +84,9 @@ This monorepo was created **without importing either history**, and `.gitignore`
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| **Arcade games run in the browser.** A scripted client can submit plausible fake scores. | At most 100–150 XP per run, and at most 500 XP per day across all free games. | Server-issued runs, plausibility rate check, caps. See the roadmap in [docs/PRD.md](docs/PRD.md#11-roadmap). |
+| **Arcade games run in the browser.** A script that solves a game offline can still submit a valid run. | At most 100–150 XP per run, and at most 500 XP per day across all free games; arcade XP does not count on the public weekly board. | Server-issued seeded runs; the server replays the recorded inputs and pays on the replayed score (edited, fabricated, accelerated or impossible runs are rejected); runs under 5 seconds pay nothing; caps. See [docs/design/arcade-anti-cheat.md](docs/design/arcade-anti-cheat.md). |
 | **Public `/list` messages.** Anyone in the channel sees your list names and tasks (by design: lists are shared in-channel). | Information visible to channel members | Use `/list` in DMs or a private channel for private lists. Mutations are limited to the owner and members with a role, and a click on someone else's message is refused. |
-| **Invitation spam and name enumeration.** Anyone can try to invite a name, and a `404` tells them the name has not used TaskQuest. | `POST /api/lists/:id/invites`, `POST /api/parties/invites`, `/share`, `/party invite` | Rate limit on the endpoint, 30 invitations a day per person, 7-day expiry, the invitee must accept. People can switch invitations off (`users.accept_invites`, Settings), and the inviter cannot tell that from a name nobody uses; see the known residual risks below. |
+| **Invitation spam and name enumeration.** Anyone can try to invite a name; the call answers the same neutral message whether or not an invitation went out, so it does not reveal whether the name has used TaskQuest. | `POST /api/lists/:id/invites`, `POST /api/parties/invites`, `/share`, `/party invite` | Rate limit on the endpoint, 30 invitations a day per person, 7-day expiry, the invitee must accept. People can switch invitations off (`users.accept_invites`, Settings), and the inviter cannot tell that from a name nobody uses; see the known residual risks below. |
 | **Single shared database user** for both apps | A compromise of either app reaches all data | Use `MIGRATE_ON_START=false` with a DML-only user, and restrict network access to the DB. |
 
 ### Known residual risks

@@ -48,4 +48,25 @@ describe("CommandPalette task search", () => {
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/tasks?list=42"));
     expect(searchTasks).toHaveBeenCalledWith("rent");
   });
+
+  it("says it is searching instead of 'no match' while task results are on their way", async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    searchTasks.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    const input = await open();
+    await userEvent.type(input, "zzzz");
+    expect(screen.getByRole("status")).toHaveTextContent("Searching tasks…");
+    await act(async () => answer({ lists: [], tasks: [] }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("No matching command."));
+  });
+
+  it("opens blank again after Ctrl+K closed it", async () => {
+    searchTasks.mockResolvedValue({ lists: [], tasks: [] });
+    const input = await open();
+    await userEvent.type(input, "set");
+    await userEvent.keyboard("{Control>}k{/Control}");
+    await waitFor(() => expect(screen.queryByRole("combobox")).not.toBeInTheDocument());
+    act(() => { window.dispatchEvent(new Event(OPEN_PALETTE_EVENT)); });
+    expect(await screen.findByRole("combobox", { name: "Search commands" })).toHaveValue("");
+  });
 });
+

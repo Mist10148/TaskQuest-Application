@@ -43,6 +43,13 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
 
   const close = () => setOpen(false);
 
+  // However it closes (Escape, a click outside, Ctrl+K, choosing an entry), it opens blank next time.
+  useEffect(() => {
+    if (open) return;
+    setQuery("");
+    setActive(0);
+  }, [open]);
+
   const entries = useMemo<Entry[]>(() => {
     const pages = aiEnabled ? [...NAV_ITEMS.slice(0, 2), AI_NAV_ITEM, ...NAV_ITEMS.slice(2)] : NAV_ITEMS;
     const go = (path: string) => () => navigate(path);
@@ -72,6 +79,8 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
   );
   const results = useMemo(() => [...filterCommands(entries, query), ...taskEntries], [entries, query, taskEntries]);
   const activeIndex = Math.min(active, Math.max(0, results.length - 1));
+  // Task hits arrive after the debounce and the request: until then "no match" would be a false answer.
+  const searching = searchableQuery(query) !== null && (debouncedQuery !== query || taskQuery.isFetching);
 
   const choose = (entry: Entry | undefined) => {
     if (!entry) return;
@@ -87,7 +96,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setQuery(""); setActive(0); } }}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="top-[20%] translate-y-0 gap-0 p-0 sm:max-w-lg" onKeyDown={onKeyDown}>
         <DialogTitle className="sr-only">Command palette</DialogTitle>
         <DialogDescription className="sr-only">Type to search pages, actions and tasks, use the arrow keys and Enter to choose.</DialogDescription>
@@ -107,7 +116,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
           />
         </div>
         <ul id="palette-list" role="listbox" aria-label="Commands" className="max-h-80 overflow-y-auto p-2">
-          {results.length === 0 && <li className="px-3 py-6 text-center text-sm text-foreground-muted" role="status">No matching command.</li>}
+          {results.length === 0 && <li className="px-3 py-6 text-center text-sm text-foreground-muted" role="status">{searching ? "Searching tasks…" : "No matching command."}</li>}
           {results.map((r, i) => {
             const Icon = r.icon;
             const showGroup = i === 0 || results[i - 1].group !== r.group;

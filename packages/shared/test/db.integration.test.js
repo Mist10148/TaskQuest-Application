@@ -4233,6 +4233,35 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual(await memberItems(O), []);
     });
 
+    await t.test('import links subtasks whatever the row order, and refuses duplicate ids, self-parents and grandchildren', async () => {
+        const U = '100000000000000657';
+        await db.users.ensureUser(U);
+        let n = 0;
+        const imported = async (items) => {
+            const name = `order ${++n}`;
+            const r = await db.transfer.importAll(U, { lists: [{ name, items }] });
+            const rows = await db.query('SELECT i.id, i.name, i.parent_id FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ? AND l.name = ? ORDER BY i.position', [U, name]);
+            const byId = new Map(rows.map((x) => [x.id, x.name]));
+            return { r, links: Object.fromEntries(rows.map((x) => [x.name, x.parent_id === null ? null : byId.get(x.parent_id)])) };
+        };
+        const childFirst = await imported([{ id: 2, name: 'child', parent_id: 1 }, { id: 1, name: 'parent' }]);
+        assert.deepEqual(childFirst.links, { parent: null, child: 'parent' }, 'a subtask listed before its parent still belongs to it');
+        assert.equal(childFirst.r.orphanedSubtasks, undefined);
+        const orphan = await imported([{ id: 1, name: 'lonely', parent_id: 99 }, { name: 'plain' }]);
+        assert.deepEqual(orphan.links, { lonely: null, plain: null });
+        assert.equal(orphan.r.orphanedSubtasks, 1, 'a parent that is not in the file is reported');
+
+        const listsBefore = (await db.tasks.getLists(U)).length;
+        const refused = (items, pattern) => assert.rejects(db.transfer.importAll(U, { lists: [{ name: 'bad', items }] }), (err) => err.code === 'VALIDATION' && pattern.test(err.message));
+        await refused([{ id: 1, name: 'a' }, { id: 1, name: 'b' }], /items\[1\]: the id "1" is used by more than one task/);
+        await refused([{ id: 1, name: 'a' }, { id: '1', name: 'b' }], /more than one task/);
+        await refused([{ id: 1, name: 'a', parent_id: 1 }], /own subtask/);
+        // A subtask of a subtask is refused in every order, not only when the middle task happens to come first.
+        const chain = [{ id: 1, name: 'a' }, { id: 2, name: 'b', parent_id: 1 }, { id: 3, name: 'c', parent_id: 2 }];
+        for (const order of [[0, 1, 2], [0, 2, 1], [2, 1, 0], [1, 2, 0], [2, 0, 1]]) await refused(order.map((i) => chain[i]), /one level deep/);
+        assert.equal((await db.tasks.getLists(U)).length, listsBefore, 'a refused import writes nothing');
+    });
+
     await t.test('reordering a long list writes every position in a few statements and leaves unmoved rows alone', async () => {
         const U = '100000000000000662';
         await db.users.ensureUser(U);

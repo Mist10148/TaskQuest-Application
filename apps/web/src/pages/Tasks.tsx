@@ -280,6 +280,7 @@ const Tasks = () => {
           }}
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
+          onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
           onEditItem={openItemEditor}
           hiddenIds={itemDeletes.hidden}
           onDeleteItem={(id) => deleteItems([id])}

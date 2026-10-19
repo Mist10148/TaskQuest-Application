@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
 import { motion } from "framer-motion";
-import type { Item, ListWithItems } from "@/lib/api";
+import type { Item, ListWithItems, Priority } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { SummarizeButton } from "@/components/ai/SummarizeButton";
 import { formatDeadline } from "@/lib/dates";
@@ -38,6 +38,8 @@ interface Props {
   onDeleteList: () => void;
   onToggleItem: (itemId: number) => void;
   onEditItem: (itemId: number) => void;
+  /** Set one task's priority (moving a card between the board's columns). */
+  onSetPriority: (itemId: number, priority: Priority | null) => void;
   onDeleteItem: (itemId: number) => void;
   onBulkComplete: (itemIds: number[]) => Promise<unknown>;
   onBulkDelete: (itemIds: number[]) => void;
@@ -54,7 +56,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
+export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -302,7 +304,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           <p>{editable ? "No tasks yet. Type one above or press Add Task." : "No tasks yet."}</p>
         </div>
       ) : view === "board" ? (
-        <TaskBoard items={items} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} />
+        <TaskBoard items={items} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onSetPriority={onSetPriority} />
       ) : view === "calendar" ? (
         <TaskCalendar items={items} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} />
       ) : (

@@ -114,3 +114,12 @@ export function calendarKeyTarget(date: string, key: string): string | null {
     default: return null;
   }
 }
+
+/** The priority a task gets when it is moved to a board column ("No priority" clears it). */
+export const columnPriority = (key: BoardColumn["key"]): Priority | null => (key === "NONE" ? null : key);
+
+/**
+ * Whether a task may be moved to a column. "No priority" is closed while the quest has a priority of its own: a task
+ * without one shows under the quest's priority, so it would bounce straight back.
+ */
+export const canMoveToColumn = (key: BoardColumn["key"], listPriority?: Priority | null): boolean => key !== "NONE" || !listPriority;

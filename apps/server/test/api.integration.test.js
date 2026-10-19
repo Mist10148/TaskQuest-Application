@@ -1095,6 +1095,55 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('POST', '/api/lists', { body: { name: 'x', description: 'y'.repeat(20_000) } })).status, 413);
     });
 
+
+    await t.test('moving a task to another quest: body, shape, roles and strangers', async () => {
+        const ids = { own: '200000000000001701', ed: '200000000000001702', st: '200000000000001703' };
+        const cookies = {};
+        for (const [k, id] of Object.entries(ids)) {
+            cookies[k] = await login(db, id);
+            await db.users.ensureUser(id, { username: `move_${k}`, handle: `move_${k}`, avatar: null });
+        }
+        const J = async (method, path, who, body) => {
+            const res = await call(method, path, { cookie: cookies[who], body });
+            const text = await res.text();
+            return { status: res.status, text, body: text ? JSON.parse(text) : null };
+        };
+        const from = (await J('POST', '/api/lists', 'own', { name: 'Move from' })).body;
+        const to = (await J('POST', '/api/lists', 'own', { name: 'Move to' })).body;
+        const task = (await J('POST', `/api/lists/${from.id}/items`, 'own', { name: 'Pack boxes' })).body;
+        const sub = (await J('POST', `/api/lists/${from.id}/items`, 'own', { name: 'Tape', parent_id: task.id })).body;
+
+        for (const body of [{}, { listId: String(to.id) }, { listId: 0 }, { listId: to.id, position: 1 }]) {
+            assert.equal((await J('POST', `/api/items/${task.id}/move`, 'own', body)).status, 400, JSON.stringify(body));
+        }
+        assert.equal((await call('POST', `/api/items/${task.id}/move`, { body: { listId: to.id } })).status, 401);
+        assert.equal((await call('POST', `/api/items/${task.id}/move`, { cookie: cookies.own, body: { listId: to.id }, origin: 'https://evil.example' })).status, 403);
+        const subMove = await J('POST', `/api/items/${sub.id}/move`, 'own', { listId: to.id });
+        assert.deepEqual([subMove.status, subMove.body.code, subMove.body.error], [400, 'VALIDATION', 'Move the parent task; its subtasks go with it.']);
+        assert.equal((await J('POST', `/api/items/${task.id}/move`, 'own', { listId: from.id })).status, 400, 'already there');
+        assert.equal((await J('POST', `/api/items/${task.id}/move`, 'st', { listId: to.id })).status, 404, 'a stranger');
+        const theirs = (await J('POST', '/api/lists', 'st', { name: 'Elsewhere' })).body;
+        assert.equal((await J('POST', `/api/items/${task.id}/move`, 'own', { listId: theirs.id })).status, 404, "a quest that is not mine");
+
+        const moved = await J('POST', `/api/items/${task.id}/move`, 'own', { listId: to.id });
+        assert.equal(moved.status, 200, moved.text);
+        assert.deepEqual(Object.keys(moved.body).sort(), ['item', 'moved']);
+        assert.equal(moved.body.moved, 2);
+        const listed = (await J('GET', `/api/lists/${to.id}`, 'own')).body.items.find((i) => i.id === task.id);
+        assert.deepEqual(moved.body.item, listed, 'the item exactly as the list view has it');
+        assert.equal((await J('GET', `/api/lists/${from.id}`, 'own')).body.items.length, 0);
+
+        // A member: an editor may move only what they added; nothing in the answer carries a Discord ID.
+        for (const listId of [to.id, from.id]) {
+            await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, ids.ed, 'editor', crypto.randomBytes(6).toString('hex')]);
+        }
+        assert.equal((await J('POST', `/api/items/${task.id}/move`, 'ed', { listId: from.id })).status, 403);
+        const mine = (await J('POST', `/api/lists/${to.id}/items`, 'ed', { name: 'Mine' })).body;
+        const back = await J('POST', `/api/items/${mine.id}/move`, 'ed', { listId: from.id });
+        assert.equal(back.status, 200, back.text);
+        for (const id of Object.values(ids)) assert.equal(back.text.includes(id), false, 'no Discord ID in the answer');
+    });
+
     // Last on purpose: it uses up the per-address invite budget.
     await t.test('invite lookups are limited per address as well as per account', async () => {
         // Each account makes a single call (far below its own limit of 30), so only the address limit can answer 429.

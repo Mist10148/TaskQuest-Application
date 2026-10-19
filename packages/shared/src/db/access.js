@@ -13,7 +13,8 @@
  *
  * Lock order (the same everywhere, or two requests deadlock): user row, then the LIST row, then the item rows. forItem therefore
  * finds the item's list without a lock, locks that list first and only then the item, the same order the list-wide writers
- * (reorder, move, clean-up) use.
+ * (reorder, move, clean-up) use. A task can move to another list (tasks.moveItemToList, which holds both list locks), so forItem
+ * checks again under the list lock that the task is still on that list.
  */
 
 'use strict';
@@ -67,6 +68,24 @@ async function forList(conn, discordId, listId, min = 'viewer', { lock = false }
 }
 
 /**
+ * Lock the list a task is on, before the task itself (see the lock order above). The list id is read without a lock, so a move that
+ * commits while this waits for the list leaves the task on another list: read again under the lock and follow it once. Moving a
+ * task needs its list's lock, so once the id read under a list lock matches that list, it cannot change until this transaction
+ * ends. A vanished task returns quietly and the caller's query finds nothing (NOT_FOUND).
+ */
+async function lockItemList(conn, itemId) {
+    let locked = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const [[peek]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [itemId]);
+        if (!peek || peek.list_id === locked) return;
+        await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [peek.list_id]);
+        locked = peek.list_id;
+    }
+    const [[now]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [itemId]);
+    if (now && now.list_id !== locked) throw errors.conflict('This task was just moved to another quest. Try again.');
+}
+
+/**
  * Load a task (with its list's name, priority and owner) the user may use at `min` role or better.
  * @returns {Promise<{ item: object, role: string, isOwner: boolean }>}
  */
@@ -75,11 +94,7 @@ async function forItem(conn, discordId, itemId, min = 'viewer', { lock = false }
     const id = v.id(itemId);
     if (!id.ok) throw errors.notFound('Task not found.');
     const me = String(discordId);
-    if (lock) {
-        // An item never changes list, so reading its list id without a lock is safe; a vanished item falls through to NOT_FOUND below.
-        const [[peek]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [id.value]);
-        if (peek) await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [peek.list_id]);
-    }
+    if (lock) await lockItemList(conn, id.value);
     const [[row]] = await conn.query(
         `SELECT i.*, l.name AS list_name, l.priority AS list_priority, l.discord_id AS owner_id, m.role AS member_role
          FROM items i JOIN lists l ON l.id = i.list_id

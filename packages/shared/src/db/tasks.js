@@ -329,12 +329,21 @@ async function search(discordId, query, { scope = 'lists' } = {}) {
 
 /** Items of an owned list, or null if the list isn't the user's. */
 async function getItems(discordId, listId, { sortBy = 'position', order = 'ASC' } = {}) {
+    return listItems(discordId, listId, { sortBy, order });
+}
+
+/** getItems, or with `itemId` just that one task of the list (in the same shape), or null. */
+async function listItems(discordId, listId, { sortBy = 'position', order = 'ASC', itemId = null } = {}) {
     const list = await getList(discordId, listId);
     if (!list) return null;
     // On a shared list each task also says who finished it (a display name, never an ID).
     const names = list.shared ? ', cu.discord_username AS completed_by_name' : '';
     const join = list.shared ? 'LEFT JOIN users cu ON cu.discord_id = i.completed_by' : '';
-    const rows = await run(`SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ? ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`, [list.id]);
+    const one = itemId === null ? '' : ' AND i.id = ?';
+    const rows = await run(
+        `SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ?${one} ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`,
+        itemId === null ? [list.id] : [list.id, itemId]
+    );
     // can_delete tells the UI which delete buttons to offer (the server decides again on every delete).
     return rows.map((row) => ({ ...shapeItem({ ...row, can_delete: mayDelete(list.role, row, discordId) }, list.is_owner), ...(list.is_owner ? { can_delete: true } : {}) }));
 }
@@ -592,6 +601,96 @@ async function deleteItem(discordId, itemId) {
         await conn.query('DELETE FROM items WHERE id = ?', [id]);
     });
     return true;
+}
+
+/**
+ * The lists.cleared_by mark of a list that took in an already finished task by a move. Such a list never pays the list-cleared bonus
+ * (completionContext sees cleared_at), and the mark is nobody's Discord ID, so no quest counts it as a list someone cleared.
+ */
+const CLEARED_BY_MOVE = 'moved';
+
+/**
+ * Move a top-level task, with its subtasks, to the end of another list (keeping their order). Taking a task away from a list needs
+ * the same right as deleting it there (a manager, or the editor who added it and its subtasks, see mayDelete); the target needs
+ * editor. Completion, XP and who did what stay as they are. The target owner's task limit counts the moved rows when the owner
+ * changes. Reminder state follows the people: the target owner gets their own member state onto the rows (or none), the source
+ * owner keeps theirs as a member of the target, and anyone who is not on the target loses their per-task state.
+ * Lock order: both lists in ascending id order (two moves in opposite directions cannot deadlock), then the rows.
+ * @returns {Promise<{ item: object, moved: number, fromListId: number }>} the task as getItems shapes it, and how many rows moved
+ */
+async function moveItemToList(discordId, itemId, targetListId) {
+    const id = unwrap(v.id(itemId));
+    const targetId = unwrap(v.id(targetListId));
+    const me = String(discordId);
+    const result = await withTransaction(async (conn) => {
+        const [[peek]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [id]);
+        if (!peek) throw errors.notFound('Task not found.');
+        for (const lid of [...new Set([peek.list_id, targetId])].sort((a, b) => a - b)) {
+            await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [lid]);
+        }
+        const { item, role } = await access.forItem(conn, me, id, 'editor', { lock: true });
+        if (item.list_id !== peek.list_id) throw errors.conflict('This task was just moved to another quest. Try again.');
+        if (item.parent_id !== null) throw errors.validation('Move the parent task; its subtasks go with it.');
+        if (item.list_id === targetId) throw errors.validation('The task is already on that quest.');
+        if (!mayDelete(role, item, me)) throw errors.forbidden('Editors can only move tasks they added themselves and that nobody else finished. Ask a manager of this list.');
+        const { list: target } = await access.forList(conn, me, targetId, 'editor', { lock: true });
+
+        const [rows] = await conn.query('SELECT id, created_by FROM items WHERE id = ? OR parent_id = ? ORDER BY position, id FOR UPDATE', [id, id]);
+        if (!access.atLeast(role, 'manager') && rows.some((r) => r.id !== id && (r.created_by === null || String(r.created_by) !== me))) {
+            throw errors.forbidden('This task has subtasks added by other people, so only a manager of this list can move it.');
+        }
+        const ids = rows.map((r) => r.id);
+        const [[source]] = await conn.query('SELECT discord_id, name FROM lists WHERE id = ?', [item.list_id]);
+        const ownerChanges = String(source.discord_id) !== String(target.discord_id);
+        if (ownerChanges) {
+            const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [target.discord_id]);
+            if (Number(owned.n) + ids.length > LIMITS.MAX_ITEMS_PER_USER) {
+                throw errors.validation(`That quest's owner would go over the limit of ${LIMITS.MAX_ITEMS_PER_USER} tasks. Delete some first.`);
+            }
+        }
+
+        const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [targetId]);
+        await conn.query(
+            `UPDATE items SET list_id = ?, position = v.pos, updated_at = CURRENT_TIMESTAMP
+             FROM (VALUES ${ids.map(() => '(?::int, ?::int)').join(', ')}) AS v(id, pos)
+             WHERE items.id = v.id`,
+            [targetId, ...ids.flatMap((rowId, i) => [rowId, Number(pos.next) + i])]
+        );
+        await moveReminderState(conn, ids, { targetId, sourceOwner: String(source.discord_id), targetOwner: String(target.discord_id), ownerChanges });
+        // A finished task arriving does not get the target cleared for free: the clear bonus is for finishing a list's tasks there.
+        if (Number(item.completed)) {
+            await conn.query('UPDATE lists SET cleared_at = CURRENT_TIMESTAMP, cleared_by = ? WHERE id = ? AND cleared_at IS NULL', [CLEARED_BY_MOVE, targetId]);
+        }
+        return { moved: ids.length, fromListId: item.list_id };
+    });
+    const [item] = (await listItems(me, targetId, { itemId: id })) || [];
+    if (!item) throw errors.notFound('Task not found.');
+    return { item, ...result };
+}
+
+/**
+ * The per-person reminder state of moved rows (see moveItemToList). The owner's lives on the rows, a member's in item_reminders.
+ * When the owner changes, the source owner's state moves to their member rows (only if they are on the target), and the rows take
+ * the target owner's member state, or none. Then nobody who is not a member of the target keeps a row.
+ */
+async function moveReminderState(conn, ids, { targetId, sourceOwner, targetOwner, ownerChanges }) {
+    if (ownerChanges) {
+        await conn.query(
+            `INSERT INTO item_reminders (item_id, discord_id, reminded_at, remind_at)
+             SELECT id, ?, reminded_at, remind_at FROM items
+              WHERE id = ANY(?) AND (reminded_at IS NOT NULL OR remind_at IS NOT NULL)
+                AND EXISTS (SELECT 1 FROM list_members WHERE list_id = ? AND discord_id = ?)
+             ON CONFLICT (item_id, discord_id) DO UPDATE SET reminded_at = EXCLUDED.reminded_at, remind_at = EXCLUDED.remind_at`,
+            [sourceOwner, ids, targetId, sourceOwner]
+        );
+        await conn.query(
+            `UPDATE items SET reminded_at = r.reminded_at, remind_at = r.remind_at
+             FROM items i LEFT JOIN item_reminders r ON r.item_id = i.id AND r.discord_id = ?
+             WHERE items.id = i.id AND i.id = ANY(?)`,
+            [targetOwner, ids]
+        );
+    }
+    await conn.query('DELETE FROM item_reminders WHERE item_id = ANY(?) AND discord_id NOT IN (SELECT discord_id FROM list_members WHERE list_id = ?)', [ids, targetId]);
 }
 
 /**
@@ -1103,6 +1202,7 @@ module.exports = {
     addSubtasks,
     updateItem,
     deleteItem,
+    moveItemToList,
     setItemCompleted,
     swapItemPositions,
     moveItem,

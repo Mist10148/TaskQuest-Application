@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.SESSION_SECRET ||= 'x'.repeat(40);
-const { createItemBody, updateItemBody, reorderBody, focusStartBody, focusFinishBody, createTemplateBody, jsonImportBody } = await import('../lib/schemas.js');
+const { createItemBody, updateItemBody, reorderBody, focusStartBody, focusFinishBody, createTemplateBody, jsonImportBody, moveItemBody } = await import('../lib/schemas.js');
 const { default: shared } = await import('@taskquest/shared');
 
 test('createItemBody accepts the per-task fields and normalises empties to null', () => {
@@ -61,4 +61,11 @@ test('jsonImportBody checks the top level of an export and leaves the lists to p
     const max = shared.IMPORT_LIMITS.LISTS;
     assert.ok(jsonImportBody.parse({ lists: Array.from({ length: max }, () => ({})) }));
     assert.throws(() => jsonImportBody.parse({ lists: Array.from({ length: max + 1 }, () => ({})) }), 'more lists than an import may hold');
+});
+
+test('moveItemBody: one positive whole quest id, nothing else', () => {
+    assert.deepEqual(moveItemBody.parse({ listId: 7 }), { listId: 7 });
+    for (const body of [{}, { listId: '7' }, { listId: 0 }, { listId: -1 }, { listId: 1.5 }, { listId: null }, { listId: 7, position: 0 }, null]) {
+        assert.throws(() => moveItemBody.parse(body), JSON.stringify(body));
+    }
 });

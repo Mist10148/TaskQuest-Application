@@ -2882,6 +2882,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
                 setItemCompleted: [[f.a.id], 'rejects'],
                 swapItemPositions: [[f.a.id, f.b.id], 'rejects'],
                 moveItem: [[f.a.id, 0], 'rejects'],
+                moveItemToList: [[f.a.id, f.list.id], 'rejects'],
                 reorderItems: [[f.list.id, [f.b.id, f.a.id]], 'rejects'],
                 snoozeList: [[f.list.id, later], 'rejects'],
                 snoozeTask: [[f.b.id, later], 'rejects']
@@ -4336,6 +4337,177 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { sessionId } = await db.games.startArcade(U, 'dino');
         await assert.rejects(db.games.finishArcade(U, sessionId, { score: 0, ticks: 1, inputs: [] }, { type: 'snake' }), { code: 'NOT_FOUND' });
         assert.equal((await db.query('SELECT state FROM game_sessions WHERE id = ?', [sessionId]))[0].state, 'active');
+    });
+
+
+    // ─── Moving a task to another quest ───────────────────────────────────────────
+
+    const MV = { owner: '100000000000001701', editor: '100000000000001702', viewer: '100000000000001703', manager: '100000000000001704', other: '100000000000001705', stranger: '100000000000001706' };
+    const mvMember = (listId, userId, role) =>
+        db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, require('crypto').randomBytes(6).toString('hex')]);
+    const mvRows = (listId) => db.query('SELECT id, parent_id, position, completed FROM items WHERE list_id = ? ORDER BY position, id', [listId]);
+
+    await t.test('move: a task and its subtasks go to the end of another quest, in order, with completion and XP untouched', async () => {
+        const U = MV.owner;
+        for (const [name, id] of Object.entries(MV)) await db.users.ensureUser(id, { username: `mv_${name}`, handle: `mv_${name}`, avatar: null });
+        const from = (await db.tasks.createList(U, { name: 'Move from' })).list;
+        const to = (await db.tasks.createList(U, { name: 'Move to' })).list;
+        const first = (await db.tasks.addItem(U, from.id, { name: 'stays' })).item;
+        const task = (await db.tasks.addItem(U, from.id, { name: 'goes' })).item;
+        const subs = (await db.tasks.addSubtasks(U, task.id, ['step 1', 'step 2'])).items.map((r) => r.item);
+        await db.tasks.addItem(U, from.id, { name: 'stays too' });
+        const there = (await db.tasks.addItem(U, to.id, { name: 'already there' })).item;
+        await db.tasks.setItemCompleted(U, subs[0].id, true);
+        await db.tasks.moveItem(U, subs[1].id, 0); // the list order now differs from the id order: the move keeps the list order
+        const xpBefore = (await db.users.getUser(U)).player_xp;
+
+        const r = await db.tasks.moveItemToList(U, task.id, to.id);
+        assert.equal(r.moved, 3, 'the task and both subtasks');
+        assert.equal(r.fromListId, from.id);
+        assert.equal(r.item.id, task.id);
+        assert.equal(r.item.list_id, to.id);
+        assert.equal(r.item.can_delete, true, 'the same shape as the list view');
+        const target = await mvRows(to.id);
+        assert.deepEqual(target.map((x) => x.id), [there.id, subs[1].id, task.id, subs[0].id], 'after what was there, in their old order');
+        assert.deepEqual(target.map((x) => x.position), [0, 1, 2, 3]);
+        assert.equal(Number(target[3].completed), 1, 'a finished subtask stays finished');
+        assert.deepEqual((await mvRows(from.id)).map((x) => x.id).includes(first.id), true);
+        assert.equal((await mvRows(from.id)).length, 2);
+        assert.equal((await db.users.getUser(U)).player_xp, xpBefore, 'moving pays and takes no XP');
+        assert.equal((await db.tasks.getItem(U, subs[0].id)).parent_id, task.id, 'subtasks keep their parent');
+
+        await assert.rejects(db.tasks.moveItemToList(U, subs[0].id, from.id), { code: 'VALIDATION', message: 'Move the parent task; its subtasks go with it.' });
+        await assert.rejects(db.tasks.moveItemToList(U, task.id, to.id), { code: 'VALIDATION', message: /already on that quest/ });
+        await assert.rejects(db.tasks.moveItemToList(U, task.id, 99999999), { code: 'NOT_FOUND' });
+        await assert.rejects(db.tasks.moveItemToList(U, 99999999, to.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.tasks.moveItemToList(U, task.id, 'x'), { code: 'VALIDATION' });
+        // The access check follows the task to its new list, and moving back works the same way.
+        assert.equal((await db.access.forItem(db.getPool(), U, task.id)).item.list_name, 'Move to');
+        assert.equal((await db.tasks.moveItemToList(U, task.id, from.id)).moved, 3);
+    });
+
+    await t.test('move: a finished task does not pay a clear bonus on the target, and is not paid again there', async () => {
+        const U = MV.other;
+        const a = (await db.tasks.createList(U, { name: 'Clear source' })).list;
+        const done1 = (await db.tasks.addItem(U, a.id, { name: 'd1' })).item;
+        const done2 = (await db.tasks.addItem(U, a.id, { name: 'd2' })).item;
+        await db.tasks.addItem(U, a.id, { name: 'open' });
+        await db.tasks.setItemCompleted(U, done1.id, true);
+        await db.tasks.setItemCompleted(U, done2.id, true);
+        const b = (await db.tasks.createList(U, { name: 'Clear target' })).list;
+        const last = (await db.tasks.addItem(U, b.id, { name: 'last one' })).item;
+        await db.tasks.moveItemToList(U, done1.id, b.id);
+        await db.tasks.moveItemToList(U, done2.id, b.id);
+        const [mark] = await db.query('SELECT cleared_at, cleared_by FROM lists WHERE id = ?', [b.id]);
+        assert.ok(mark.cleared_at, 'the target counts as cleared already');
+        assert.equal(mark.cleared_by, 'moved', 'by nobody: no quest counts it');
+        const r = await db.tasks.setItemCompleted(U, last.id, true);
+        assert.ok(r.xp && r.xp.finalXP > 0, 'the open task itself still pays');
+        assert.equal(r.bonuses.some((x) => x.key === 'list_cleared'), false, 'three done tasks, but two were finished elsewhere');
+        await db.tasks.setItemCompleted(U, done1.id, false);
+        assert.equal((await db.tasks.setItemCompleted(U, done1.id, true)).xp, null, 'a moved task that was already paid is not paid again');
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'list_cleared'", [U]))[0].n), 0);
+        // An open task arriving leaves the target's clear state alone.
+        const c = (await db.tasks.createList(U, { name: 'Clear later' })).list;
+        const open = (await db.tasks.addItem(U, a.id, { name: 'open 2' })).item;
+        await db.tasks.moveItemToList(U, open.id, c.id);
+        assert.equal((await db.query('SELECT cleared_at FROM lists WHERE id = ?', [c.id]))[0].cleared_at, null);
+    });
+
+    await t.test("move: roles on both quests, subtasks by other people, strangers and the target owner's task limit", async () => {
+        const O = MV.owner;
+        const src = (await db.tasks.createList(O, { name: 'Shared source' })).list;
+        const dst = (await db.tasks.createList(MV.other, { name: 'Shared target' })).list;
+        const viewOnly = (await db.tasks.createList(MV.other, { name: 'View only target' })).list;
+        await mvMember(src.id, MV.editor, 'editor');
+        await mvMember(src.id, MV.viewer, 'viewer');
+        await mvMember(src.id, MV.manager, 'manager');
+        await mvMember(dst.id, MV.editor, 'editor');
+        await mvMember(dst.id, MV.manager, 'editor');
+        await mvMember(viewOnly.id, MV.editor, 'viewer');
+        const ownerTask = (await db.tasks.addItem(O, src.id, { name: 'owner task' })).item;
+        const editorTask = (await db.tasks.addItem(MV.editor, src.id, { name: 'editor task' })).item;
+        const mixed = (await db.tasks.addItem(MV.editor, src.id, { name: 'editor task with owner step' })).item;
+        await db.tasks.addSubtasks(O, mixed.id, ['owner step']);
+
+        await assert.rejects(db.tasks.moveItemToList(MV.stranger, ownerTask.id, dst.id), { code: 'NOT_FOUND' }, 'a stranger to the source');
+        await assert.rejects(db.tasks.moveItemToList(MV.viewer, ownerTask.id, dst.id), { code: 'FORBIDDEN' }, 'a viewer');
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, ownerTask.id, dst.id), { code: 'FORBIDDEN', message: /Editors can only move tasks they added/ });
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, mixed.id, dst.id), { code: 'FORBIDDEN', message: /subtasks added by other people/ });
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, editorTask.id, viewOnly.id), { code: 'FORBIDDEN' }, 'the target needs editor');
+        const strangerList = (await db.tasks.createList(MV.stranger, { name: 'Not yours' })).list;
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, editorTask.id, strangerList.id), { code: 'NOT_FOUND' }, 'a stranger to the target');
+        assert.equal((await db.tasks.getItem(O, editorTask.id)).list_id, src.id, 'nothing moved');
+
+        const r = await db.tasks.moveItemToList(MV.editor, editorTask.id, dst.id);
+        assert.equal(r.item.list_id, dst.id);
+        assert.equal(r.item.created_by, undefined, "no Discord IDs in a member's view");
+        assert.equal((await db.tasks.moveItemToList(MV.manager, ownerTask.id, dst.id)).moved, 1, "a manager moves anyone's task");
+
+        // The target owner's task limit counts the moved rows, because the owner changes.
+        const filler = (await db.tasks.createList(MV.other, { name: 'Filler' })).list;
+        const [{ n }] = await db.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [MV.other]);
+        await db.query("INSERT INTO items (list_id, name, position) SELECT ?, 'f' || g, g FROM generate_series(1, ?) AS g", [filler.id, 5000 - Number(n) - 1]);
+        await assert.rejects(db.tasks.moveItemToList(MV.manager, mixed.id, dst.id), { code: 'VALIDATION', message: /limit of 5000 tasks/ }, 'two rows do not fit');
+        const single = (await db.tasks.addItem(O, src.id, { name: 'fits' })).item;
+        await db.tasks.moveItemToList(MV.manager, single.id, dst.id);
+        // At the limit, a move between the owner's own quests adds nothing to their count.
+        assert.equal((await db.tasks.moveItemToList(MV.other, single.id, filler.id)).moved, 1);
+        await db.query('DELETE FROM lists WHERE id = ?', [filler.id]);
+    });
+
+    await t.test('move: reminder state follows the people, and forItem follows a task that moved while it waited for the lock', async () => {
+        const O = MV.owner;
+        const src = (await db.tasks.createList(O, { name: 'Remind source' })).list;
+        const dst = (await db.tasks.createList(MV.other, { name: 'Remind target' })).list;
+        await mvMember(src.id, MV.editor, 'editor'); // on both lists
+        await mvMember(dst.id, MV.editor, 'editor');
+        await mvMember(src.id, MV.viewer, 'viewer'); // only on the source
+        await mvMember(src.id, MV.other, 'manager'); // the target's owner, a member of the source
+        await mvMember(dst.id, O, 'viewer'); // the source's owner, a member of the target
+        const task = (await db.tasks.addItem(O, src.id, { name: 'due soon', due_date: '2031-03-01' })).item;
+        const ownerSeen = new Date('2031-02-28T09:00:00Z');
+        const otherSeen = new Date('2031-02-27T09:00:00Z');
+        const snooze = new Date('2031-03-02T09:00:00Z');
+        await db.query('UPDATE items SET reminded_at = ? WHERE id = ?', [ownerSeen, task.id]);
+        await db.tasks.markTaskReminderSent(task.id, otherSeen, MV.other);
+        await db.tasks.snoozeTask(MV.editor, task.id, snooze);
+        await db.tasks.snoozeTask(MV.viewer, task.id, snooze);
+
+        await db.tasks.moveItemToList(MV.other, task.id, dst.id);
+        const rows = await db.query('SELECT discord_id, reminded_at, remind_at FROM item_reminders WHERE item_id = ?', [task.id]);
+        const by = Object.fromEntries(rows.map((x) => [x.discord_id, x]));
+        assert.deepEqual(Object.keys(by).sort(), [O, MV.editor].sort(), 'the viewer (not on the target) and the new owner (their state is on the row now) have no member rows');
+        assert.equal(by[O].reminded_at.getTime(), ownerSeen.getTime(), 'the old owner keeps what they were told, as a member');
+        assert.equal(by[MV.editor].remind_at.getTime(), snooze.getTime(), 'a member of both keeps their snooze');
+        const [row] = await db.query('SELECT reminded_at, remind_at FROM items WHERE id = ?', [task.id]);
+        assert.equal(row.reminded_at.getTime(), otherSeen.getTime(), "the row now carries the new owner's own state");
+        assert.equal(row.remind_at, null);
+
+        // forItem reads the task's list without a lock. If the task moved while it waited for that list, it follows it once.
+        const locks = [];
+        let peeks = 0;
+        const moving = {
+            async query(sql, params) {
+                if (sql.startsWith('SELECT list_id FROM items')) return [[{ list_id: ++peeks === 1 ? src.id : dst.id }]];
+                if (sql.startsWith('SELECT id FROM lists')) {
+                    locks.push(params[0]);
+                    return [[{ id: params[0] }]];
+                }
+                return db.getPool().query(sql, params);
+            }
+        };
+        const found = await db.access.forItem(moving, MV.other, task.id, 'editor', { lock: true });
+        assert.equal(found.item.list_id, dst.id);
+        assert.deepEqual(locks, [src.id, dst.id], 'it locked the list it saw first, then the one the task is on now');
+        peeks = 0;
+        const flapping = {
+            async query(sql, params) {
+                if (sql.startsWith('SELECT list_id FROM items')) return [[{ list_id: ++peeks % 2 ? src.id : dst.id }]];
+                return [[{ id: params[0] }]];
+            }
+        };
+        await assert.rejects(db.access.forItem(flapping, MV.other, task.id, 'editor', { lock: true }), { code: 'CONFLICT' }, 'a task that keeps moving is a conflict to retry');
     });
 
     await db.closePool();

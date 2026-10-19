@@ -14,7 +14,7 @@ export function parseTags(raw: string | null | undefined): string[] {
   return out;
 }
 
-/** The server's limits (packages/shared/src/validation.js). */
+/** The server's limits (TAG_LIMITS in packages/shared/src/constants.js). */
 export const MAX_TAGS = 5;
 export const MAX_TAG_LENGTH = 20;
 const TAG = /^[\p{L}\p{N}_-]+$/u;

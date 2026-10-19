@@ -301,6 +301,12 @@ export const itemsApi = {
         patch<Item & RewardFields & { nextItem?: Item | null }>(`/api/items/${id}/toggle`, completed === undefined ? undefined : { completed }),
     /** `init.keepalive` lets the request finish while the page is being closed. */
     delete: (id: number, init?: RequestInit) => del<{ success: boolean }>(`/api/items/${id}`, init),
+    /** Move a top-level task (with its subtasks) to another quest. */
+    move: (id: number, listId: number) => post<{ item: Item; moved: number }>(`/api/items/${id}/move`, { listId }),
+    activity: (id: number) => apiFetch<{ activity: ItemActivity[] }>(`/api/items/${id}/activity`),
+    comments: (id: number) => apiFetch<{ comments: ItemComment[] }>(`/api/items/${id}/comments`),
+    addComment: (id: number, body: string) => post<ItemComment>(`/api/items/${id}/comments`, { body }),
+    deleteComment: (commentId: number) => del<{ success: boolean }>(`/api/comments/${commentId}`),
 };
 
 // ─── AI (optional feature; see docs/AI_INTEGRATION.md) ───────────────────────
@@ -716,6 +722,38 @@ export interface Item {
     completed_by_name?: string | null;
     /** false when the server would refuse to delete it for me (an editor may only delete tasks they added). Absent: assume yes. */
     can_delete?: boolean;
+    /** Who the task is assigned to (the owner or a member of the quest), or null. */
+    assignee?: ItemPerson | null;
+    /** How many comments the task has. */
+    comment_count?: number;
+}
+
+/** A person on a quest as tasks show them: the member key (as in the members list), never a Discord id. */
+export interface ItemPerson {
+    memberKey: string;
+    name: string | null;
+    isYou: boolean;
+}
+
+export type ItemActivityKind = 'created' | 'renamed' | 'completed' | 'reopened' | 'priority' | 'due' | 'assigned' | 'moved';
+
+/** One entry of a task's history; `from` and `to` are the old and new values where the kind has them. */
+export interface ItemActivity {
+    id: number;
+    kind: ItemActivityKind;
+    actor: { name: string | null; isYou: boolean } | null;
+    from?: string | null;
+    to?: string | null;
+    createdAt: string;
+}
+
+export interface ItemComment {
+    id: number;
+    body: string;
+    author: { name: string | null; isYou: boolean };
+    createdAt: string;
+    /** The author and the quest's managers may delete a comment. */
+    canDelete: boolean;
 }
 
 export type Recurrence = 'daily' | 'weekly' | 'monthly';
@@ -729,6 +767,8 @@ export interface ItemInput {
     recurrence?: Recurrence | null;
     estimate_minutes?: number | null;
     parent_id?: number | null;
+    /** A member key from the quest's members list ("owner" for the owner), or null to unassign. */
+    assignee?: string | null;
 }
 
 export interface ListWithItems extends List {

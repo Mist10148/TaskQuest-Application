@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import {
   useLists, useList, useCreateList, useUpdateList, useDeleteList,
-  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems,
+  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems, useMoveItem, useListMembers,
 } from "@/hooks/useApi";
 import { ListOverview } from "@/components/tasks/ListOverview";
 import { ListDetail } from "@/components/tasks/ListDetail";
@@ -38,6 +38,7 @@ const Tasks = () => {
   const createItem = useCreateItem();
   const toggleItem = useToggleItem();
   const updateItem = useUpdateItem();
+  const moveItem = useMoveItem();
   const reorderItems = useReorderItems();
   const deleteItem = useDeleteItem();
 
@@ -260,6 +261,28 @@ const Tasks = () => {
   };
 
   const detail: ListWithItems | undefined = selectedListId ? selectedList : undefined;
+  // People a task can be assigned to: only a shared quest has anyone besides the owner.
+  const membersQuery = useListMembers(detail?.id ?? 0, Boolean(detail?.shared));
+  const assignOptions = detail?.shared ? membersQuery.data?.members : undefined;
+  // Quests a task can move to: any other quest I may add tasks to.
+  const moveTargets = useMemo(
+    () => lists.filter((l) => l.id !== detail?.id && canEditTasks(roleOf(l))).map((l) => ({ id: l.id, name: l.name })),
+    [lists, detail?.id]
+  );
+
+  const moveItems = async (ids: number[], listId: number) => {
+    const target = lists.find((l) => l.id === listId)?.name ?? "the other quest";
+    let done = 0;
+    for (const id of ids) {
+      try {
+        await moveItem.mutateAsync({ itemId: id, listId });
+        done += 1;
+      } catch {
+        break; // error toast shown by the mutation hook
+      }
+    }
+    if (done > 0) toast.success(`📦 Moved ${done === 1 ? `"${nameOf(ids[0])}"` : `${done} tasks`} to ${target}`);
+  };
 
   return (
     <DashboardLayout>
@@ -281,6 +304,10 @@ const Tasks = () => {
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
           onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
+          assignOptions={assignOptions}
+          onAssign={(itemId, memberKey) => updateItem.mutate({ itemId, data: { assignee: memberKey } })}
+          moveTargets={moveTargets}
+          onMove={moveItems}
           onEditItem={openItemEditor}
           hiddenIds={itemDeletes.hidden}
           onDeleteItem={(id) => deleteItems([id])}

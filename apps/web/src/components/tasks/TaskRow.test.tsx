@@ -55,4 +55,12 @@ describe("TaskRow details button", () => {
     renderRow();
     expect(screen.queryByRole("button", { name: /Details of/ })).toBeNull();
   });
+
+  it("shows who it is assigned to and how many comments it has", () => {
+    renderRow({ assignee: { memberKey: "m1", name: "Sam", isYou: false }, comment_count: 2 });
+    expect(screen.getByText("Assigned to")).toBeInTheDocument();
+    expect(screen.getByText("Sam")).toBeInTheDocument();
+    expect(screen.getByText("comments")).toBeInTheDocument();
+  });
 });
+

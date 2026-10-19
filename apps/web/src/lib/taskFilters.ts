@@ -12,13 +12,14 @@ export interface TaskFilter {
   due: DueWindow;
   /** A tag, or "" for any. */
   tag: string;
+  assignee: "any" | "me" | "unassigned";
 }
 
 export type GroupBy = "none" | "priority" | "due" | "tag";
 
-export const DEFAULT_FILTER: TaskFilter = { status: "all", priority: "any", due: "any", tag: "" };
+export const DEFAULT_FILTER: TaskFilter = { status: "all", priority: "any", due: "any", tag: "", assignee: "any" };
 
-export const isFiltering = (f: TaskFilter): boolean => f.status !== "all" || f.priority !== "any" || f.due !== "any" || f.tag !== "";
+export const isFiltering = (f: TaskFilter): boolean => f.status !== "all" || f.priority !== "any" || f.due !== "any" || f.tag !== "" || f.assignee !== "any";
 
 const dueDay = (item: Pick<Item, "due_date">): string | null => (item.due_date ? String(item.due_date).slice(0, 10) : null);
 
@@ -46,6 +47,8 @@ export function matchesFilter(item: Item, f: TaskFilter, listPriority: Priority 
     if (f.due === "week" ? !["overdue", "today", "week"].includes(w) : w !== f.due) return false;
   }
   if (f.tag && !parseTags(item.tags).includes(f.tag)) return false;
+  if (f.assignee === "me" && !item.assignee?.isYou) return false;
+  if (f.assignee === "unassigned" && item.assignee) return false;
   return true;
 }
 
@@ -106,6 +109,7 @@ const STATUS = ["all", "open", "done"];
 const PRIORITY = ["any", "none", "HIGH", "MEDIUM", "LOW"];
 const DUE = ["any", "overdue", "today", "week", "none"];
 const GROUPS = ["none", "priority", "due", "tag"];
+const ASSIGNEE = ["any", "me", "unassigned"];
 
 /** The filter and grouping last used in this browser (a convenience: anything unreadable falls back to the defaults). */
 export function loadFilterPrefs(): { filter: TaskFilter; groupBy: GroupBy } {
@@ -118,6 +122,7 @@ export function loadFilterPrefs(): { filter: TaskFilter; groupBy: GroupBy } {
         priority: pick(saved.priority, PRIORITY, DEFAULT_FILTER.priority),
         due: pick(saved.due, DUE, DEFAULT_FILTER.due),
         tag: typeof saved.tag === "string" ? saved.tag : "",
+        assignee: pick(saved.assignee, ASSIGNEE, DEFAULT_FILTER.assignee),
       },
       groupBy: pick(saved.groupBy, GROUPS, "none"),
     };

@@ -1,10 +1,11 @@
-import { Calendar, Check, Pencil, Repeat, Timer } from "lucide-react";
+import { Calendar, Check, Pencil, Repeat, Timer, UserRound } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { parseTags } from "@/lib/tags";
+import { TaskThread } from "./TaskThread";
 
 interface Props {
   /** The task to show; null keeps the drawer closed. */
@@ -16,7 +17,18 @@ interface Props {
   onToggle: (id: number) => void;
   onEdit: (id: number) => void;
   onOpenSubtask: (id: number) => void;
+  /** People the task can be assigned to (a shared quest's owner and members); leave out on a quest nobody shares. */
+  assignOptions?: ReadonlyArray<{ memberKey: string; name: string | null; isYou: boolean }>;
+  onAssign?: (id: number, memberKey: string | null) => void;
+  /** Quests a top-level task can be moved to (with its subtasks). */
+  moveTargets?: ReadonlyArray<{ id: number; name: string }>;
+  onMove?: (id: number, listId: number) => void;
+  /** Show the comments and activity (they load from the server). */
+  showThread?: boolean;
 }
+
+const selectClass = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
+const personName = (p: { name: string | null; isYou: boolean }) => (p.isYou ? `${p.name ?? "You"} (you)` : p.name ?? "Unknown");
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>
@@ -26,7 +38,7 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 );
 
 /** A side drawer with everything about one task, so it can be read without opening the edit form. */
-export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onToggle, onEdit, onOpenSubtask }: Props) => {
+export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onToggle, onEdit, onOpenSubtask, assignOptions, onAssign, moveTargets, onMove, showThread }: Props) => {
   const completed = Boolean(item?.completed);
   const tags = parseTags(item?.tags);
   const overdue = item ? !completed && isPastDeadline(item.due_date) : false;
@@ -75,7 +87,44 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                   </ul>
                 </Field>
               )}
+              {!readOnly && onAssign && assignOptions && assignOptions.length > 1 ? (
+                <Field label="Assignee">
+                  <select
+                    aria-label="Assignee"
+                    className={selectClass}
+                    value={item.assignee?.memberKey ?? ""}
+                    onChange={(e) => onAssign(item.id, e.target.value || null)}
+                  >
+                    <option value="">Nobody</option>
+                    {assignOptions.map((p) => (
+                      <option key={p.memberKey} value={p.memberKey}>{personName(p)}</option>
+                    ))}
+                  </select>
+                </Field>
+              ) : (
+                item.assignee && (
+                  <Field label="Assignee">
+                    <span className="inline-flex items-center gap-1"><UserRound className="h-4 w-4" aria-hidden /> {personName(item.assignee)}</span>
+                  </Field>
+                )
+              )}
               <Field label="Added">{new Date(item.created_at).toLocaleDateString()}</Field>
+              {!readOnly && onMove && !item.parent_id && moveTargets && moveTargets.length > 0 && (
+                <Field label="Move to another quest">
+                  <select
+                    aria-label="Move to another quest"
+                    className={selectClass}
+                    value=""
+                    onChange={(e) => { if (e.target.value) onMove(item.id, Number(e.target.value)); }}
+                  >
+                    <option value="">Choose a quest…</option>
+                    {moveTargets.map((q) => (
+                      <option key={q.id} value={q.id}>{q.name}</option>
+                    ))}
+                  </select>
+                  {subtasks.length > 0 && <p className="mt-1 text-xs text-foreground-muted">Its {subtasks.length} subtask{subtasks.length === 1 ? "" : "s"} move with it.</p>}
+                </Field>
+              )}
             </dl>
             {!readOnly && (
               <SheetFooter className="mt-6 gap-2 sm:space-x-0">
@@ -83,6 +132,7 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                 <Button onClick={() => onToggle(item.id)}>{completed ? "Reopen" : "Mark done"}</Button>
               </SheetFooter>
             )}
+            {showThread && <TaskThread itemId={item.id} canComment={!readOnly} />}
           </>
         )}
       </SheetContent>

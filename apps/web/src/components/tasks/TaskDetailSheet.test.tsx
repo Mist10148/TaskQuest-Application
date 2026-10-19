@@ -55,4 +55,33 @@ describe("TaskDetailSheet", () => {
     expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Edit/ })).toBeNull();
   });
+
+  it("assigns the task to a member of a shared quest", async () => {
+    const onAssign = vi.fn();
+    const people = [{ memberKey: "owner", name: "Me", isYou: true }, { memberKey: "m1", name: "Sam", isYou: false }];
+    renderSheet({}, { assignOptions: people, onAssign });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Assignee" }), "m1");
+    expect(onAssign).toHaveBeenCalledWith(7, "m1");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Assignee" }), "");
+    expect(onAssign).toHaveBeenLastCalledWith(7, null);
+  });
+
+  it("only shows the assignee to a viewer", () => {
+    renderSheet({ assignee: { memberKey: "m1", name: "Sam", isYou: false } }, { readOnly: true, assignOptions: [], onAssign: vi.fn() });
+    expect(screen.queryByRole("combobox", { name: "Assignee" })).toBeNull();
+    expect(screen.getByText("Sam")).toBeInTheDocument();
+  });
+
+  it("moves a top-level task to another quest, but never a subtask", async () => {
+    const onMove = vi.fn();
+    renderSheet({}, { moveTargets: [{ id: 3, name: "Work" }], onMove });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Move to another quest" }), "3");
+    expect(onMove).toHaveBeenCalledWith(7, 3);
+  });
+
+  it("offers no move for a subtask", () => {
+    renderSheet({ parent_id: 1 }, { moveTargets: [{ id: 3, name: "Work" }], onMove: vi.fn() });
+    expect(screen.queryByRole("combobox", { name: "Move to another quest" })).toBeNull();
+  });
 });
+

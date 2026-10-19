@@ -7,6 +7,8 @@ interface Props {
   onFilter: (next: TaskFilter) => void;
   /** Tags used in this quest (the tag filter is hidden when there are none). */
   tags: readonly string[];
+  /** Offer the assignee filter (a shared quest). */
+  showAssignee?: boolean;
   /** Grouping only applies to the list view; leave it out to hide the control. */
   groupBy?: GroupBy;
   onGroupBy?: (next: GroupBy) => void;
@@ -18,7 +20,7 @@ const selectClass =
   "h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Narrow a quest's tasks by status, priority, due date and tag, and (in the list view) group them under headings. */
-export const TaskFilterBar = ({ filter, onFilter, tags, groupBy, onGroupBy, shown, total }: Props) => {
+export const TaskFilterBar = ({ filter, onFilter, tags, showAssignee, groupBy, onGroupBy, shown, total }: Props) => {
   const set = (patch: Partial<TaskFilter>) => onFilter({ ...filter, ...patch });
   const active = isFiltering(filter);
   return (
@@ -48,6 +50,13 @@ export const TaskFilterBar = ({ filter, onFilter, tags, groupBy, onGroupBy, show
           {tags.map((t) => (
             <option key={t} value={t}>#{t}</option>
           ))}
+        </select>
+      )}
+      {showAssignee && (
+        <select aria-label="Assignee" className={selectClass} value={filter.assignee} onChange={(e) => set({ assignee: e.target.value as TaskFilter["assignee"] })}>
+          <option value="any">Anyone</option>
+          <option value="me">Assigned to me</option>
+          <option value="unassigned">Unassigned</option>
         </select>
       )}
       {groupBy !== undefined && onGroupBy && (

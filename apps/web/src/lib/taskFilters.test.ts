@@ -33,6 +33,13 @@ describe("matchesFilter", () => {
     expect(matchesFilter(item(1), { ...DEFAULT_FILTER, priority: "none" }, null, TODAY)).toBe(true);
     expect(matchesFilter(item(1), { ...DEFAULT_FILTER, priority: "none" }, "LOW", TODAY)).toBe(false);
   });
+
+  it("filters by assignee", () => {
+    const mine = item(1, { assignee: { memberKey: "owner", name: "Me", isYou: true } });
+    const theirs = item(2, { assignee: { memberKey: "m1", name: "Sam", isYou: false } });
+    expect([mine, theirs, item(3)].filter((i) => matchesFilter(i, { ...DEFAULT_FILTER, assignee: "me" }, null, TODAY)).map((i) => i.id)).toEqual([1]);
+    expect([mine, theirs, item(3)].filter((i) => matchesFilter(i, { ...DEFAULT_FILTER, assignee: "unassigned" }, null, TODAY)).map((i) => i.id)).toEqual([3]);
+  });
 });
 
 describe("filterTasks", () => {

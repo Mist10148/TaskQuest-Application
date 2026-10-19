@@ -43,6 +43,13 @@ interface Props {
   onEditItem: (itemId: number) => void;
   /** Set one task's priority (moving a card between the board's columns). */
   onSetPriority: (itemId: number, priority: Priority | null) => void;
+  /** A shared quest's owner and members, for assigning tasks (absent on a quest nobody shares). */
+  assignOptions?: ReadonlyArray<{ memberKey: string; name: string | null; isYou: boolean }>;
+  onAssign?: (itemId: number, memberKey: string | null) => void;
+  /** Other quests tasks can be moved to. */
+  moveTargets?: ReadonlyArray<{ id: number; name: string }>;
+  /** Move top-level tasks (their subtasks go with them) to another quest. */
+  onMove?: (itemIds: number[], listId: number) => Promise<unknown>;
   onDeleteItem: (itemId: number) => void;
   onBulkComplete: (itemIds: number[]) => Promise<unknown>;
   onBulkDelete: (itemIds: number[]) => void;
@@ -59,7 +66,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
+export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -159,6 +166,8 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   const openIds = items.filter((i) => selected.has(i.id) && !i.completed).map((i) => i.id);
   // An editor may only delete tasks they added; the rest of a selection is left alone.
   const deletableIds = items.filter((i) => selected.has(i.id) && i.can_delete !== false).map((i) => i.id);
+  // Only top-level tasks move (each takes its subtasks along).
+  const movableIds = items.filter((i) => selected.has(i.id) && !i.parent_id).map((i) => i.id);
 
   // The keyboard cursor: j and k move over the rows, x completes, e edits, d deletes (list view only).
   const [cursorId, setCursorId] = useState<number | null>(null);
@@ -326,6 +335,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           filter={filter}
           onFilter={(next) => updatePrefs({ filter: next })}
           tags={questTags}
+          showAssignee={Boolean(list.shared) || items.some((i) => i.assignee)}
           groupBy={view === "list" ? groupBy : undefined}
           onGroupBy={(next) => updatePrefs({ groupBy: next })}
           shown={shownItems.length}
@@ -390,6 +400,28 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === 0} onClick={() => setBulkEditOpen(true)}>
             <SlidersHorizontal className="h-4 w-4" aria-hidden /> Edit{selectedIds.length ? ` (${selectedIds.length})` : ""}
           </Button>
+          {onMove && moveTargets && moveTargets.length > 0 && (
+            <select
+              aria-label="Move selected tasks to another quest"
+              title={movableIds.length < selectedIds.length ? "Subtasks move with their parent task" : undefined}
+              disabled={movableIds.length === 0}
+              value=""
+              onChange={async (e) => {
+                const listId = Number(e.target.value);
+                if (!listId) return;
+                try {
+                  await onMove(movableIds, listId);
+                } catch {
+                  // The mutation hooks already showed the error.
+                }
+                leaveSelectMode();
+              }}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+            >
+              <option value="">Move{movableIds.length ? ` (${movableIds.length})` : ""} to…</option>
+              {moveTargets.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+            </select>
+          )}
           <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { onBulkDelete(deletableIds); leaveSelectMode(); }}>
             <Trash2 className="h-4 w-4" /> Delete{deletableIds.length && deletableIds.length < selectedIds.length ? ` (${deletableIds.length})` : ""}
           </Button>
@@ -429,6 +461,11 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         onToggle={onToggleItem}
         onEdit={(id) => { setDetailId(null); onEditItem(id); }}
         onOpenSubtask={setDetailId}
+        assignOptions={assignOptions}
+        onAssign={onAssign}
+        moveTargets={moveTargets}
+        onMove={onMove ? (id, listId) => { setDetailId(null); void onMove([id], listId); } : undefined}
+        showThread
       />
 
       {editable && <button onClick={() => onAddItem()} className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 text-foreground-muted text-sm transition-all group">

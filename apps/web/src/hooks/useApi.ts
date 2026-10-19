@@ -82,6 +82,7 @@ export function showError(error: unknown) {
 /** Refresh what a change to tasks or lists can alter: the lists, and the Today page and the stats that are derived from due dates and completions. */
 function invalidateTaskViews(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['lists'] });
+    qc.invalidateQueries({ queryKey: ['items'] }); // a task's history and comments in the detail drawer
     qc.invalidateQueries({ queryKey: ['today'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
 }
@@ -412,6 +413,43 @@ export function useUpdateItem() {
     });
 }
 
+export function useMoveItem() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ itemId, listId }: { itemId: number; listId: number }) => itemsApi.move(itemId, listId),
+        onSuccess: () => invalidateTaskViews(qc),
+        onError: showError,
+    });
+}
+
+/** A task's history, newest first (loaded when the detail drawer shows it). */
+export function useItemActivity(itemId: number | null) {
+    return useQuery({ queryKey: ['items', itemId, 'activity'], queryFn: () => itemsApi.activity(itemId as number), enabled: itemId !== null });
+}
+
+export function useItemComments(itemId: number | null) {
+    return useQuery({ queryKey: ['items', itemId, 'comments'], queryFn: () => itemsApi.comments(itemId as number), enabled: itemId !== null });
+}
+
+export function useAddComment(itemId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (body: string) => itemsApi.addComment(itemId, body),
+        // Also the comment count on the task's row.
+        onSuccess: () => invalidateTaskViews(qc),
+        onError: showError,
+    });
+}
+
+export function useDeleteComment() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (commentId: number) => itemsApi.deleteComment(commentId),
+        onSuccess: () => invalidateTaskViews(qc),
+        onError: showError,
+    });
+}
+
 export function useDeleteItem() {
     const qc = useQueryClient();
     return useMutation({
@@ -457,6 +495,7 @@ export function useToggleItem() {
             typeof arg === 'number' ? itemsApi.toggle(arg) : itemsApi.toggle(arg.itemId, arg.completed),
         onSuccess: (result, arg) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
+            qc.invalidateQueries({ queryKey: ['items'] });
             invalidateProgress(qc);
             const quiet = typeof arg !== 'number' && arg.quiet === true;
             if (quiet) {

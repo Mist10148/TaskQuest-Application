@@ -20,6 +20,7 @@
 const crypto = require('crypto');
 const { withTransaction, getPool } = require('./pool');
 const access = require('./access');
+const assignees = require('./assignees');
 const { lockUser, normalizeHandle, HANDLE_RE } = require('./users');
 const { errors, TaskQuestError } = require('../errors');
 const v = require('../validation');
@@ -308,6 +309,7 @@ async function removeMember(actorId, listId, memberKey) {
         const m = await memberByKey(conn, list.id, memberKey);
         if (!isOwner && m.role === 'manager') throw errors.forbidden('Only the owner can remove a manager.');
         await dropMember(conn, list.id, m.discord_id);
+        await assignees.clearAssignments(conn, list.id, m.discord_id);
         return true;
     });
 }
@@ -318,6 +320,7 @@ async function leave(userId, listId) {
         const { list, isOwner } = await access.forList(conn, userId, listId, 'viewer', { lock: true });
         if (isOwner) throw errors.forbidden('You own this list, so you cannot leave it. Delete it instead.');
         await dropMember(conn, list.id, String(userId));
+        await assignees.clearAssignments(conn, list.id, userId);
         return true;
     });
 }

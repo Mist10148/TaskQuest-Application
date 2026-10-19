@@ -139,6 +139,8 @@ export const updateItemBody = z
         name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
         description: optionalText(TEXT_LIMITS.DESCRIPTION),
         position: z.number().int().min(0).max(100000),
+        // A member key from the quest's members list ('owner' for the owner), or null to unassign. The service resolves it.
+        assignee: z.string().max(64).nullable(),
         ...itemExtras
     })
     .partial()

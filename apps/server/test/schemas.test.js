@@ -69,3 +69,11 @@ test('moveItemBody: one positive whole quest id, nothing else', () => {
         assert.throws(() => moveItemBody.parse(body), JSON.stringify(body));
     }
 });
+
+test('updateItemBody: assignee is a member key or null, and creating a task takes none', () => {
+    assert.deepEqual(updateItemBody.parse({ assignee: 'owner' }), { assignee: 'owner' });
+    assert.deepEqual(updateItemBody.parse({ assignee: 'a1b2c3d4e5f6' }), { assignee: 'a1b2c3d4e5f6' });
+    assert.deepEqual(updateItemBody.parse({ assignee: null }), { assignee: null });
+    for (const assignee of [7, true, ['owner'], { key: 'owner' }, 'x'.repeat(65)]) assert.throws(() => updateItemBody.parse({ assignee }), JSON.stringify(assignee));
+    assert.throws(() => createItemBody.parse({ name: 'x', assignee: 'owner' }), 'assign after creating');
+});

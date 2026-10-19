@@ -442,6 +442,8 @@ async function resetProgress(discordId) {
         await conn.query("UPDATE party_invites SET status = 'revoked' WHERE invited_by = ? AND status = 'pending'", [id]);
         await conn.query('DELETE FROM parties WHERE owner_id = ?', [id]); // a party the user owns goes with them
         await conn.query('DELETE FROM party_members WHERE discord_id = ?', [id]);
+        // The user left every shared list above (list_members), so nothing anywhere stays assigned to them.
+        await conn.query('UPDATE items SET assignee_id = NULL WHERE assignee_id = ?', [id]);
         await conn.query(
             `UPDATE users SET progress_reset_at = CURRENT_TIMESTAMP, player_xp = 0, lifetime_xp = 0, lifetime_xp_total = 0, prestige = 0, player_level = 1, player_class = 'DEFAULT',
                 streak_count = 0, last_active_day = NULL, last_daily_claim = NULL, last_game_at = NULL,

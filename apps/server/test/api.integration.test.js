@@ -1144,6 +1144,58 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         for (const id of Object.values(ids)) assert.equal(back.text.includes(id), false, 'no Discord ID in the answer');
     });
 
+
+    await t.test('assigning a task: PATCH /api/items/:id with a member key, the person on every item read, and Today', async () => {
+        const ids = { own: '200000000000001801', ed: '200000000000001802', st: '200000000000001803' };
+        const cookies = {};
+        for (const [k, id] of Object.entries(ids)) {
+            cookies[k] = await login(db, id);
+            await db.users.ensureUser(id, { username: `assign_${k}`, handle: `assign_${k}`, avatar: null });
+        }
+        const J = async (method, path, who, body) => {
+            const res = await call(method, path, { cookie: cookies[who], body });
+            const text = await res.text();
+            return { status: res.status, text, body: text ? JSON.parse(text) : null };
+        };
+        const noIds = (r, what) => {
+            for (const id of Object.values(ids)) assert.equal(r.text.includes(id), false, `${what}: a Discord ID leaked`);
+        };
+        const list = (await J('POST', '/api/lists', 'own', { name: 'Chores to share' })).body;
+        const today = new Date().toISOString().slice(0, 10);
+        const task = (await J('POST', `/api/lists/${list.id}/items`, 'own', { name: 'Mop', due_date: today })).body;
+        assert.equal(task.assignee, null);
+        const edKey = crypto.randomBytes(6).toString('hex');
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [list.id, ids.ed, 'editor', edKey]);
+
+        for (const assignee of [7, true, 'x'.repeat(65)]) assert.equal((await J('PATCH', `/api/items/${task.id}`, 'own', { assignee })).status, 400, JSON.stringify(assignee));
+        const unknown = await J('PATCH', `/api/items/${task.id}`, 'own', { assignee: 'abcdefabcdef' });
+        assert.deepEqual([unknown.status, unknown.body.code, unknown.body.error], [400, 'VALIDATION', 'That person is not on this quest.']);
+        assert.equal((await J('PATCH', `/api/items/${task.id}`, 'st', { assignee: 'owner' })).status, 404);
+
+        const assigned = await J('PATCH', `/api/items/${task.id}`, 'own', { assignee: edKey });
+        assert.equal(assigned.status, 200, assigned.text);
+        assert.deepEqual(assigned.body.assignee, { memberKey: edKey, name: 'assign_ed', isYou: false });
+        assert.equal(assigned.body.assignee_id, undefined);
+        noIds(assigned, 'PATCH');
+        const seen = await J('GET', `/api/lists/${list.id}`, 'ed');
+        assert.deepEqual(seen.body.items[0].assignee, { memberKey: edKey, name: 'assign_ed', isYou: true });
+        noIds(seen, 'list view');
+        const toggled = await J('PATCH', `/api/items/${task.id}/toggle`, 'ed', { completed: false });
+        assert.deepEqual(toggled.body.assignee, seen.body.items[0].assignee, 'the toggle answer carries it too');
+
+        // Today: the task is on someone else's quest, but it is mine.
+        const mine = await J('GET', '/api/today', 'ed');
+        assert.equal(mine.status, 200);
+        assert.deepEqual(mine.body.tasks.map((x) => [x.id, x.listName]), [[task.id, 'Chores to share']]);
+        assert.equal(mine.body.counts.dueToday, 1);
+        noIds(mine, 'today');
+        assert.equal((await J('GET', '/api/today', 'own')).body.counts.dueToday, 1, 'the owner counts it once');
+
+        const cleared = await J('PATCH', `/api/items/${task.id}`, 'own', { assignee: null });
+        assert.equal(cleared.body.assignee, null);
+        assert.equal((await J('GET', '/api/today', 'ed')).body.tasks.length, 0);
+    });
+
     // Last on purpose: it uses up the per-address invite budget.
     await t.test('invite lookups are limited per address as well as per account', async () => {
         // Each account makes a single call (far below its own limit of 30), so only the address limit can answer 429.

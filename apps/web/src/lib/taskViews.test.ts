@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Item } from "./api";
-import { boardColumns, monthGrid, shiftMonth, tasksByDate } from "./taskViews";
+import { addDays, boardColumns, calendarKeyTarget, monthGrid, shiftMonth, tasksByDate } from "./taskViews";
 
 const item = (id: number, extra: Partial<Item> = {}): Item => ({ id, list_id: 1, name: `t${id}`, description: null, completed: false, position: id, created_at: "", ...extra }) as Item;
 
@@ -54,5 +54,25 @@ describe("shiftMonth and tasksByDate", () => {
     const map = tasksByDate([item(1, { due_date: "2030-01-05" }), item(2, { due_date: "2030-01-05T00:00:00.000Z" }), item(3), item(4, { due_date: "2030-01-06", parent_id: 1 })]);
     expect([...map.keys()]).toEqual(["2030-01-05"]);
     expect(map.get("2030-01-05")?.map((i) => i.id)).toEqual([1, 2]);
+  });
+});
+
+describe("calendarKeyTarget", () => {
+  it("moves by days and weeks, across month and year ends", () => {
+    expect(calendarKeyTarget("2030-01-31", "ArrowRight")).toBe("2030-02-01");
+    expect(calendarKeyTarget("2030-01-01", "ArrowLeft")).toBe("2029-12-31");
+    expect(calendarKeyTarget("2030-01-03", "ArrowUp")).toBe("2029-12-27");
+    expect(addDays("2030-03-30", 2)).toBe("2030-04-01");
+  });
+
+  it("goes to the ends of the week and clamps a month jump", () => {
+    expect(calendarKeyTarget("2030-01-10", "Home")).toBe("2030-01-07"); // Thursday -> Monday
+    expect(calendarKeyTarget("2030-01-10", "End")).toBe("2030-01-13");
+    expect(calendarKeyTarget("2030-03-31", "PageUp")).toBe("2030-02-28");
+    expect(calendarKeyTarget("2030-01-31", "PageDown")).toBe("2030-02-28");
+  });
+
+  it("ignores other keys", () => {
+    expect(calendarKeyTarget("2030-01-10", "a")).toBeNull();
   });
 });

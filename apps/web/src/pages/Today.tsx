@@ -11,7 +11,7 @@ import { useClaimGoal, useSetGoal, useToday, useToggleItem, useWriteReflection }
 import { cn } from "@/lib/utils";
 import { formatDeadline } from "@/lib/dates";
 import { todayHeadline, goalPercent } from "@/lib/today";
-import { streakStrip } from "@/lib/streakStrip";
+import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import type { TodayData, TodayTask } from "@/lib/api";
 
 const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "bg-xp", LOW: "bg-success" };
@@ -125,26 +125,6 @@ const GoalCard = ({ data }: { data: TodayData }) => {
   );
 };
 
-const StreakStrip = ({ data }: { data: TodayData }) => {
-  const days = streakStrip(data.day, data.streak.live, data.streak.claimedToday);
-  return (
-    <section aria-label="Your streak this week" className="rounded-xl border border-border bg-card p-3" data-testid="streak-strip">
-      <div className="mb-2 flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2 font-heading font-semibold"><Flame className="h-4 w-4 text-destructive-text" aria-hidden /> {data.streak.live > 0 ? `${data.streak.live}-day streak` : "No streak yet"}</span>
-        <span className="text-xs text-foreground-muted">{data.streak.claimedToday ? "Claimed today" : "Claim your daily reward to keep it"}</span>
-      </div>
-      <ol className="grid grid-cols-7 gap-1 text-center text-xs">
-        {days.map((d) => (
-          <li key={d.day} className={cn("rounded-lg border px-1 py-2", d.state === "kept" ? "border-destructive/40 bg-destructive/10" : "border-border", d.isToday && "ring-2 ring-ring")}>
-            <div className="text-foreground-muted">{d.label}<span className="sr-only">{`: ${d.state === "kept" ? "streak day" : d.state === "today-open" ? "today, not claimed yet" : "no claim"}`}</span></div>
-            <Flame className={cn("mx-auto mt-1 h-4 w-4", d.state === "kept" ? "text-destructive-text" : "text-foreground-muted/40")} aria-hidden />
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-};
-
 const TodayView = ({ data }: { data: TodayData }) => (
   <div className="space-y-4 sm:space-y-6">
     <div className="flex flex-wrap gap-2 text-sm" role="group" aria-label="Today at a glance">
@@ -157,7 +137,7 @@ const TodayView = ({ data }: { data: TodayData }) => (
       <p className="rounded-lg border border-xp/30 bg-xp/10 px-3 py-2 text-sm" data-testid="season-banner"><strong>{data.season.name}:</strong> {data.season.blurb}</p>
     )}
 
-    <StreakStrip data={data} />
+    <StreakStrip day={data.day} live={data.streak.live} claimedToday={data.streak.claimedToday} />
 
     {data.streak.atRisk && (
       <div role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm" data-testid="streak-warning">

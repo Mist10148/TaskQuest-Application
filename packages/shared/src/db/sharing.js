@@ -354,18 +354,42 @@ async function transferOwnership(actorId, listId, memberKey) {
         if (Number(theirs.n) + Number(here.n) > LIMITS.MAX_ITEMS_PER_USER) throw errors.validation('That person would go over the task limit with this quest.');
 
         const former = String(actorId);
-        // The old owner's reminder state lives on the list row; as a member it moves to list_reminders, so they are not
-        // told about a deadline they were already told about.
+        // Reminder state is per person: the owner's lives on the list and task rows, a member's in list_reminders / item_reminders
+        // (see getReminderCandidates and getTaskReminderCandidates). Each side keeps their own, so nobody is told again about a
+        // deadline they were already told about, and nobody loses a snooze or inherits the other's.
+        // 1. The old owner's state moves from the rows to their member rows.
         const [[state]] = await conn.query('SELECT deadline_notified, overdue_notified, remind_at FROM lists WHERE id = ?', [list.id]);
-        await conn.query('UPDATE lists SET discord_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, list.id]);
-        // The new owner is no longer a member; their member-only reminder state goes with the row. The invitations they sent stay valid.
+        await conn.query(
+            `INSERT INTO list_reminders (list_id, discord_id, deadline_notified, overdue_notified, remind_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT (list_id, discord_id) DO UPDATE SET deadline_notified = EXCLUDED.deadline_notified, overdue_notified = EXCLUDED.overdue_notified, remind_at = EXCLUDED.remind_at`,
+            [list.id, former, Number(state.deadline_notified) || 0, Number(state.overdue_notified) || 0, state.remind_at || null]
+        );
+        await conn.query(
+            `INSERT INTO item_reminders (item_id, discord_id, reminded_at, remind_at)
+             SELECT id, ?, reminded_at, remind_at FROM items WHERE list_id = ? AND (reminded_at IS NOT NULL OR remind_at IS NOT NULL)
+             ON CONFLICT (item_id, discord_id) DO UPDATE SET reminded_at = EXCLUDED.reminded_at, remind_at = EXCLUDED.remind_at`,
+            [former, list.id]
+        );
+        // 2. The rows take the new owner's member state, or none (a member without a row has not been reminded yet).
+        // Neither is an edit, so updated_at on the tasks is left alone.
+        await conn.query(
+            `UPDATE lists SET discord_id = ?, updated_at = CURRENT_TIMESTAMP,
+                 deadline_notified = COALESCE((SELECT r.deadline_notified FROM list_reminders r WHERE r.list_id = lists.id AND r.discord_id = ?), 0),
+                 overdue_notified = COALESCE((SELECT r.overdue_notified FROM list_reminders r WHERE r.list_id = lists.id AND r.discord_id = ?), 0),
+                 remind_at = (SELECT r.remind_at FROM list_reminders r WHERE r.list_id = lists.id AND r.discord_id = ?)
+             WHERE id = ?`,
+            [next, next, next, next, list.id]
+        );
+        await conn.query(
+            `UPDATE items SET reminded_at = r.reminded_at, remind_at = r.remind_at
+             FROM items i LEFT JOIN item_reminders r ON r.item_id = i.id AND r.discord_id = ?
+             WHERE items.id = i.id AND i.list_id = ? AND (items.reminded_at IS DISTINCT FROM r.reminded_at OR items.remind_at IS DISTINCT FROM r.remind_at)`,
+            [next, list.id]
+        );
+        // 3. The new owner is no longer a member; their member rows (now copied onto the list and tasks) go. The invitations they sent stay valid.
         await dropMember(conn, list.id, next, { keepInvites: true });
         const key = crypto.randomBytes(6).toString('hex');
         await conn.query("INSERT INTO list_members (list_id, discord_id, role, public_id, added_by) VALUES (?, ?, 'manager', ?, ?)", [list.id, former, key, next]);
-        await conn.query(
-            'INSERT INTO list_reminders (list_id, discord_id, deadline_notified, overdue_notified, remind_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (list_id, discord_id) DO NOTHING',
-            [list.id, former, Number(state.deadline_notified) || 0, Number(state.overdue_notified) || 0, state.remind_at || null]
-        );
         return { listId: list.id, role: 'manager', memberKey: key };
     });
 }

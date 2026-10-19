@@ -4170,6 +4170,69 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.query('SELECT priority FROM lists WHERE id = ?', [list.id]))[0].priority, null);
     });
 
+    await t.test('a hand-over swaps reminder state: each person keeps their own, on the rows as owner and in the reminder tables as member', async () => {
+        const O = '100000000000000655';
+        const N = '100000000000000656';
+        for (const id of [O, N]) await db.users.ensureUser(id);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['remind_new', N]);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['remind_old', O]);
+        const { list } = await db.tasks.createList(O, { name: 'Reminder hand-over', deadline: dayOffset(1) });
+        const a = (await db.tasks.addItem(O, list.id, { name: 'a', due_date: dayOffset(1) })).item;
+        const b = (await db.tasks.addItem(O, list.id, { name: 'b', due_date: dayOffset(1) })).item;
+        const c = (await db.tasks.addItem(O, list.id, { name: 'c', due_date: dayOffset(1) })).item;
+        await db.query("INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, 'editor', ?)", [list.id, N, require('crypto').randomBytes(6).toString('hex')]);
+        const T = (s) => new Date(`2031-01-0${s}T03:04:05.000Z`);
+        // The owner was told the deadline is near, snoozed the list, was reminded about a and snoozed b.
+        await db.query('UPDATE lists SET deadline_notified = 1, overdue_notified = 0, remind_at = ? WHERE id = ?', [T(1), list.id]);
+        await db.query('UPDATE items SET reminded_at = ? WHERE id = ?', [T(2), a.id]);
+        await db.query('UPDATE items SET remind_at = ? WHERE id = ?', [T(3), b.id]);
+        // The member was told about the deadline and the overdue day, and was reminded about c.
+        await db.query('INSERT INTO list_reminders (list_id, discord_id, deadline_notified, overdue_notified, remind_at) VALUES (?, ?, 1, 1, NULL)', [list.id, N]);
+        await db.query('INSERT INTO item_reminders (item_id, discord_id, reminded_at, remind_at) VALUES (?, ?, ?, NULL)', [c.id, N, T(4)]);
+        const ms = (d) => (d ? new Date(d).getTime() : null);
+        const listState = async () => {
+            const [l] = await db.query('SELECT deadline_notified AS dn, overdue_notified AS onn, remind_at FROM lists WHERE id = ?', [list.id]);
+            return [Number(l.dn), Number(l.onn), ms(l.remind_at)];
+        };
+        const memberList = async (who) => {
+            const rows = await db.query('SELECT deadline_notified AS dn, overdue_notified AS onn, remind_at FROM list_reminders WHERE list_id = ? AND discord_id = ?', [list.id, who]);
+            return rows.map((r) => [Number(r.dn), Number(r.onn), ms(r.remind_at)]);
+        };
+        const itemState = async () => (await db.query('SELECT name, reminded_at, remind_at FROM items WHERE list_id = ? ORDER BY name', [list.id])).map((r) => [r.name, ms(r.reminded_at), ms(r.remind_at)]);
+        const memberItems = async (who) =>
+            (await db.query('SELECT i.name, r.reminded_at, r.remind_at FROM item_reminders r JOIN items i ON i.id = r.item_id WHERE i.list_id = ? AND r.discord_id = ? ORDER BY i.name', [list.id, who])).map((r) => [
+                r.name,
+                ms(r.reminded_at),
+                ms(r.remind_at)
+            ]);
+        const stamp = async () => (await db.query('SELECT MAX(updated_at) AS t FROM items WHERE list_id = ?', [list.id]))[0].t;
+        const before = String(await stamp());
+
+        const key = (await db.sharing.listMembers(O, list.id)).members.find((m) => m.name === 'remind_new').memberKey;
+        await db.sharing.transferOwnership(O, list.id, key);
+        assert.deepEqual(await listState(), [1, 1, null], "the list carries the new owner's state");
+        assert.deepEqual(await itemState(), [['a', null, null], ['b', null, null], ['c', ms(T(4)), null]], 'so do the tasks');
+        assert.deepEqual(await memberList(O), [[1, 0, ms(T(1))]], 'the old owner keeps their list state as a member');
+        assert.deepEqual(await memberItems(O), [['a', ms(T(2)), null], ['b', null, ms(T(3))]], 'and their task reminders and snoozes');
+        assert.deepEqual(await memberList(N), [], 'the new owner has no member rows left');
+        assert.deepEqual(await memberItems(N), []);
+        assert.equal(String(await stamp()), before, 'moving reminder state is not an edit of the tasks');
+
+        // The bot now reminds each of them by their own state: the old owner's snooze of b is still theirs.
+        const due = (await db.tasks.getTaskReminderCandidates(T(5))).filter((r) => r.list_id === list.id);
+        assert.deepEqual(due.filter((r) => r.discord_id === O).map((r) => r.name), ['b']);
+
+        // And back: a hand-over to someone who has no member list row resets the list's flags to "not told yet".
+        await db.query('DELETE FROM list_reminders WHERE list_id = ? AND discord_id = ?', [list.id, O]);
+        const back = (await db.sharing.listMembers(N, list.id)).members.find((m) => m.name === 'remind_old').memberKey;
+        await db.sharing.transferOwnership(N, list.id, back);
+        assert.deepEqual(await listState(), [0, 0, null]);
+        assert.deepEqual(await itemState(), [['a', ms(T(2)), null], ['b', null, ms(T(3))], ['c', null, null]]);
+        assert.deepEqual(await memberList(N), [[1, 1, null]]);
+        assert.deepEqual(await memberItems(N), [['c', ms(T(4)), null]]);
+        assert.deepEqual(await memberItems(O), []);
+    });
+
     await t.test('reordering a long list writes every position in a few statements and leaves unmoved rows alone', async () => {
         const U = '100000000000000662';
         await db.users.ensureUser(U);

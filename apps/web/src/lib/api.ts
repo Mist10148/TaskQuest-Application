@@ -1031,7 +1031,7 @@ export interface QuestClaimResult {
 export type HistoryRange = 7 | 30 | 90;
 
 export interface XPHistoryDay {
-    /** UTC day, YYYY-MM-DD. */
+    /** A day in the player's own time zone, YYYY-MM-DD (the last one is their today). */
     date: string;
     xp: number;
     tasksCompleted: number;

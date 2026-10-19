@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { aiApi, type AiConfirmAction, type AiSource, type AiToolEvent, type ChatEvent } from '@/lib/api';
+import { aiApi, ApiError, type AiConfirmAction, type AiSource, type AiToolEvent, type ChatEvent } from '@/lib/api';
 import { isPendingConflict, PENDING_CONFIRM_NOTICE, withoutFailedTurn } from '@/lib/chatTurn';
 import { invalidateProgress, showAchievementNotifications, showError, showXPNotification } from '@/hooks/useApi';
 
@@ -62,6 +62,9 @@ export function useChat(initialThreadId: string | null) {
     const touchedRef = useRef(false);
     // Id of a thread the stream itself just created (the only case where the URL should adopt it).
     const [createdThreadId, setCreatedThreadId] = useState<string | null>(null);
+    // History of an opened thread: loading, failed (retryable) or gone (deleted / never existed).
+    const [history, setHistory] = useState<'idle' | 'loading' | 'error' | 'missing'>('idle');
+    const [reloadKey, setReloadKey] = useState(0);
 
     // Load history (and any confirmation still waiting) when a thread is opened.
     useEffect(() => {
@@ -73,23 +76,45 @@ export function useChat(initialThreadId: string | null) {
         setCreatedThreadId(null);
         setThreadId(initialThreadId);
         setPending([]);
+        setMessages([]);
         if (!initialThreadId) {
-            setMessages([]);
+            setHistory('idle');
             return;
         }
+        setHistory('loading');
         let cancelled = false;
         aiApi
             .thread(initialThreadId)
             .then((t) => {
-                if (cancelled || touchedRef.current) return;
+                if (cancelled) return;
+                setHistory('idle');
+                if (touchedRef.current) return;
                 setMessages(t.messages.map((m) => ({ id: newId(), role: m.role, text: m.text, sources: [], tools: [] })));
                 setPending(t.pendingConfirm);
             })
-            .catch(showError);
+            .catch((err) => {
+                // A request for a thread the reader already left must not toast or change the screen.
+                if (cancelled) return;
+                if (err instanceof ApiError && err.status === 404) {
+                    showError(err);
+                    setHistory('missing');
+                } else {
+                    setHistory('error');
+                }
+            });
         return () => {
             cancelled = true;
         };
-    }, [initialThreadId]);
+    }, [initialThreadId, reloadKey]);
+
+    /** Try loading the open thread's history again after a failure. */
+    const retryHistory = useCallback(() => {
+        loadedFor.current = null;
+        setReloadKey((k) => k + 1);
+    }, []);
+
+    /** The page has moved the URL to the thread the stream created; forget it so it is never adopted again. */
+    const acknowledgeCreated = useCallback(() => setCreatedThreadId(null), []);
 
     useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -108,7 +133,8 @@ export function useChat(initialThreadId: string | null) {
                 }
             }
             if (event.event === 'done') {
-                if (threadRef.current !== event.data.threadId) setCreatedThreadId(event.data.threadId);
+                // Only a stream that started without a thread created one; the URL adopts it once.
+                if (threadRef.current === null) setCreatedThreadId(event.data.threadId);
                 threadRef.current = event.data.threadId;
                 loadedFor.current = event.data.threadId;
                 setThreadId(event.data.threadId);
@@ -156,7 +182,8 @@ export function useChat(initialThreadId: string | null) {
     const send = useCallback(
         async (text: string): Promise<'ok' | 'blocked'> => {
             const message = text.trim();
-            if (!message || isStreaming) return 'ok';
+            if (!message) return 'ok';
+            if (isStreaming || history === 'loading') return 'blocked';
             if (pending.length) {
                 setNotice(PENDING_CONFIRM_NOTICE);
                 return 'blocked';
@@ -169,7 +196,7 @@ export function useChat(initialThreadId: string | null) {
             ]);
             return run((signal) => aiApi.chatStream({ threadId: threadRef.current ?? undefined, message }, handleEvent, signal));
         },
-        [handleEvent, isStreaming, pending.length, run]
+        [handleEvent, history, isStreaming, pending.length, run]
     );
 
     /** Answer the confirmation card: approve runs the change, cancel leaves everything untouched. */
@@ -193,5 +220,20 @@ export function useChat(initialThreadId: string | null) {
         setMessages((prev) => prev.map((m) => ({ ...m, streaming: false })));
     }, []);
 
-    return { threadId, createdThreadId, messages, pending, isStreaming, notice, send, respond, stop };
+    return {
+        threadId,
+        createdThreadId,
+        acknowledgeCreated,
+        messages,
+        pending,
+        isStreaming,
+        notice,
+        historyLoading: history === 'loading',
+        historyFailed: history === 'error',
+        historyMissing: history === 'missing',
+        retryHistory,
+        send,
+        respond,
+        stop,
+    };
 }

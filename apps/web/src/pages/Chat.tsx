@@ -11,7 +11,7 @@ import { useSlow } from "@/components/ai/useSlow";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/hooks/useChat";
 import { usePreferences } from "@/contexts/PreferencesContext";
-import { showError, useChatThreads, useDeleteThread } from "@/hooks/useApi";
+import { useChatThreads, useDeleteThread } from "@/hooks/useApi";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { cn } from "@/lib/utils";
 
@@ -31,16 +31,49 @@ const Chat = () => {
   const [showThreads, setShowThreads] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Thread whose history has already been scrolled into view; opening a thread jumps straight to its end once.
+  const scrolledFor = useRef<string | null>(null);
+  // Only replies that finish while the page is open are read aloud, not a history that just loaded.
+  const [announced, setAnnounced] = useState<string | null>(null);
   const { reduceMotion } = usePreferences();
   const waiting = chat.isStreaming && !chat.messages[chat.messages.length - 1]?.text;
   const slow = useSlow(waiting);
   const lastMessage = chat.messages[chat.messages.length - 1];
-  const announcement = lastMessage && lastMessage.role === "assistant" && !chat.isStreaming ? lastMessage.text : "";
+  const busy = chat.isStreaming || chat.pending.length > 0 || chat.historyLoading;
+  const wasStreaming = useRef(false);
 
-  // A brand-new conversation gets its id when the first turn ends; reflect it in the URL.
   useEffect(() => {
-    if (chat.createdThreadId && chat.createdThreadId !== routeThreadId && !chat.isStreaming) navigate(`/chat/${chat.createdThreadId}`, { replace: true });
-  }, [chat.createdThreadId, chat.isStreaming, routeThreadId, navigate]);
+    if (wasStreaming.current && !chat.isStreaming && lastMessage?.role === "assistant") setAnnounced(lastMessage.text);
+    wasStreaming.current = chat.isStreaming;
+  }, [chat.isStreaming, lastMessage]);
+
+  // A brand-new conversation gets its id when the first turn ends; reflect it in the URL, once.
+  const { createdThreadId, acknowledgeCreated } = chat;
+  useEffect(() => {
+    if (!createdThreadId || chat.isStreaming) return;
+    if (!routeThreadId) navigate(`/chat/${createdThreadId}`, { replace: true });
+    acknowledgeCreated();
+  }, [createdThreadId, acknowledgeCreated, chat.isStreaming, routeThreadId, navigate]);
+
+  // A deleted or unknown conversation sends the reader back to a fresh chat.
+  useEffect(() => {
+    if (chat.historyMissing) navigate("/chat", { replace: true });
+  }, [chat.historyMissing, navigate]);
+
+  // Once the confirmation card goes away, put the cursor back in the message box instead of losing it.
+  const hadPending = useRef(false);
+  useEffect(() => {
+    if (hadPending.current && chat.pending.length === 0) inputRef.current?.focus();
+    hadPending.current = chat.pending.length > 0;
+  }, [chat.pending.length]);
+
+  useEffect(() => {
+    if (!showThreads) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowThreads(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showThreads]);
 
   useEffect(() => {
     // Follow the conversation only while the reader is at (or near) the bottom, or just sent something: scrolling up to
@@ -49,14 +82,20 @@ const Chat = () => {
     const scroller = end?.parentElement;
     const nearBottom = !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 240;
     const justSent = chat.messages[chat.messages.length - 1]?.role === "user";
-    if (nearBottom || justSent) end?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
-  }, [chat.messages, chat.pending.length, reduceMotion]);
+    const key = routeThreadId ?? "";
+    const firstView = chat.messages.length > 0 && scrolledFor.current !== key;
+    if (firstView) {
+      // Opening a conversation lands on its latest message, not its first.
+      scrolledFor.current = key;
+      end?.scrollIntoView({ behavior: "auto", block: "end" });
+    } else if (nearBottom || justSent) end?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
+  }, [chat.messages, chat.pending.length, reduceMotion, routeThreadId]);
 
   if (!enabled) return <Navigate to="/dashboard" replace />;
 
   const submit = () => {
     const text = input;
-    if (!text.trim()) return;
+    if (!text.trim() || busy) return;
     setInput("");
     // A refused message (confirmation pending) goes back into the box instead of being lost.
     void chat.send(text).then((outcome) => { if (outcome === "blocked") setInput((current) => current || text); });
@@ -71,15 +110,15 @@ const Chat = () => {
     try {
       await deleteThread.mutateAsync(target.id);
       if (String(target.id) === String(routeThreadId)) navigate("/chat");
-    } catch (err) {
-      showError(err);
+    } catch {
+      // useDeleteThread already showed the error.
     }
   };
 
   return (
     <DashboardLayout>
       <div className="relative flex gap-4 h-[calc(100dvh-11rem)] min-h-[480px] lg:h-[calc(100dvh-7rem)]">
-        <aside className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-0 w-auto lg:static" : "hidden lg:flex")}>
+        <aside id="chat-threads" aria-label="Conversations" className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-0 w-auto lg:static" : "hidden lg:flex")}>
           <Button size="sm" variant="glow" className="gap-1" onClick={() => { navigate("/chat"); setShowThreads(false); }}>
             <MessageSquarePlus className="h-4 w-4" /> New chat
           </Button>
@@ -89,7 +128,7 @@ const Chat = () => {
             {!threadsLoading && !threadsFailed && threads.length === 0 && <p className="text-xs text-foreground-muted p-2">Your conversations will show up here.</p>}
             {threads.map((t) => (
               <div key={t.id} className={cn("group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm hover:bg-background-secondary", t.id === routeThreadId && "bg-background-secondary")}>
-                <button type="button" className="flex-1 truncate text-left" onClick={() => { navigate(`/chat/${t.id}`); setShowThreads(false); }}>{t.title}</button>
+                <button type="button" aria-current={t.id === routeThreadId ? "page" : undefined} className="flex-1 truncate text-left" onClick={() => { navigate(`/chat/${t.id}`); setShowThreads(false); }}>{t.title}</button>
                 <button
                   type="button"
                   aria-label={`Delete ${t.title}`}
@@ -105,7 +144,7 @@ const Chat = () => {
 
         <section className="flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-background-secondary/30">
           <header className="flex items-center gap-2 border-b border-border px-4 py-3">
-            <Button size="icon" variant="ghost" className="lg:hidden" aria-label="Show conversations" onClick={() => setShowThreads((v) => !v)}><PanelLeft className="h-4 w-4" /></Button>
+            <Button size="icon" variant="ghost" className="lg:hidden" aria-label={showThreads ? "Hide conversations" : "Show conversations"} aria-expanded={showThreads} aria-controls="chat-threads" onClick={() => setShowThreads((v) => !v)}><PanelLeft className="h-4 w-4" /></Button>
             <Bot className="h-5 w-5 text-primary-text" />
             <h1 className="font-heading font-semibold">Quest Assistant</h1>
             <span className="ml-auto text-[11px] text-foreground-muted hidden sm:inline">AI-generated. Changes always ask first.</span>
@@ -113,8 +152,14 @@ const Chat = () => {
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {/* Screen readers hear a reply once it is complete, not every streamed token. */}
-            <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
-            {chat.messages.length === 0 && (
+            <div className="sr-only" role="status" aria-live="polite">{announced ?? ""}</div>
+            {chat.historyLoading && (
+              <p className="h-full flex items-center justify-center gap-2 text-sm text-foreground-muted" aria-busy="true">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading conversation…
+              </p>
+            )}
+            {chat.historyFailed && <ErrorCard what="this conversation" onRetry={chat.retryHistory} />}
+            {chat.messages.length === 0 && !chat.historyLoading && !chat.historyFailed && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-4">
                 <Bot className="h-10 w-10 text-primary-text" />
                 <div>
@@ -123,7 +168,7 @@ const Chat = () => {
                 </div>
                 <div className="flex flex-wrap justify-center gap-2">
                   {SUGGESTIONS.map((s) => (
-                    <button key={s} type="button" onClick={() => chat.send(s)} className="text-xs px-3 py-1.5 rounded-full border border-border bg-card hover:border-primary/50">{s}</button>
+                    <button key={s} type="button" disabled={busy} onClick={() => void chat.send(s)} className="text-xs px-3 py-1.5 rounded-full border border-border bg-card hover:border-primary/50 disabled:opacity-50 disabled:pointer-events-none">{s}</button>
                   ))}
                 </div>
               </div>
@@ -140,13 +185,14 @@ const Chat = () => {
             onSubmit={(e) => { e.preventDefault(); submit(); }}
           >
             <Textarea
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
               placeholder={chat.pending.length ? "Approve or cancel the change above first" : "Ask anything about your quests…"}
               rows={1}
               maxLength={2000}
-              disabled={chat.pending.length > 0}
+              disabled={chat.pending.length > 0 || chat.historyLoading}
               className="resize-none min-h-[40px] max-h-32"
               aria-label="Message"
             />

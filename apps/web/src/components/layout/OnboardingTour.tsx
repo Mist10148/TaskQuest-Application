@@ -37,14 +37,17 @@ export const OnboardingTour = () => {
     if (!open) return;
     nextRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector('[role="dialog"], [role="alertdialog"]')) {
+      if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector('[role="dialog"], [role="alertdialog"]')) {
+        // This Escape closes the tour and nothing else (page shortcuts such as "back to all quests" skip handled keys).
+        e.preventDefault();
         markTourSeen();
         saveTourStep(0);
         setOpen(false);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture phase: runs before the page's own shortcuts, which listen on window too.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [open]);
 
   // Every page mounts its own layout (and so its own tour): the step is kept for the tab so the tour

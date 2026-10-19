@@ -97,7 +97,7 @@ Every list in `GET /api/lists`, `GET /api/lists/:id` and `PATCH /api/lists/:id` 
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/lists` | — | `[{...list, itemsTotal, itemsCompleted}]`, newest first |
+| GET | `/api/lists` | — | `[{...list, itemsTotal, itemsCompleted}]`, newest first. The counts are of top-level tasks (subtasks are not counted) |
 | GET | `/api/lists/search?q=…&scope=lists\|tasks\|all` | `q` 1–100 characters (required), `scope` (default `lists`) | `{lists:[list rows], tasks:[{id, name, description, completed, parent_id, due_date, list_id, list_name}]}`; the part not in scope is `[]`. `lists` matches quest name, category and description; `tasks` matches task names and descriptions. Case-insensitive, `%` and `_` are matched literally, owner-scoped, and bounded (50 tasks, 100 quests). Declared before `/:id`. |
 | POST | `/api/lists` | `{name, description?, category?, priority?: "LOW"\|"MEDIUM"\|"HIGH"\|null, deadline?: "YYYY-MM-DD"\|null}` | `201 {...list, xpResult, newAchievements}`. `409` on duplicate name; `400` at 200 quests. |
 | GET | `/api/lists/:id` | — | `{...list, items:[...]}` (items by position) |

@@ -4292,6 +4292,18 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM items WHERE id = ?', [item.id]))[0].n), 1, "the other person's list is untouched");
     });
 
+    await t.test('list overviews count top-level tasks only, like clearing a list does', async () => {
+        const U = '100000000000000661';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Counted' });
+        const a = (await db.tasks.addItem(U, list.id, { name: 'a' })).item;
+        await db.tasks.addItem(U, list.id, { name: 'b' });
+        await db.tasks.addSubtasks(U, a.id, ['a1', 'a2']);
+        await db.tasks.setItemCompleted(U, a.id, true);
+        const row = (await db.tasks.getLists(U)).find((l) => l.id === list.id);
+        assert.deepEqual([row.items_total, row.items_completed], [2, 1], 'two tasks, one done; the open subtasks are steps of the done one');
+    });
+
     await t.test('reordering a long list writes every position in a few statements and leaves unmoved rows alone', async () => {
         const U = '100000000000000662';
         await db.users.ensureUser(U);

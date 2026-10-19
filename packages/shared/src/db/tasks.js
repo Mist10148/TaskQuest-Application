@@ -128,13 +128,17 @@ function shareFields(row) {
     return { ...row, is_owner: Boolean(Number(row.is_owner)), member_count: memberCount, shared: memberCount > 1 };
 }
 
-/** Lists the user owns plus lists shared with them, with item counts and how each is shared, in one query. */
+/**
+ * Lists the user owns plus lists shared with them, with item counts and how each is shared, in one query.
+ * items_total / items_completed count top-level tasks only (subtasks are steps of their task), the same tasks that decide
+ * whether a list counts as cleared (completionContext).
+ */
 async function getLists(discordId, { sortBy = 'created_at', order = 'DESC' } = {}) {
     const me = String(discordId);
     const acc = access.accessSql('l', me);
     const rows = await run(
         `SELECT l.*, COUNT(i.id) AS items_total, COALESCE(SUM(i.completed), 0) AS items_completed, ${SHARE_COLUMNS}
-         FROM lists l LEFT JOIN items i ON i.list_id = l.id
+         FROM lists l LEFT JOIN items i ON i.list_id = l.id AND i.parent_id IS NULL
          ${SHARE_JOINS}
          WHERE ${acc.sql}
          GROUP BY l.id, me.role, ou.discord_username
@@ -541,10 +545,6 @@ async function moveItem(discordId, itemId, position) {
     });
 }
 
-/** Apply a full new order to a list the user can edit. `orderedIds` must be exactly the list's item ids. */
-async function reorderItems(discordId, listId, orderedIds) {
-    const lid = unwrap(v.id(listId));
-    if (!Array.isArray(orderedIds) || orderedIds.length > 5000) throw errors.validation('Provide the task ids in their new order.');
 /** moveItem on an item whose list the caller has already locked. @returns {Promise<number[]>} the list's new order */
 async function moveItemIn(conn, item, position) {
     const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
@@ -554,6 +554,10 @@ async function moveItemIn(conn, item, position) {
     return ids;
 }
 
+/** Apply a full new order to a list the user can edit. `orderedIds` must be exactly the list's item ids. */
+async function reorderItems(discordId, listId, orderedIds) {
+    const lid = unwrap(v.id(listId));
+    if (!Array.isArray(orderedIds) || orderedIds.length > 5000) throw errors.validation('Provide the task ids in their new order.');
     const wanted = orderedIds.map((x) => unwrap(v.id(x)));
     return withTransaction(async (conn) => {
         await access.forList(conn, discordId, lid, 'editor', { lock: true });

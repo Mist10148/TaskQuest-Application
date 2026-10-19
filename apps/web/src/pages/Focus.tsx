@@ -157,8 +157,8 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
       <h2 id="focus-running" className="mb-2 flex items-center justify-center gap-2 font-heading text-base font-semibold sm:text-lg">
         <Hourglass className="h-5 w-5 text-primary-text" aria-hidden /> {active.minutes} minute session
       </h2>
-      <p className="font-heading text-6xl font-bold tabular-nums sm:text-7xl" role="timer" aria-label="Time left" data-testid="focus-timer">
-        {formatClock(left)}
+      <p className="font-heading text-6xl font-bold tabular-nums sm:text-7xl" role="timer" data-testid="focus-timer">
+        <span className="sr-only">Time left: </span>{formatClock(left)}
       </p>
       <p className="mt-2 text-sm text-foreground-muted">
         {left === 0 ? "Time's up! Finish the session to collect your XP." : "Stay with it. The timer cannot be paused: leave early and the session ends without XP."}

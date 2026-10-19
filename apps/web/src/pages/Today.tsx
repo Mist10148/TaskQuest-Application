@@ -135,8 +135,8 @@ const StreakStrip = ({ data }: { data: TodayData }) => {
       </div>
       <ol className="grid grid-cols-7 gap-1 text-center text-xs">
         {days.map((d) => (
-          <li key={d.day} className={cn("rounded-lg border px-1 py-2", d.state === "kept" ? "border-destructive/40 bg-destructive/10" : "border-border", d.isToday && "ring-2 ring-ring")} aria-label={`${d.label}: ${d.state === "kept" ? "streak day" : d.state === "today-open" ? "today, not claimed yet" : "no claim"}`}>
-            <div className="text-foreground-muted">{d.label}</div>
+          <li key={d.day} className={cn("rounded-lg border px-1 py-2", d.state === "kept" ? "border-destructive/40 bg-destructive/10" : "border-border", d.isToday && "ring-2 ring-ring")}>
+            <div className="text-foreground-muted">{d.label}<span className="sr-only">{`: ${d.state === "kept" ? "streak day" : d.state === "today-open" ? "today, not claimed yet" : "no claim"}`}</span></div>
             <Flame className={cn("mx-auto mt-1 h-4 w-4", d.state === "kept" ? "text-destructive-text" : "text-foreground-muted/40")} aria-hidden />
           </li>
         ))}
@@ -147,7 +147,7 @@ const StreakStrip = ({ data }: { data: TodayData }) => {
 
 const TodayView = ({ data }: { data: TodayData }) => (
   <div className="space-y-4 sm:space-y-6">
-    <div className="flex flex-wrap gap-2 text-sm" aria-label="Today at a glance">
+    <div className="flex flex-wrap gap-2 text-sm" role="group" aria-label="Today at a glance">
       <span className="rounded-full border border-border bg-card px-3 py-1" data-testid="count-due"><strong>{data.counts.dueToday}</strong> due today</span>
       <span className={cn("rounded-full border px-3 py-1", data.counts.overdue > 0 ? "border-destructive/40 bg-destructive/10 text-destructive-text" : "border-border bg-card")} data-testid="count-overdue"><strong>{data.counts.overdue}</strong> overdue</span>
       <span className="rounded-full border border-border bg-card px-3 py-1" data-testid="count-done"><strong>{data.counts.doneToday}</strong> done today</span>

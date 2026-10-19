@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { onCelebrate, type CelebrationKind } from "@/lib/celebrate";
 import { usePreferences } from "@/contexts/PreferencesContext";
@@ -22,14 +22,25 @@ export const CelebrationHost = () => {
   const { reduceMotion } = usePreferences();
   const reduced = useReducedMotion() || reduceMotion;
 
+  // Ids keep counting across re-subscriptions, so a new burst never reuses the key of one still on screen.
+  const nextId = useRef(0);
+
   useEffect(() => {
-    let next = 0;
-    return onCelebrate((kind) => {
+    const timers = new Set<number>();
+    const unsubscribe = onCelebrate((kind) => {
       if (reduced) return;
-      const id = ++next;
+      const id = ++nextId.current;
       setBursts((b) => [...b, { id, kind }]);
-      window.setTimeout(() => setBursts((b) => b.filter((x) => x.id !== id)), 1800);
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
+        setBursts((b) => b.filter((x) => x.id !== id));
+      }, 1800);
+      timers.add(timer);
     });
+    return () => {
+      unsubscribe();
+      timers.forEach((t) => window.clearTimeout(t));
+    };
   }, [reduced]);
 
   return (

@@ -230,7 +230,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
             <SummarizeButton body={{ mode: "list", listId: list.id }} title={`Summary: ${list.name}`} />
             <Button variant="outline" size="sm" onClick={onOpenMembers} className="gap-1" title={list.shared ? `Shared with ${peopleLabel(list.memberCount)}` : "Invite people to this quest"}>
               <Users className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Members</span>
-              {list.shared && <span className="rounded-full bg-primary/15 px-1.5 text-xs font-semibold text-primary-text" aria-label={`${list.memberCount ?? 2} people`}>👥 {list.memberCount}</span>}
+              {list.shared && <span className="rounded-full bg-primary/15 px-1.5 text-xs font-semibold text-primary-text"><span aria-hidden>👥 {list.memberCount}</span><span className="sr-only">{`, ${list.memberCount ?? 2} people`}</span></span>}
             </Button>
             {editable && (
               <Button variant="outline" size="sm" onClick={() => onAddItem()} className="gap-1">

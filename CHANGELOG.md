@@ -4,6 +4,14 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Highlights
+
+- **PostgreSQL replaces MySQL** (empty start; read the upgrade notes first).
+- **Optional AI features** (summaries, prioritiser, chat with confirmed write actions, bot persona) in a separate `apps/ai` service.
+- **Shared quests and parties**, with assignees, comments and a per-task history.
+- **New game systems:** ten more classes, quests, prestige, the cosmetics shop, focus sessions, the weekly review, the Today page and arcade replay verification.
+- **Web app:** Tailwind 4, board and calendar views, a task drawer, bulk edit, keyboard task cursor, accessibility preferences and Playwright tests.
+
 ### Upgrade notes
 
 > **Migration numbers in this section.** Entries below that name a migration from `004` up to `026` (for example `018`, `021`, `024`) refer to the pre-squash MySQL migration names. Those migrations are folded into `001_baseline`; the migrations that exist in `packages/shared/src/db/migrations` are `001_baseline`, `002_drop_skill_points`, `003_ai_prioritize_cache`, `004_item_assignee`, `005_item_activity` and `006_item_comments`, so the next one is `007`. Names below such as `003_ai`, `004_lists_updated_at`, `005_ai_thread_source` and `006_ai_chat_format` are pre-squash names and do not match the files of the same number.
@@ -406,3 +414,4 @@ The Discord bot (`taskquest-botv2` v3.8.3) and the web app (`taskquest-web_deplo
 Their git histories were deliberately not imported, because both contained leaked secrets. The original repositories remain the reference for older history.
 
 [4.0.0]: https://github.com/Mist10148/TaskQuest-Application/releases/tag/v4.0.0
+[Unreleased]: https://github.com/Mist10148/TaskQuest-Application/compare/v4.0.0...HEAD

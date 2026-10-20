@@ -209,8 +209,8 @@ async function importAll(discordId, data) {
         let itemCount = 0;
         let orphaned = 0;
         for (const l of lists) {
-            // The database compares names with its own collation (Cafe = Café), which a lower-cased set does not see:
-            // when the insert is refused as a duplicate, mark that name taken and pick the next suffix.
+            // List names are CITEXT, so the database has the last word on what counts as a duplicate: when the insert is
+            // refused as one, mark that name taken and pick the next suffix.
             let listId;
             for (let attempt = 0; listId === undefined; attempt++) {
                 const name = freeName(l.name, taken);

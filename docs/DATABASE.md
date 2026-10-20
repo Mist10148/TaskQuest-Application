@@ -64,6 +64,7 @@ Every per-user table has a foreign key to `users(discord_id)` with `ON DELETE CA
 | `lifetime_xp` | BIGINT | XP earned since the last prestige. Drives the level. |
 | `lifetime_xp_total` | BIGINT | Total ever earned, never reset (kept in sync by `applyXP`). Drives the XP achievements and the lifetime leaderboard. |
 | `prestige` | INT | Times the player has prestiged (0–10); each adds +2% XP |
+| `streak_warned_day` | DATE NULL | The local day the streak-at-risk reminder was last sent, so a user is warned at most once a day |
 | `last_chest_streak` | INT | Streak length of the last streak chest paid; a chest pays only above it, and a broken streak clears it |
 | `player_level` | BIGINT | ⌊lifetime_xp / 100⌋ + 1 (kept in sync by `applyXP`) |
 | `player_class` | VARCHAR(20) CHECK IN (DEFAULT, HERO, GAMBLER, ASSASSIN, WIZARD, ARCHER, TANK, MONK, ARTISAN, RANGER, NECROMANCER, PALADIN, BARD, ALCHEMIST, DRUID, CHRONOMANCER, WARDEN) | Equipped class |

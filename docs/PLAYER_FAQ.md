@@ -62,7 +62,7 @@ At **level 30** you can prestige (profile, or `/prestige`), up to 10 times. You 
 
 **Why didn't my invitation say who was found or not found?** On purpose. The answer is the same whether the person exists, turned invitations off, declined you recently (you cannot invite them again for 7 days) or you invited them already, so nobody can use it to look up who uses TaskQuest. People can switch invitations off in Settings.
 
-**What is a party?** Up to six people with one shared weekly quest (Monday to Monday in UTC): 12 tasks for each member who finished at least 6 tasks themselves. Each member who finished 6 tasks themselves since joining gets +60 XP when it is reached, once per week. See [GAMEPLAY §5h](GAMEPLAY.md#5i-parties). You can be in one party at a time; the owner invites, removes members and disbands.
+**What is a party?** Up to six people with one shared weekly quest (Monday to Monday in UTC): 12 tasks for each member who finished at least 6 tasks themselves. Each member who finished 6 tasks themselves since joining gets +60 XP when it is reached, once per week. See [GAMEPLAY §5i](GAMEPLAY.md#5i-parties). You can be in one party at a time; the owner invites, removes members and disbands.
 
 ## Import and export
 

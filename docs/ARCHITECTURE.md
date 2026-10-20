@@ -27,7 +27,7 @@ flowchart TB
     end
     subgraph "Web service (apps/server)"
         MW["helmet · rate limit · CSRF · session"]
-        R["Routes: auth · user · lists/items · sharing · parties · templates · import · quests · focus · review · stats · cosmetics · push · classes/skills/achievements · leaderboard · games"]
+        R["Routes: auth · user · lists/items · sharing · parties · templates · import · quests · focus · review · stats · cosmetics · push · classes/skills/achievements · leaderboard · games · today · reflection · weekly goal · comments · ai"]
         STATIC["Static dist/ + SPA fallback"]
     end
     subgraph "Bot worker (apps/bot)"
@@ -104,6 +104,10 @@ packages/shared/src
     ├── quests.js    daily/weekly/monthly/rotating quest progress and atomic claims
     ├── focus.js     server-timed focus sessions
     ├── review.js    the weekly review
+    ├── today.js     the Today page data and the streak-at-risk warnings
+    ├── goals.js     the daily reflection and the weekly goal (claims)
+    ├── extras.js    smaller queries that do not belong to one area
+    ├── maintenance.js  scheduled clean-up and archive jobs
     ├── stats.js     XP history and summary for the Stats page
     ├── templates.js task templates
     ├── cosmetics.js the shop: buy and equip titles, frames and accents

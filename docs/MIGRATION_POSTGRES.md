@@ -34,7 +34,7 @@ This page explains why and how TaskQuest moved its database from MySQL (TiDB Clo
 | Node driver (`packages/shared`, `apps/server`) | `mysql2` | `pg` (node-postgres), behind a small compatibility layer in `packages/shared/src/db/pool.js` |
 | Python driver (`apps/ai`) | SQLAlchemy + `aiomysql` / `PyMySQL` | SQLAlchemy + `asyncpg`, with codecs that keep naive-UTC datetimes and ISO date strings working (`apps/ai/app/db/pool.py`) |
 | Schema | 26 MySQL migrations | `001_baseline` in Postgres DDL |
-| Migration lock | `GET_LOCK('taskquest_migrations')` | `pg_advisory_lock` |
+| Migration lock | `GET_LOCK('taskquest_migrations')` | `pg_try_advisory_lock` (session level; a second process waits and retries) |
 | RAG search | BLOB embeddings, cosine similarity in numpy | `vector(768)` column, exact `ORDER BY embedding <=> :q` in SQL over the user's rows (numpy stays for the SQLite tests) |
 | CI services | `mysql:8.0` | `pgvector/pgvector:pg16` |
 | Backups | `mysqldump` | Supabase daily backups plus `pg_dump` |
@@ -180,4 +180,4 @@ Redeploy the last MySQL-era commit and set `DB_URL` back to the TiDB URL. Nothin
 - **Strict typing.** Postgres does not compare a string with a number implicitly. The code passes numbers for numeric columns, and the compatibility layer turns booleans into `1` / `0`.
 - **Transactional DDL.** Each migration runs inside a transaction, so a failed migration leaves no half-applied schema.
 - **Failed statements abort the transaction.** Postgres refuses every statement after an error until the transaction ends, so code that catches a duplicate key inside a transaction and retries (the import's list names, a re-assigned Discord handle) wraps the attempt in `savepoint()`.
-- **No legacy upgrade path.** The MySQL-only `002_upgrade_legacy` migration and the [collation risk](OPERATIONS.md) it carried no longer apply.
+- **No legacy upgrade path.** The MySQL-only `002_upgrade_legacy` migration and the MySQL collation risk it carried no longer apply.

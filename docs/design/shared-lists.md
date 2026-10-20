@@ -75,7 +75,7 @@ Opt-in per list. Shared lists are excluded from a member's embeddings by default
 
 ## Migration and rollout
 
-1. Migration `010_list_members` adds the two tables and `items.completed_by` (nullable, back-filled from `lists.discord_id` for completed items).
+1. Migration `010_list_members` (a pre-squash MySQL name, now part of `001_baseline`) adds the two tables and `items.completed_by` (nullable, back-filled from `lists.discord_id` for completed items).
 2. Ship the access function behind no flag but with **no UI**, running the whole test suite; no behaviour changes yet.
 3. Add the web Members panel and `/share`, then reminders and the digest.
 4. Announce it as a beta and watch `list_members` growth and any `NOT_FOUND` spike.
@@ -111,8 +111,8 @@ The open questions above were settled like this (the product owner was not avail
 | Proposal | Built |
 |---|---|
 | `list_invites` with a hashed token, `max_uses`, `uses` | A **named invitation** row (`invitee_discord_id`, `role`, `invited_by`, `expires_at` = 7 days, `status`). No tokens. |
-| Migration `010_list_members` | `018_list_members` (010 was taken). It also adds `list_reminders` / `item_reminders` (per-member reminder state), `public_id` on members and the actor columns, with a backfill from the list owner. |
-| "Managers can delete the list" | **Only the owner deletes a list**, which also settles "orphaned lists when the owner leaves": the owner cannot leave, they delete. Ownership transfer is out of scope. Only the owner makes or changes a manager and invites managers. |
+| Migration `010_list_members` | `018_list_members` (010 was taken; both are pre-squash MySQL names, now folded into `001_baseline`). It also adds `list_reminders` / `item_reminders` (per-member reminder state), `public_id` on members and the actor columns, with a backfill from the list owner. |
+| "Managers can delete the list" | **Only the owner deletes a list**, which also settles "orphaned lists when the owner leaves": the owner cannot leave, they delete. Ownership transfer is built (`POST /api/lists/:id/transfer`). Only the owner makes or changes a manager and invites managers. |
 | `access.forList(conn, discordId, listId, minRole)` | Built as proposed in `packages/shared/src/db/access.js`, with `forItem`, `accessSql` (queries over many lists) and `actorSql` (metrics by actor). A viewer attempting a write gets `FORBIDDEN` (they already know the list exists); a stranger always gets `NOT_FOUND`. |
 | A test over every `tasks.*` function as a stranger | `db.integration.test.js` enumerates every export of `db.tasks`, `db.templates`, `db.transfer` and `db.quests`, requires each to be classified, and proves a non-member gets `NOT_FOUND` and writes nothing. Role matrix and "removed while open" tests are beside it. |
 | Reminders once per member | Candidates are one row per recipient (owner or member with automation on); a member's sent/snooze state lives in `list_reminders` / `item_reminders`, the owner's stays on the list/item. A changed due date or deadline re-arms everybody's state only when the date really changes, at most 3 times a day per task or list (`rearm_count`, `rearm_day`); the bot sends a person at most 20 reminder DMs per run and one digest DM for the rest. |
@@ -126,11 +126,11 @@ Surfaces: web (Members dialog, invitation banner, read-only view for viewers), b
 
 ### Parties (minimal)
 
-Built on the same invitation rules: `parties`, `party_members` (UNIQUE per user: one party each, up to 6), `party_invites`. The weekly **party quest** is 12 first completions per member over the global UTC ISO week, summed over the members, with +60 XP claimable once per person per week (`quest_claims` key `PARTY_<id>`, and one party reward per person per week across parties). It is not in `QUESTS` because its target depends on the member count. See [GAMEPLAY](../GAMEPLAY.md#5h-parties) and [API.md](../API.md#parties).
+Built on the same invitation rules: `parties`, `party_members` (UNIQUE per user: one party each, up to 6), `party_invites`. The weekly **party quest** is 12 first completions per member over the global UTC ISO week, summed over the members, with +60 XP claimable once per person per week (`quest_claims` key `PARTY_<id>`, and one party reward per person per week across parties). It is not in `QUESTS` because its target depends on the member count. See [GAMEPLAY](../GAMEPLAY.md#5i-parties) and [API.md](../API.md#parties).
 
 ### Still open for a human
 
 - ~~Opt out of invitations~~: built (`users.accept_invites`, a neutral answer to the inviter).
-- Whether a manager should be able to delete the list, or ownership transfer is wanted.
+- Whether a manager should be able to delete the list. (Ownership transfer is built.)
 - ~~Party owner removes a member~~: built (`/party kick`).
 - Whether a viewer should keep seeing a shared list's task descriptions in Discord's public `/list` messages (the same caveat as any `/list` message: it is public in a channel).

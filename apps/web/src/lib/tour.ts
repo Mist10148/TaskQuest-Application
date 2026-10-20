@@ -58,6 +58,35 @@ export function resetTour(storage: TourStorage | null = defaultStorage()): void 
   }
 }
 
+const STEP_KEY = "tq.tourStep";
+
+function sessionStore(): TourStorage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** The step the tour was on, kept for the tab so it resumes on the next page instead of restarting (each page mounts its own tour). */
+export function readTourStep(storage: TourStorage | null = sessionStore()): number {
+  try {
+    const n = Number(storage?.getItem(STEP_KEY));
+    return Number.isInteger(n) ? clampStep(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function saveTourStep(step: number, storage: TourStorage | null = sessionStore()): void {
+  try {
+    if (step <= 0) storage?.removeItem(STEP_KEY);
+    else storage?.setItem(STEP_KEY, String(clampStep(step)));
+  } catch {
+    /* the step just is not remembered */
+  }
+}
+
 /** Fired on window to start the tour on demand (Settings > Replay tour). */
 export const START_TOUR_EVENT = "tq:start-tour";
 

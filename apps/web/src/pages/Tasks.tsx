@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { itemsApi, type Item, type ListWithItems } from "@/lib/api";
@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import {
   useLists, useList, useCreateList, useUpdateList, useDeleteList,
-  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems,
+  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems, useMoveItem, useListMembers,
 } from "@/hooks/useApi";
 import { ListOverview } from "@/components/tasks/ListOverview";
 import { ListDetail } from "@/components/tasks/ListDetail";
@@ -22,6 +22,8 @@ import { ConfirmDeleteDialog } from "@/components/tasks/ConfirmDeleteDialog";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { TemplatesDialog } from "@/components/tasks/TemplatesDialog";
 import { SaveTemplateDialog } from "@/components/tasks/SaveTemplateDialog";
+import { bulkPatch, tooManyTags, type BulkEditValues } from "@/lib/bulkEdit";
+import { MAX_TAGS, parseTags } from "@/lib/tags";
 import { saveTemplateProblem } from "@/lib/templates";
 import { MembersDialog } from "@/components/tasks/MembersDialog";
 import { canEditTasks, isAccessLost, roleOf } from "@/lib/sharing";
@@ -36,12 +38,22 @@ const Tasks = () => {
   const createItem = useCreateItem();
   const toggleItem = useToggleItem();
   const updateItem = useUpdateItem();
+  const moveItem = useMoveItem();
   const reorderItems = useReorderItems();
   const deleteItem = useDeleteItem();
 
-  // /tasks?list=42 opens a quest directly (used by links from AI answers).
+  // The open quest lives in the URL (/tasks?list=42): links from AI answers open it, refresh keeps it,
+  // and the browser's Back button returns to the quest log. Opening adds a history entry; closing replaces it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedListId, setSelectedListId] = useState<number | null>(() => Number(searchParams.get("list")) || null);
+  const selectedListId: number | null = Number(searchParams.get("list")) || null;
+  const setSelectedListId = useCallback((id: number | null) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (id) next.set("list", String(id));
+      else next.delete("list");
+      return next;
+    }, { replace: id === null });
+  }, [setSearchParams]);
   const { data: selectedList, refetch: refetchList, isLoading: listLoading, isError: listFailed, error: listError, isFetching: listFetching } = useList(selectedListId || 0);
   const filters = useListFilters(lists);
 
@@ -63,7 +75,7 @@ const Tasks = () => {
     void qc.invalidateQueries({ queryKey: ["lists"] });
     setMembersOpen(false);
     setSelectedListId(null);
-  }, [accessLost, selectedListId, qc]);
+  }, [accessLost, selectedListId, qc, setSelectedListId]);
   const itemDeletes = useUndoableDelete(
     async (id) => {
       await deleteItem.mutateAsync(id);
@@ -186,14 +198,48 @@ const Tasks = () => {
     itemDeletes.request(ids, ids.length === 1 ? `Deleted "${nameOf(ids[0])}"` : `Deleted ${ids.length} tasks`);
 
   // Complete one after another so each task pays its own XP and achievements.
+  // The reward toasts are folded into one summary for the batch.
   const completeItems = async (ids: number[]) => {
+    let done = 0;
+    let xp = 0;
     for (const id of ids) {
       try {
-        await toggleItem.mutateAsync(id);
+        const result = await toggleItem.mutateAsync({ itemId: id, completed: true, quiet: true });
+        if (result.completed) {
+          done += 1;
+          xp += result.xpResult?.finalXP ?? 0;
+        }
       } catch {
         break; // error toast shown by the mutation hook
       }
     }
+    if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`);
+    refetchList();
+  };
+
+  // One update per task (the same endpoint as the edit form), one toast at the end.
+  const editItems = async (ids: number[], values: BulkEditValues) => {
+    if (!bulkPatch(values)) return;
+    let done = 0;
+    let tooMany = 0;
+    for (const id of ids) {
+      // Adding or removing tags depends on each task's own tags, so every task gets its own patch.
+      const current = parseTags(selectedList?.items.find((i: Item) => i.id === id)?.tags);
+      if (tooManyTags(values, current)) {
+        tooMany += 1;
+        continue;
+      }
+      const data = bulkPatch(values, current);
+      if (!data) continue; // nothing would change for this task
+      try {
+        await updateItem.mutateAsync({ itemId: id, data });
+        done += 1;
+      } catch {
+        break; // error toast shown by the mutation hook
+      }
+    }
+    if (done > 0) toast.success(`✏️ ${done} ${done === 1 ? "task" : "tasks"} updated${done < ids.length ? ` (${ids.length - done} not changed)` : ""}`);
+    if (tooMany > 0) toast.warning(`${tooMany} ${tooMany === 1 ? "task was" : "tasks were"} skipped: a task can have at most ${MAX_TAGS} tags.`);
     refetchList();
   };
 
@@ -215,6 +261,28 @@ const Tasks = () => {
   };
 
   const detail: ListWithItems | undefined = selectedListId ? selectedList : undefined;
+  // People a task can be assigned to: only a shared quest has anyone besides the owner.
+  const membersQuery = useListMembers(detail?.id ?? 0, Boolean(detail?.shared));
+  const assignOptions = detail?.shared ? membersQuery.data?.members : undefined;
+  // Quests a task can move to: any other quest I may add tasks to.
+  const moveTargets = useMemo(
+    () => lists.filter((l) => l.id !== detail?.id && canEditTasks(roleOf(l))).map((l) => ({ id: l.id, name: l.name })),
+    [lists, detail?.id]
+  );
+
+  const moveItems = async (ids: number[], listId: number) => {
+    const target = lists.find((l) => l.id === listId)?.name ?? "the other quest";
+    let done = 0;
+    for (const id of ids) {
+      try {
+        await moveItem.mutateAsync({ itemId: id, listId });
+        done += 1;
+      } catch {
+        break; // error toast shown by the mutation hook
+      }
+    }
+    if (done > 0) toast.success(`📦 Moved ${done === 1 ? `"${nameOf(ids[0])}"` : `${done} tasks`} to ${target}`);
+  };
 
   return (
     <DashboardLayout>
@@ -235,11 +303,17 @@ const Tasks = () => {
           }}
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
+          onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
+          assignOptions={assignOptions}
+          onAssign={(itemId, memberKey) => updateItem.mutate({ itemId, data: { assignee: memberKey } })}
+          moveTargets={moveTargets}
+          onMove={moveItems}
           onEditItem={openItemEditor}
           hiddenIds={itemDeletes.hidden}
           onDeleteItem={(id) => deleteItems([id])}
           onBulkComplete={completeItems}
           onBulkDelete={deleteItems}
+          onBulkEdit={editItems}
           onReorder={(itemIds) => reorderItems.mutateAsync({ listId: detail.id, itemIds })}
         />
       ) : selectedListId ? (

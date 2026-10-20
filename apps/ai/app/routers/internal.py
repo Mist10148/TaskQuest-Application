@@ -19,7 +19,7 @@ router = APIRouter(prefix="/internal", dependencies=[Depends(verify_internal_tok
 
 class IndexBody(BaseModel):
     discordId: str = Field(pattern=r"^\d{1,32}$")
-    listId: int | None = None
+    listId: int | None = Field(default=None, gt=0, le=2_147_483_647)
 
 
 @router.post("/index", status_code=204)

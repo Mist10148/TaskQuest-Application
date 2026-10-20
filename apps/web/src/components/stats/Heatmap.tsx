@@ -16,8 +16,9 @@ const ROW_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""];
 const describeCell = (c: HeatCell) => `${shortDate(c.date)}: ${c.count === 0 ? "no tasks" : c.count === 1 ? "1 task" : `${c.count} tasks`} completed`;
 
 /** Tasks completed per day over the last 12 weeks: a grid of cells, one column per week (Monday first). */
-export const Heatmap = ({ days, today = utcToday() }: { days: readonly XPHistoryDay[]; today?: string }) => {
-  const columns = buildHeatmap(days, today, 12);
+export const Heatmap = ({ days, today }: { days: readonly XPHistoryDay[]; today?: string }) => {
+  // The server's last day is today in the player's own time zone; UTC would be a day off for half the world.
+  const columns = buildHeatmap(days, today ?? days[days.length - 1]?.date ?? utcToday(), 12);
   return (
     <div data-testid="heatmap">
       <div className="flex gap-1.5 overflow-x-auto pb-1">

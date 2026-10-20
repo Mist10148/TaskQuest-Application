@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, uid, xpResult } from '../lib/http.js';
-import { idParam, listIdParam, searchQuery, saveTemplateBody, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody } from '../lib/schemas.js';
+import { idParam, listIdParam, searchQuery, saveTemplateBody, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody, moveItemBody } from '../lib/schemas.js';
 
 export const listsRouter = Router();
 export const itemsRouter = Router();
@@ -110,6 +110,28 @@ itemsRouter.patch(
         const item = await db.tasks.updateItem(uid(req), id, parse(updateItemBody, req.body));
         if (item?.list_id) aiClient.reindex(uid(req), item.list_id);
         res.json(item);
+    })
+);
+
+// Moves a top-level task, with its subtasks, to the end of another quest. The answer is the task as GET /api/lists/:id lists it.
+itemsRouter.post(
+    '/:id/move',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        const { listId } = parse(moveItemBody, req.body);
+        const r = await db.tasks.moveItemToList(uid(req), id, listId);
+        aiClient.reindex(uid(req), r.fromListId);
+        aiClient.reindex(uid(req), listId);
+        res.json({ item: r.item, moved: r.moved });
+    })
+);
+
+// A task's history, newest first (at most 50 entries). Anyone on the quest may read it.
+itemsRouter.get(
+    '/:id/activity',
+    asyncRoute(async (req, res) => {
+        const { id } = parse(idParam, req.params);
+        res.json({ activity: await db.activity.getActivity(uid(req), id) });
     })
 );
 

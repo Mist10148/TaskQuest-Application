@@ -1,6 +1,6 @@
 # Documentation index
 
-Last verified against code: 18 October 2026 (2026-10-18), branch `improvements/oct-2026`, after the review pass listed in the [CHANGELOG](../CHANGELOG.md#unreleased).
+Last verified against code: 19 October 2026 (2026-10-19), branch `improvements/oct-2026`, after the review pass listed in the [CHANGELOG](../CHANGELOG.md#unreleased).
 
 `packages/shared/test/docs.test.js` (run by `npm test`) checks the tables in GAMEPLAY.md against `packages/shared/src/constants.js`, the numbers in the class and skill descriptions against the rules, and the build tables in CLASS_GUIDE.md against the balance simulator. The other documents are checked by hand: when you change behaviour, update the matching document in the same commit and add a line to the [CHANGELOG](../CHANGELOG.md).
 
@@ -35,12 +35,14 @@ Last verified against code: 18 October 2026 (2026-10-18), branch `improvements/o
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Discord setup, database (Supabase), every environment variable (including web push and AI), Render, upgrades |
 | [OPERATIONS.md](OPERATIONS.md) | Backups and restore, troubleshooting, useful queries, the first live Gemini run |
 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | Known limitations and their workarounds |
+| [TESTING.md](TESTING.md) | Every check and test suite, how to run it locally and what CI runs |
 | [../SECURITY.md](../SECURITY.md) | Security model, fixed vulnerabilities, residual risks, secret rotation, reporting |
 
 ## Product and design records
 
 | Document | What it is |
 |---|---|
+| [ROADMAP.md](ROADMAP.md) | What is open next, what is later and the open product decisions |
 | [PRD.md](PRD.md) | Goals, personas, user stories (`US-` ids), functional requirements, platform parity, roadmap, risks |
 | [design/balance.md](design/balance.md) | Why the level curve stays linear, how class power was estimated, the caps, open balance questions |
 | [design/shared-lists.md](design/shared-lists.md) | Shared lists and parties: the permission model and what was built |

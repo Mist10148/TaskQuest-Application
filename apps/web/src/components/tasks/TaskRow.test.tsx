@@ -42,3 +42,25 @@ describe("TaskRow", () => {
     expect(screen.getByText(/high priority:/)).toHaveClass("sr-only");
   });
 });
+
+describe("TaskRow details button", () => {
+  it("opens the details by id, also for a viewer", async () => {
+    const onOpenDetails = vi.fn();
+    renderRow({}, { onOpenDetails, readOnly: true });
+    await userEvent.click(screen.getByRole("button", { name: 'Details of "Pay rent"' }));
+    expect(onOpenDetails).toHaveBeenCalledWith(7);
+  });
+
+  it("has no details button unless a handler is given", () => {
+    renderRow();
+    expect(screen.queryByRole("button", { name: /Details of/ })).toBeNull();
+  });
+
+  it("shows who it is assigned to and how many comments it has", () => {
+    renderRow({ assignee: { memberKey: "m1", name: "Sam", isYou: false }, comment_count: 2 });
+    expect(screen.getByText("Assigned to")).toBeInTheDocument();
+    expect(screen.getByText("Sam")).toBeInTheDocument();
+    expect(screen.getByText("comments")).toBeInTheDocument();
+  });
+});
+

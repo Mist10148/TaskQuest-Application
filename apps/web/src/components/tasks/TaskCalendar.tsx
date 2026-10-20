@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronLeft, ChevronRight, Check, Circle } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { monthGrid, shiftMonth, tasksByDate } from "@/lib/taskViews";
+import { calendarKeyTarget, monthGrid, shiftMonth, tasksByDate } from "@/lib/taskViews";
 import { localToday } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,29 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
   const weeks = useMemo(() => monthGrid(view.year, view.month), [view]);
   const undated = items.filter((i) => !i.parent_id && !i.due_date && !i.completed).length;
   const dayItems = byDate.get(picked) ?? [];
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Set by a key press, so focus follows the picked day after the grid re-renders (possibly as another month).
+  const focusAfterRender = useRef(false);
+  // One tab stop for the whole grid: the picked day if it is shown, otherwise the first day of the month.
+  const shown = weeks.flat();
+  const tabStop = shown.some((c) => c.date === picked) ? picked : shown.find((c) => c.inMonth)?.date;
+
+  useEffect(() => {
+    if (!focusAfterRender.current) return;
+    focusAfterRender.current = false;
+    gridRef.current?.querySelector<HTMLElement>(`[data-date="${picked}"]`)?.focus();
+  }, [picked, weeks]);
+
+  const onGridKey = (e: KeyboardEvent, date: string) => {
+    const target = calendarKeyTarget(date, e.key);
+    if (!target) return;
+    e.preventDefault();
+    focusAfterRender.current = true;
+    setPicked(target);
+    const y = Number(target.slice(0, 4));
+    const m = Number(target.slice(5, 7));
+    if (y !== view.year || m !== view.month) setView({ year: y, month: m });
+  };
 
   return (
     <div data-testid="task-calendar">
@@ -36,7 +59,7 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
       <div className="grid grid-cols-7 gap-1 text-center text-xs text-foreground-muted" aria-hidden>
         {WEEKDAYS.map((d) => <div key={d}>{d}</div>)}
       </div>
-      <div className="mt-1 grid grid-cols-7 gap-1" role="grid" aria-label={`${MONTHS[view.month - 1]} ${view.year}`}>
+      <div className="mt-1 grid grid-cols-7 gap-1" role="grid" ref={gridRef} aria-label={`${MONTHS[view.month - 1]} ${view.year}`}>
         {weeks.map((week) => (
           <div key={week[0].date} role="row" className="contents">
             {week.map((cell) => {
@@ -49,6 +72,9 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
                   type="button"
                   role="gridcell"
                   aria-selected={picked === cell.date}
+                  data-date={cell.date}
+                  tabIndex={cell.date === tabStop ? 0 : -1}
+                  onKeyDown={(e) => onGridKey(e, cell.date)}
                   aria-label={`${cell.date}${tasks.length ? `, ${open} open of ${tasks.length}${overdue ? ", overdue" : ""}` : ""}`}
                   onClick={() => setPicked(cell.date)}
                   className={cn(

@@ -9,6 +9,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["s", "Select several tasks (inside a quest)"],
   ["j / k", "Move down or up the tasks (inside a quest)"],
   ["x", "Complete or reopen the highlighted task"],
+  ["i", "Open the details of the highlighted task"],
   ["e", "Edit the highlighted task"],
   ["d", "Delete the highlighted task (with Undo)"],
   ["Esc", "Leave select mode or go back to the quest log"],

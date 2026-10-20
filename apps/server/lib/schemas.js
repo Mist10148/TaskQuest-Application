@@ -7,10 +7,12 @@
 import { z } from 'zod';
 import shared from '@taskquest/shared';
 
-const { TEXT_LIMITS, PRIORITIES, GAME_TYPES } = shared;
+const { TEXT_LIMITS, TAG_LIMITS, IMPORT_LIMITS, PRIORITIES, GAME_TYPES } = shared;
+/** Row ids are INTEGER columns: a larger id can never exist, and Postgres would answer with a 22003 error (a 500). */
+const MAX_ID = shared.validation.MAX_ID;
 
-export const idParam = z.object({ id: z.coerce.number().int().positive() });
-export const listIdParam = z.object({ listId: z.coerce.number().int().positive() });
+export const idParam = z.object({ id: z.coerce.number().int().positive().max(MAX_ID) });
+export const listIdParam = z.object({ listId: z.coerce.number().int().positive().max(MAX_ID) });
 export const keyParam = z.object({ key: z.string().regex(/^[A-Za-z]{1,20}$/) });
 export const leaderboardQuery = z
     .object({
@@ -48,6 +50,19 @@ export const settingsBody = z
     })
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
+
+/**
+ * A JSON import (the shape GET /api/user/export writes). Only the top level is checked here; parseImport in the shared service
+ * validates every list and task, with error messages that say which one.
+ */
+export const jsonImportBody = z
+    .object({
+        app: z.string().max(40).optional(),
+        version: z.number().int().positive().optional(),
+        exportedAt: z.string().max(40).optional(),
+        lists: z.array(z.record(z.unknown())).max(IMPORT_LIMITS.LISTS)
+    })
+    .strip(); // like parseImport, other top-level fields are ignored
 
 /** A spreadsheet import: the CSV text itself (1 MB), optionally just checked without writing. */
 export const csvImportBody = z.object({ csv: z.string().min(1).max(1_000_000), dryRun: z.boolean().optional() }).strict();
@@ -95,14 +110,22 @@ export const updateListBody = z
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
-const tagsField = z.union([z.string().max(200), z.array(z.string().max(30)).max(10)]).nullable().optional();
+// The service's tag limits (TAG_LIMITS), with room for what it strips before measuring: a leading # on each tag, and the
+// ", " between tags in the string form. The service checks the cleaned tags exactly.
+const tagsField = z
+    .union([
+        z.string().max(TAG_LIMITS.MAX_TAGS * (TAG_LIMITS.MAX_LENGTH + 3)),
+        z.array(z.string().max(TAG_LIMITS.MAX_LENGTH + 1)).max(TAG_LIMITS.MAX_TAGS)
+    ])
+    .nullable()
+    .optional();
 const itemExtras = {
     due_date: nullableEmpty(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional()),
     priority: nullableEmpty(z.enum(PRIORITIES).nullable().optional()),
     tags: tagsField,
     recurrence: nullableEmpty(z.enum(['daily', 'weekly', 'monthly']).nullable().optional()),
     estimate_minutes: z.number().int().min(1).max(shared.LIMITS.ESTIMATE_MAX_MINUTES).nullable().optional(),
-    parent_id: z.number().int().positive().nullable().optional()
+    parent_id: z.number().int().positive().max(MAX_ID).nullable().optional()
 };
 
 export const createItemBody = z
@@ -118,13 +141,19 @@ export const updateItemBody = z
         name: z.string().min(1).max(TEXT_LIMITS.ITEM_NAME),
         description: optionalText(TEXT_LIMITS.DESCRIPTION),
         position: z.number().int().min(0).max(100000),
+        // A member key from the quest's members list ('owner' for the owner), or null to unassign. The service resolves it.
+        assignee: z.string().max(64).nullable(),
         ...itemExtras
     })
     .partial()
     .strict()
     .refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
-export const reorderBody = z.object({ itemIds: z.array(z.number().int().positive()).max(5000) }).strict();
+export const reorderBody = z.object({ itemIds: z.array(z.number().int().positive().max(MAX_ID)).max(5000) }).strict();
+/** POST /api/items/:id/comments. The service trims it, strips control characters and checks 1 to TEXT_LIMITS.COMMENT characters again. */
+export const commentBody = z.object({ body: z.string().min(1).max(TEXT_LIMITS.COMMENT) }).strict();
+/** POST /api/items/:id/move: the quest a top-level task (and its subtasks) moves to. */
+export const moveItemBody = z.object({ listId: z.number().int().positive().max(MAX_ID) }).strict();
 
 export const toggleItemBody = z.object({ completed: z.boolean().optional() }).strict().optional();
 
@@ -145,7 +174,7 @@ export const createTemplateBody = z
     })
     .strict();
 export const applyTemplateBody = z
-    .object({ listName: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional(), listId: z.number().int().positive().optional() })
+    .object({ listName: z.string().min(1).max(TEXT_LIMITS.LIST_NAME).optional(), listId: z.number().int().positive().max(MAX_ID).optional() })
     .strict();
 // Sharing: people are found by their exact Discord username, never by display name or Discord ID, and a member is addressed by an opaque key.
 // dryRun asks who the username resolves to (for the confirmation step) without inviting anyone.
@@ -153,7 +182,7 @@ export const inviteBody = z
     .object({ username: z.string().trim().min(1).max(100), role: z.enum(shared.LIST_ROLES).default('viewer'), dryRun: z.boolean().optional() })
     .strict();
 export const memberRoleBody = z.object({ role: z.enum(shared.LIST_ROLES) }).strict();
-export const memberKeyParam = z.object({ id: z.coerce.number().int().positive(), memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
+export const memberKeyParam = z.object({ id: z.coerce.number().int().positive().max(MAX_ID), memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
 
 export const partyMemberKeyParam = z.object({ memberKey: z.string().regex(/^[a-f0-9]{12}$/) });
 export const createPartyBody = z.object({ name: z.string().trim().min(1).max(TEXT_LIMITS.PARTY_NAME) }).strict();
@@ -173,7 +202,7 @@ export const ARCADE_MAX_INPUT_VALUES = Math.max(...arcadeLimits.map((l) => l.max
 // "please refresh the page" error from the service instead of a generic validation failure.
 export const arcadeFinishBody = z
     .object({
-        sessionId: z.number().int().positive(),
+        sessionId: z.number().int().positive().max(MAX_ID),
         score: z.number().int().min(0).max(1_000_000),
         ticks: z.number().int().min(1).max(ARCADE_MAX_TICKS).optional(),
         inputs: z.array(z.number().int().min(0).max(1_000_000)).max(ARCADE_MAX_INPUT_VALUES).optional()
@@ -184,7 +213,7 @@ export const quitParam = z.object({ type: z.enum(GAME_TYPES) });
 export const focusStartBody = z.object({ minutes: z.number().int().min(shared.LIMITS.FOCUS_MIN_MINUTES).max(shared.LIMITS.FOCUS_MAX_MINUTES) }).strict();
 export const reflectionBody = z.object({ note: z.string().min(1).max(shared.LIMITS.REFLECTION_MAX_LENGTH) }).strict();
 export const goalBody = z.object({ target: z.number().int().min(shared.LIMITS.WEEKLY_GOAL_MIN).max(shared.LIMITS.WEEKLY_GOAL_MAX) }).strict();
-export const focusFinishBody = z.object({ sessionId: z.number().int().positive() }).strict();
+export const focusFinishBody = z.object({ sessionId: z.number().int().positive().max(MAX_ID) }).strict();
 
 export const statsHistoryQuery = z.object({ days: z.coerce.number().int().refine((n) => [7, 30, 90].includes(n), 'days must be 7, 30 or 90').default(30) }).strip();
 
@@ -193,7 +222,7 @@ export const uuidParam = z.object({ threadId: z.string().uuid() });
 export const aiSummaryBody = z
     .object({
         mode: z.enum(['list', 'digest', 'recap']),
-        listId: z.number().int().positive().optional(),
+        listId: z.number().int().positive().max(MAX_ID).optional(),
         range: z.enum(['day', 'week']).optional()
     })
     .strict()

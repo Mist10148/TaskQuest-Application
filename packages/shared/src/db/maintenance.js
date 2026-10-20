@@ -1,7 +1,8 @@
 /**
  * Keeping the database small and measuring balance:
  *  - archiveOld moves xp_transactions (and, only when asked, finished game sessions) older than a number of days to
- *    *_archive tables, in batches, each batch in its own transaction.
+ *    *_archive tables, in batches, each batch in its own transaction, and deletes task history (item_activity) older than the same
+ *    window: it has no archive table, it is a convenience for the people on a quest, not a record anything is counted from.
  *  - xpByClass reports what each class really earned per action, from xp_transactions.player_class.
  *  - arcadeRuns lists finished arcade runs (replayed score and length) to calibrate the plausibility bound.
  */
@@ -37,10 +38,31 @@ async function moveBatches({ table, archive, columns, where, params, batch, dryR
     }
 }
 
+/** Delete rows of one table older than the cutoff, in batches; returns how many (or how many would go on a dry run). */
+async function pruneBatches({ table, where, params, batch, dryRun }) {
+    const pool = getPool();
+    if (dryRun) {
+        const [[row]] = await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`, params);
+        return Number(row.n);
+    }
+    let pruned = 0;
+    for (;;) {
+        const n = await withTransaction(async (conn) => {
+            const [rows] = await conn.query(`SELECT id FROM ${table} WHERE ${where} ORDER BY id LIMIT ?`, [...params, batch]);
+            if (!rows.length) return 0;
+            await conn.query(`DELETE FROM ${table} WHERE id = ANY(?)`, [rows.map((r) => r.id)]);
+            return rows.length;
+        });
+        pruned += n;
+        if (n < batch) return pruned;
+    }
+}
+
 /**
  * @param {object} [opts] { days: keep this many days (default 365), batch: rows per transaction (default 5000),
  *   games: also archive finished game sessions (the games played and won counts drop with them), dryRun, now }
- * @returns {Promise<{ cutoff: Date, xpTransactions: number, gameSessions: number|null, dryRun: boolean }>}
+ * @returns {Promise<{ cutoff: Date, xpTransactions: number, gameSessions: number|null, itemActivity: number, dryRun: boolean }>}
+ *   itemActivity: task history rows deleted (they are not archived)
  */
 async function archiveOld({ days = 365, batch = 5000, games = false, dryRun = false, now = new Date() } = {}) {
     if (!Number.isInteger(days) || days < 1) throw new Error('days must be a whole number of at least 1');
@@ -50,7 +72,8 @@ async function archiveOld({ days = 365, batch = 5000, games = false, dryRun = fa
     const gameSessions = games
         ? await moveBatches({ table: 'game_sessions', archive: 'game_sessions_archive', columns: GAME_COLUMNS, where: "created_at < ? AND state <> 'active'", params: [cutoff], batch, dryRun })
         : null;
-    return { cutoff, xpTransactions, gameSessions, dryRun };
+    const itemActivity = await pruneBatches({ table: 'item_activity', where: 'created_at < ?', params: [cutoff], batch, dryRun });
+    return { cutoff, xpTransactions, gameSessions, itemActivity, dryRun };
 }
 
 /** The sources whose XP a class reshapes (everything else is flat and the same for every class). */

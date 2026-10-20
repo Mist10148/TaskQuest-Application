@@ -14,6 +14,7 @@ const assert = require('node:assert/strict');
 const enabled = Boolean(process.env.TEST_DB_NAME);
 
 if (enabled) {
+    require('./helpers/safeDb').assertThrowawayDatabase({ name: process.env.TEST_DB_NAME, host: process.env.TEST_DB_HOST || '127.0.0.1' });
     process.env.DB_URL = '';
     process.env.DB_HOST = process.env.TEST_DB_HOST || '127.0.0.1';
     process.env.DB_PORT = process.env.TEST_DB_PORT || '5432';
@@ -2882,6 +2883,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
                 setItemCompleted: [[f.a.id], 'rejects'],
                 swapItemPositions: [[f.a.id, f.b.id], 'rejects'],
                 moveItem: [[f.a.id, 0], 'rejects'],
+                moveItemToList: [[f.a.id, f.list.id], 'rejects'],
                 reorderItems: [[f.list.id, [f.b.id, f.a.id]], 'rejects'],
                 snoozeList: [[f.list.id, later], 'rejects'],
                 snoozeTask: [[f.b.id, later], 'rejects']
@@ -3528,14 +3530,14 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.snoozeList(O, list.id, new Date(Date.now() + 3600e3));
         await db.tasks.setItemCompleted(O, item.id, true); // xp_awarded, first_completed_*, the repeat copy
 
-        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'];
-        const PRIVATE_ITEM = ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'first_completed_by', 'first_completed_high', 'first_completed_early', 'first_completed_overdue', 'due_date_set_at', 'repeat_anchor_day', 'habit_streak', 'rearm_count', 'rearm_day', 'created_by', 'completed_by'];
+        const MEMBER_ITEM = ['id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id', 'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority', 'assignee', 'comment_count'];
+        const PRIVATE_ITEM = ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'first_completed_by', 'first_completed_high', 'first_completed_early', 'first_completed_overdue', 'due_date_set_at', 'repeat_anchor_day', 'habit_streak', 'rearm_count', 'rearm_day', 'created_by', 'completed_by', 'assignee_id'];
         const PRIVATE_LIST = ['remind_at', 'deadline_notified', 'overdue_notified', 'cleared_at', 'cleared_by', 'rearm_count', 'rearm_day', 'discord_id'];
 
         // The owner's rows are unchanged: everything the owner needs, including their own reminder state.
         const ownerItems = await db.tasks.getItems(O, list.id);
         for (const f of ['remind_at', 'reminded_at', 'xp_awarded', 'counts_for_quests', 'first_completed_at', 'habit_streak', 'due_date_set_at']) assert.ok(f in ownerItems[0], `owner row has ${f}`);
-        for (const f of ['created_by', 'completed_by', 'first_completed_by']) assert.equal(f in ownerItems[0], false, 'other people\'s IDs never leave');
+        for (const f of ['created_by', 'completed_by', 'first_completed_by', 'assignee_id']) assert.equal(f in ownerItems[0], false, 'other people\'s IDs never leave');
         const ownerList = await db.tasks.getList(O, list.id);
         for (const f of ['remind_at', 'deadline_notified', 'overdue_notified', 'cleared_at', 'discord_id']) assert.ok(f in ownerList, `owner list has ${f}`);
 
@@ -4076,6 +4078,797 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const row = (await db.query('SELECT reminded_at, remind_at FROM items WHERE id = ?', [item.id]))[0];
         assert.ok(row.reminded_at);
         assert.equal(row.remind_at, null);
+    });
+
+    await t.test('a monthly task re-saved with the same date and rule keeps its anchor day; a real change starts a new one', async () => {
+        const U = '100000000000000651';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Rent on the 31st' });
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'Rent', due_date: '2031-04-30', recurrence: 'monthly' });
+        // As a copy spawned from a task due on the 31st would be: due on the 30th (April), anchored on the 31st.
+        await db.query('UPDATE items SET repeat_anchor_day = 31 WHERE id = ?', [item.id]);
+        const anchor = async () => (await db.query('SELECT repeat_anchor_day AS a FROM items WHERE id = ?', [item.id]))[0].a;
+
+        await db.tasks.updateItem(U, item.id, { name: 'Rent!', due_date: '2031-04-30', recurrence: 'monthly' });
+        assert.equal(await anchor(), 31, 'the edit form re-sends the same date and rule');
+        await db.tasks.updateItem(U, item.id, { recurrence: 'Monthly' });
+        assert.equal(await anchor(), 31, 'the same rule, spelled differently');
+        await db.tasks.updateItem(U, item.id, { due_date: '2031-05-15' });
+        assert.equal(await anchor(), null, 'a new date starts a new anchor');
+        await db.query('UPDATE items SET repeat_anchor_day = 15 WHERE id = ?', [item.id]);
+        await db.tasks.updateItem(U, item.id, { recurrence: 'weekly' });
+        assert.equal(await anchor(), null, 'so does a new rule');
+    });
+
+    await t.test('a task edit and its move are one transaction: a move that fails keeps the old fields', async () => {
+        const U = '100000000000000652';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Atomic edit' });
+        const a = (await db.tasks.addItem(U, list.id, { name: 'a' })).item;
+        await db.tasks.addItem(U, list.id, { name: 'b' });
+        // Make the move fail half-way (its position UPDATE throws), as a lost connection or a deadlock in the middle of it would.
+        const probe = await pool.getConnection();
+        const Connection = Object.getPrototypeOf(probe);
+        probe.release();
+        const query = Connection.query;
+        Connection.query = function (sql, params) {
+            if (/^UPDATE items SET position/.test(String(sql).trim())) return Promise.reject(new Error('move refused'));
+            return query.call(this, sql, params);
+        };
+        try {
+            await assert.rejects(db.tasks.updateItem(U, a.id, { name: 'renamed', priority: 'HIGH', position: 1 }), /move refused/);
+        } finally {
+            Connection.query = query;
+        }
+        const row = (await db.query('SELECT name, priority, position FROM items WHERE id = ?', [a.id]))[0];
+        assert.deepEqual({ ...row }, { name: 'a', priority: null, position: 0 }, 'nothing of the edit was kept');
+
+        const done = await db.tasks.updateItem(U, a.id, { name: 'renamed', position: 1 });
+        assert.equal(done.name, 'renamed');
+        assert.equal(done.position, 1);
+    });
+
+    await t.test('an AI (owner-only) write waiting on the list sees a hand-over that commits first, and is refused', async () => {
+        const O = '100000000000000653';
+        const N = '100000000000000654';
+        for (const id of [O, N]) await db.users.ensureUser(id);
+        const { list } = await db.tasks.createList(O, { name: 'Handed over mid-write' });
+        const { item } = await db.tasks.addItem(O, list.id, { name: 'existing' });
+        const count = async () => Number((await db.query('SELECT COUNT(*) AS n FROM items WHERE list_id = ?', [list.id]))[0].n);
+
+        for (const [label, write] of [
+            ['addItem', () => db.tasks.asOwner.addItem(O, list.id, { name: 'from the AI' })],
+            ['updateItem', () => db.tasks.asOwner.updateItem(O, item.id, { name: 'renamed by the AI' })],
+            ['setItemCompleted', () => db.tasks.asOwner.setItemCompleted(O, item.id, true)],
+            ['addSubtasks', () => db.tasks.asOwner.addSubtasks(O, item.id, ['one', 'two'])],
+            ['updateList', () => db.tasks.asOwner.updateList(O, list.id, { priority: 'HIGH' })]
+        ]) {
+            await db.query('UPDATE lists SET discord_id = ? WHERE id = ?', [O, list.id]);
+            await db.query('DELETE FROM list_members WHERE list_id = ?', [list.id]);
+            const before = await count();
+            // Another session holds the list (as a hand-over does) and gives it to N, keeping O on it as a manager.
+            const conn = await pool.getConnection();
+            let pending;
+            try {
+                await conn.beginTransaction();
+                await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [list.id]);
+                pending = write().then(
+                    (value) => ({ value }),
+                    (error) => ({ error })
+                );
+                await new Promise((resolve) => setTimeout(resolve, 150)); // the write has checked what it can and waits on the list
+                await conn.query('UPDATE lists SET discord_id = ? WHERE id = ?', [N, list.id]);
+                await conn.query("INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, 'manager', ?)", [list.id, O, require('crypto').randomBytes(6).toString('hex')]);
+                await conn.commit();
+            } finally {
+                conn.release();
+            }
+            const outcome = await pending;
+            assert.equal(outcome.error && outcome.error.code, 'NOT_FOUND', `${label}: refused once the list is someone else's`);
+            assert.equal(await count(), before, `${label}: nothing was added`);
+        }
+        const row = (await db.query('SELECT name, completed FROM items WHERE id = ?', [item.id]))[0];
+        assert.deepEqual({ ...row }, { name: 'existing', completed: 0 });
+        assert.equal((await db.query('SELECT priority FROM lists WHERE id = ?', [list.id]))[0].priority, null);
+    });
+
+    await t.test('a hand-over swaps reminder state: each person keeps their own, on the rows as owner and in the reminder tables as member', async () => {
+        const O = '100000000000000655';
+        const N = '100000000000000656';
+        for (const id of [O, N]) await db.users.ensureUser(id);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['remind_new', N]);
+        await db.query('UPDATE users SET discord_username = ? WHERE discord_id = ?', ['remind_old', O]);
+        const { list } = await db.tasks.createList(O, { name: 'Reminder hand-over', deadline: dayOffset(1) });
+        const a = (await db.tasks.addItem(O, list.id, { name: 'a', due_date: dayOffset(1) })).item;
+        const b = (await db.tasks.addItem(O, list.id, { name: 'b', due_date: dayOffset(1) })).item;
+        const c = (await db.tasks.addItem(O, list.id, { name: 'c', due_date: dayOffset(1) })).item;
+        await db.query("INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, 'editor', ?)", [list.id, N, require('crypto').randomBytes(6).toString('hex')]);
+        const T = (s) => new Date(`2031-01-0${s}T03:04:05.000Z`);
+        // The owner was told the deadline is near, snoozed the list, was reminded about a and snoozed b.
+        await db.query('UPDATE lists SET deadline_notified = 1, overdue_notified = 0, remind_at = ? WHERE id = ?', [T(1), list.id]);
+        await db.query('UPDATE items SET reminded_at = ? WHERE id = ?', [T(2), a.id]);
+        await db.query('UPDATE items SET remind_at = ? WHERE id = ?', [T(3), b.id]);
+        // The member was told about the deadline and the overdue day, and was reminded about c.
+        await db.query('INSERT INTO list_reminders (list_id, discord_id, deadline_notified, overdue_notified, remind_at) VALUES (?, ?, 1, 1, NULL)', [list.id, N]);
+        await db.query('INSERT INTO item_reminders (item_id, discord_id, reminded_at, remind_at) VALUES (?, ?, ?, NULL)', [c.id, N, T(4)]);
+        const ms = (d) => (d ? new Date(d).getTime() : null);
+        const listState = async () => {
+            const [l] = await db.query('SELECT deadline_notified AS dn, overdue_notified AS onn, remind_at FROM lists WHERE id = ?', [list.id]);
+            return [Number(l.dn), Number(l.onn), ms(l.remind_at)];
+        };
+        const memberList = async (who) => {
+            const rows = await db.query('SELECT deadline_notified AS dn, overdue_notified AS onn, remind_at FROM list_reminders WHERE list_id = ? AND discord_id = ?', [list.id, who]);
+            return rows.map((r) => [Number(r.dn), Number(r.onn), ms(r.remind_at)]);
+        };
+        const itemState = async () => (await db.query('SELECT name, reminded_at, remind_at FROM items WHERE list_id = ? ORDER BY name', [list.id])).map((r) => [r.name, ms(r.reminded_at), ms(r.remind_at)]);
+        const memberItems = async (who) =>
+            (await db.query('SELECT i.name, r.reminded_at, r.remind_at FROM item_reminders r JOIN items i ON i.id = r.item_id WHERE i.list_id = ? AND r.discord_id = ? ORDER BY i.name', [list.id, who])).map((r) => [
+                r.name,
+                ms(r.reminded_at),
+                ms(r.remind_at)
+            ]);
+        const stamp = async () => (await db.query('SELECT MAX(updated_at) AS t FROM items WHERE list_id = ?', [list.id]))[0].t;
+        const before = String(await stamp());
+
+        const key = (await db.sharing.listMembers(O, list.id)).members.find((m) => m.name === 'remind_new').memberKey;
+        await db.sharing.transferOwnership(O, list.id, key);
+        assert.deepEqual(await listState(), [1, 1, null], "the list carries the new owner's state");
+        assert.deepEqual(await itemState(), [['a', null, null], ['b', null, null], ['c', ms(T(4)), null]], 'so do the tasks');
+        assert.deepEqual(await memberList(O), [[1, 0, ms(T(1))]], 'the old owner keeps their list state as a member');
+        assert.deepEqual(await memberItems(O), [['a', ms(T(2)), null], ['b', null, ms(T(3))]], 'and their task reminders and snoozes');
+        assert.deepEqual(await memberList(N), [], 'the new owner has no member rows left');
+        assert.deepEqual(await memberItems(N), []);
+        assert.equal(String(await stamp()), before, 'moving reminder state is not an edit of the tasks');
+
+        // The bot now reminds each of them by their own state: the old owner's snooze of b is still theirs.
+        const due = (await db.tasks.getTaskReminderCandidates(T(5))).filter((r) => r.list_id === list.id);
+        assert.deepEqual(due.filter((r) => r.discord_id === O).map((r) => r.name), ['b']);
+
+        // And back: a hand-over to someone who has no member list row resets the list's flags to "not told yet".
+        await db.query('DELETE FROM list_reminders WHERE list_id = ? AND discord_id = ?', [list.id, O]);
+        const back = (await db.sharing.listMembers(N, list.id)).members.find((m) => m.name === 'remind_old').memberKey;
+        await db.sharing.transferOwnership(N, list.id, back);
+        assert.deepEqual(await listState(), [0, 0, null]);
+        assert.deepEqual(await itemState(), [['a', ms(T(2)), null], ['b', null, ms(T(3))], ['c', null, null]]);
+        assert.deepEqual(await memberList(N), [[1, 1, null]]);
+        assert.deepEqual(await memberItems(N), [['c', ms(T(4)), null]]);
+        assert.deepEqual(await memberItems(O), []);
+    });
+
+    await t.test('import links subtasks whatever the row order, and refuses duplicate ids, self-parents and grandchildren', async () => {
+        const U = '100000000000000657';
+        await db.users.ensureUser(U);
+        let n = 0;
+        const imported = async (items) => {
+            const name = `order ${++n}`;
+            const r = await db.transfer.importAll(U, { lists: [{ name, items }] });
+            const rows = await db.query('SELECT i.id, i.name, i.parent_id FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ? AND l.name = ? ORDER BY i.position', [U, name]);
+            const byId = new Map(rows.map((x) => [x.id, x.name]));
+            return { r, links: Object.fromEntries(rows.map((x) => [x.name, x.parent_id === null ? null : byId.get(x.parent_id)])) };
+        };
+        const childFirst = await imported([{ id: 2, name: 'child', parent_id: 1 }, { id: 1, name: 'parent' }]);
+        assert.deepEqual(childFirst.links, { parent: null, child: 'parent' }, 'a subtask listed before its parent still belongs to it');
+        assert.equal(childFirst.r.orphanedSubtasks, undefined);
+        const orphan = await imported([{ id: 1, name: 'lonely', parent_id: 99 }, { name: 'plain' }]);
+        assert.deepEqual(orphan.links, { lonely: null, plain: null });
+        assert.equal(orphan.r.orphanedSubtasks, 1, 'a parent that is not in the file is reported');
+
+        const listsBefore = (await db.tasks.getLists(U)).length;
+        const refused = (items, pattern) => assert.rejects(db.transfer.importAll(U, { lists: [{ name: 'bad', items }] }), (err) => err.code === 'VALIDATION' && pattern.test(err.message));
+        await refused([{ id: 1, name: 'a' }, { id: 1, name: 'b' }], /items\[1\]: the id "1" is used by more than one task/);
+        await refused([{ id: 1, name: 'a' }, { id: '1', name: 'b' }], /more than one task/);
+        await refused([{ id: 1, name: 'a', parent_id: 1 }], /own subtask/);
+        // A subtask of a subtask is refused in every order, not only when the middle task happens to come first.
+        const chain = [{ id: 1, name: 'a' }, { id: 2, name: 'b', parent_id: 1 }, { id: 3, name: 'c', parent_id: 2 }];
+        for (const order of [[0, 1, 2], [0, 2, 1], [2, 1, 0], [1, 2, 0], [2, 0, 1]]) await refused(order.map((i) => chain[i]), /one level deep/);
+        assert.equal((await db.tasks.getLists(U)).length, listsBefore, 'a refused import writes nothing');
+    });
+
+    await t.test('a progress reset also clears reflections, goals, member reminder state and push subscriptions, and withdraws sent invitations', async () => {
+        const U = '100000000000000658';
+        const OTHER = '100000000000000659';
+        const INVITEE = '100000000000000660';
+        for (const id of [U, OTHER, INVITEE]) await db.users.ensureUser(id);
+        const { list } = await db.tasks.createList(OTHER, { name: "Someone else's" });
+        const { item } = await db.tasks.addItem(OTHER, list.id, { name: 'theirs', due_date: dayOffset(1) });
+        await db.query("INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, 'manager', ?)", [list.id, U, require('crypto').randomBytes(6).toString('hex')]);
+        await db.tasks.snoozeList(U, list.id, new Date(Date.now() + 3600e3));
+        await db.tasks.snoozeTask(U, item.id, new Date(Date.now() + 3600e3));
+        await db.query('INSERT INTO reflections (discord_id, day, note) VALUES (?, ?, ?)', [U, dayOffset(0), 'a good day']);
+        await db.query('INSERT INTO weekly_goals (discord_id, week_key, target) VALUES (?, ?, 10)', [U, dayOffset(0)]);
+        await db.query("INSERT INTO push_subscriptions (discord_id, endpoint, endpoint_hash, p256dh, auth) VALUES (?, 'https://push.example/x', ?, 'k', 'a')", [U, 'f'.repeat(64)]);
+        const expires = new Date(Date.now() + 86400e3);
+        await db.query("INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, expires_at) VALUES (?, ?, 'viewer', ?, ?)", [list.id, INVITEE, U, expires]);
+        await db.query("INSERT INTO list_invites (list_id, invitee_discord_id, role, invited_by, status, expires_at) VALUES (?, ?, 'viewer', ?, 'declined', ?)", [list.id, OTHER, U, expires]);
+        const [[party]] = await pool.query("INSERT INTO parties (name, owner_id) VALUES ('Not mine', ?) RETURNING id", [OTHER]).then(([res]) => [res.rows]);
+        await db.query('INSERT INTO party_invites (party_id, invitee_discord_id, invited_by, expires_at) VALUES (?, ?, ?, ?)', [party.id, INVITEE, U, expires]);
+
+        await db.users.resetProgress(U);
+        const count = async (sql) => Number((await db.query(sql, [U]))[0].n);
+        for (const table of ['reflections', 'weekly_goals', 'push_subscriptions', 'list_reminders', 'item_reminders', 'list_members']) {
+            assert.equal(await count(`SELECT COUNT(*) AS n FROM ${table} WHERE discord_id = ?`), 0, table);
+        }
+        assert.equal(await count("SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND status = 'pending'"), 0, 'pending list invitations are withdrawn');
+        assert.equal(await count("SELECT COUNT(*) AS n FROM party_invites WHERE invited_by = ? AND status = 'pending'"), 0, 'pending party invitations are withdrawn');
+        assert.equal(await count("SELECT COUNT(*) AS n FROM list_invites WHERE invited_by = ? AND status = 'declined'"), 1, 'a decline still counts for the cooldown');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM items WHERE id = ?', [item.id]))[0].n), 1, "the other person's list is untouched");
+    });
+
+    await t.test('list overviews count top-level tasks only, like clearing a list does', async () => {
+        const U = '100000000000000661';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Counted' });
+        const a = (await db.tasks.addItem(U, list.id, { name: 'a' })).item;
+        await db.tasks.addItem(U, list.id, { name: 'b' });
+        await db.tasks.addSubtasks(U, a.id, ['a1', 'a2']);
+        await db.tasks.setItemCompleted(U, a.id, true);
+        const row = (await db.tasks.getLists(U)).find((l) => l.id === list.id);
+        assert.deepEqual([row.items_total, row.items_completed], [2, 1], 'two tasks, one done; the open subtasks are steps of the done one');
+    });
+
+    await t.test('reordering a long list writes every position in a few statements and leaves unmoved rows alone', async () => {
+        const U = '100000000000000662';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Long list' });
+        const N = 2345; // three chunks of the batched UPDATE
+        await db.query("INSERT INTO items (list_id, name, position) SELECT ?, 't' || g, g FROM generate_series(0, ?) AS g", [list.id, N - 1]);
+        const ids = (await db.query('SELECT id FROM items WHERE list_id = ? ORDER BY position', [list.id])).map((r) => r.id);
+        await db.query("UPDATE items SET updated_at = '2020-01-01 00:00:00' WHERE list_id = ?", [list.id]);
+
+        const reversed = [...ids].reverse();
+        await db.tasks.reorderItems(U, list.id, reversed);
+        const after = await db.query('SELECT id, position FROM items WHERE list_id = ? ORDER BY position', [list.id]);
+        assert.deepEqual(after.map((r) => r.id), reversed);
+        assert.deepEqual(after.map((r) => r.position), reversed.map((_, i) => i));
+        // The middle row of an odd-length list keeps its position, so it is not written.
+        const untouched = await db.query("SELECT COUNT(*) AS n FROM items WHERE list_id = ? AND updated_at = '2020-01-01 00:00:00'", [list.id]);
+        assert.equal(Number(untouched[0].n), 1);
+
+        // A move inside the long list goes through the same writer.
+        await db.tasks.moveItem(U, reversed[N - 1], 0);
+        const moved = await db.query('SELECT id, position FROM items WHERE list_id = ? ORDER BY position', [list.id]);
+        assert.equal(moved[0].id, reversed[N - 1]);
+        assert.deepEqual(moved.map((r) => r.position), moved.map((_, i) => i));
+        await db.query('DELETE FROM lists WHERE id = ?', [list.id]);
+    });
+
+    await t.test('an arcade run finished on the route of another game is not found, and stays open', async () => {
+        const U = '100000000000000663';
+        await db.users.ensureUser(U);
+        const { sessionId } = await db.games.startArcade(U, 'dino');
+        await assert.rejects(db.games.finishArcade(U, sessionId, { score: 0, ticks: 1, inputs: [] }, { type: 'snake' }), { code: 'NOT_FOUND' });
+        assert.equal((await db.query('SELECT state FROM game_sessions WHERE id = ?', [sessionId]))[0].state, 'active');
+    });
+
+
+    // ─── Moving a task to another quest ───────────────────────────────────────────
+
+    const MV = { owner: '100000000000001701', editor: '100000000000001702', viewer: '100000000000001703', manager: '100000000000001704', other: '100000000000001705', stranger: '100000000000001706' };
+    const mvMember = (listId, userId, role) =>
+        db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, require('crypto').randomBytes(6).toString('hex')]);
+    const mvRows = (listId) => db.query('SELECT id, parent_id, position, completed FROM items WHERE list_id = ? ORDER BY position, id', [listId]);
+
+    await t.test('move: a task and its subtasks go to the end of another quest, in order, with completion and XP untouched', async () => {
+        const U = MV.owner;
+        for (const [name, id] of Object.entries(MV)) await db.users.ensureUser(id, { username: `mv_${name}`, handle: `mv_${name}`, avatar: null });
+        const from = (await db.tasks.createList(U, { name: 'Move from' })).list;
+        const to = (await db.tasks.createList(U, { name: 'Move to' })).list;
+        const first = (await db.tasks.addItem(U, from.id, { name: 'stays' })).item;
+        const task = (await db.tasks.addItem(U, from.id, { name: 'goes' })).item;
+        const subs = (await db.tasks.addSubtasks(U, task.id, ['step 1', 'step 2'])).items.map((r) => r.item);
+        await db.tasks.addItem(U, from.id, { name: 'stays too' });
+        const there = (await db.tasks.addItem(U, to.id, { name: 'already there' })).item;
+        await db.tasks.setItemCompleted(U, subs[0].id, true);
+        await db.tasks.moveItem(U, subs[1].id, 0); // the list order now differs from the id order: the move keeps the list order
+        const xpBefore = (await db.users.getUser(U)).player_xp;
+
+        const r = await db.tasks.moveItemToList(U, task.id, to.id);
+        assert.equal(r.moved, 3, 'the task and both subtasks');
+        assert.equal(r.fromListId, from.id);
+        assert.equal(r.item.id, task.id);
+        assert.equal(r.item.list_id, to.id);
+        assert.equal(r.item.can_delete, true, 'the same shape as the list view');
+        const target = await mvRows(to.id);
+        assert.deepEqual(target.map((x) => x.id), [there.id, subs[1].id, task.id, subs[0].id], 'after what was there, in their old order');
+        assert.deepEqual(target.map((x) => x.position), [0, 1, 2, 3]);
+        assert.equal(Number(target[3].completed), 1, 'a finished subtask stays finished');
+        assert.deepEqual((await mvRows(from.id)).map((x) => x.id).includes(first.id), true);
+        assert.equal((await mvRows(from.id)).length, 2);
+        assert.equal((await db.users.getUser(U)).player_xp, xpBefore, 'moving pays and takes no XP');
+        assert.equal((await db.tasks.getItem(U, subs[0].id)).parent_id, task.id, 'subtasks keep their parent');
+
+        await assert.rejects(db.tasks.moveItemToList(U, subs[0].id, from.id), { code: 'VALIDATION', message: 'Move the parent task; its subtasks go with it.' });
+        await assert.rejects(db.tasks.moveItemToList(U, task.id, to.id), { code: 'VALIDATION', message: /already on that quest/ });
+        await assert.rejects(db.tasks.moveItemToList(U, task.id, 99999999), { code: 'NOT_FOUND' });
+        await assert.rejects(db.tasks.moveItemToList(U, 99999999, to.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.tasks.moveItemToList(U, task.id, 'x'), { code: 'VALIDATION' });
+        // The access check follows the task to its new list, and moving back works the same way.
+        assert.equal((await db.access.forItem(db.getPool(), U, task.id)).item.list_name, 'Move to');
+        assert.equal((await db.tasks.moveItemToList(U, task.id, from.id)).moved, 3);
+    });
+
+    await t.test('move: a finished task does not pay a clear bonus on the target, and is not paid again there', async () => {
+        const U = MV.other;
+        const a = (await db.tasks.createList(U, { name: 'Clear source' })).list;
+        const done1 = (await db.tasks.addItem(U, a.id, { name: 'd1' })).item;
+        const done2 = (await db.tasks.addItem(U, a.id, { name: 'd2' })).item;
+        await db.tasks.addItem(U, a.id, { name: 'open' });
+        await db.tasks.setItemCompleted(U, done1.id, true);
+        await db.tasks.setItemCompleted(U, done2.id, true);
+        const b = (await db.tasks.createList(U, { name: 'Clear target' })).list;
+        const last = (await db.tasks.addItem(U, b.id, { name: 'last one' })).item;
+        await db.tasks.moveItemToList(U, done1.id, b.id);
+        await db.tasks.moveItemToList(U, done2.id, b.id);
+        const [mark] = await db.query('SELECT cleared_at, cleared_by FROM lists WHERE id = ?', [b.id]);
+        assert.ok(mark.cleared_at, 'the target counts as cleared already');
+        assert.equal(mark.cleared_by, 'moved', 'by nobody: no quest counts it');
+        const r = await db.tasks.setItemCompleted(U, last.id, true);
+        assert.ok(r.xp && r.xp.finalXP > 0, 'the open task itself still pays');
+        assert.equal(r.bonuses.some((x) => x.key === 'list_cleared'), false, 'three done tasks, but two were finished elsewhere');
+        await db.tasks.setItemCompleted(U, done1.id, false);
+        assert.equal((await db.tasks.setItemCompleted(U, done1.id, true)).xp, null, 'a moved task that was already paid is not paid again');
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'list_cleared'", [U]))[0].n), 0);
+        // An open task arriving leaves the target's clear state alone.
+        const c = (await db.tasks.createList(U, { name: 'Clear later' })).list;
+        const open = (await db.tasks.addItem(U, a.id, { name: 'open 2' })).item;
+        await db.tasks.moveItemToList(U, open.id, c.id);
+        assert.equal((await db.query('SELECT cleared_at FROM lists WHERE id = ?', [c.id]))[0].cleared_at, null);
+    });
+
+    await t.test("move: roles on both quests, subtasks by other people, strangers and the target owner's task limit", async () => {
+        const O = MV.owner;
+        const src = (await db.tasks.createList(O, { name: 'Shared source' })).list;
+        const dst = (await db.tasks.createList(MV.other, { name: 'Shared target' })).list;
+        const viewOnly = (await db.tasks.createList(MV.other, { name: 'View only target' })).list;
+        await mvMember(src.id, MV.editor, 'editor');
+        await mvMember(src.id, MV.viewer, 'viewer');
+        await mvMember(src.id, MV.manager, 'manager');
+        await mvMember(dst.id, MV.editor, 'editor');
+        await mvMember(dst.id, MV.manager, 'editor');
+        await mvMember(viewOnly.id, MV.editor, 'viewer');
+        const ownerTask = (await db.tasks.addItem(O, src.id, { name: 'owner task' })).item;
+        const editorTask = (await db.tasks.addItem(MV.editor, src.id, { name: 'editor task' })).item;
+        const mixed = (await db.tasks.addItem(MV.editor, src.id, { name: 'editor task with owner step' })).item;
+        await db.tasks.addSubtasks(O, mixed.id, ['owner step']);
+
+        await assert.rejects(db.tasks.moveItemToList(MV.stranger, ownerTask.id, dst.id), { code: 'NOT_FOUND' }, 'a stranger to the source');
+        await assert.rejects(db.tasks.moveItemToList(MV.viewer, ownerTask.id, dst.id), { code: 'FORBIDDEN' }, 'a viewer');
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, ownerTask.id, dst.id), { code: 'FORBIDDEN', message: /Editors can only move tasks they added/ });
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, mixed.id, dst.id), { code: 'FORBIDDEN', message: /subtasks added by other people/ });
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, editorTask.id, viewOnly.id), { code: 'FORBIDDEN' }, 'the target needs editor');
+        const strangerList = (await db.tasks.createList(MV.stranger, { name: 'Not yours' })).list;
+        await assert.rejects(db.tasks.moveItemToList(MV.editor, editorTask.id, strangerList.id), { code: 'NOT_FOUND' }, 'a stranger to the target');
+        assert.equal((await db.tasks.getItem(O, editorTask.id)).list_id, src.id, 'nothing moved');
+
+        const r = await db.tasks.moveItemToList(MV.editor, editorTask.id, dst.id);
+        assert.equal(r.item.list_id, dst.id);
+        assert.equal(r.item.created_by, undefined, "no Discord IDs in a member's view");
+        assert.equal((await db.tasks.moveItemToList(MV.manager, ownerTask.id, dst.id)).moved, 1, "a manager moves anyone's task");
+
+        // The target owner's task limit counts the moved rows, because the owner changes.
+        const filler = (await db.tasks.createList(MV.other, { name: 'Filler' })).list;
+        const [{ n }] = await db.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [MV.other]);
+        await db.query("INSERT INTO items (list_id, name, position) SELECT ?, 'f' || g, g FROM generate_series(1, ?) AS g", [filler.id, 5000 - Number(n) - 1]);
+        await assert.rejects(db.tasks.moveItemToList(MV.manager, mixed.id, dst.id), { code: 'VALIDATION', message: /limit of 5000 tasks/ }, 'two rows do not fit');
+        const single = (await db.tasks.addItem(O, src.id, { name: 'fits' })).item;
+        await db.tasks.moveItemToList(MV.manager, single.id, dst.id);
+        // At the limit, a move between the owner's own quests adds nothing to their count.
+        assert.equal((await db.tasks.moveItemToList(MV.other, single.id, filler.id)).moved, 1);
+        await db.query('DELETE FROM lists WHERE id = ?', [filler.id]);
+    });
+
+    await t.test('move: reminder state follows the people, and forItem follows a task that moved while it waited for the lock', async () => {
+        const O = MV.owner;
+        const src = (await db.tasks.createList(O, { name: 'Remind source' })).list;
+        const dst = (await db.tasks.createList(MV.other, { name: 'Remind target' })).list;
+        await mvMember(src.id, MV.editor, 'editor'); // on both lists
+        await mvMember(dst.id, MV.editor, 'editor');
+        await mvMember(src.id, MV.viewer, 'viewer'); // only on the source
+        await mvMember(src.id, MV.other, 'manager'); // the target's owner, a member of the source
+        await mvMember(dst.id, O, 'viewer'); // the source's owner, a member of the target
+        const task = (await db.tasks.addItem(O, src.id, { name: 'due soon', due_date: '2031-03-01' })).item;
+        const ownerSeen = new Date('2031-02-28T09:00:00Z');
+        const otherSeen = new Date('2031-02-27T09:00:00Z');
+        const snooze = new Date('2031-03-02T09:00:00Z');
+        await db.query('UPDATE items SET reminded_at = ? WHERE id = ?', [ownerSeen, task.id]);
+        await db.tasks.markTaskReminderSent(task.id, otherSeen, MV.other);
+        await db.tasks.snoozeTask(MV.editor, task.id, snooze);
+        await db.tasks.snoozeTask(MV.viewer, task.id, snooze);
+
+        await db.tasks.moveItemToList(MV.other, task.id, dst.id);
+        const rows = await db.query('SELECT discord_id, reminded_at, remind_at FROM item_reminders WHERE item_id = ?', [task.id]);
+        const by = Object.fromEntries(rows.map((x) => [x.discord_id, x]));
+        assert.deepEqual(Object.keys(by).sort(), [O, MV.editor].sort(), 'the viewer (not on the target) and the new owner (their state is on the row now) have no member rows');
+        assert.equal(by[O].reminded_at.getTime(), ownerSeen.getTime(), 'the old owner keeps what they were told, as a member');
+        assert.equal(by[MV.editor].remind_at.getTime(), snooze.getTime(), 'a member of both keeps their snooze');
+        const [row] = await db.query('SELECT reminded_at, remind_at FROM items WHERE id = ?', [task.id]);
+        assert.equal(row.reminded_at.getTime(), otherSeen.getTime(), "the row now carries the new owner's own state");
+        assert.equal(row.remind_at, null);
+
+        // forItem reads the task's list without a lock. If the task moved while it waited for that list, it follows it once.
+        const locks = [];
+        let peeks = 0;
+        const moving = {
+            async query(sql, params) {
+                if (sql.startsWith('SELECT list_id FROM items')) return [[{ list_id: ++peeks === 1 ? src.id : dst.id }]];
+                if (sql.startsWith('SELECT id FROM lists')) {
+                    locks.push(params[0]);
+                    return [[{ id: params[0] }]];
+                }
+                return db.getPool().query(sql, params);
+            }
+        };
+        const found = await db.access.forItem(moving, MV.other, task.id, 'editor', { lock: true });
+        assert.equal(found.item.list_id, dst.id);
+        assert.deepEqual(locks, [src.id, dst.id], 'it locked the list it saw first, then the one the task is on now');
+        peeks = 0;
+        const flapping = {
+            async query(sql, params) {
+                if (sql.startsWith('SELECT list_id FROM items')) return [[{ list_id: ++peeks % 2 ? src.id : dst.id }]];
+                return [[{ id: params[0] }]];
+            }
+        };
+        await assert.rejects(db.access.forItem(flapping, MV.other, task.id, 'editor', { lock: true }), { code: 'CONFLICT' }, 'a task that keeps moving is a conflict to retry');
+    });
+
+
+    // ─── Assigning a task to someone on its quest ─────────────────────────────────
+
+    const AS = { owner: '100000000000001801', editor: '100000000000001802', viewer: '100000000000001803', other: '100000000000001804', stranger: '100000000000001805' };
+    const asMember = async (listId, userId, role) => {
+        const key = require('crypto').randomBytes(6).toString('hex');
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, key]);
+        return key;
+    };
+    const assigneeOf = async (who, listId, itemId) => (await db.tasks.getItems(who, listId)).find((i) => i.id === itemId).assignee;
+
+    await t.test('assignee: set by a member key, read as a person without IDs, needs editor, refuses anyone not on the quest', async () => {
+        for (const [name, id] of Object.entries(AS)) await db.users.ensureUser(id, { username: `as_${name}`, handle: `as_${name}`, avatar: null });
+        const { list } = await db.tasks.createList(AS.owner, { name: 'Assigned' });
+        const edKey = await asMember(list.id, AS.editor, 'editor');
+        const vwKey = await asMember(list.id, AS.viewer, 'viewer');
+        const task = (await db.tasks.addItem(AS.owner, list.id, { name: 'Hoover' })).item;
+        assert.equal(task.assignee, null, 'a new task is nobody\'s');
+
+        const mine = await db.tasks.updateItem(AS.owner, task.id, { assignee: 'owner' });
+        assert.deepEqual(mine.assignee, { memberKey: 'owner', name: 'as_owner', isYou: true });
+        assert.equal('assignee_id' in mine, false, 'the column itself never leaves the service');
+        assert.deepEqual(await assigneeOf(AS.editor, list.id, task.id), { memberKey: 'owner', name: 'as_owner', isYou: false });
+        const toViewer = await db.tasks.updateItem(AS.editor, task.id, { assignee: vwKey });
+        assert.deepEqual(toViewer.assignee, { memberKey: vwKey, name: 'as_viewer', isYou: false }, 'an editor assigns, a viewer can be assigned');
+        assert.deepEqual(await assigneeOf(AS.viewer, list.id, task.id), { memberKey: vwKey, name: 'as_viewer', isYou: true });
+        const seen = JSON.stringify(await db.tasks.getItems(AS.editor, list.id));
+        for (const id of Object.values(AS)) assert.equal(seen.includes(id), false, 'no Discord ID in a member\'s view');
+
+        await assert.rejects(db.tasks.updateItem(AS.viewer, task.id, { assignee: 'owner' }), { code: 'FORBIDDEN' });
+        await assert.rejects(db.tasks.updateItem(AS.stranger, task.id, { assignee: 'owner' }), { code: 'NOT_FOUND' });
+        const elsewhere = (await db.tasks.createList(AS.other, { name: 'Other quest' })).list;
+        const otherKey = await asMember(elsewhere.id, AS.stranger, 'viewer');
+        for (const key of ['abcdefabcdef', otherKey, 'nobody', '', 'OWNER', 7]) {
+            await assert.rejects(db.tasks.updateItem(AS.editor, task.id, { assignee: key }), { code: 'VALIDATION', message: 'That person is not on this quest.' }, String(key));
+        }
+        assert.equal((await assigneeOf(AS.owner, list.id, task.id)).memberKey, vwKey, 'a refused assignment changes nothing');
+        // Assigning goes with other fields in one edit, and null unassigns.
+        const both = await db.tasks.updateItem(AS.editor, task.id, { name: 'Hoover the stairs', assignee: edKey });
+        assert.deepEqual([both.name, both.assignee.memberKey, both.assignee.isYou], ['Hoover the stairs', edKey, true], 'the editor took it themselves');
+        assert.equal((await db.tasks.updateItem(AS.editor, task.id, { assignee: null })).assignee, null);
+        assert.equal((await db.tasks.getItem(AS.owner, task.id)).assignee, null);
+    });
+
+    await t.test('assignee: leaving, removal, a reset and a move clear it; a hand-over and a repeat keep it', async () => {
+        const { list } = await db.tasks.createList(AS.owner, { name: 'Assigned 2' });
+        const edKey = await asMember(list.id, AS.editor, 'editor');
+        const vwKey = await asMember(list.id, AS.viewer, 'viewer');
+        const otherKey = await asMember(list.id, AS.other, 'editor');
+        const add = async (name, extra = {}) => (await db.tasks.addItem(AS.owner, list.id, { name, ...extra })).item;
+        const [forViewer, forEditor, forOther, forOwner] = [await add('v'), await add('e'), await add('o'), await add('w')];
+        await db.tasks.updateItem(AS.owner, forViewer.id, { assignee: vwKey });
+        await db.tasks.updateItem(AS.owner, forEditor.id, { assignee: edKey });
+        await db.tasks.updateItem(AS.owner, forOther.id, { assignee: otherKey });
+        await db.tasks.updateItem(AS.owner, forOwner.id, { assignee: 'owner' });
+
+        await db.sharing.leave(AS.viewer, list.id);
+        assert.equal(await assigneeOf(AS.owner, list.id, forViewer.id), null, 'leaving clears the assignment');
+        await db.sharing.removeMember(AS.owner, list.id, otherKey);
+        assert.equal(await assigneeOf(AS.owner, list.id, forOther.id), null, 'so does being removed');
+        assert.equal((await assigneeOf(AS.owner, list.id, forEditor.id)).memberKey, edKey, 'other people keep theirs');
+
+        // A hand-over: keys are worked out when read, so the new owner reads 'owner' and the old owner their new member key.
+        const handed = await db.sharing.transferOwnership(AS.owner, list.id, edKey);
+        assert.deepEqual(await assigneeOf(AS.editor, list.id, forEditor.id), { memberKey: 'owner', name: 'as_editor', isYou: true });
+        assert.deepEqual(await assigneeOf(AS.editor, list.id, forOwner.id), { memberKey: handed.memberKey, name: 'as_owner', isYou: false });
+        assert.equal((await assigneeOf(AS.owner, list.id, forOwner.id)).isYou, true);
+
+        // The next copy of a repeating task keeps its assignee.
+        const habit = (await db.tasks.addItem(AS.editor, list.id, { name: 'Bins', recurrence: 'weekly' })).item;
+        await db.tasks.updateItem(AS.editor, habit.id, { assignee: handed.memberKey });
+        const done = await db.tasks.setItemCompleted(AS.editor, habit.id, true);
+        assert.equal(done.item.assignee.memberKey, handed.memberKey);
+        assert.equal(done.nextItem.assignee.memberKey, handed.memberKey, 'the repeat is still theirs');
+
+        // A move to a quest the assignee is not on unassigns it; to one they are on, it stays.
+        const theirsOnly = (await db.tasks.createList(AS.editor, { name: 'Editor only' })).list;
+        const r = await db.tasks.moveItemToList(AS.editor, forOwner.id, theirsOnly.id);
+        assert.equal(r.item.assignee, null, 'the old owner is not on the target');
+        const shared = (await db.tasks.createList(AS.editor, { name: 'Editor and old owner' })).list;
+        const oldOwnerKey = await asMember(shared.id, AS.owner, 'viewer');
+        const r2 = await db.tasks.moveItemToList(AS.editor, habit.id, shared.id);
+        assert.deepEqual(r2.item.assignee, { memberKey: oldOwnerKey, name: 'as_owner', isYou: false }, 'the same person under their key on the target');
+
+        // A progress reset leaves every shared list, so nothing stays assigned to that person.
+        await db.users.resetProgress(AS.owner);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM items WHERE assignee_id = ?', [AS.owner]))[0].n), 0);
+    });
+
+    await t.test('today: also the open tasks assigned to me on quests shared with me, each counted once', async () => {
+        const M = AS.stranger;
+        const today = new Date().toISOString().slice(0, 10);
+        const yesterday = new Date(Date.now() - 86400e3).toISOString().slice(0, 10);
+        await db.query('UPDATE users SET timezone = NULL WHERE discord_id IN (?, ?)', [M, AS.other]);
+        const own = (await db.tasks.createList(M, { name: 'My own today' })).list;
+        const mineDue = (await db.tasks.addItem(M, own.id, { name: 'own due', due_date: today })).item;
+        const sharedList = (await db.tasks.createList(AS.other, { name: 'Shared today' })).list;
+        const mKey = await asMember(sharedList.id, M, 'editor');
+        const add = async (name, extra) => (await db.tasks.addItem(AS.other, sharedList.id, { name, ...extra })).item;
+        const assignedDue = await add('assigned due', { due_date: today });
+        const assignedLate = await add('assigned late', { due_date: yesterday });
+        const notMine = await add('not mine', { due_date: today });
+        const ownerOwn = await add('owner assigned to self', { due_date: today });
+        const assignedDone = await add('assigned done', { due_date: today });
+        const assignedLater = await add('assigned later', { due_date: '2031-01-01' });
+        for (const it of [assignedDue, assignedLate, assignedDone, assignedLater]) await db.tasks.updateItem(AS.other, it.id, { assignee: mKey });
+        await db.tasks.updateItem(AS.other, ownerOwn.id, { assignee: 'owner' });
+        await db.tasks.setItemCompleted(AS.other, assignedDone.id, true);
+
+        const mine = await db.today.getToday(M);
+        const ids = mine.tasks.map((x) => x.id);
+        assert.deepEqual(ids.slice().sort((a, b) => a - b), [mineDue.id, assignedDue.id, assignedLate.id].sort((a, b) => a - b));
+        assert.equal(ids[0], assignedLate.id, 'overdue first, the usual order');
+        assert.equal(mine.tasks.find((x) => x.id === assignedDue.id).listName, 'Shared today');
+        assert.deepEqual([mine.counts.dueToday, mine.counts.overdue], [2, 1]);
+        assert.equal(ids.includes(notMine.id), false);
+
+        const owner = await db.today.getToday(AS.other);
+        const ownerIds = owner.tasks.map((x) => x.id);
+        assert.equal(ownerIds.filter((x) => x === ownerOwn.id).length, 1, 'my own task assigned to me is there once');
+        assert.ok(ownerIds.includes(assignedDue.id), 'the owner still sees everything on their own quest');
+        assert.deepEqual([owner.counts.dueToday, owner.counts.overdue], [3, 1], 'not counted twice');
+
+        await db.sharing.leave(M, sharedList.id);
+        assert.deepEqual((await db.today.getToday(M)).tasks.map((x) => x.id), [mineDue.id], 'gone once I leave the quest');
+    });
+
+
+    // ─── A task's history ─────────────────────────────────────────────────────────
+
+    const AV = { owner: '100000000000001901', editor: '100000000000001902', viewer: '100000000000001903', stranger: '100000000000001904', gone: '100000000000001905' };
+    const avMember = async (listId, userId, role) => {
+        const key = require('crypto').randomBytes(6).toString('hex');
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, key]);
+        return key;
+    };
+    const kinds = async (who, itemId) => (await db.activity.getActivity(who, itemId)).map((a) => [a.kind, a.from, a.to]);
+
+    await t.test('activity: each kind is written in the change itself, only for a real change, and read newest first by name', async () => {
+        for (const [name, id] of Object.entries(AV)) await db.users.ensureUser(id, { username: `av_${name}`, handle: `av_${name}`, avatar: null });
+        const home = (await db.tasks.createList(AV.owner, { name: 'Home' })).list;
+        const work = (await db.tasks.createList(AV.owner, { name: 'Work' })).list;
+        const edKey = await avMember(home.id, AV.editor, 'editor');
+        await avMember(work.id, AV.editor, 'editor');
+        await avMember(home.id, AV.viewer, 'viewer');
+        const task = (await db.tasks.addItem(AV.owner, home.id, { name: 'Taxes' })).item;
+        assert.deepEqual(await kinds(AV.owner, task.id), [['created', null, null]]);
+
+        const T = db.tasks;
+        await T.updateItem(AV.owner, task.id, { name: 'Taxes' }); // the same name: no entry
+        await T.updateItem(AV.owner, task.id, { name: 'File taxes' });
+        await T.updateItem(AV.owner, task.id, { priority: 'HIGH' });
+        await T.updateItem(AV.owner, task.id, { priority: 'HIGH', description: 'by April' }); // same priority, and a field with no history
+        await T.updateItem(AV.owner, task.id, { priority: null });
+        await T.updateItem(AV.owner, task.id, { due_date: '2031-04-15' });
+        await T.updateItem(AV.owner, task.id, { due_date: '2031-04-15', tags: 'money' });
+        await T.updateItem(AV.editor, task.id, { assignee: edKey });
+        await T.updateItem(AV.editor, task.id, { assignee: edKey });
+        await T.updateItem(AV.editor, task.id, { assignee: null });
+        await T.setItemCompleted(AV.editor, task.id, true);
+        await T.setItemCompleted(AV.editor, task.id, true); // already done: nothing changes, nothing is written
+        await T.setItemCompleted(AV.editor, task.id, false);
+        await T.moveItemToList(AV.owner, task.id, work.id);
+        assert.deepEqual(await kinds(AV.editor, task.id), [
+            ['moved', 'Home', 'Work'],
+            ['reopened', null, null],
+            ['completed', null, null],
+            ['assigned', 'av_editor', null],
+            ['assigned', null, 'av_editor'],
+            ['due', null, '2031-04-15'],
+            ['priority', 'HIGH', null],
+            ['priority', null, 'HIGH'],
+            ['renamed', 'Taxes', 'File taxes'],
+            ['created', null, null]
+        ]);
+        const read = await db.activity.getActivity(AV.editor, task.id);
+        assert.deepEqual(read[1].actor, { name: 'av_editor', isYou: true });
+        assert.deepEqual(read[0].actor, { name: 'av_owner', isYou: false });
+        assert.ok(read[0].createdAt instanceof Date && typeof read[0].id === 'number');
+        assert.deepEqual(Object.keys(read[0]).sort(), ['actor', 'createdAt', 'from', 'id', 'kind', 'to']);
+        for (const id of Object.values(AV)) assert.equal(JSON.stringify(read).includes(id), false, 'no Discord IDs');
+        await T.updateItem(AV.owner, task.id, { due_date: null });
+        assert.deepEqual((await kinds(AV.owner, task.id))[0], ['due', '2031-04-15', null]);
+
+        // Readers: anyone on the task's quest now. The viewer is on Home only, and the task moved to Work.
+        await assert.rejects(db.activity.getActivity(AV.viewer, task.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.activity.getActivity(AV.stranger, task.id), { code: 'NOT_FOUND' });
+        await assert.rejects(db.activity.getActivity(AV.owner, 99999999), { code: 'NOT_FOUND' });
+        const homeTask = (await T.addItem(AV.editor, home.id, { name: 'Plants' })).item;
+        assert.deepEqual(await kinds(AV.viewer, homeTask.id), [['created', null, null]], 'a viewer reads it');
+
+        // Subtasks: a break-down records each one, and a move records every row that moved.
+        const sub = (await T.addSubtasks(AV.owner, task.id, ['Receipts'])).items[0].item;
+        await T.moveItemToList(AV.owner, task.id, home.id);
+        assert.deepEqual(await kinds(AV.owner, sub.id), [['moved', 'Work', 'Home'], ['created', null, null]]);
+    });
+
+    await t.test('activity: bulk creation writes no history, a deleted account reads as nobody, at most 50 entries, gone with the task', async () => {
+        const { list, items } = await db.tasks.createListWithItems(AV.owner, { name: 'Bulk' }, ['a', 'b']);
+        const added = await db.tasks.addItems(AV.owner, list.id, [{ name: 'c' }]);
+        const ids = [...items.map((r) => r.item.id), added[0].item.id];
+        await db.transfer.importAll(AV.owner, { lists: [{ name: 'Imported quest', items: [{ name: 'i' }] }] });
+        const [imported] = await db.query("SELECT i.id FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ? AND l.name = 'Imported quest'", [AV.owner]);
+        for (const id of [...ids, imported.id]) assert.deepEqual(await kinds(AV.owner, id), [], 'no created row for bulk adds');
+
+        await avMember(list.id, AV.gone, 'editor');
+        await db.tasks.setItemCompleted(AV.gone, ids[0], true);
+        await db.query('DELETE FROM users WHERE discord_id = ?', [AV.gone]);
+        const [entry] = await db.activity.getActivity(AV.owner, ids[0]);
+        assert.deepEqual([entry.kind, entry.actor], ['completed', null], 'the account is gone, the entry stays');
+
+        await db.query("INSERT INTO item_activity (item_id, actor_id, kind, created_at) SELECT ?, ?, 'renamed', CURRENT_TIMESTAMP - make_interval(mins => g) FROM generate_series(1, 60) AS g", [ids[1], AV.owner]);
+        assert.equal((await db.activity.getActivity(AV.owner, ids[1])).length, 50);
+        await db.tasks.deleteItem(AV.owner, ids[1]);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM item_activity WHERE item_id = ?', [ids[1]]))[0].n), 0);
+        // The value columns hold what the UI shows, clipped to 255 characters.
+        await db.activity.record(db.getPool(), ids[2], AV.owner, 'renamed', 'x'.repeat(300), '');
+        const [clip] = await db.query('SELECT from_value, to_value FROM item_activity WHERE item_id = ? ORDER BY id DESC LIMIT 1', [ids[2]]);
+        assert.deepEqual([clip.from_value.length, clip.to_value], [255, null]);
+        await assert.rejects(db.query("INSERT INTO item_activity (item_id, kind) VALUES (?, 'deleted')", [ids[2]]), 'the kinds are checked by the database');
+    });
+
+    await t.test('activity: npm run archive deletes history older than the window, a dry run counts it', async () => {
+        const { list } = await db.tasks.createList(AV.owner, { name: 'Old history' });
+        const task = (await db.tasks.addItem(AV.owner, list.id, { name: 'old' })).item;
+        await db.tasks.updateItem(AV.owner, task.id, { name: 'renamed' });
+        await db.query("UPDATE item_activity SET created_at = CURRENT_TIMESTAMP - make_interval(days => 400) WHERE item_id = ? AND kind = 'created'", [task.id]);
+        const dry = await db.maintenance.archiveOld({ days: 365, dryRun: true });
+        assert.ok(dry.itemActivity >= 1);
+        assert.equal((await kinds(AV.owner, task.id)).length, 2, 'a dry run deletes nothing');
+        const run = await db.maintenance.archiveOld({ days: 365, batch: 1 });
+        assert.ok(run.itemActivity >= 1);
+        assert.deepEqual(await kinds(AV.owner, task.id), [['renamed', 'old', 'renamed']], 'the recent entry stays');
+        assert.equal((await db.maintenance.archiveOld({ days: 365 })).itemActivity, 0);
+    });
+
+
+    // ─── Comments on a task ───────────────────────────────────────────────────────
+
+    const CM = { owner: '100000000000002001', editor: '100000000000002002', viewer: '100000000000002003', manager: '100000000000002004', stranger: '100000000000002005', gone: '100000000000002006' };
+    const cmMember = async (listId, userId, role) => {
+        const key = require('crypto').randomBytes(6).toString('hex');
+        await db.query('INSERT INTO list_members (list_id, discord_id, role, public_id) VALUES (?, ?, ?, ?)', [listId, userId, role, key]);
+        return key;
+    };
+    let cmFixture;
+    async function commentFixture() {
+        if (cmFixture) return cmFixture;
+        for (const [name, id] of Object.entries(CM)) await db.users.ensureUser(id, { username: `cm_${name}`, handle: `cm_${name}`, avatar: null });
+        const { list } = await db.tasks.createList(CM.owner, { name: 'Talked about' });
+        await cmMember(list.id, CM.editor, 'editor');
+        await cmMember(list.id, CM.viewer, 'viewer');
+        await cmMember(list.id, CM.manager, 'manager');
+        const task = (await db.tasks.addItem(CM.owner, list.id, { name: 'Paint the fence' })).item;
+        cmFixture = { list, task };
+        return cmFixture;
+    }
+
+    await t.test('comments: editors write, everyone on the quest reads oldest first, cleaned text, limits and strangers', async () => {
+        const { list, task } = await commentFixture();
+        const C = db.comments;
+        const first = await C.addComment(CM.editor, task.id, '  Which colour?\u0007  ');
+        assert.deepEqual(Object.keys(first).sort(), ['author', 'body', 'canDelete', 'createdAt', 'id']);
+        assert.equal(first.body, 'Which colour?', 'trimmed, control characters gone');
+        assert.deepEqual(first.author, { name: 'cm_editor', isYou: true });
+        assert.equal(first.canDelete, true);
+        assert.ok(first.createdAt instanceof Date && typeof first.id === 'number');
+        const second = await C.addComment(CM.owner, task.id, 'Green.');
+        await C.addComment(CM.manager, task.id, 'x'.repeat(1000));
+
+        for (const body of ['', '   ', 'x'.repeat(1001), 7, null, undefined]) {
+            await assert.rejects(C.addComment(CM.editor, task.id, body), { code: 'VALIDATION' }, JSON.stringify(body));
+        }
+        await assert.rejects(C.addComment(CM.viewer, task.id, 'hi'), { code: 'FORBIDDEN' }, 'a viewer reads but does not write');
+        await assert.rejects(C.addComment(CM.stranger, task.id, 'hi'), { code: 'NOT_FOUND' });
+        await assert.rejects(C.listComments(CM.stranger, task.id), { code: 'NOT_FOUND' });
+        await assert.rejects(C.addComment(CM.owner, 99999999, 'hi'), { code: 'NOT_FOUND' });
+
+        const seen = await C.listComments(CM.viewer, task.id);
+        assert.deepEqual(seen.map((c) => c.body.slice(0, 13)), ['Which colour?', 'Green.', 'xxxxxxxxxxxxx'], 'oldest first');
+        assert.deepEqual(seen.map((c) => [c.author.name, c.author.isYou, c.canDelete]), [['cm_editor', false, false], ['cm_owner', false, false], ['cm_manager', false, false]]);
+        assert.deepEqual((await C.listComments(CM.manager, task.id)).map((c) => c.canDelete), [true, true, true], 'a manager may delete any');
+        assert.deepEqual((await C.listComments(CM.owner, task.id)).map((c) => c.canDelete), [true, true, true], 'so may the owner');
+        assert.deepEqual((await C.listComments(CM.editor, task.id)).map((c) => c.canDelete), [true, false, false], 'an editor only their own');
+        for (const id of Object.values(CM)) assert.equal(JSON.stringify(seen).includes(id), false, 'no Discord IDs');
+
+        // Every task read carries the count.
+        assert.equal((await db.tasks.getItems(CM.viewer, list.id)).find((i) => i.id === task.id).comment_count, 3);
+        assert.equal((await db.tasks.getItems(CM.owner, list.id)).find((i) => i.id === task.id).comment_count, 3);
+        assert.equal((await db.tasks.getItem(CM.editor, task.id)).comment_count, 3);
+        assert.equal((await db.tasks.updateItem(CM.editor, task.id, { description: 'white?' })).comment_count, 3);
+        assert.equal((await db.tasks.addItem(CM.editor, list.id, { name: 'no talk' })).item.comment_count, 0);
+        assert.ok(second.id > first.id);
+    });
+
+    await t.test('comments: the author or a manager deletes; strangers and unknown ids are not found', async () => {
+        const { task } = await commentFixture();
+        const C = db.comments;
+        const byEditor = await C.addComment(CM.editor, task.id, 'mine');
+        const byOwner = await C.addComment(CM.owner, task.id, 'the owner says');
+        await assert.rejects(C.deleteComment(CM.viewer, byEditor.id), { code: 'FORBIDDEN' });
+        await assert.rejects(C.deleteComment(CM.editor, byOwner.id), { code: 'FORBIDDEN', message: /your own comments/ });
+        await assert.rejects(C.deleteComment(CM.stranger, byEditor.id), { code: 'NOT_FOUND', message: 'Comment not found.' });
+        await assert.rejects(C.deleteComment(CM.owner, 99999999), { code: 'NOT_FOUND' });
+        await assert.rejects(C.deleteComment(CM.owner, 'abc'), { code: 'NOT_FOUND' });
+        assert.equal(await C.deleteComment(CM.editor, byEditor.id), true);
+        await assert.rejects(C.deleteComment(CM.editor, byEditor.id), { code: 'NOT_FOUND' }, 'already gone');
+        assert.equal(await C.deleteComment(CM.manager, byOwner.id), true, "a manager deletes the owner's");
+        // An author who was demoted to viewer can still take their own comment back.
+        const later = await C.addComment(CM.editor, task.id, 'second thoughts');
+        await db.query("UPDATE list_members SET role = 'viewer' WHERE discord_id = ?", [CM.editor]);
+        assert.equal((await C.listComments(CM.editor, task.id)).find((c) => c.id === later.id).canDelete, true);
+        assert.equal(await C.deleteComment(CM.editor, later.id), true);
+        await db.query("UPDATE list_members SET role = 'editor' WHERE discord_id = ?", [CM.editor]);
+    });
+
+    await t.test('comments: shared content survives a reset, a deleted author reads as nobody, the export holds my own, a deleted task takes them', async () => {
+        const { list, task } = await commentFixture();
+        const C = db.comments;
+        const kept = await C.addComment(CM.editor, task.id, 'before my reset');
+        await db.users.resetProgress(CM.editor);
+        const [still] = await db.query('SELECT body, author_id FROM item_comments WHERE id = ?', [kept.id]);
+        assert.deepEqual([still.body, still.author_id], ['before my reset', CM.editor], 'a reset keeps comments: they belong to the quest');
+
+        await cmMember(list.id, CM.gone, 'editor');
+        const orphan = await C.addComment(CM.gone, task.id, 'I will delete my account');
+        await db.query('DELETE FROM users WHERE discord_id = ?', [CM.gone]);
+        const read = (await C.listComments(CM.manager, task.id)).find((c) => c.id === orphan.id);
+        assert.deepEqual([read.author, read.canDelete], [{ name: null, isYou: false }, true]);
+        assert.equal((await C.listComments(CM.viewer, task.id)).find((c) => c.id === orphan.id).canDelete, false);
+
+        // The export: my own comments wherever I wrote them (with the quest and task), nobody else's; an import ignores them.
+        await cmMember(list.id, CM.stranger, 'editor');
+        await C.addComment(CM.stranger, task.id, 'from a member');
+        const mine = await db.transfer.exportAll(CM.stranger);
+        assert.deepEqual(mine.lists, [], 'the quest is not theirs');
+        assert.deepEqual(mine.comments.map((c) => [c.list, c.task, c.body]), [['Talked about', 'Paint the fence', 'from a member']]);
+        assert.ok(mine.comments[0].createdAt instanceof Date);
+        const owners = await db.transfer.exportAll(CM.owner);
+        assert.equal(owners.comments.some((c) => c.body === 'from a member'), false);
+        assert.ok(owners.lists.some((l) => l.name === 'Talked about'));
+        await db.transfer.importAll(CM.stranger, JSON.parse(JSON.stringify({ ...mine, lists: [{ name: 'Re-imported', items: [{ name: 'x' }] }] })));
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM item_comments WHERE author_id = ?', [CM.stranger]))[0].n), 1, 'an import writes no comments');
+
+        // At most 200, the newest, oldest first.
+        const busy = (await db.tasks.addItem(CM.owner, list.id, { name: 'Busy thread' })).item;
+        await db.query("INSERT INTO item_comments (item_id, author_id, body, created_at) SELECT ?, ?, 'c' || g, CURRENT_TIMESTAMP - make_interval(mins => 300 - g) FROM generate_series(1, 205) AS g", [busy.id, CM.owner]);
+        const page = await C.listComments(CM.owner, busy.id);
+        assert.equal(page.length, 200);
+        assert.deepEqual([page[0].body, page[199].body], ['c6', 'c205']);
+        assert.equal((await db.tasks.getItem(CM.owner, busy.id)).comment_count, 205, 'the count is the real number');
+        await db.tasks.deleteItem(CM.owner, busy.id);
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM item_comments WHERE item_id = ?', [busy.id]))[0].n), 0, 'they go with the task');
+
+        // The database keeps the length rule as well.
+        for (const body of ['', 'x'.repeat(1001)]) {
+            await assert.rejects(db.query('INSERT INTO item_comments (item_id, author_id, body) VALUES (?, ?, ?)', [task.id, CM.owner, body]), String(body.length));
+        }
     });
 
     await db.closePool();

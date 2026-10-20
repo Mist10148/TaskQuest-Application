@@ -18,6 +18,9 @@ const { REWARDS, LIMITS, BONUS_LABELS, HABIT_PERIOD_DAYS } = require('../constan
 const v = require('../validation');
 const { nextDueOnOrAfter, todayInZone, daysBetween } = require('../dates');
 const access = require('./access');
+const assignees = require('./assignees');
+const activity = require('./activity');
+const comments = require('./comments');
 
 const run = async (sql, params = []) => (await getPool().query(sql, params))[0];
 
@@ -53,10 +56,30 @@ function isDuplicate(err) {
     return isUniqueViolation(err);
 }
 
+/** The scope asOwner passes: only the list's owner may write, anyone else gets NOT_FOUND like a stranger. */
+const OWNER_ONLY = Object.freeze({ ownerOnly: true });
+
+/**
+ * forList for a write, with the list row locked. With `ownerOnly` (the asOwner services) it admits the owner alone, decided on
+ * the locked row, so a hand-over that commits first is always seen and a former owner's write never lands.
+ */
+async function writableList(conn, discordId, listId, min, { ownerOnly = false } = {}) {
+    const found = await access.forList(conn, discordId, listId, ownerOnly ? 'viewer' : min, { lock: true });
+    if (ownerOnly && !found.isOwner) throw errors.notFound('List not found.');
+    return found;
+}
+
+/** forItem for a write (its list and the item locked), with the same `ownerOnly` rule as writableList. */
+async function writableItem(conn, discordId, itemId, min, { ownerOnly = false } = {}) {
+    const found = await access.forItem(conn, discordId, itemId, ownerOnly ? 'viewer' : min, { lock: true });
+    if (ownerOnly && !found.isOwner) throw errors.notFound('Task not found.');
+    return found;
+}
+
 // ─── Lists ───────────────────────────────────────────────────────────────────
 
-/** Columns that hold other people's Discord IDs never leave this module. */
-const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by'];
+/** Columns that hold other people's Discord IDs never leave this module (an assignee goes out as `assignee`, see ./assignees). */
+const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by', 'assignee_id'];
 
 /**
  * What a person who does not own the list may see of a task: what the UI draws, nothing of the owner's private state (their reminder
@@ -65,7 +88,7 @@ const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by']
  */
 const MEMBER_ITEM_FIELDS = [
     'id', 'list_id', 'name', 'description', 'completed', 'completed_at', 'position', 'priority', 'due_date', 'tags', 'parent_id',
-    'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority'
+    'recurrence', 'estimate_minutes', 'created_at', 'updated_at', 'completed_by_name', 'can_delete', 'list_name', 'list_priority', 'assignee', 'comment_count'
 ];
 /** The same for a list: the fields the UI draws, the sharing fields, and the item counts. No reminder or notification state. */
 const MEMBER_LIST_FIELDS = [
@@ -74,6 +97,11 @@ const MEMBER_LIST_FIELDS = [
 ];
 
 const pick = (row, fields) => Object.fromEntries(fields.filter((f) => f in row).map((f) => [f, row[f]]));
+
+/** What item rows carry besides their columns: the assignee as a person (./assignees) and how many comments they have (./comments). */
+async function decorate(conn, rows, me) {
+    return comments.withCommentCounts(conn, await assignees.withAssignees(conn, rows, me));
+}
 
 /** @param {boolean} [isOwner] false for a member: they get only MEMBER_ITEM_FIELDS */
 function shapeItem(row, isOwner = true) {
@@ -108,13 +136,17 @@ function shareFields(row) {
     return { ...row, is_owner: Boolean(Number(row.is_owner)), member_count: memberCount, shared: memberCount > 1 };
 }
 
-/** Lists the user owns plus lists shared with them, with item counts and how each is shared, in one query. */
+/**
+ * Lists the user owns plus lists shared with them, with item counts and how each is shared, in one query.
+ * items_total / items_completed count top-level tasks only (subtasks are steps of their task), the same tasks that decide
+ * whether a list counts as cleared (completionContext).
+ */
 async function getLists(discordId, { sortBy = 'created_at', order = 'DESC' } = {}) {
     const me = String(discordId);
     const acc = access.accessSql('l', me);
     const rows = await run(
         `SELECT l.*, COUNT(i.id) AS items_total, COALESCE(SUM(i.completed), 0) AS items_completed, ${SHARE_COLUMNS}
-         FROM lists l LEFT JOIN items i ON i.list_id = l.id
+         FROM lists l LEFT JOIN items i ON i.list_id = l.id AND i.parent_id IS NULL
          ${SHARE_JOINS}
          WHERE ${acc.sql}
          GROUP BY l.id, me.role, ou.discord_username
@@ -217,14 +249,15 @@ function rearmAllowed(row, dateChanged, now = new Date()) {
     return { rearm_count: used + 1, rearm_day: today };
 }
 
-async function updateList(discordId, listId, input) {
+/** @param {{ ownerOnly?: boolean }} [scope] see writableList */
+async function updateList(discordId, listId, input, scope = {}) {
     const id = unwrap(v.id(listId));
     const fields = parseListInput(input, { partial: true });
     const keys = Object.keys(fields);
     if (!keys.length) throw errors.validation('Nothing to update.');
     try {
         await withTransaction(async (conn) => {
-            const { list } = await access.forList(conn, discordId, id, 'manager', { lock: true });
+            const { list } = await writableList(conn, discordId, id, 'manager', scope);
             // A deadline that really changed re-arms every reminder (due, overdue and any snooze), the owner's and every member's, but at
             // most REMINDER_REARMS_PER_DAY times a day: an edit that keeps the date, or the fourth change today, leaves them alone.
             const rearm = keys.includes('deadline') && rearmAllowed(list, String(list.deadline || '').slice(0, 10) !== (fields.deadline || ''));
@@ -304,21 +337,32 @@ async function search(discordId, query, { scope = 'lists' } = {}) {
 
 /** Items of an owned list, or null if the list isn't the user's. */
 async function getItems(discordId, listId, { sortBy = 'position', order = 'ASC' } = {}) {
+    return listItems(discordId, listId, { sortBy, order });
+}
+
+/** getItems, or with `itemId` just that one task of the list (in the same shape), or null. */
+async function listItems(discordId, listId, { sortBy = 'position', order = 'ASC', itemId = null } = {}) {
     const list = await getList(discordId, listId);
     if (!list) return null;
     // On a shared list each task also says who finished it (a display name, never an ID).
     const names = list.shared ? ', cu.discord_username AS completed_by_name' : '';
     const join = list.shared ? 'LEFT JOIN users cu ON cu.discord_id = i.completed_by' : '';
-    const rows = await run(`SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ? ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`, [list.id]);
+    const one = itemId === null ? '' : ' AND i.id = ?';
+    const rows = await run(
+        `SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ?${one} ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`,
+        itemId === null ? [list.id] : [list.id, itemId]
+    );
+    const people = await decorate(getPool(), rows, discordId);
     // can_delete tells the UI which delete buttons to offer (the server decides again on every delete).
-    return rows.map((row) => ({ ...shapeItem({ ...row, can_delete: mayDelete(list.role, row, discordId) }, list.is_owner), ...(list.is_owner ? { can_delete: true } : {}) }));
+    return people.map((row) => ({ ...shapeItem({ ...row, can_delete: mayDelete(list.role, row, discordId) }, list.is_owner), ...(list.is_owner ? { can_delete: true } : {}) }));
 }
 
 /** One item (with its list's name/priority) if it is on a list the user owns or is a member of. */
 async function getItem(discordId, itemId) {
     try {
         const { item, role, isOwner } = await access.forItem(getPool(), discordId, itemId);
-        return shapeItem({ ...item, can_delete: mayDelete(role, item, discordId) }, isOwner);
+        const [withPerson] = await decorate(getPool(), [item], discordId);
+        return shapeItem({ ...withPerson, can_delete: mayDelete(role, item, discordId) }, isOwner);
     } catch (err) {
         if (err.code === 'NOT_FOUND') return null;
         throw err;
@@ -368,9 +412,14 @@ function parseItemInput(listId, input) {
     };
 }
 
-async function addItem(discordId, listId, input) {
+/** @param {{ ownerOnly?: boolean }} [scope] see writableList */
+async function addItem(discordId, listId, input, scope = {}) {
     const parsed = parseItemInput(listId, input);
-    return withTransaction((conn) => addItemIn(conn, discordId, parsed));
+    return withTransaction(async (conn) => {
+        const added = await addItemIn(conn, discordId, parsed, scope);
+        await activity.record(conn, added.item.id, discordId, 'created');
+        return added;
+    });
 }
 
 /**
@@ -379,17 +428,21 @@ async function addItem(discordId, listId, input) {
  * any other (with the usual daily cap).
  * @returns {Promise<{ parent: object, items: Array<{ item: object, xp: object, achievements: Array }> }>}
  */
-async function addSubtasks(discordId, parentId, names) {
+async function addSubtasks(discordId, parentId, names, scope = {}) {
     const pid = unwrap(v.id(parentId));
     if (!Array.isArray(names) || !names.length || names.length > 20) throw errors.validation('Give between 1 and 20 subtask names.');
     const parsed = names.map((name) => parseItemInput(0, { name }));
     return withTransaction(async (conn) => {
         // Lock order is the user row first, then list and item rows (as addItemIn and setItemCompleted do), or two requests deadlock.
         await lockUser(conn, discordId);
-        const { item: parent, isOwner } = await access.forItem(conn, discordId, pid, 'editor', { lock: true });
+        const { item: parent, isOwner } = await writableItem(conn, discordId, pid, 'editor', scope);
         if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
         const items = [];
-        for (const p of parsed) items.push(await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid }));
+        for (const p of parsed) {
+            const added = await addItemIn(conn, discordId, { ...p, lid: parent.list_id, parentId: pid });
+            await activity.record(conn, added.item.id, discordId, 'created');
+            items.push(added);
+        }
         return { parent: shapeItem(parent, isOwner), items };
     });
 }
@@ -407,9 +460,9 @@ async function addItems(discordId, listId, inputs) {
     });
 }
 
-async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }) {
+async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }, scope = {}) {
     const user = await lockUser(conn, discordId);
-    const { list, isOwner } = await access.forList(conn, user.discord_id, lid, 'editor', { lock: true });
+    const { list, isOwner } = await writableList(conn, user.discord_id, lid, 'editor', scope);
     // The quota is the list OWNER's: a member adding to a shared list grows the owner's data. (Repeat copies from
     // spawnNextOccurrence stops at the same limit: the completed task stays, so a copy is a new row.)
     const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [list.discord_id]);
@@ -433,10 +486,12 @@ async function addItemIn(conn, discordId, { lid, name, description, extras, pare
     });
     const achievements = await unlockAchievements(conn, user);
     const [[item]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    return { item: shapeItem(item, isOwner), xp, achievements };
+    const [withPerson] = await decorate(conn, [item], user.discord_id);
+    return { item: shapeItem(withPerson, isOwner), xp, achievements };
 }
 
-async function updateItem(discordId, itemId, input) {
+/** @param {{ ownerOnly?: boolean }} [scope] see writableList */
+async function updateItem(discordId, itemId, input, scope = {}) {
     const id = unwrap(v.id(itemId));
     const fields = {};
     if (input.name !== undefined) fields.name = unwrap(v.itemName(input.name));
@@ -444,48 +499,75 @@ async function updateItem(discordId, itemId, input) {
     Object.assign(fields, parseItemExtras(input, { partial: true }));
     const parentGiven = input.parent_id !== undefined;
     if (parentGiven) fields.parent_id = parseParentId(input.parent_id);
+    const assigneeGiven = input.assignee !== undefined;
     let position;
     if (input.position !== undefined) {
         if (!Number.isSafeInteger(input.position) || input.position < 0) throw errors.validation('Position must be a non-negative integer.');
         position = input.position;
     }
     const keys = Object.keys(fields);
-    if (!keys.length && position === undefined) throw errors.validation('Nothing to update.');
+    if (!keys.length && position === undefined && !assigneeGiven) throw errors.validation('Nothing to update.');
 
-    if (keys.length) {
-        await withTransaction(async (conn) => {
-            const { item } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
-            if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
-            // A new due date or rule starts a new monthly anchor.
-            // A new due date also re-arms the task's reminder (due-day DM and any snooze).
-            let cols = keys.includes('due_date') || keys.includes('recurrence') ? [...keys, 'repeat_anchor_day'] : keys;
-            const dateChanged = keys.includes('due_date') && String(item.due_date || '').slice(0, 10) !== (fields.due_date || '');
-            // Only a changed date restarts the 24-hour clock that early/overdue effects need (see trustedDueDate).
-            if (dateChanged) {
-                fields.due_date_set_at = fields.due_date ? new Date() : null;
-                cols = [...cols, 'due_date_set_at'];
-            }
-            // A changed date also re-arms the task's reminder (due-day DM and any snooze) for the owner and every member, but at most
-            // REMINDER_REARMS_PER_DAY times a day: re-saving the same date, or the fourth change today, leaves everyone's state alone.
-            const rearm = rearmAllowed(item, dateChanged);
-            if (rearm) {
-                Object.assign(fields, rearm);
-                cols = [...cols, 'reminded_at', 'remind_at', 'rearm_count', 'rearm_day'];
-            }
-            await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
-            if (rearm) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
-        });
-    }
-    if (position !== undefined) await moveItem(discordId, id, position);
+    // The field changes and the move are one transaction: a move that fails rolls the field changes back too.
+    await withTransaction(async (conn) => {
+        const { item } = await writableItem(conn, discordId, id, 'editor', scope);
+        if (keys.length) await writeItemFields(conn, item, fields, keys, parentGiven);
+        if (keys.length) await activity.recordEdit(conn, item, fields, discordId);
+        if (assigneeGiven) await writeAssignee(conn, item, input.assignee, discordId);
+        if (position !== undefined) await moveItemIn(conn, item, position);
+    });
     const item = await getItem(discordId, id);
     if (!item) throw errors.notFound('Task not found.');
     return item;
 }
 
-/** Rewrite a list's positions as 0..n-1 in the given item-id order (inside a transaction). */
-async function writePositions(conn, orderedIds) {
-    for (let i = 0; i < orderedIds.length; i++) {
-        await conn.query('UPDATE items SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND position <> ?', [i, orderedIds[i], i]);
+/** Assign the locked `item` to a member key of its list ('owner' or list_members.public_id), or to nobody (null). */
+async function writeAssignee(conn, item, key, actorId) {
+    const next = await assignees.resolveAssignee(conn, item.list_id, key);
+    if ((item.assignee_id || null) === next) return;
+    await conn.query('UPDATE items SET assignee_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, item.id]);
+    await activity.recordAssigned(conn, item.id, actorId, item.assignee_id || null, next);
+}
+
+/** The field part of updateItem, on the locked `item` (the row as it was before this edit). */
+async function writeItemFields(conn, item, fields, keys, parentGiven) {
+    const id = item.id;
+    if (parentGiven) await assertValidParent(conn, item.list_id, fields.parent_id, id);
+    const dateChanged = keys.includes('due_date') && String(item.due_date || '').slice(0, 10) !== (fields.due_date || '');
+    const ruleChanged = keys.includes('recurrence') && (item.recurrence || null) !== fields.recurrence;
+    // A new due date or rule starts a new monthly anchor. Re-saving the same date and rule keeps it, so a task that repeats
+    // on the 31st (and is due on the 30th this month) is not moved to the 30th for good by an unrelated edit.
+    let cols = dateChanged || ruleChanged ? [...keys, 'repeat_anchor_day'] : keys;
+    // Only a changed date restarts the 24-hour clock that early/overdue effects need (see trustedDueDate).
+    if (dateChanged) {
+        fields.due_date_set_at = fields.due_date ? new Date() : null;
+        cols = [...cols, 'due_date_set_at'];
+    }
+    // A changed date also re-arms the task's reminder (due-day DM and any snooze) for the owner and every member, but at most
+    // REMINDER_REARMS_PER_DAY times a day: re-saving the same date, or the fourth change today, leaves everyone's state alone.
+    const rearm = rearmAllowed(item, dateChanged);
+    if (rearm) {
+        Object.assign(fields, rearm);
+        cols = [...cols, 'reminded_at', 'remind_at', 'rearm_count', 'rearm_day'];
+    }
+    await conn.query(`UPDATE items SET ${cols.map((k) => `${k} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...cols.map((k) => (k in fields ? fields[k] : null)), id]);
+    if (rearm) await conn.query('DELETE FROM item_reminders WHERE item_id = ?', [id]);
+}
+
+/** Rows per UPDATE in writePositions: two parameters each, far below Postgres's 65535-parameter limit. */
+const POSITION_CHUNK = 1000;
+
+/** Rewrite a list's positions as 0..n-1 in the given item-id order (inside a transaction, with the list's items locked). */
+async function writePositions(conn, listId, orderedIds) {
+    for (let start = 0; start < orderedIds.length; start += POSITION_CHUNK) {
+        const chunk = orderedIds.slice(start, start + POSITION_CHUNK);
+        // Only rows whose position really changes are written (and get a new updated_at).
+        await conn.query(
+            `UPDATE items SET position = v.pos, updated_at = CURRENT_TIMESTAMP
+             FROM (VALUES ${chunk.map(() => '(?::int, ?::int)').join(', ')}) AS v(id, pos)
+             WHERE items.id = v.id AND items.list_id = ? AND items.position <> v.pos`,
+            [...chunk.flatMap((itemId, i) => [itemId, start + i]), listId]
+        );
     }
 }
 
@@ -498,12 +580,17 @@ async function moveItem(discordId, itemId, position) {
     if (!Number.isSafeInteger(position) || position < 0) throw errors.validation('Position must be a non-negative integer.');
     return withTransaction(async (conn) => {
         const { item } = await access.forItem(conn, discordId, id, 'editor', { lock: true });
-        const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
-        const ids = rows.map((r) => r.id).filter((x) => x !== id);
-        ids.splice(Math.min(position, ids.length), 0, id);
-        await writePositions(conn, ids);
-        return ids;
+        return moveItemIn(conn, item, position);
     });
+}
+
+/** moveItem on an item whose list the caller has already locked. @returns {Promise<number[]>} the list's new order */
+async function moveItemIn(conn, item, position) {
+    const [rows] = await conn.query('SELECT id FROM items WHERE list_id = ? ORDER BY position, id FOR UPDATE', [item.list_id]);
+    const ids = rows.map((r) => r.id).filter((x) => x !== item.id);
+    ids.splice(Math.min(position, ids.length), 0, item.id);
+    await writePositions(conn, item.list_id, ids);
+    return ids;
 }
 
 /** Apply a full new order to a list the user can edit. `orderedIds` must be exactly the list's item ids. */
@@ -518,7 +605,7 @@ async function reorderItems(discordId, listId, orderedIds) {
         if (wanted.length !== have.size || new Set(wanted).size !== wanted.length || !wanted.every((x) => have.has(x))) {
             throw errors.validation('The order must list every task in this list exactly once.');
         }
-        await writePositions(conn, wanted);
+        await writePositions(conn, lid, wanted);
         return wanted;
     });
 }
@@ -547,6 +634,98 @@ async function deleteItem(discordId, itemId) {
 }
 
 /**
+ * The lists.cleared_by mark of a list that took in an already finished task by a move. Such a list never pays the list-cleared bonus
+ * (completionContext sees cleared_at), and the mark is nobody's Discord ID, so no quest counts it as a list someone cleared.
+ */
+const CLEARED_BY_MOVE = 'moved';
+
+/**
+ * Move a top-level task, with its subtasks, to the end of another list (keeping their order). Taking a task away from a list needs
+ * the same right as deleting it there (a manager, or the editor who added it and its subtasks, see mayDelete); the target needs
+ * editor. Completion, XP and who did what stay as they are. The target owner's task limit counts the moved rows when the owner
+ * changes. Reminder state follows the people: the target owner gets their own member state onto the rows (or none), the source
+ * owner keeps theirs as a member of the target, and anyone who is not on the target loses their per-task state and assignments.
+ * Lock order: both lists in ascending id order (two moves in opposite directions cannot deadlock), then the rows.
+ * @returns {Promise<{ item: object, moved: number, fromListId: number }>} the task as getItems shapes it, and how many rows moved
+ */
+async function moveItemToList(discordId, itemId, targetListId) {
+    const id = unwrap(v.id(itemId));
+    const targetId = unwrap(v.id(targetListId));
+    const me = String(discordId);
+    const result = await withTransaction(async (conn) => {
+        const [[peek]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [id]);
+        if (!peek) throw errors.notFound('Task not found.');
+        for (const lid of [...new Set([peek.list_id, targetId])].sort((a, b) => a - b)) {
+            await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [lid]);
+        }
+        const { item, role } = await access.forItem(conn, me, id, 'editor', { lock: true });
+        if (item.list_id !== peek.list_id) throw errors.conflict('This task was just moved to another quest. Try again.');
+        if (item.parent_id !== null) throw errors.validation('Move the parent task; its subtasks go with it.');
+        if (item.list_id === targetId) throw errors.validation('The task is already on that quest.');
+        if (!mayDelete(role, item, me)) throw errors.forbidden('Editors can only move tasks they added themselves and that nobody else finished. Ask a manager of this list.');
+        const { list: target } = await access.forList(conn, me, targetId, 'editor', { lock: true });
+
+        const [rows] = await conn.query('SELECT id, created_by FROM items WHERE id = ? OR parent_id = ? ORDER BY position, id FOR UPDATE', [id, id]);
+        if (!access.atLeast(role, 'manager') && rows.some((r) => r.id !== id && (r.created_by === null || String(r.created_by) !== me))) {
+            throw errors.forbidden('This task has subtasks added by other people, so only a manager of this list can move it.');
+        }
+        const ids = rows.map((r) => r.id);
+        const [[source]] = await conn.query('SELECT discord_id, name FROM lists WHERE id = ?', [item.list_id]);
+        const ownerChanges = String(source.discord_id) !== String(target.discord_id);
+        if (ownerChanges) {
+            const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [target.discord_id]);
+            if (Number(owned.n) + ids.length > LIMITS.MAX_ITEMS_PER_USER) {
+                throw errors.validation(`That quest's owner would go over the limit of ${LIMITS.MAX_ITEMS_PER_USER} tasks. Delete some first.`);
+            }
+        }
+
+        const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [targetId]);
+        await conn.query(
+            `UPDATE items SET list_id = ?, position = v.pos, updated_at = CURRENT_TIMESTAMP
+             FROM (VALUES ${ids.map(() => '(?::int, ?::int)').join(', ')}) AS v(id, pos)
+             WHERE items.id = v.id`,
+            [targetId, ...ids.flatMap((rowId, i) => [rowId, Number(pos.next) + i])]
+        );
+        await moveReminderState(conn, ids, { targetId, sourceOwner: String(source.discord_id), targetOwner: String(target.discord_id), ownerChanges });
+        await assignees.clearOutsiders(conn, targetId, ids);
+        await activity.recordMoves(conn, ids, me, source.name, target.name);
+        // A finished task arriving does not get the target cleared for free: the clear bonus is for finishing a list's tasks there.
+        if (Number(item.completed)) {
+            await conn.query('UPDATE lists SET cleared_at = CURRENT_TIMESTAMP, cleared_by = ? WHERE id = ? AND cleared_at IS NULL', [CLEARED_BY_MOVE, targetId]);
+        }
+        return { moved: ids.length, fromListId: item.list_id };
+    });
+    const [item] = (await listItems(me, targetId, { itemId: id })) || [];
+    if (!item) throw errors.notFound('Task not found.');
+    return { item, ...result };
+}
+
+/**
+ * The per-person reminder state of moved rows (see moveItemToList). The owner's lives on the rows, a member's in item_reminders.
+ * When the owner changes, the source owner's state moves to their member rows (only if they are on the target), and the rows take
+ * the target owner's member state, or none. Then nobody who is not a member of the target keeps a row.
+ */
+async function moveReminderState(conn, ids, { targetId, sourceOwner, targetOwner, ownerChanges }) {
+    if (ownerChanges) {
+        await conn.query(
+            `INSERT INTO item_reminders (item_id, discord_id, reminded_at, remind_at)
+             SELECT id, ?, reminded_at, remind_at FROM items
+              WHERE id = ANY(?) AND (reminded_at IS NOT NULL OR remind_at IS NOT NULL)
+                AND EXISTS (SELECT 1 FROM list_members WHERE list_id = ? AND discord_id = ?)
+             ON CONFLICT (item_id, discord_id) DO UPDATE SET reminded_at = EXCLUDED.reminded_at, remind_at = EXCLUDED.remind_at`,
+            [sourceOwner, ids, targetId, sourceOwner]
+        );
+        await conn.query(
+            `UPDATE items SET reminded_at = r.reminded_at, remind_at = r.remind_at
+             FROM items i LEFT JOIN item_reminders r ON r.item_id = i.id AND r.discord_id = ?
+             WHERE items.id = i.id AND i.id = ANY(?)`,
+            [targetOwner, ids]
+        );
+    }
+    await conn.query('DELETE FROM item_reminders WHERE item_id = ANY(?) AND discord_id NOT IN (SELECT discord_id FROM list_members WHERE list_id = ?)', [ids, targetId]);
+}
+
+/**
  * Create the next copy of a repeating task. It runs only on the first completion
  * (the xp_awarded guard), so un-checking and re-checking cannot duplicate it, and it
  * grants no creation XP or counters and never counts towards quests (counts_for_quests = 0),
@@ -567,12 +746,13 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0, isOwner = 
     if (Number(owned.n) >= LIMITS.MAX_ITEMS_PER_USER) return null;
     const [[pos]] = await conn.query('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM items WHERE list_id = ?', [item.list_id]);
     const [res] = await conn.query(
-        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) RETURNING id`,
-        [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.estimate_minutes ?? null, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id]
+        `INSERT INTO items (list_id, name, description, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, repeat_anchor_day, counts_for_quests, habit_streak, created_by, assignee_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) RETURNING id`,
+        [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.estimate_minutes ?? null, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id, item.assignee_id || null]
     );
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
-    return shapeItem(created, isOwner);
+    const [withPerson] = await decorate(conn, [created], user.discord_id);
+    return shapeItem(withPerson, isOwner);
 }
 
 /**
@@ -718,17 +898,18 @@ function habitOutcome(item, ctx) {
  * Completion XP and the completion counter are granted only the first time
  * an item is ever completed, so toggling cannot farm XP.
  */
-async function setItemCompleted(discordId, itemId, completed) {
+async function setItemCompleted(discordId, itemId, completed, scope = {}) {
     const id = unwrap(v.id(itemId));
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
-        const { item, isOwner } = await access.forItem(conn, user.discord_id, id, 'editor', { lock: true });
+        const { item, isOwner } = await writableItem(conn, user.discord_id, id, 'editor', scope);
 
         const target = completed === undefined ? !item.completed : Boolean(completed);
         const now = new Date();
         // Re-sending the state an item is already in changes nothing: it must not re-attribute the completion or move its time.
         if (target !== Boolean(item.completed)) {
             await conn.query('UPDATE items SET completed = ?, completed_at = ?, completed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [target ? 1 : 0, target ? now : null, target ? user.discord_id : null, id]);
+            await activity.record(conn, id, user.discord_id, target ? 'completed' : 'reopened');
         }
 
         let xp = null;
@@ -767,7 +948,8 @@ async function setItemCompleted(discordId, itemId, completed) {
             if (item.recurrence) nextItem = await spawnNextOccurrence(conn, item, user, habit.streak, isOwner);
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
-        return { item: shapeItem(updated, isOwner), completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
+        const [withPerson] = await decorate(conn, [updated], user.discord_id);
+        return { item: shapeItem(withPerson, isOwner), completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }
 
@@ -786,7 +968,7 @@ async function swapItemPositions(discordId, itemIdA, itemIdB) {
         const ids = all.map((r) => r.id);
         const [ia, ib] = [ids.indexOf(a), ids.indexOf(b)];
         [ids[ia], ids[ib]] = [ids[ib], ids[ia]];
-        await writePositions(conn, ids);
+        await writePositions(conn, rows[0].list_id, ids);
         return true;
     });
 }
@@ -1019,33 +1201,18 @@ async function cleanupOldLists(days = 5, { onCandidates } = {}) {
 }
 
 /**
- * The writing services restricted to lists the user OWNS, for callers that must never reach a list the user merely belongs to:
- * the AI service's tools (routes/internal.js) use these, so sharing never widens what the AI can read or change. A member's
- * call on someone else's list is NOT_FOUND, exactly like a stranger's.
+ * The writing services restricted to lists the user OWNS (shared ones included), for the AI service's write tools
+ * (routes/internal.js): a member's call on someone else's list is NOT_FOUND, exactly like a stranger's. Ownership is decided
+ * inside each write's transaction on the locked list row (see writableList), so a hand-over cannot slip in between the check and
+ * the write.
  */
-async function requireOwnedList(discordId, listId) {
-    const { isOwner } = await access.forList(getPool(), discordId, listId);
-    if (!isOwner) throw errors.notFound('List not found.');
-}
-async function requireOwnedItem(discordId, itemId) {
-    const { isOwner } = await access.forItem(getPool(), discordId, itemId);
-    if (!isOwner) throw errors.notFound('Task not found.');
-}
-const ownedList = (fn) => async (discordId, listId, ...rest) => {
-    await requireOwnedList(discordId, listId);
-    return fn(discordId, listId, ...rest);
-};
-const ownedItem = (fn) => async (discordId, itemId, ...rest) => {
-    await requireOwnedItem(discordId, itemId);
-    return fn(discordId, itemId, ...rest);
-};
 const asOwner = {
-    createListWithItems: (...args) => createListWithItems(...args),
-    addItem: ownedList(addItem),
-    updateList: ownedList(updateList),
-    updateItem: ownedItem(updateItem),
-    setItemCompleted: ownedItem(setItemCompleted),
-    addSubtasks: ownedItem(addSubtasks)
+    createListWithItems: (discordId, input, names) => createListWithItems(discordId, input, names),
+    addItem: (discordId, listId, input) => addItem(discordId, listId, input, OWNER_ONLY),
+    updateList: (discordId, listId, input) => updateList(discordId, listId, input, OWNER_ONLY),
+    updateItem: (discordId, itemId, input) => updateItem(discordId, itemId, input, OWNER_ONLY),
+    setItemCompleted: (discordId, itemId, completed) => setItemCompleted(discordId, itemId, completed, OWNER_ONLY),
+    addSubtasks: (discordId, parentId, names) => addSubtasks(discordId, parentId, names, OWNER_ONLY)
 };
 
 module.exports = {
@@ -1070,6 +1237,7 @@ module.exports = {
     addSubtasks,
     updateItem,
     deleteItem,
+    moveItemToList,
     setItemCompleted,
     swapItemPositions,
     moveItem,

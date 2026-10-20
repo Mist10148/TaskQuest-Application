@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a new feature or a change to the game rules.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the roadmap in [docs/PRD.md](https://github.com/Mist10148/TaskQuest-Application/blob/main/docs/PRD.md) and [docs/KNOWN_ISSUES.md](https://github.com/Mist10148/TaskQuest-Application/blob/main/docs/KNOWN_ISSUES.md) first; it may already be planned or decided.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+      description: Who needs it and what they cannot do today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How it would work for the player, in the bot, the web app or both.
+    validations:
+      required: true
+  - type: textarea
+    id: balance
+    attributes:
+      label: XP, balance and abuse
+      description: If it pays XP or changes a rule, how much, what caps it, and how it could be farmed (see docs/design/balance.md).
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

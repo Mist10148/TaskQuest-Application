@@ -5,7 +5,7 @@
 
 'use strict';
 
-const { TEXT_LIMITS, PRIORITIES, LIMITS } = require('./constants');
+const { TEXT_LIMITS, TAG_LIMITS, PRIORITIES, LIMITS } = require('./constants');
 
 const LIMITS_REFLECTION_MAX = LIMITS.REFLECTION_MAX_LENGTH;
 
@@ -47,6 +47,7 @@ function estimate(value) {
 const reflection = (v) => requiredText(v, LIMITS_REFLECTION_MAX, 'Reflection');
 const itemName = (v) => requiredText(v, TEXT_LIMITS.ITEM_NAME, 'Task name');
 const description = (v) => optionalText(v, TEXT_LIMITS.DESCRIPTION, 'Description');
+const comment = (v) => requiredText(v, TEXT_LIMITS.COMMENT, 'Comment');
 const category = (v) => optionalText(v, TEXT_LIMITS.CATEGORY, 'Category');
 
 function priority(value) {
@@ -84,8 +85,7 @@ function recurrence(value) {
     return RECURRENCES.includes(v) ? ok(v) : fail(`Repeat must be one of ${RECURRENCES.join(', ')}.`);
 }
 
-const MAX_TAGS = 5;
-const MAX_TAG_LENGTH = 20;
+const { MAX_TAGS, MAX_LENGTH: MAX_TAG_LENGTH } = TAG_LIMITS;
 
 /**
  * Tags arrive as an array or a comma/space separated string ("#work, home").
@@ -120,10 +120,13 @@ function formatDate(value) {
     return String(value).slice(0, 10);
 }
 
+/** Largest row id: the id columns are 32-bit INTEGERs, so anything above can never exist (and would be a database error). */
+const MAX_ID = 2147483647;
+
 /** Positive integer id (for route params / custom ids). */
 function id(value) {
     const n = typeof value === 'number' ? value : Number(String(value));
-    return Number.isSafeInteger(n) && n > 0 ? ok(n) : fail('Invalid id.');
+    return Number.isSafeInteger(n) && n > 0 && n <= MAX_ID ? ok(n) : fail('Invalid id.');
 }
 
 /** Escape % and _ so user input is matched literally in LIKE patterns. */
@@ -132,7 +135,9 @@ function escapeLike(value) {
 }
 
 module.exports = {
+    MAX_ID,
     cleanText,
+    comment,
     partyName,
     listName,
     itemName,

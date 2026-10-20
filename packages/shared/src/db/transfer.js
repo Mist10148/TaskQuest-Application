@@ -13,15 +13,18 @@ const { lockUser } = require('./users');
 const { errors } = require('../errors');
 const v = require('../validation');
 const { parseDone } = require('../csv');
-const { LIMITS: USER_LIMITS } = require('../constants');
+const { LIMITS: USER_LIMITS, TEXT_LIMITS, IMPORT_LIMITS: LIMITS } = require('../constants');
 const access = require('./access');
+const comments = require('./comments');
 
-const LIMITS = { LISTS: 100, ITEMS_PER_LIST: 500, ITEMS_TOTAL: 1000 };
 const FORMAT_VERSION = 1;
 
 const isoDate = (value) => (value ? String(value).slice(0, 10) : null);
 
-/** Everything the user OWNS, in a portable shape. Lists shared with them are not theirs to export. */
+/**
+ * Everything the user OWNS, in a portable shape. Lists shared with them are not theirs to export. `comments` are the comments the user
+ * wrote, on any quest (with the quest and task name): theirs to take along, though an import does not bring them back.
+ */
 async function exportAll(discordId) {
     const id = String(discordId);
     const [lists] = await getPool().query('SELECT * FROM lists WHERE discord_id = ? ORDER BY id', [id]);
@@ -56,7 +59,8 @@ async function exportAll(discordId) {
             priority: l.priority,
             deadline: isoDate(l.deadline),
             items: byList.get(l.id) || []
-        }))
+        })),
+        comments: await comments.ownComments(id)
     };
 }
 
@@ -137,13 +141,38 @@ function parseImport(data) {
                 };
             })
         };
+        linkParents(list.items, fail);
         return list;
     });
 }
 
-/** A free list name: "Name", then "Name (imported)", "Name (imported 2)", ... within the 100-character limit. */
+/**
+ * Resolve each task's parent_id to the index of its parent in the same list (`parent`, or null for a top-level task), whatever
+ * order the rows come in. A parent_id that matches no task leaves the task top-level (`orphaned`). Refused: two tasks with the
+ * same id, a task that is its own parent, and a subtask of a subtask (one level only, as assertValidParent enforces elsewhere).
+ */
+function linkParents(items, fail) {
+    const indexByRef = new Map();
+    items.forEach((it, ii) => {
+        if (it.ref === null) return;
+        if (indexByRef.has(it.ref)) fail(`items[${ii}]: the id "${it.ref}" is used by more than one task.`);
+        indexByRef.set(it.ref, ii);
+    });
+    for (const it of items) {
+        const parent = it.parentRef === null ? undefined : indexByRef.get(it.parentRef);
+        it.parent = parent === undefined ? null : parent;
+        it.orphaned = it.parentRef !== null && parent === undefined;
+    }
+    items.forEach((it, ii) => {
+        if (it.parent === null) return;
+        if (it.parent === ii) fail(`items[${ii}]: a task cannot be its own subtask.`);
+        if (items[it.parent].parent !== null) fail(`items[${ii}]: subtasks can only be one level deep.`);
+    });
+}
+
+/** A free list name: "Name", then "Name (imported)", "Name (imported 2)", ... within the list name limit. */
 function freeName(base, taken) {
-    const fit = (suffix) => `${base.slice(0, 100 - suffix.length)}${suffix}`;
+    const fit = (suffix) => `${base.slice(0, TEXT_LIMITS.LIST_NAME - suffix.length)}${suffix}`;
     if (!taken.has(base.toLowerCase())) return base;
     for (let n = 1; n < 1000; n++) {
         const candidate = fit(n === 1 ? ' (imported)' : ` (imported ${n})`);
@@ -180,8 +209,8 @@ async function importAll(discordId, data) {
         let itemCount = 0;
         let orphaned = 0;
         for (const l of lists) {
-            // The database compares names with its own collation (Cafe = Café), which a lower-cased set does not see:
-            // when the insert is refused as a duplicate, mark that name taken and pick the next suffix.
+            // List names are CITEXT, so the database has the last word on what counts as a duplicate: when the insert is
+            // refused as one, mark that name taken and pick the next suffix.
             let listId;
             for (let attempt = 0; listId === undefined; attempt++) {
                 const name = freeName(l.name, taken);
@@ -198,25 +227,22 @@ async function importAll(discordId, data) {
                     if (!isUniqueViolation(err) || attempt >= 20) throw err;
                 }
             }
-            const idByRef = new Map();
-            const subtaskRefs = new Set(); // imported rows that were stored as subtasks
-            // Parents first, so a subtask can point at a row that already exists.
-            const ordered = [...l.items.filter((i) => i.parentRef === null), ...l.items.filter((i) => i.parentRef !== null)];
+            // parseImport linked every subtask to its parent (it.parent, an index). Top-level tasks are written first, so each
+            // subtask's parent row already exists, however the file ordered them.
+            const idByIndex = new Map();
+            const indices = [...l.items.keys()];
+            const ordered = [...indices.filter((i) => l.items[i].parent === null), ...indices.filter((i) => l.items[i].parent !== null)];
             let position = 0;
-            for (const it of ordered) {
-                if (it.parentRef !== null && !idByRef.has(it.parentRef)) orphaned++; // stored as a top-level task
-                const parentId = it.parentRef !== null && idByRef.has(it.parentRef) ? idByRef.get(it.parentRef) : null;
-                // Subtasks are one level deep (the same rule assertValidParent enforces elsewhere).
-                if (parentId !== null && subtaskRefs.has(it.parentRef)) throw errors.validation('Subtasks can only be one level deep.');
+            for (const index of ordered) {
+                const it = l.items[index];
+                if (it.orphaned) orphaned++; // stored as a top-level task
+                const parentId = it.parent === null ? null : idByIndex.get(it.parent);
                 const [ir] = await conn.query(
                     `INSERT INTO items (list_id, name, description, completed, xp_awarded, completed_at, completed_by, position, due_date, due_date_set_at, priority, tags, recurrence, estimate_minutes, parent_id, counts_for_quests, created_by)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?) RETURNING id`,
                     [listId, it.name, it.description, it.completed ? 1 : 0, it.completed ? 1 : 0, it.completed ? new Date() : null, it.completed ? user.discord_id : null, position++, it.due_date, it.due_date ? new Date() : null, it.priority, it.tags, it.recurrence, it.estimate_minutes, parentId, user.discord_id]
                 );
-                if (it.ref !== null) {
-                    idByRef.set(it.ref, ir.insertId);
-                    if (parentId !== null) subtaskRefs.add(it.ref);
-                }
+                idByIndex.set(index, ir.insertId);
                 itemCount++;
             }
         }

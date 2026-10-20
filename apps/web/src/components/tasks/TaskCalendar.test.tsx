@@ -47,4 +47,19 @@ describe("TaskCalendar", () => {
     await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
     expect(screen.getByText("January 2030")).toBeInTheDocument();
   });
+
+  it("has one tab stop and moves between days with the arrow keys, across months", async () => {
+    render(<TaskCalendar items={[item(1, "2030-02-01")]} onToggle={() => {}} onEdit={() => {}} />);
+    const start = screen.getByRole("gridcell", { name: "2030-01-10" });
+    expect(screen.getAllByRole("gridcell").filter((c) => c.tabIndex === 0)).toEqual([start]);
+    start.focus();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+    const endOfJan = screen.getByRole("gridcell", { name: "2030-01-31" });
+    expect(endOfJan).toHaveFocus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByText("February 2030")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "2030-02-01, 1 open of 1" })).toHaveFocus();
+    expect(screen.getByRole("region", { name: "Tasks due 2030-02-01" })).toBeInTheDocument();
+  });
 });
+

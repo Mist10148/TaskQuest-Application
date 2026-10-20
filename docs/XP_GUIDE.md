@@ -44,7 +44,7 @@ Task bonuses (`first_of_day` to `subtasks_done`, `habit_bonus`, `perfect_day`, `
 
 Giving a skill tree back refunds 75% of its cost as a plain balance credit (`skill_refund`, never lifetime XP), once a day.
 
-Spending sinks: classes (300 to 750), skills (50 to 360 a level), streak freezes (150, or 120 with Freeze Cache), cosmetics (200 to 2000), Blackjack bets. Prestige empties your balance.
+Spending sinks: classes (400 to 700), skills (50 to 360 a level), streak freezes (150, or 120 with Freeze Cache), cosmetics (200 to 2000), Blackjack bets. Prestige empties your balance.
 
 ## Order of calculation
 

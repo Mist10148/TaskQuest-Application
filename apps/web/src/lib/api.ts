@@ -301,19 +301,31 @@ export const itemsApi = {
         patch<Item & RewardFields & { nextItem?: Item | null }>(`/api/items/${id}/toggle`, completed === undefined ? undefined : { completed }),
     /** `init.keepalive` lets the request finish while the page is being closed. */
     delete: (id: number, init?: RequestInit) => del<{ success: boolean }>(`/api/items/${id}`, init),
+    /** Move a top-level task (with its subtasks) to another quest. */
+    move: (id: number, listId: number) => post<{ item: Item; moved: number }>(`/api/items/${id}/move`, { listId }),
+    activity: (id: number) => apiFetch<{ activity: ItemActivity[] }>(`/api/items/${id}/activity`),
+    comments: (id: number) => apiFetch<{ comments: ItemComment[] }>(`/api/items/${id}/comments`),
+    addComment: (id: number, body: string) => post<ItemComment>(`/api/items/${id}/comments`, { body }),
+    deleteComment: (commentId: number) => del<{ success: boolean }>(`/api/comments/${commentId}`),
 };
 
 // ─── AI (optional feature; see docs/AI_INTEGRATION.md) ───────────────────────
 
 /** Streams an SSE response from a POST endpoint, calling onEvent for each event. */
 async function sseFetch(endpoint: string, json: unknown, onEvent: (event: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
-        body: JSON.stringify(json),
-        signal,
-    });
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+            body: JSON.stringify(json),
+            signal,
+        });
+    } catch (err) {
+        if (isNetworkFailure(err)) throw new ApiError(OFFLINE_MESSAGE, 0, 'NETWORK');
+        throw err;
+    }
     if (!response.ok || !response.body) {
         const body = await response.json().catch(() => ({}));
         throw new ApiError(body.error || `Request failed (HTTP ${response.status})`, response.status, body.code, body.details);
@@ -332,6 +344,8 @@ async function sseFetch(endpoint: string, json: unknown, onEvent: (event: ChatEv
             if (event) onEvent(event);
         }
     }
+    // Flush any bytes the decoder held back (a multi-byte character split across the last chunk).
+    buffer += decoder.decode();
     const tail = parseSseFrame(buffer);
     if (tail) onEvent(tail);
 }
@@ -357,12 +371,12 @@ export const aiApi = {
         post<AiSummary>('/api/ai/summary', body),
     prioritize: (limit?: number) => post<AiPriorityResult>('/api/ai/prioritize', limit ? { limit } : {}),
     threads: () => apiFetch<{ threads: AiThread[] }>('/api/ai/threads'),
-    thread: (id: string) => apiFetch<AiThreadDetail>(`/api/ai/threads/${id}`),
-    deleteThread: (id: string) => del<{ success: boolean }>(`/api/ai/threads/${id}`),
+    thread: (id: string) => apiFetch<AiThreadDetail>(`/api/ai/threads/${encodeURIComponent(id)}`),
+    deleteThread: (id: string) => del<{ success: boolean }>(`/api/ai/threads/${encodeURIComponent(id)}`),
     chatStream: (body: { threadId?: string; message: string }, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) =>
         sseFetch('/api/ai/chat', body, onEvent, signal),
     resumeStream: (threadId: string, approved: boolean, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) =>
-        sseFetch(`/api/ai/chat/${threadId}/resume`, { approved }, onEvent, signal),
+        sseFetch(`/api/ai/chat/${encodeURIComponent(threadId)}/resume`, { approved }, onEvent, signal),
 };
 
 // ─── Progression ─────────────────────────────────────────────────────────────
@@ -708,6 +722,38 @@ export interface Item {
     completed_by_name?: string | null;
     /** false when the server would refuse to delete it for me (an editor may only delete tasks they added). Absent: assume yes. */
     can_delete?: boolean;
+    /** Who the task is assigned to (the owner or a member of the quest), or null. */
+    assignee?: ItemPerson | null;
+    /** How many comments the task has. */
+    comment_count?: number;
+}
+
+/** A person on a quest as tasks show them: the member key (as in the members list), never a Discord id. */
+export interface ItemPerson {
+    memberKey: string;
+    name: string | null;
+    isYou: boolean;
+}
+
+export type ItemActivityKind = 'created' | 'renamed' | 'completed' | 'reopened' | 'priority' | 'due' | 'assigned' | 'moved';
+
+/** One entry of a task's history; `from` and `to` are the old and new values where the kind has them. */
+export interface ItemActivity {
+    id: number;
+    kind: ItemActivityKind;
+    actor: { name: string | null; isYou: boolean } | null;
+    from?: string | null;
+    to?: string | null;
+    createdAt: string;
+}
+
+export interface ItemComment {
+    id: number;
+    body: string;
+    author: { name: string | null; isYou: boolean };
+    createdAt: string;
+    /** The author and the quest's managers may delete a comment. */
+    canDelete: boolean;
 }
 
 export type Recurrence = 'daily' | 'weekly' | 'monthly';
@@ -721,6 +767,8 @@ export interface ItemInput {
     recurrence?: Recurrence | null;
     estimate_minutes?: number | null;
     parent_id?: number | null;
+    /** A member key from the quest's members list ("owner" for the owner), or null to unassign. */
+    assignee?: string | null;
 }
 
 export interface ListWithItems extends List {
@@ -1023,7 +1071,7 @@ export interface QuestClaimResult {
 export type HistoryRange = 7 | 30 | 90;
 
 export interface XPHistoryDay {
-    /** UTC day, YYYY-MM-DD. */
+    /** A day in the player's own time zone, YYYY-MM-DD (the last one is their today). */
     date: string;
     xp: number;
     tasksCompleted: number;

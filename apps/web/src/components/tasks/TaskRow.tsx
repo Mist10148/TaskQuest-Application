@@ -1,9 +1,10 @@
-import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, ListPlus, Pencil, Repeat, Timer, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Info, ListPlus, MessageSquare, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { formatDeadline, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import { swipeAction, swipeOffset } from "@/lib/swipe";
+import { parseTags } from "@/lib/tags";
 
 const DOT: Record<string, string> = { HIGH: "bg-red-500", MEDIUM: "bg-yellow-500", LOW: "bg-blue-500" };
 
@@ -30,6 +31,8 @@ interface Props {
   onToggle: (id: number) => void;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
+  /** Opens the detail drawer (also for a viewer, who has no other row actions). */
+  onOpenDetails?: (id: number) => void;
   onAddSubtask?: (id: number) => void;
   onMove?: (id: number, direction: -1 | 1) => void;
   canMoveUp?: boolean;
@@ -44,10 +47,10 @@ interface Props {
 const iconButton = "p-2.5 sm:p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
-export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
+export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
-  const tags = item.tags ? item.tags.split(",").filter(Boolean) : [];
+  const tags = parseTags(item.tags);
   const overdue = !completed && isPastDeadline(item.due_date);
 
   // Touch: swipe a task to the right to complete it (the checkbox and the keyboard still work as before).
@@ -149,7 +152,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         </p>
         {item.description && <p className="text-xs sm:text-sm mt-1 line-clamp-2 text-foreground-muted">{item.description}</p>}
         {completed && item.completed_by_name && <p className="mt-1 text-xs text-foreground-muted">Done by {item.completed_by_name}</p>}
-        {(item.due_date || item.recurrence || item.estimate_minutes || tags.length > 0) && (
+        {(item.due_date || item.recurrence || item.estimate_minutes || tags.length > 0 || item.assignee || (item.comment_count ?? 0) > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
               <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
@@ -170,9 +173,25 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
             {tags.map((t) => (
               <span key={t} className="rounded-full px-2 py-0.5 bg-primary/10 text-primary-text">#{t}</span>
             ))}
+            {item.assignee && (
+              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", item.assignee.isYou ? "border-primary/40 text-primary-text" : "border-border text-foreground-muted")}>
+                <UserRound className="h-3 w-3" aria-hidden /> <span className="sr-only">Assigned to </span>{item.assignee.isYou ? "You" : item.assignee.name ?? "Someone"}
+              </span>
+            )}
+            {(item.comment_count ?? 0) > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 border border-border text-foreground-muted">
+                <MessageSquare className="h-3 w-3" aria-hidden /> {item.comment_count}<span className="sr-only"> {item.comment_count === 1 ? "comment" : "comments"}</span>
+              </span>
+            )}
           </div>
         )}
       </div>
+
+      {onOpenDetails && (
+        <button type="button" aria-label={`Details of "${item.name}"`} onClick={() => onOpenDetails(item.id)} className={cn(iconButton, "shrink-0 hover:bg-background-secondary hover:text-primary-text")}>
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {!readOnly && <div className="shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 interface Pending {
   timer: ReturnType<typeof setTimeout>;
   ids: number[];
+  toastId: string | number;
 }
 
 /**
@@ -43,8 +44,7 @@ export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs
       };
 
       const timer = setTimeout(commit, delayMs);
-      pending.current.set(key, { timer, ids });
-      toast(label, {
+      const toastId = toast(label, {
         duration: delayMs,
         action: {
           label: "Undo",
@@ -57,6 +57,7 @@ export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs
           },
         },
       });
+      pending.current.set(key, { timer, ids, toastId });
     },
     [delayMs, unhide]
   );
@@ -75,9 +76,11 @@ export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs
     window.addEventListener("pagehide", onPageHide);
     return () => {
       window.removeEventListener("pagehide", onPageHide);
-      current.forEach(({ timer, ids }) => {
+      current.forEach(({ timer, ids, toastId }) => {
         clearTimeout(timer);
         ids.forEach((id) => void runRef.current(id).catch(() => undefined));
+        // The delete is final now: an Undo button left on screen would do nothing.
+        toast.dismiss(toastId);
       });
       current.clear();
     };

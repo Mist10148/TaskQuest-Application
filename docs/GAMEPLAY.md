@@ -13,10 +13,10 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
    - [Bonus XP sources](#5c-bonus-xp-sources)
    - [Focus sessions](#5d-focus-sessions)
    - [Weekly review](#5e-weekly-review)
-   - [Reflection and weekly goal](#5e-reflection-and-weekly-goal)
-   - [Prestige](#5f-prestige)
-   - [Cosmetics](#5g-cosmetics-the-shop)
-   - [Parties](#5h-parties)
+   - [Reflection and weekly goal](#5f-reflection-and-weekly-goal)
+   - [Prestige](#5g-prestige)
+   - [Cosmetics](#5h-cosmetics-the-shop)
+   - [Parties](#5i-parties)
 6. [Achievements](#6-achievements)
 7. [Games](#7-games)
 8. [Limits and anti-farming](#8-limits-and-anti-farming)
@@ -91,7 +91,7 @@ The Default class is free. Buying a class also equips it. Switching class resets
 | ⚗️ **Alchemist** | 650 | **Brew.** Completing a task adds its priority to the brew (`alchemist_mix`) and pays +2 XP per ingredient in it. Completing the third different priority finishes the brew: ⌊base × 150%⌋ + 15, and the brew starts over. Other actions pay +2. A task with no priority counts as MEDIUM. |
 | 🌿 **Druid** | 600 | **Habits.** Completing a repeating task pays ⌊base × 6%⌋ × steps + 2 per step of its habit streak (up to 10 steps; the streak is the one shown on the task and kept by [habit streaks](#5c-bonus-xp-sources)), at least +3. Every other action pays +3. |
 | ⏳ **Chronomancer** | 650 | **Flow.** The first 3 tasks you complete within 30 minutes after a [focus session](#5d-focus-sessions) finished (finished, not cancelled or expired) pay +100% of the base XP and 5 more. Every other action pays +2. The window comes from your last finished focus session; nothing is stored on your account. |
-| 🤝 **Warden** | 600 | **Guard.** Completing a task on a [shared list](#5h-parties) pays ⌊base × 10% × n⌋ + 2 × n XP, where n is the number of other people on that list (up to 5; members and the owner count, you do not). Every other action, and tasks on lists nobody shares, pay +2. |
+| 🤝 **Warden** | 600 | **Guard.** Completing a task on a [shared list](#5i-parties) pays ⌊base × 10% × n⌋ + 2 × n XP, where n is the number of other people on that list (up to 5; members and the owner count, you do not). Every other action, and tasks on lists nobody shares, pay +2. |
 
 All class bonuses are multiplied by your percentage skills (§2), like any other class bonus.
 
@@ -354,8 +354,8 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | `comeback` | +25 for the first completion after 3 idle days (the previous paid completion is 3 or more days old) | Once a week |
 | `party_assist` | +3 for every completion while you are in a party of two or more | 15 XP a day |
 | `estimate_accuracy` | +10 when a task you gave an estimate is finished within 10 minutes after a focus session whose real minutes are within 25% of the estimate | 30 XP a day |
-| `reflection` | +10 for a one-line note about your day ([reflection](#5e-reflection-and-weekly-goal)) | Once a day |
-| `weekly_goal` | +10 + 2 per task of your goal, at most 80, when you reach the goal you set ([weekly goal](#5e-reflection-and-weekly-goal)) | Once a week |
+| `reflection` | +10 for a one-line note about your day ([reflection](#5f-reflection-and-weekly-goal)) | Once a day |
+| `weekly_goal` | +10 + 2 per task of your goal, at most 80, when you reach the goal you set ([weekly goal](#5f-reflection-and-weekly-goal)) | Once a week |
 | `focus_session` | floor(minutes × 0.6) per [focus session](#5d-focus-sessions) | 100 XP and 8 sessions a day |
 | `weekly_review` | +40 ([weekly review](#5e-weekly-review)) | Once per week |
 
@@ -373,14 +373,14 @@ A server-timed work timer. `POST /api/focus/start {minutes}` (10 to 90) starts a
 
 Once per week of yours (Monday to Monday in your time zone) you can claim **+40 XP** after finishing at least one task that week (first completions only; imported and auto-created copies don't count). `GET /api/review` shows the week's finished tasks, the XP earned and whether the review is claimable; `POST /api/review/claim` pays it.
 
-## 5e. Reflection and weekly goal
+## 5f. Reflection and weekly goal
 
 Two small, player-driven sources (flat XP, no class or skill modifiers):
 
 - **Reflection.** One short note a day (1 to 200 characters, your day and time zone) pays **+10 XP** once. `POST /api/reflection {note}`. The note is saved even when XP is off.
 - **Weekly goal.** Pick how many tasks you will finish this week, **3 to 60**. Finish them (the same count as the [weekly review](#5e-weekly-review)) and claim **10 + 2 XP per task of the goal, at most 80**, once a week. The goal must be above what you have already finished this week, so it cannot be set after the fact; it can be changed while it is open. `PUT /api/goal {target}`, `POST /api/goal/claim`.
 
-## 5f. Prestige
+## 5g. Prestige
 
 At **level 30** you can prestige (`POST /api/user/prestige` with `{"confirm":"PRESTIGE"}`, at most 10 times). It **resets** your balance, level (back to 1), class (back to Default), class ownership, skills, class counters and streak freezes. It **keeps** your achievements, quest claims, tasks, daily streak and spending history. Each prestige adds a permanent **+2% XP multiplier** (up to +20%) to class-modified XP, **+1 flat XP on every task completion** (up to +10) and gives you a title:
 
@@ -390,7 +390,7 @@ At **level 30** you can prestige (`POST /api/user/prestige` with `{"confirm":"PR
 
 Level comes from `lifetime_xp`, so prestige resets it; the never-reset `lifetime_xp_total` feeds the XP achievements and the lifetime leaderboard, so neither moves. The multiplier is added to your other multipliers, so on small amounts the extra XP rounds down (10 base XP stays 10 until about +5%); the flat +1 per prestige is why a prestige is felt on a plain task too.
 
-## 5g. Cosmetics (the shop)
+## 5h. Cosmetics (the shop)
 
 Titles, avatar frames and profile accents are an XP sink with **no gameplay effect**: they never change how much XP you earn. Buy them in the web app's **Shop** page or with `/shop` in Discord. Each is bought once with XP (source `cosmetic_purchase`, which counts as spending for `xp_spent` and the spending achievements) and is yours until a progress reset. A few also need something earned first: a level, a prestige or an achievement. The server checks the requirement, your balance and ownership in one locked transaction, so a double click or two devices cannot charge twice.
 
@@ -435,7 +435,7 @@ You can equip one of each kind (or none). **Prestige keeps** everything you own 
 | Rose | 400 XP | Reach level 5 |
 | Slate | 500 XP | Reach level 10 |
 
-## 5h. Parties
+## 5i. Parties
 
 A party is a group of up to **6** people (the owner included) with one shared **weekly quest**. You can be in one party at a time; the owner invites people (`/party invite` with a mention, the web Party page by exact Discord username with a confirmation), they accept, and the owner can disband it. Members see each other's **display names and this week's counts** and nothing else (no XP, levels, lists or progress elsewhere).
 

@@ -32,7 +32,7 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 | **Progression** | XP for creating lists, adding tasks and completing tasks, plus capped bonuses for good habits (first task of the day, clearing a list, finishing early, clearing overdue work, subtasks, habit streaks, achievements, streak chests, focus sessions, a weekly review). Levels come from lifetime XP (100 XP a level). A daily reward with streaks and freezes. See [docs/XP_GUIDE.md](docs/XP_GUIDE.md). |
 | **Quests** | Daily, weekly, a rotating weekly pool and a monthly boss, all computed from what you actually did in your own day. |
 | **Classes** | Seventeen classes (Default, Hero, Gambler, Assassin, Wizard, Archer, Tank, Monk, Artisan, Ranger, Necromancer, Paladin, Bard, Alchemist, Druid, Chronomancer, Warden), each changing how XP is earned. Choosing one: [docs/CLASS_GUIDE.md](docs/CLASS_GUIDE.md). |
-| **Skills** | 96 skills in 12 trees, all with real effects that work the same on both platforms. |
+| **Skills** | 96 skills in 17 trees, all with real effects that work the same on both platforms. |
 | **Achievements** | 33 achievements for lists, tasks, XP, levels, streaks, classes, games and spending; each pays 25 XP. |
 | **Prestige and shop** | At level 30, start over for a permanent XP bonus and a title. Spend XP on titles, avatar frames and profile accents with no gameplay effect. |
 | **Sharing** | Share a list with viewer, editor or manager roles (invited by Discord username), and team up in parties of up to six with a shared weekly quest. |
@@ -153,11 +153,15 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 | `npm run start:server` / `start:bot` | Production start |
 | `npm run db:up` / `db:down` / `db:reset` | Start, stop, or recreate the local Docker PostgreSQL (`docker-compose.yml`) |
 | `npm run db:migrate` | Apply pending database migrations (`001_baseline` and any later ones; both apps also do it on start) |
+| `npm run archive` | Move old XP transactions (and, with `-- --games`, finished game sessions) to the `*_archive` tables, and delete task history older than the window (`-- --days 365 --batch 5000 --dry-run`; take a backup first) |
+| `npm run xp-report` | What each class really earned per action, from the XP log (`-- --days 90`) |
+| `npm run balance` | Deterministic class balance tables from the shared XP functions (`scripts/balance-sim.js`, see [docs/design/balance.md](docs/design/balance.md)) |
 | `npm run arcade-report` | How fast real players score in the arcade games, to check the plausibility bound (needs run history) |
 | `npm run deploy:commands` | Register Discord slash commands (`-- --guild=ID` for one guild) |
 | `npm run lint` / `typecheck` | ESLint for the web app and the Node packages (`lint:node`, config in `eslint.config.node.mjs`), and TypeScript for the web app |
 | `npm run test:e2e` | Playwright browser tests against the built app, a real API and a throwaway database (see [CONTRIBUTING.md](CONTRIBUTING.md#browser-tests)) |
 | `npm run check` | `node --check` every Node source file |
+| `npm run test:db` | Prints how to run the integration tests against the local Docker database (`db:up`, then `TEST_DB_PASSWORD=taskquest-dev TEST_DB_NAME=taskquest_test npm test`; that database is wiped) |
 | `npm test` | Unit tests (Node packages, the docs consistency test and the web app's Vitest suite). Integration tests also run when `TEST_DB_NAME` is set (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
 
 ## Configuration
@@ -175,6 +179,8 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 | Document | Contents |
 |---|---|
 | [docs/README.md](docs/README.md) | Index of every document, with the date it was last checked against the code |
+| [docs/START_HERE.md](docs/START_HERE.md) | A short path for players and one for contributors |
+| [docs/WHATS_NEW.md](docs/WHATS_NEW.md) | A player's view of what changed in 4.0 and the balance pass that followed |
 | [docs/PRD.md](docs/PRD.md) | Product requirements: goals, personas, user stories, requirements, roadmap |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, transactions, security design |
 | [docs/API.md](docs/API.md) | Every REST endpoint with request and response shapes |
@@ -190,7 +196,10 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render, environment variables, Discord setup, operations |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Backups and restore, troubleshooting, and the first live Gemini run |
 | [docs/design/](docs/design/) | Design records for what was built: shared lists and parties, Tailwind 4, arcade anti-cheat, and the balance rationale |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations (the roadmap is in the PRD) |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is open next and later, and the open product decisions |
+| [docs/TESTING.md](docs/TESTING.md) | Every check and test suite, locally and in CI |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | How we treat each other |
 | [SECURITY.md](SECURITY.md) | Security model, fixed vulnerabilities, required secret rotation, reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, tests, conventions |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |

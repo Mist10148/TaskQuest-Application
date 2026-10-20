@@ -35,8 +35,8 @@ export function SummarizeButton({ body, label = "Summarize", title = "Summary", 
 
   return (
     <>
-      <Button variant="outline" size={size} onClick={run} className="gap-1">
-        <Sparkles className="h-4 w-4 text-primary-text" /> <span className="hidden sm:inline">{label}</span>
+      <Button variant="outline" size={size} onClick={run} className="gap-1" aria-label={label}>
+        <Sparkles className="h-4 w-4 text-primary-text" aria-hidden /> <span className="hidden sm:inline">{label}</span>
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">

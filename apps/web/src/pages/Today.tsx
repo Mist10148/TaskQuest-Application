@@ -11,6 +11,7 @@ import { useClaimGoal, useSetGoal, useToday, useToggleItem, useWriteReflection }
 import { cn } from "@/lib/utils";
 import { formatDeadline } from "@/lib/dates";
 import { todayHeadline, goalPercent } from "@/lib/today";
+import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import type { TodayData, TodayTask } from "@/lib/api";
 
 const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "bg-xp", LOW: "bg-success" };
@@ -29,7 +30,7 @@ const TaskLine = ({ task }: { task: TodayTask }) => {
         {toggle.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5 text-transparent hover:text-success" aria-hidden />}
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium sm:text-base">{task.name}</p>
+        <p className="line-clamp-2 break-words text-sm font-medium sm:text-base">{task.name}</p>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-foreground-muted">
           <span>{task.listName}</span>
           {task.dueDate && (
@@ -126,7 +127,7 @@ const GoalCard = ({ data }: { data: TodayData }) => {
 
 const TodayView = ({ data }: { data: TodayData }) => (
   <div className="space-y-4 sm:space-y-6">
-    <div className="flex flex-wrap gap-2 text-sm" aria-label="Today at a glance">
+    <div className="flex flex-wrap gap-2 text-sm" role="group" aria-label="Today at a glance">
       <span className="rounded-full border border-border bg-card px-3 py-1" data-testid="count-due"><strong>{data.counts.dueToday}</strong> due today</span>
       <span className={cn("rounded-full border px-3 py-1", data.counts.overdue > 0 ? "border-destructive/40 bg-destructive/10 text-destructive-text" : "border-border bg-card")} data-testid="count-overdue"><strong>{data.counts.overdue}</strong> overdue</span>
       <span className="rounded-full border border-border bg-card px-3 py-1" data-testid="count-done"><strong>{data.counts.doneToday}</strong> done today</span>
@@ -135,6 +136,8 @@ const TodayView = ({ data }: { data: TodayData }) => (
     {data.season.enabled && data.xpEnabled && (
       <p className="rounded-lg border border-xp/30 bg-xp/10 px-3 py-2 text-sm" data-testid="season-banner"><strong>{data.season.name}:</strong> {data.season.blurb}</p>
     )}
+
+    <StreakStrip day={data.day} live={data.streak.live} claimedToday={data.streak.claimedToday} />
 
     {data.streak.atRisk && (
       <div role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm" data-testid="streak-warning">

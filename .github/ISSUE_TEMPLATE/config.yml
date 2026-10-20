@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Mist10148/TaskQuest-Application/blob/main/SECURITY.md#5-reporting-a-vulnerability
+    about: Please do not open a public issue for security problems. Follow SECURITY.md to report privately.

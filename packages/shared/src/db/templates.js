@@ -12,7 +12,7 @@ const tasks = require('./tasks');
 const access = require('./access');
 const { errors } = require('../errors');
 const v = require('../validation');
-const { LIMITS } = require('../constants');
+const { LIMITS, TEXT_LIMITS } = require('../constants');
 const { todayInZone } = require('../dates');
 
 const MAX_TEMPLATES = LIMITS.MAX_TEMPLATES_PER_USER;
@@ -121,12 +121,12 @@ async function saveFromList(discordId, listId, { name } = {}) {
     });
 }
 
-/** "Name", then "Name (2030-01-05)", "Name (2030-01-05 2)", ... within the 100-character name limit. */
+/** "Name", then "Name (2030-01-05)", "Name (2030-01-05 2)", ... within the list name limit. */
 function freeName(base, taken, today) {
     if (!taken.has(base.toLowerCase())) return base;
     for (let n = 1; n < 1000; n++) {
         const suffix = ` (${today}${n === 1 ? '' : ` ${n}`})`;
-        const candidate = `${base.slice(0, 100 - suffix.length)}${suffix}`;
+        const candidate = `${base.slice(0, TEXT_LIMITS.LIST_NAME - suffix.length)}${suffix}`;
         if (!taken.has(candidate.toLowerCase())) return candidate;
     }
     throw errors.conflict('Could not find a free list name.');

@@ -17,6 +17,13 @@ const { liveStreak, getSkillBonuses, streakWindowDays, claimGapDays } = require(
 
 const TASK_LIMIT = 6;
 
+/**
+ * The tasks that are "mine" for Today: every task on a list I own, plus the tasks assigned to me on a list shared with me (the
+ * membership is checked too, although leaving a list already clears its assignments). One row per task, so nothing counts twice.
+ * Binds `me` three times. The item is aliased `i`, its list `l`.
+ */
+const MINE = `(l.discord_id = ? OR (i.assignee_id = ? AND EXISTS (SELECT 1 FROM list_members tm WHERE tm.list_id = l.id AND tm.discord_id = ?)))`;
+
 /** The streak as the Today card needs it: is it alive, was today's reward claimed, is today the last day to keep it. */
 function streakState(user, skills, now) {
     const count = Number(user.streak_count) || 0;
@@ -41,21 +48,21 @@ async function getToday(discordId, now = new Date()) {
     const { from, to } = await dayWindow(pool, u, now);
     const skills = await getUserSkills(id);
 
-    // What needs doing: open top-level tasks on your own lists that are overdue, due today or HIGH priority.
+    // What needs doing: open top-level tasks on your own lists, or assigned to you on a shared one, that are overdue, due today or HIGH priority.
     const [rows] = await pool.query(
         `SELECT i.id, i.name, i.list_id, l.name AS list_name, i.due_date, COALESCE(i.priority, l.priority) AS priority, i.estimate_minutes
            FROM items i JOIN lists l ON l.id = i.list_id
-          WHERE l.discord_id = ? AND i.completed = 0 AND i.parent_id IS NULL
+          WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL
             AND (i.due_date <= ? OR COALESCE(i.priority, l.priority) = 'HIGH')
           ORDER BY (i.due_date IS NULL), i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 0 END, i.id
           LIMIT ${TASK_LIMIT}`,
-        [id, today]
+        [id, id, id, today]
     );
     const [[counts]] = await pool.query(
         `SELECT COUNT(*) FILTER (WHERE i.due_date = ?) AS "dueToday", COUNT(*) FILTER (WHERE i.due_date < ?) AS overdue
            FROM items i JOIN lists l ON l.id = i.list_id
-          WHERE l.discord_id = ? AND i.completed = 0 AND i.parent_id IS NULL`,
-        [today, today, id]
+          WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL`,
+        [today, today, id, id, id]
     );
     const [[done]] = await pool.query('SELECT COUNT(*) AS n FROM items WHERE first_completed_by = ? AND first_completed_at >= ? AND first_completed_at < ?', [id, from, to]);
 

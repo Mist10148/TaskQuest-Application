@@ -83,3 +83,43 @@ export function tasksByDate(items: readonly Item[]): Map<string, Item[]> {
   }
   return map;
 }
+
+/** `date` moved by whole days (UTC calendar arithmetic, so no time zone can skip or repeat a day). */
+export function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return iso(d);
+}
+
+/**
+ * The day a key moves to in the calendar grid (the keys of the WAI-ARIA date-grid pattern), or null for any
+ * other key: arrows move by a day or a week, Home/End go to the week's Monday/Sunday, PageUp/PageDown move a
+ * month (the day is clamped, so 31 March goes back to 28 or 29 February).
+ */
+export function calendarKeyTarget(date: string, key: string): string | null {
+  const weekday = (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
+  switch (key) {
+    case "ArrowLeft": return addDays(date, -1);
+    case "ArrowRight": return addDays(date, 1);
+    case "ArrowUp": return addDays(date, -7);
+    case "ArrowDown": return addDays(date, 7);
+    case "Home": return addDays(date, -weekday);
+    case "End": return addDays(date, 6 - weekday);
+    case "PageUp":
+    case "PageDown": {
+      const { year, month } = shiftMonth(Number(date.slice(0, 4)), Number(date.slice(5, 7)), key === "PageUp" ? -1 : 1);
+      const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      return `${year}-${pad(month)}-${pad(Math.min(Number(date.slice(8, 10)), last))}`;
+    }
+    default: return null;
+  }
+}
+
+/** The priority a task gets when it is moved to a board column ("No priority" clears it). */
+export const columnPriority = (key: BoardColumn["key"]): Priority | null => (key === "NONE" ? null : key);
+
+/**
+ * Whether a task may be moved to a column. "No priority" is closed while the quest has a priority of its own: a task
+ * without one shows under the quest's priority, so it would bounce straight back.
+ */
+export const canMoveToColumn = (key: BoardColumn["key"], listPriority?: Priority | null): boolean => key !== "NONE" || !listPriority;

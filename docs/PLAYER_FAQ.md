@@ -44,7 +44,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 ## Time zones and "your day"
 
-Set your zone with `/timezone` or in Settings (UTC until you do). Your zone decides when your day starts (daily caps, the first-task-of-the-day bonus, Monk Rhythm, due-today checks, daily quests), when your week starts (Monday 00:00; weekly quests, the weekly review) and your month (the monthly boss), and when reminders arrive. The daily reward ignores calendar days, and the weekly leaderboard and a party's week always run Monday to Monday in UTC for everyone.
+Set your zone with `/timezone` or in Settings (UTC until you do). Your zone decides when your day starts (daily caps, the first-task-of-the-day bonus, Monk Rhythm, due-today checks, daily quests), when your week starts (Monday 00:00; weekly quests, the weekly review) and your month (the monthly boss), and when reminders arrive. The daily reward streak follows calendar days (the 24-hour cooldown between two claims is counted from your last claim), and the weekly leaderboard and a party's week always run Monday to Monday in UTC for everyone.
 
 **Why can't I change my zone again?** A zone change is allowed once every 24 hours (the first change, and saving the zone you already have, always work). Otherwise hopping between zones would reset your daily caps again and again. Changing zone is not retroactive: XP you already earned keeps its moment, and the change can shift when today's caps reset.
 
@@ -62,7 +62,7 @@ At **level 30** you can prestige (profile, or `/prestige`), up to 10 times. You 
 
 **Why didn't my invitation say who was found or not found?** On purpose. The answer is the same whether the person exists, turned invitations off, declined you recently (you cannot invite them again for 7 days) or you invited them already, so nobody can use it to look up who uses TaskQuest. People can switch invitations off in Settings.
 
-**What is a party?** Up to six people with one shared weekly quest (Monday to Monday in UTC): 12 tasks for each member who finished at least 6 tasks themselves. Each member who finished 6 tasks themselves since joining gets +60 XP when it is reached, once per week. See [GAMEPLAY §5h](GAMEPLAY.md#5h-parties). You can be in one party at a time; the owner invites, removes members and disbands.
+**What is a party?** Up to six people with one shared weekly quest (Monday to Monday in UTC): 12 tasks for each member who finished at least 6 tasks themselves. Each member who finished 6 tasks themselves since joining gets +60 XP when it is reached, once per week. See [GAMEPLAY §5i](GAMEPLAY.md#5i-parties). You can be in one party at a time; the owner invites, removes members and disbands.
 
 ## Import and export
 

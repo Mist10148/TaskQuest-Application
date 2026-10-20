@@ -2,9 +2,10 @@
  * Service-to-service endpoints for the AI service (chat write tools).
  *
  * Not reachable by browsers: no session, protected by the shared
- * X-AI-Token. They run the same db.tasks.* services as the public API (through db.tasks.asOwner, which refuses any
- * list the user merely belongs to: shared lists are never reachable by the AI), so XP,
- * achievements and validation behave identically. The AI service only calls
+ * X-AI-Token. They run the same db.tasks.* services as the public API (through db.tasks.asOwner), so XP,
+ * achievements and validation behave identically. asOwner refuses (NOT_FOUND) any list the user merely belongs to: the
+ * AI can write only to lists the user owns, including the ones they share with others. (The AI's reads are narrower:
+ * apps/ai/app/db/repo.py leaves out every list that has members.) The AI service only calls
  * these after the user approved the action in the UI.
  */
 

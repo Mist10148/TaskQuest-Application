@@ -9,7 +9,8 @@ import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { Sparkles, Flame, Target, ListTodo, Trophy, Gamepad2, Plus, Calendar, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLists, useClaimDaily } from "@/hooks/useApi";
+import { useLists, useClaimDaily, useToday } from "@/hooks/useApi";
+import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -30,6 +31,8 @@ const Dashboard = () => {
   const listsQuery = useLists();
   const apiLists = listsQuery.data;
   const claimDaily = useClaimDaily();
+  // The Today page's data: the streak strip needs the player's own day and whether today is claimed.
+  const today = useToday();
   // Earliest time the daily reward is claimable again, learned from this session's claim or server answer.
   const [claimedUntil, setClaimedUntil] = useState<number | null>(null);
 
@@ -145,6 +148,8 @@ const Dashboard = () => {
             <StatCard label="Achievements" value={achievementCount} icon={<Trophy className="h-4 w-4 sm:h-5 sm:w-5" />} colorScheme="xp" subValue="Unlock more!" />
           </motion.div>
         </div>
+
+        {today.data && <StreakStrip day={today.data.day} live={today.data.streak.live} claimedToday={today.data.streak.claimedToday} />}
 
         <QuestsCard />
 

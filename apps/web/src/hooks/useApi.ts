@@ -4,7 +4,7 @@
  * showing fake data.
  */
 
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
@@ -82,6 +82,7 @@ export function showError(error: unknown) {
 /** Refresh what a change to tasks or lists can alter: the lists, and the Today page and the stats that are derived from due dates and completions. */
 function invalidateTaskViews(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['lists'] });
+    qc.invalidateQueries({ queryKey: ['items'] }); // a task's history and comments in the detail drawer
     qc.invalidateQueries({ queryKey: ['today'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
 }
@@ -412,6 +413,43 @@ export function useUpdateItem() {
     });
 }
 
+export function useMoveItem() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ itemId, listId }: { itemId: number; listId: number }) => itemsApi.move(itemId, listId),
+        onSuccess: () => invalidateTaskViews(qc),
+        onError: showError,
+    });
+}
+
+/** A task's history, newest first (loaded when the detail drawer shows it). */
+export function useItemActivity(itemId: number | null) {
+    return useQuery({ queryKey: ['items', itemId, 'activity'], queryFn: () => itemsApi.activity(itemId as number), enabled: itemId !== null });
+}
+
+export function useItemComments(itemId: number | null) {
+    return useQuery({ queryKey: ['items', itemId, 'comments'], queryFn: () => itemsApi.comments(itemId as number), enabled: itemId !== null });
+}
+
+export function useAddComment(itemId: number) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (body: string) => itemsApi.addComment(itemId, body),
+        // Also the comment count on the task's row.
+        onSuccess: () => invalidateTaskViews(qc),
+        onError: showError,
+    });
+}
+
+export function useDeleteComment() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (commentId: number) => itemsApi.deleteComment(commentId),
+        onSuccess: () => invalidateTaskViews(qc),
+        onError: showError,
+    });
+}
+
 export function useDeleteItem() {
     const qc = useQueryClient();
     return useMutation({
@@ -427,6 +465,7 @@ export function useDeleteItem() {
 export function useReorderItems() {
     const qc = useQueryClient();
     return useMutation({
+        mutationKey: ['reorderItems'],
         mutationFn: ({ listId, itemIds }: { listId: number; itemIds: number[] }) => listsApi.reorder(listId, itemIds),
         // Optimistic: the list reorders at once and is rolled back if the server refuses. No success toast per drop.
         onMutate: async ({ listId, itemIds }) => {
@@ -439,7 +478,11 @@ export function useReorderItems() {
             if (context?.previous) qc.setQueryData(['lists', listId], context.previous);
             showError(error);
         },
-        onSettled: (_items, _error, { listId }) => qc.invalidateQueries({ queryKey: ['lists', listId] }),
+        // While a later reorder is still in flight, refetching would show the older server order for a moment (a flicker); the last one to settle refetches.
+        onSettled: (_items, _error, { listId }) => {
+            if (qc.isMutating({ mutationKey: ['reorderItems'] }) > 1) return;
+            return qc.invalidateQueries({ queryKey: ['lists', listId] });
+        },
     });
 }
 
@@ -447,11 +490,31 @@ export function useToggleItem() {
     const qc = useQueryClient();
     return useMutation({
         // `completed` makes the request idempotent (a double click cannot flip the task back).
-        mutationFn: (arg: number | { itemId: number; completed?: boolean }) =>
+        // `quiet` is for a batch: the caller shows one summary toast instead of one per task.
+        mutationFn: (arg: number | { itemId: number; completed?: boolean; quiet?: boolean }) =>
             typeof arg === 'number' ? itemsApi.toggle(arg) : itemsApi.toggle(arg.itemId, arg.completed),
-        onSuccess: (result) => {
+        // Optimistic when the wanted state is explicit: the row flips at once and is put back if the server refuses.
+        // Rewards, achievements and a repeating task's next copy still come from the server's answer.
+        onMutate: async (arg) => {
+            if (typeof arg === 'number' || arg.completed === undefined) return { previous: [] as Array<[QueryKey, ListWithItems]> };
+            await qc.cancelQueries({ queryKey: ['lists'] });
+            const previous: Array<[QueryKey, ListWithItems]> = [];
+            for (const [key, data] of qc.getQueriesData<ListWithItems>({ queryKey: ['lists'] })) {
+                if (!data || !Array.isArray(data.items) || !data.items.some((i) => i.id === arg.itemId)) continue;
+                previous.push([key, data]);
+                qc.setQueryData<ListWithItems>(key, { ...data, items: data.items.map((i) => (i.id === arg.itemId ? { ...i, completed: arg.completed as boolean } : i)) });
+            }
+            return { previous };
+        },
+        onSuccess: (result, arg) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
+            qc.invalidateQueries({ queryKey: ['items'] });
             invalidateProgress(qc);
+            const quiet = typeof arg !== 'number' && arg.quiet === true;
+            if (quiet) {
+                showAchievementNotifications(result.newAchievements, qc);
+                return;
+            }
             if (result.completed) {
                 // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing.
                 const undo = () => itemsApi.toggle(result.id, false).then(() => invalidateTaskViews(qc)).catch(showError);
@@ -462,7 +525,10 @@ export function useToggleItem() {
             }
             showAchievementNotifications(result.newAchievements, qc);
         },
-        onError: showError,
+        onError: (error, _arg, context) => {
+            for (const [key, data] of context?.previous ?? []) qc.setQueryData(key, data);
+            showError(error);
+        },
     });
 }
 

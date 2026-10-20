@@ -339,23 +339,23 @@ test('GAMEPLAY quotes the import quota and the web rate limits from the code', (
 
 // ─── Prestige, cosmetics, parties ─────────────────────────────────────────────
 
-test('GAMEPLAY §5f prestige titles and numbers match PRESTIGE and PRESTIGE_TITLES', () => {
-    const block = section(/^5f\. Prestige/);
+test('GAMEPLAY §5g prestige titles and numbers match PRESTIGE and PRESTIGE_TITLES', () => {
+    const block = section(/^5g\. Prestige/);
     const problems = [];
     const [table] = tables(block);
     const titles = table.rows.find((r) => /^Title$/i.test(clean(r[0])));
-    assert.ok(titles, `${DOC} §5f: the "Title" row is missing`);
+    assert.ok(titles, `${DOC} §5g: the "Title" row is missing`);
     C.PRESTIGE_TITLES.slice(1).forEach((title, i) => {
-        if (clean(titles[i + 1]) !== title) problems.push(`§5f title for prestige ${i + 1}: "${titles[i + 1]}" but constants.js says "${title}"`);
+        if (clean(titles[i + 1]) !== title) problems.push(`§5g title for prestige ${i + 1}: "${titles[i + 1]}" but constants.js says "${title}"`);
     });
     const body = block.join('\n');
-    for (const n of [C.PRESTIGE.MIN_LEVEL, C.PRESTIGE.MAX, C.PRESTIGE.BONUS_PERCENT]) if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5f should mention ${n}`);
-    if (!body.includes(C.PRESTIGE.CONFIRM)) problems.push(`§5f should mention the confirmation word ${C.PRESTIGE.CONFIRM}`);
+    for (const n of [C.PRESTIGE.MIN_LEVEL, C.PRESTIGE.MAX, C.PRESTIGE.BONUS_PERCENT]) if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5g should mention ${n}`);
+    if (!body.includes(C.PRESTIGE.CONFIRM)) problems.push(`§5g should mention the confirmation word ${C.PRESTIGE.CONFIRM}`);
     check('The prestige section', problems);
 });
 
-test('GAMEPLAY §5g cosmetics match COSMETICS (name, cost)', () => {
-    const block = section(/^5g\. Cosmetics/);
+test('GAMEPLAY §5h cosmetics match COSMETICS (name, cost)', () => {
+    const block = section(/^5h\. Cosmetics/);
     const problems = [];
     const seen = new Set();
     for (const table of tables(block)) {
@@ -364,35 +364,35 @@ test('GAMEPLAY §5g cosmetics match COSMETICS (name, cost)', () => {
             const name = clean(row[0]);
             const [id, item] = Object.entries(C.COSMETICS).find(([, c]) => c.name === name) || [];
             if (!item) {
-                problems.push(`§5g row "${name}": no such cosmetic`);
+                problems.push(`§5h row "${name}": no such cosmetic`);
                 continue;
             }
             seen.add(id);
-            if (numbers(row[cost])[0] !== item.cost) problems.push(`§5g row "${name}": cost ${row[cost]} but constants.js says ${item.cost}`);
+            if (numbers(row[cost])[0] !== item.cost) problems.push(`§5h row "${name}": cost ${row[cost]} but constants.js says ${item.cost}`);
             const req = item.requires;
             const needs = row[col(table, /needs/)] || '';
-            if (req && req.level && !numbers(needs).includes(req.level)) problems.push(`§5g row "${name}": needs "${needs}" but constants.js requires level ${req.level}`);
-            if (req && req.prestige && !/prestige/i.test(needs)) problems.push(`§5g row "${name}": needs "${needs}" but constants.js requires a prestige`);
-            if (req && req.achievement && !needs.includes(C.ACHIEVEMENTS[req.achievement].name)) problems.push(`§5g row "${name}": needs "${needs}" but constants.js requires the ${C.ACHIEVEMENTS[req.achievement].name} achievement`);
-            if (!req && !/^-?\s*$/.test(needs.replace(/[–—]/g, '-').trim())) problems.push(`§5g row "${name}": needs "${needs}" but constants.js has no requirement`);
+            if (req && req.level && !numbers(needs).includes(req.level)) problems.push(`§5h row "${name}": needs "${needs}" but constants.js requires level ${req.level}`);
+            if (req && req.prestige && !/prestige/i.test(needs)) problems.push(`§5h row "${name}": needs "${needs}" but constants.js requires a prestige`);
+            if (req && req.achievement && !needs.includes(C.ACHIEVEMENTS[req.achievement].name)) problems.push(`§5h row "${name}": needs "${needs}" but constants.js requires the ${C.ACHIEVEMENTS[req.achievement].name} achievement`);
+            if (!req && !/^-?\s*$/.test(needs.replace(/[–—]/g, '-').trim())) problems.push(`§5h row "${name}": needs "${needs}" but constants.js has no requirement`);
         }
     }
-    for (const [id, c] of Object.entries(C.COSMETICS)) if (!seen.has(id)) problems.push(`§5g: cosmetic "${c.name}" (${id}) has no row`);
+    for (const [id, c] of Object.entries(C.COSMETICS)) if (!seen.has(id)) problems.push(`§5h: cosmetic "${c.name}" (${id}) has no row`);
     check('The cosmetics tables', problems);
 });
 
-test('GAMEPLAY §5h party quest numbers match PARTY_QUEST and the party size', () => {
-    const body = section(/^5h\. Parties/).join('\n');
+test('GAMEPLAY §5i party quest numbers match PARTY_QUEST and the party size', () => {
+    const body = section(/^5i\. Parties/).join('\n');
     const P = C.PARTY_QUEST;
     const problems = [];
     for (const n of [P.PER_MEMBER_TARGET, P.MIN_OWN_TO_CLAIM, P.REWARD, C.LIMITS.MAX_PARTY_MEMBERS]) {
-        if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5h should mention ${n}`);
+        if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5i should mention ${n}`);
     }
     const F = C.PARTY_FOCUS_QUEST;
     for (const n of [F.PER_MEMBER_MINUTES, F.MIN_OWN_MINUTES, F.REWARD]) {
-        if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5h should mention the focus quest number ${n}`);
+        if (!new RegExp(`\\b${n}\\b`).test(body)) problems.push(`§5i should mention the focus quest number ${n}`);
     }
-    if (P.MIN_OWN_TO_CLAIM * 2 !== P.PER_MEMBER_TARGET) problems.push('§5h says the claim needs half the per-member target, but MIN_OWN_TO_CLAIM is not half of PER_MEMBER_TARGET');
+    if (P.MIN_OWN_TO_CLAIM * 2 !== P.PER_MEMBER_TARGET) problems.push('§5i says the claim needs half the per-member target, but MIN_OWN_TO_CLAIM is not half of PER_MEMBER_TARGET');
     check('The party section', problems);
 });
 

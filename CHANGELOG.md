@@ -4,7 +4,17 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Highlights
+
+- **PostgreSQL replaces MySQL** (empty start; read the upgrade notes first).
+- **Optional AI features** (summaries, prioritiser, chat with confirmed write actions, bot persona) in a separate `apps/ai` service.
+- **Shared quests and parties**, with assignees, comments and a per-task history.
+- **New game systems:** ten more classes, quests, prestige, the cosmetics shop, focus sessions, the weekly review, the Today page and arcade replay verification.
+- **Web app:** Tailwind 4, board and calendar views, a task drawer, bulk edit, keyboard task cursor, accessibility preferences and Playwright tests.
+
 ### Upgrade notes
+
+> **Migration numbers in this section.** Entries below that name a migration from `004` up to `026` (for example `018`, `021`, `024`) refer to the pre-squash MySQL migration names. Those migrations are folded into `001_baseline`; the migrations that exist in `packages/shared/src/db/migrations` are `001_baseline`, `002_drop_skill_points`, `003_ai_prioritize_cache`, `004_item_assignee`, `005_item_activity` and `006_item_comments`, so the next one is `007`. Names below such as `003_ai`, `004_lists_updated_at`, `005_ai_thread_source` and `006_ai_chat_format` are pre-squash names and do not match the files of the same number.
 
 - **The database is now PostgreSQL (Supabase), and it starts empty.** MySQL, MariaDB and TiDB are no longer supported, and nothing is copied from the old database: players link again on their first command or web login. Create a Supabase project, set `DB_URL` to its **Session pooler** URL (port 5432) with `DB_SSL=true`, and deploy; the single migration `001_baseline` runs on start. Follow [MIGRATION_POSTGRES.md](docs/MIGRATION_POSTGRES.md) for the runbook and rollback. Do not deploy this release against the old MySQL database: it can no longer talk to it.
 - **Two new migrations run on start** (`002_drop_skill_points`, `003_ai_prioritize_cache`). `002` drops a column the previous version still reads, so rolling back to the previous version after it ran is not supported; take a backup first if that matters (see OPERATIONS).
@@ -19,9 +29,26 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **A repeating task stops repeating at the 5,000 task limit.** Its copy is a new row (the completed task stays), so it now counts against the list owner's quota; at the limit completing it pays as usual but creates no next copy until you delete some tasks.
 - **Time zones are stored in canonical form.** `europe/paris` is saved as `Europe/Paris`, and offset zones such as `+05:30` are refused. A value saved earlier is left as it is; the AI service falls back to UTC for a name it cannot resolve.
 - **The CSV export has a `description` column** (last, so older readers still work).
+- **Three more migrations run on start** (`004_item_assignee`, `005_item_activity`, `006_item_comments`): task assignees, a per-task history and task comments. They only add a column and two tables.
+- **Quest progress counts top-level tasks.** `itemsTotal` / `itemsCompleted` in `GET /api/lists` no longer count subtasks, so a quest's progress bar matches when it counts as cleared.
 
 ### Added
 
+- **Move tasks between quests.** "Move to another quest" in the task drawer and a bulk **Move to…** in select mode move a task with its subtasks to the end of another quest you can edit (`POST /api/items/:id/move`).
+- **Assignees on shared quests.** A task on a shared quest can be assigned to its owner or a member (task drawer), shows who has it on its row, can be filtered by "Assigned to me" or "Unassigned", and a task assigned to you on someone else's quest shows on your Today page.
+- **Comments and activity on a task.** The task drawer has a **Comments** tab (anyone who can edit the quest can comment; the author or a manager can delete) and an **Activity** tab with every change: created, renamed, done or reopened, priority, due date, assignee and moves. Rows show a comment count.
+- **Filters and groups.** A filter bar above a quest narrows the tasks by status, priority, due window (overdue, today, next 7 days, none), tag and assignee in every view, and the list view can group tasks by priority, due window or tag. Remembered per browser.
+- **Drag on the board.** Drag an open card to another priority column (or use its priority menu, which works by keyboard and touch) to change its priority.
+- **Bulk edit of tags.** The bulk edit dialog can add, remove or replace tags on the selected tasks.
+- **A streak strip on the dashboard.** The Today page's seven-day strip also shows under the dashboard stats.
+- **Calendar keyboard navigation.** The calendar is one tab stop; arrows, Home/End and PageUp/PageDown move between days and months.
+- **Repository templates.** GitHub issue and pull request templates, and Dependabot for npm, pip and GitHub Actions.
+
+- **A task detail drawer.** An info button on each task (and `i` on the highlighted one) opens a side drawer with the full description, priority, due date, repeat, estimate, tags and subtasks, with Mark done / Reopen and Edit for anyone who can edit. A viewer of a shared quest can read it too.
+- **Bulk edit.** In select mode an **Edit** button changes the priority, due date and (see above) tags of the selected tasks together (keep, set or clear each), through the existing update endpoint with one summary toast.
+- **The command palette finds tasks.** Ctrl+K lists tasks whose name or description match (two or more characters, the same search as the quest log) with their quest, and opens that quest.
+- **A streak strip on the Today page.** The last seven days as flames, from the streak the page already returns.
+- **High contrast and text size.** Two per-device settings under Settings > Appearance: stronger text and border colours, and a normal / large / larger page scale.
 - **An installable web app.** `manifest.webmanifest`, 192 and 512 px icons, a maskable icon, an Apple touch icon and a theme colour (all drawn from the existing SVG mark), so the app can be added to a phone's home screen. Push notifications use the PNG icon. The service worker is still push-only and caches nothing.
 - **An offline banner and a plain network error.** A notice shows while the browser is offline, and a request that fails before reaching the server says "You appear to be offline" instead of "Failed to fetch". Nothing is queued offline, so rewards stay server-authoritative.
 - **A keyboard cursor over tasks.** Inside a quest, `j` and `k` move a highlighted row, `x` completes or reopens it, `e` edits it and `d` deletes it (with Undo). Listed in the `?` dialog.
@@ -84,7 +111,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **Optional web push** for reminders: a service worker, VAPID keys, a Settings switch per browser and `POST /internal/push` for the bot, all off unless the `WEB_PUSH_*` variables are set. Push endpoints are limited to the browsers' own push services on port 443. Migration `017_web_push`.
 - **Days follow your time zone.** Daily caps, the first-of-day bonus, Monk Rhythm, Ranger and Necromancer due-date checks, daily, weekly and monthly quests, the weekly review and the Stats page use your own day, Monday-to-Monday week and month (UTC until you set a zone), with DST-safe local midnights. A zone change is allowed once every 24 hours so zone hopping cannot reset caps (migration `015_timezone_days`). The weekly leaderboard stays on one global UTC week.
 - **Arcade anti-cheat.** Snake, Dino Runner and Space Invaders are deterministic fixed-step simulators shared by the web app and the server; the browser records every input, and the server replays the run and pays on the score it derives itself. Runs that do not replay, run too long, press too fast or do not fit the elapsed time are rejected. Design: [arcade-anti-cheat](docs/design/arcade-anti-cheat.md).
-- **Playwright e2e suite** (`npm run test:e2e`, own CI job against MySQL 8) for the main flows: dashboard, tasks, Focus, Stats, Review, shared lists and parties.
+- **Playwright e2e suite** (`npm run test:e2e`, own CI job against PostgreSQL) for the main flows: dashboard, tasks, Focus, Stats, Review, shared lists and parties.
 - **Shared lists and parties.** Invite people to a list as viewer, editor or manager (members, roles, accept or decline, leave, 7-day invitations) and form a party of up to six with a shared weekly quest (12 tasks per active member, +60 XP each for 6 tasks of their own). XP, caps, quests and stats belong to whoever acted. Invitations name a person by their exact Discord username with a confirmation step on the web, and the AI service never reaches a list you merely belong to. Migrations `018_list_members`, `019_parties` and `021_sharing_hardening`. Design: [shared-lists](docs/design/shared-lists.md).
 - **Docs:** [XP_GUIDE.md](docs/XP_GUIDE.md), [CLASS_GUIDE.md](docs/CLASS_GUIDE.md), [PLAYER_FAQ.md](docs/PLAYER_FAQ.md), [design/balance.md](docs/design/balance.md), a docs index ([docs/README.md](docs/README.md)) and a test that fails when GAMEPLAY.md disagrees with `constants.js`.
 - **Tasks grow up.** Each task can have its own due date, priority, up to five tags, one level of subtasks and a repeat rule (daily / weekly / monthly: completing a repeating task creates the next copy, with no creation XP). Migration `007_item_fields`.
@@ -120,8 +147,10 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - The summarizer's model call is now a LangChain LCEL chain.
 - Explicit Gemini safety settings, and a friendly reply when a response is blocked.
 - Evals: p95 summarizer latency, an optional LLM-as-judge (`--judge`), and 50 retrieval queries.
-- CI: the AI service's SQL runs against MySQL 8 with the migrations applied (`ai-mysql` job).
+- CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-mysql` job).
 - [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) explains how the LangChain/LangGraph service is built.
+- Quick due-date picks (Today, Tomorrow, Next week, No date) in the task form.
+- Docs: `docs/ROADMAP.md`, `docs/TESTING.md`, `CODE_OF_CONDUCT.md`, a longer web README, and corrections to migration numbers, costs, quotas and several contradictions.
 
 ### Changed
 
@@ -168,6 +197,27 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- Ids above 2147483647 now fail validation (400) instead of reaching Postgres and returning a 500, in the shared validator, the route schemas and the AI service.
+- The AI chat assistant was told today's UTC date and retrieved with it; it now uses the user's own day.
+- Keyboard shortcuts `x`, `e` and `d` no longer act on a hidden row after switching to the board or calendar view, or while selecting tasks; the `j`/`k` cursor is announced to screen readers.
+- Completing a task shows it as done at once and rolls back if the server refuses.
+- Long task names wrap to two lines on the Today page and the board instead of being cut off.
+- The AI answer stream honours backpressure from a slow browser.
+- Concurrent leaderboard cache misses share one query.
+- The integration suites and the e2e seed refuse to wipe a database whose name does not contain `test` or `e2e`, or that is not on localhost.
+- **Chat:** after a new conversation got its URL, opening another thread or "New chat" bounced back to it; Enter while a reply streamed cleared the draft without sending; a long conversation opened at the top; history had no loading or error state; a failed delete toasted twice. Thread ids are URL-encoded and a dropped stream says "offline".
+- **Monthly repeats keep their day.** Re-saving a monthly task with the same date (bulk edit does) reset its anchor, so a task on the 31st moved to the 28th for good after February.
+- **A task edit with a move is one transaction**, so a failed move no longer leaves half the edit applied.
+- **The AI's owner-only writes are decided on the locked list row**, so a hand-over that commits first is always respected.
+- **Ownership transfer keeps each person's reminder state**: nobody misses a due notice or gets one twice after a hand-over.
+- **Import no longer depends on row order** for subtasks, and refuses duplicate ids and subtasks of subtasks clearly.
+- **Progress reset also clears** reflections, weekly goals, reminder rows and push subscriptions, and withdraws pending invitations you sent.
+- **Arcade finish checks the game type** of the route.
+- **Limits from one place:** the API's tag limit (it allowed 10 tags of 30 characters) now matches the service (5 of 20), the import body is validated, and copied names use the real list name limit.
+- **Reorder is one statement per 1000 tasks** instead of one per task.
+- **Web:** bulk complete never reopens a task finished elsewhere; the bulk edit dialog starts blank every time; the heatmap ends on your own today (not UTC); the command palette opens blank and says when it is still searching; Escape that closes the tour no longer also leaves the quest; Undo toasts disappear once leaving a page made the delete final; tags are trimmed and de-duplicated; a second deploy in the same tab reloads too; several icon-only buttons have proper screen reader names.
+
+- **Web rough edges from the October review** (known issue #53): the welcome tour resumes at its step on the next page instead of restarting; finishing several tasks at once shows one summary toast instead of one per task; the open quest is in the URL (`/tasks?list=42`), so refresh keeps it and the browser's Back button returns to the quest log; and two quick reorders no longer flicker (only the last one to settle refetches).
 - **Shared and server fixes from the October review.**
   - Repeating tasks respect the task quota and keep `estimate_minutes` on the next copy.
   - The CSV import preview applies the real import limits (it said OK for 1,001 rows in one list, which the import refuses), and the export round-trips names that start with an apostrophe.
@@ -280,7 +330,7 @@ The Discord bot (`taskquest-botv2` v3.8.3) and the web app (`taskquest-web_deplo
   - a 3-second cooldown between free-game rounds
 - Web login screen (`AuthGate`), typed API client, MySQL-backed sessions and the Vite dev proxy.
 - Tests: rules unit tests, plus integration tests for services, the HTTP API and every bot flow.
-- GitHub Actions CI: lint, typecheck, build, syntax check, tests on MySQL 8, and a production audit.
+- GitHub Actions CI: lint, typecheck, build, syntax check, tests on PostgreSQL, and a production audit.
 - Documentation: README, PRD, architecture, API, commands, gameplay, database, deployment, security, contributing, known issues.
 
 ### Changed
@@ -374,3 +424,4 @@ The Discord bot (`taskquest-botv2` v3.8.3) and the web app (`taskquest-web_deplo
 Their git histories were deliberately not imported, because both contained leaked secrets. The original repositories remain the reference for older history.
 
 [4.0.0]: https://github.com/Mist10148/TaskQuest-Application/releases/tag/v4.0.0
+[Unreleased]: https://github.com/Mist10148/TaskQuest-Application/compare/v4.0.0...HEAD

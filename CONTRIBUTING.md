@@ -25,7 +25,7 @@ Use a **separate Discord application** for development, register commands to a t
 |---|---|
 | A number, rule, class, skill, achievement or game rule | `packages/shared/src` (`constants.js`, `xp.js`, `games/`) |
 | Anything that reads or writes the database | `packages/shared/src/db/*` services |
-| A schema change | A **new** migration, `packages/shared/src/db/migrations/00N_name.js` (after `003_ai_prioritize_cache`, so from `004`) |
+| A schema change | A **new** migration, `packages/shared/src/db/migrations/00N_name.js` (after `006_item_comments`, so from `007`) |
 | An HTTP endpoint | `apps/server/routes/*` + a zod schema in `lib/schemas.js` |
 | A Discord interaction | `apps/bot/commands/*` + `utils/ui.js` |
 | UI | `apps/web/src` (pages in `pages/`, feature components in `components/<feature>/`, shared logic in `lib/` and `hooks/`) |
@@ -104,7 +104,7 @@ python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activ
 pip install -e ".[dev]"
 ruff check .
 mypy
-pytest tests/unit tests/graphs tests/evals        # offline: fake models, in-memory SQLite, mocked Express
+pytest tests/unit tests/graphs tests/evals        # offline: fake models, temporary SQLite files, mocked Express
 python -m tests.evals.run                         # offline eval pipeline (also in CI)
 ```
 
@@ -145,5 +145,6 @@ User-facing text in the web app is moving into a typed message catalog (`apps/we
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(bot): …`, `fix(shared): …`, `docs: …`, `test: …`, `chore(deploy): …`.
 - Keep commits focused, so one logical change per commit. A bug fix commit should contain the test that proves it.
-- PRs need green CI (lint, typecheck, build, tests on PostgreSQL, audit) and updated docs if behaviour changed.
+- PRs need green CI and updated docs if behaviour changed. The required checks are the jobs in [`.github/workflows/ci.yml`](.github/workflows/ci.yml): **Web** (lint, typecheck, build), **Node** (syntax, tests on PostgreSQL), **Browser tests** (Playwright e2e on PostgreSQL), **AI service** (ruff, mypy, pytest), **AI service on PostgreSQL** (migrated schema) and **Dependency audit** (`npm audit --omit=dev --audit-level=high`).
+- Opening an issue or a PR fills in a template (`.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`); report vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in an issue. Dependabot (`.github/dependabot.yml`) opens weekly update PRs for npm, pip and GitHub Actions.
 - Never commit `.env` files, tokens or database dumps. If you leak a secret, rotate it immediately; deleting the commit is not enough.

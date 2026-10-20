@@ -15,6 +15,23 @@ export function localToday(now: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+/** `day` ("YYYY-MM-DD") moved by `days` calendar days, without going through UTC. */
+export function addDays(day: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(day));
+  if (!m) return "";
+  return localToday(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
+}
+
+/** The quick picks next to a due-date field. "" clears the date. */
+export function quickDueDates(today: string = localToday()): Array<{ label: string; value: string }> {
+  return [
+    { label: "Today", value: today },
+    { label: "Tomorrow", value: addDays(today, 1) },
+    { label: "Next week", value: addDays(today, 7) },
+    { label: "No date", value: "" },
+  ];
+}
+
 /** The date part of a DATE or ISO string, or "" when absent. */
 export function dateOnly(value: string | null | undefined): string {
   return value ? String(value).slice(0, 10) : "";

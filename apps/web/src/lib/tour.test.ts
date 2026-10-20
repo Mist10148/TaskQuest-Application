@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampStep, hasSeenTour, markTourSeen, resetTour, TOUR_STEPS, type TourStorage } from "./tour";
+import { clampStep, hasSeenTour, markTourSeen, readTourStep, resetTour, saveTourStep, TOUR_STEPS, type TourStorage } from "./tour";
 
 const fake = (): TourStorage & { data: Map<string, string> } => {
   const data = new Map<string, string>();
@@ -49,5 +49,24 @@ describe("tour steps", () => {
     expect(clampStep(-3)).toBe(0);
     expect(clampStep(99)).toBe(3);
     expect(clampStep(2)).toBe(2);
+  });
+});
+
+describe("tour step memory", () => {
+  it("resumes the saved step and forgets it at step 0", () => {
+    const s = fake();
+    expect(readTourStep(s)).toBe(0);
+    saveTourStep(2, s);
+    expect(readTourStep(s)).toBe(2);
+    saveTourStep(0, s);
+    expect(readTourStep(s)).toBe(0);
+  });
+  it("ignores junk and clamps", () => {
+    const s = fake();
+    s.setItem("tq.tourStep", "abc");
+    expect(readTourStep(s)).toBe(0);
+    s.setItem("tq.tourStep", "99");
+    expect(readTourStep(s)).toBe(TOUR_STEPS.length - 1);
+    expect(readTourStep(null)).toBe(0);
   });
 });

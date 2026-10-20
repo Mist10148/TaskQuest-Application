@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { clampStep, hasSeenTour, markTourSeen, START_TOUR_EVENT, TOUR_STEPS } from "@/lib/tour";
+import { clampStep, hasSeenTour, markTourSeen, readTourStep, saveTourStep, START_TOUR_EVENT, TOUR_STEPS } from "@/lib/tour";
 
 /**
  * Four-step welcome card shown once to new players and replayable from Settings. It is a small
@@ -16,10 +16,14 @@ export const OnboardingTour = () => {
   useEffect(() => {
     // Let the page paint first; never pop up on top of a view the instant it loads.
     const id = window.setTimeout(() => {
-      if (!hasSeenTour()) setOpen(true);
+      if (!hasSeenTour()) {
+        setStep(readTourStep());
+        setOpen(true);
+      }
     }, 800);
     const onStart = () => {
       setStep(0);
+      saveTourStep(0);
       setOpen(true);
     };
     window.addEventListener(START_TOUR_EVENT, onStart);
@@ -33,19 +37,28 @@ export const OnboardingTour = () => {
     if (!open) return;
     nextRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector('[role="dialog"], [role="alertdialog"]')) {
+      if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector('[role="dialog"], [role="alertdialog"]')) {
+        // This Escape closes the tour and nothing else (page shortcuts such as "back to all quests" skip handled keys).
+        e.preventDefault();
         markTourSeen();
+        saveTourStep(0);
         setOpen(false);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture phase: runs before the page's own shortcuts, which listen on window too.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [open]);
 
-  // Every page mounts its own layout (and so its own tour), so following a step's link counts as
-  // leaving the tour; otherwise it would restart at step 1 on the next route.
+  // Every page mounts its own layout (and so its own tour): the step is kept for the tab so the tour
+  // resumes where it was on the next route. Following a step's link, Skip and Done all end it.
+  const goTo = (next: number) => {
+    setStep(next);
+    saveTourStep(next);
+  };
   const finish = () => {
     markTourSeen();
+    saveTourStep(0);
     setOpen(false);
   };
 
@@ -72,8 +85,8 @@ export const OnboardingTour = () => {
       <div className="mt-4 flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" onClick={finish}>Skip</Button>
         <div className="flex gap-2">
-          {index > 0 && <Button variant="outline" size="sm" onClick={() => setStep(index - 1)}>Back</Button>}
-          <Button ref={nextRef} size="sm" onClick={() => (last ? finish() : setStep(index + 1))}>{last ? "Done" : "Next"}</Button>
+          {index > 0 && <Button variant="outline" size="sm" onClick={() => goTo(index - 1)}>Back</Button>}
+          <Button ref={nextRef} size="sm" onClick={() => (last ? finish() : goTo(index + 1))}>{last ? "Done" : "Next"}</Button>
         </div>
       </div>
     </section>

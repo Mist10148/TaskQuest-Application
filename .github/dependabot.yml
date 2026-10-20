@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # npm workspaces share the root package-lock.json (apps/bot, apps/server, apps/web, packages/shared).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  # The AI service (apps/ai/pyproject.toml).
+  - package-ecosystem: pip
+    directory: /apps/ai
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      pip-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]

@@ -1,0 +1,114 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ useChat: vi.fn(), send: vi.fn(), acknowledgeCreated: vi.fn() }));
+vi.mock("@/hooks/useChat", () => ({ useChat: mocks.useChat }));
+vi.mock("@/hooks/useApi", () => ({
+  useChatThreads: () => ({ data: { threads: [{ id: "t1", title: "Plans" }] }, isLoading: false, isError: false, refetch: vi.fn(), isFetching: false }),
+  useDeleteThread: () => ({ mutateAsync: vi.fn() }),
+}));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { features: { ai: true } } }) }));
+vi.mock("@/contexts/PreferencesContext", () => ({ usePreferences: () => ({ reduceMotion: true }) }));
+vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+
+import Chat from "./Chat";
+
+const chatState = (over: Record<string, unknown> = {}) => ({
+  threadId: null,
+  createdThreadId: null,
+  acknowledgeCreated: mocks.acknowledgeCreated,
+  messages: [],
+  pending: [],
+  isStreaming: false,
+  notice: null,
+  historyLoading: false,
+  historyFailed: false,
+  historyMissing: false,
+  retryHistory: vi.fn(),
+  send: mocks.send,
+  respond: vi.fn(),
+  stop: vi.fn(),
+  ...over,
+});
+
+const Where = () => <span data-testid="where">{useLocation().pathname}</span>;
+const renderAt = (path: string) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/chat" element={<><Chat /><Where /></>} />
+        <Route path="/chat/:threadId" element={<><Chat /><Where /></>} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
+describe("Chat page", () => {
+  beforeEach(() => {
+    mocks.send.mockReset().mockResolvedValue("ok");
+    mocks.acknowledgeCreated.mockReset();
+  });
+
+  it("moves a brand-new conversation to its own URL and acknowledges it", () => {
+    mocks.useChat.mockReturnValue(chatState({ createdThreadId: "new-1" }));
+    renderAt("/chat");
+    expect(screen.getByTestId("where")).toHaveTextContent("/chat/new-1");
+    expect(mocks.acknowledgeCreated).toHaveBeenCalled();
+  });
+
+  it("does not pull the reader back to a created thread once they opened another one", () => {
+    mocks.useChat.mockReturnValue(chatState({ createdThreadId: "new-1" }));
+    renderAt("/chat/t1");
+    expect(screen.getByTestId("where")).toHaveTextContent("/chat/t1");
+  });
+
+  it("keeps the draft when Enter is pressed while a reply is streaming", async () => {
+    mocks.useChat.mockReturnValue(chatState({ isStreaming: true, messages: [{ id: "a", role: "assistant", text: "…", sources: [], tools: [], streaming: true }] }));
+    renderAt("/chat");
+    const box = screen.getByRole("textbox", { name: "Message" });
+    await userEvent.type(box, "next question{Enter}");
+    expect(box).toHaveValue("next question");
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it("shows a loading state instead of the suggestions while history loads", () => {
+    mocks.useChat.mockReturnValue(chatState({ historyLoading: true }));
+    renderAt("/chat/t1");
+    expect(screen.getByText(/loading conversation/i)).toBeInTheDocument();
+    expect(screen.queryByText(/what should i do first today/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
+  });
+
+  it("offers a retry when history fails to load", async () => {
+    const retryHistory = vi.fn();
+    mocks.useChat.mockReturnValue(chatState({ historyFailed: true, retryHistory }));
+    renderAt("/chat/t1");
+    await userEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(retryHistory).toHaveBeenCalled();
+  });
+
+  it("sends a missing conversation back to a new chat", () => {
+    mocks.useChat.mockReturnValue(chatState({ historyMissing: true }));
+    renderAt("/chat/gone");
+    expect(screen.getByTestId("where")).toHaveTextContent(/^\/chat$/);
+  });
+
+  it("disables the suggestions while an action waits for approval", () => {
+    mocks.useChat.mockReturnValue(chatState({ pending: [{ id: "p", tool: "x", summary: "Do it" }] }));
+    renderAt("/chat");
+    expect(screen.getByRole("button", { name: /what should i do first today/i })).toBeDisabled();
+  });
+
+  it("marks the open conversation and labels the mobile toggle", () => {
+    mocks.useChat.mockReturnValue(chatState());
+    renderAt("/chat/t1");
+    expect(screen.getByRole("button", { name: "Plans" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: /show conversations/i })).toHaveAttribute("aria-expanded", "false");
+  });
+});

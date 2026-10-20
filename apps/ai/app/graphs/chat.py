@@ -16,7 +16,6 @@ import json
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from typing import Any, Literal
 
 from langchain_core.messages import (
@@ -274,6 +273,7 @@ def build_chat_graph(
                     source_types=types,
                     status=filters.get("status"),
                     category=filters.get("category"),
+                    today=await usage.user_today(state["discord_id"]),
                 )
         except Exception:  # noqa: BLE001 - e.g. embeddings unavailable: the agent can still use tools
             log.warning("retrieval failed; continuing without context")
@@ -282,7 +282,8 @@ def build_chat_graph(
 
     async def agent(state: ChatState, config: RunnableConfig) -> dict:
         context = format_context([Retrieved(**r) for r in state.get("retrieved", [])])
-        system = f"{chat_prompt}\n\nToday: {datetime.now(UTC).date().isoformat()}"
+        today = await usage.user_today(state["discord_id"])  # the user's own day, so "tomorrow" is right far from UTC
+        system = f"{chat_prompt}\n\nToday: {today.isoformat()}"
         if state.get("summary"):
             system += f"\n\nConversation so far (summary): {state['summary']}"
         if context:

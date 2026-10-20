@@ -306,8 +306,10 @@ async function startArcade(discordId, gameType) {
  * Submit a finished run started with startArcade(). `claim` is { score, ticks, inputs }: the score is only
  * a claim, the reward is based on the score the server derives by replaying the inputs from the run's seed.
  * Any rejected submission cancels the run for good.
+ * `type`, when given (the API's /arcade/:type/finish), must be the run's game: a run of another game is NOT_FOUND, like an
+ * unknown run, and is left as it was.
  */
-async function finishArcade(discordId, sessionId, claim) {
+async function finishArcade(discordId, sessionId, claim, { type } = {}) {
     const id = Number(sessionId);
     if (!Number.isSafeInteger(id) || id <= 0) throw errors.validation('Invalid session.');
     const outcome = await withTransaction(async (conn) => {
@@ -318,7 +320,9 @@ async function finishArcade(discordId, sessionId, claim) {
              FROM game_sessions WHERE id = ? AND discord_id = ? AND state = 'active' FOR UPDATE`,
             [id, user.discord_id]
         );
-        if (!session || !arcade.isArcadeGame(session.game_type)) throw errors.notFound('Arcade run not found or already submitted.');
+        if (!session || !arcade.isArcadeGame(session.game_type) || (type !== undefined && session.game_type !== type)) {
+            throw errors.notFound('Arcade run not found or already submitted.');
+        }
 
         const seed = parseData(session.game_data)?.seed;
         const scored = arcade.verifyRun(session.game_type, { seed, elapsedMs: Number(session.elapsed_ms) }, claim);

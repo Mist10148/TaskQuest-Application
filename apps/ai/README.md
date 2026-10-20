@@ -1,6 +1,6 @@
-# @taskquest/ai
+# taskquest-ai
 
-The optional private AI service for TaskQuest: a summarizer, a prioritizer and a chat assistant, built with FastAPI, LangChain and LangGraph on Google Gemini. The design is in [docs/AI_INTEGRATION.md](../../docs/AI_INTEGRATION.md).
+The optional private AI service for TaskQuest (the Python package `taskquest-ai`, defined in `pyproject.toml`; it is not an npm workspace, so the root `npm` scripts do not run it): a summarizer, a prioritizer and a chat assistant, built with FastAPI, LangChain and LangGraph on Google Gemini. The design is in [docs/AI_INTEGRATION.md](../../docs/AI_INTEGRATION.md).
 
 The browser never calls this service. Express authenticates the user and forwards requests with a shared secret (`X-AI-Token`) and the trusted Discord ID (`X-Discord-Id`).
 
@@ -30,7 +30,7 @@ mypy
 pytest tests/unit tests/graphs tests/evals
 ```
 
-Tests are offline: fake chat models and embeddings, in-memory SQLite, and a mocked Express. Nothing calls Gemini. `pytest tests/postgres` runs the SQL against a real PostgreSQL with pgvector (set `AI_TEST_DB_URL=postgresql://...` to a scratch database migrated with `npm run db:migrate`; the `ai-postgres` CI job). The Python code targets 3.12 (CI) and has also been run on 3.13.
+Tests are offline: fake chat models and embeddings, a temporary SQLite file per test (`tests/schema.py`), and a mocked Express. Nothing calls Gemini. `pytest tests/postgres` runs the SQL against a real PostgreSQL with pgvector (set `AI_TEST_DB_URL=postgresql://...` to a scratch database migrated with `npm run db:migrate`; the `ai-postgres` CI job). The Python code targets 3.12 (CI) and has also been run on 3.13.
 
 ## Evals
 
@@ -60,7 +60,7 @@ It prints ok / warn / FAIL per check and exits 1 on any failure.
 | summary | faithful rate (no unknown ids), coverage of must-mention ids, forbidden ids | 100 %, ≥ 0.8, 0 |
 | prioritize | top-3 agreement with a human ordering, top-1 accuracy, valid ids | ≥ 0.8, —, 100 % |
 
-Offline numbers only show that the plumbing works: the fake embedder is bag-of-words, the fake summarizer reads the input heuristically (and invents an id once to exercise validation), and the prioritizer uses its deterministic fallback. Run `--live` before changing prompts, models or retrieval weights, and keep the report with the change. Everything runs on in-memory SQLite, so no database is needed.
+Offline numbers only show that the plumbing works: the fake embedder is bag-of-words, the fake summarizer reads the input heuristically (and invents an id once to exercise validation), and the prioritizer uses its deterministic fallback. Run `--live` before changing prompts, models or retrieval weights, and keep the report with the change. Everything runs on a temporary SQLite file, so no database server is needed.
 
 ## Layout
 

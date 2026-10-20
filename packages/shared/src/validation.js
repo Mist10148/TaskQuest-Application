@@ -120,10 +120,13 @@ function formatDate(value) {
     return String(value).slice(0, 10);
 }
 
+/** Largest row id: the id columns are 32-bit INTEGERs, so anything above can never exist (and would be a database error). */
+const MAX_ID = 2147483647;
+
 /** Positive integer id (for route params / custom ids). */
 function id(value) {
     const n = typeof value === 'number' ? value : Number(String(value));
-    return Number.isSafeInteger(n) && n > 0 ? ok(n) : fail('Invalid id.');
+    return Number.isSafeInteger(n) && n > 0 && n <= MAX_ID ? ok(n) : fail('Invalid id.');
 }
 
 /** Escape % and _ so user input is matched literally in LIKE patterns. */
@@ -132,6 +135,7 @@ function escapeLike(value) {
 }
 
 module.exports = {
+    MAX_ID,
     cleanText,
     comment,
     partyName,

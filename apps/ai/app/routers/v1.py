@@ -23,7 +23,7 @@ async def ping(caller: Caller = Depends(get_caller)):
 
 class SummaryBody(BaseModel):
     mode: Literal["list", "digest", "recap"]
-    listId: int | None = Field(default=None, gt=0)
+    listId: int | None = Field(default=None, gt=0, le=2_147_483_647)
     range: Literal["day", "week"] = "week"
 
 

@@ -6,6 +6,7 @@ import shared from '@taskquest/shared';
 import { asyncRoute, parse, requireAuth, uid, avatarUrl } from '../lib/http.js';
 import { keyParam, skillParam, leaderboardQuery, previewQuery, respecBody } from '../lib/schemas.js';
 import { sealId, openId } from '../lib/avatarProxy.js';
+import { coalesce } from '../lib/coalesce.js';
 
 const { CLASSES, SKILL_TREES, ACHIEVEMENTS, classOwnershipColumn, simulateAverage, FAVOURABLE } = shared;
 
@@ -164,6 +165,7 @@ achievementsRouter.get(
 
 const BOARD_TTL_MS = 30_000;
 const boardCache = new Map(); // `${by}:${class}` -> { at, rows }
+const boardInflight = new Map(); // the same keys, while a query for them is running
 
 /** Forget every cached board (tests read the board right after changing a player's standing). */
 export function clearBoardCache() {
@@ -174,15 +176,18 @@ export function clearBoardCache() {
 const RANK_TTL_MS = 10_000;
 const RANK_CACHE_MAX = 2000;
 const rankCache = new Map(); // `${user}:${by}:${class}` -> { at, rank }
+const rankInflight = new Map();
 
 /** The ranking queries are heavy and the route is anonymous, so share one result per board for a short while. */
 async function cachedBoard(by, playerClass) {
     const cacheKey = `${by}:${playerClass || ''}`;
     const hit = boardCache.get(cacheKey);
     if (hit && Date.now() - hit.at < BOARD_TTL_MS) return hit.rows;
-    const rows = await db.users.getLeaderboard(10, { by, playerClass });
-    boardCache.set(cacheKey, { at: Date.now(), rows });
-    return rows;
+    return coalesce(boardInflight, cacheKey, async () => {
+        const rows = await db.users.getLeaderboard(10, { by, playerClass });
+        boardCache.set(cacheKey, { at: Date.now(), rows });
+        return rows;
+    });
 }
 
 // Public, but only exposes display data. No Discord IDs: avatars go through an opaque token.
@@ -244,9 +249,12 @@ leaderboardRouter.get(
         const key = `${uid(req)}:${by}:${playerClass || ''}`;
         const hit = rankCache.get(key);
         if (hit && Date.now() - hit.at < RANK_TTL_MS) return res.json({ rank: hit.rank });
-        const rank = await db.users.getRank(uid(req), by, { playerClass });
-        if (rankCache.size >= RANK_CACHE_MAX) rankCache.clear();
-        rankCache.set(key, { at: Date.now(), rank });
+        const rank = await coalesce(rankInflight, key, async () => {
+            const value = await db.users.getRank(uid(req), by, { playerClass });
+            if (rankCache.size >= RANK_CACHE_MAX) rankCache.clear();
+            rankCache.set(key, { at: Date.now(), rank: value });
+            return value;
+        });
         res.json({ rank });
     })
 );

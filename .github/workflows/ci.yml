@@ -106,7 +106,7 @@ jobs:
         working-directory: apps/ai
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -147,7 +147,7 @@ jobs:
       - run: npm ci
       # The Node migrations own the schema; the AI service never runs DDL.
       - run: npm run db:migrate
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip

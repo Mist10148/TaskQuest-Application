@@ -114,7 +114,7 @@ export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onS
                       {item.completed ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Circle className="h-4 w-4" aria-hidden />}
                     </button>
                     <button type="button" onClick={() => onEdit(item.id)} disabled={readOnly} className="min-w-0 flex-1 text-left text-sm disabled:cursor-default">
-                      <span className={cn("block truncate font-medium", item.completed && "line-through")}>{item.name}</span>
+                      <span className={cn("line-clamp-2 break-words font-medium", item.completed && "line-through")}>{item.name}</span>
                       {item.due_date && <span className="block text-xs text-foreground-muted">{formatDeadline(item.due_date)}</span>}
                     </button>
                     {canDrag && (

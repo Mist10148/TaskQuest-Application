@@ -30,7 +30,7 @@ const TaskLine = ({ task }: { task: TodayTask }) => {
         {toggle.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5 text-transparent hover:text-success" aria-hidden />}
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium sm:text-base">{task.name}</p>
+        <p className="line-clamp-2 break-words text-sm font-medium sm:text-base">{task.name}</p>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-foreground-muted">
           <span>{task.listName}</span>
           {task.dueDate && (

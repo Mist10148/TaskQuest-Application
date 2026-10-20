@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { quickDueDates } from "@/lib/dates";
 import { PRIORITIES, TEXT_LIMITS } from "./constants";
 import type { ItemFormValues } from "./forms";
 
@@ -70,6 +71,19 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
             <div>
               <label htmlFor="item-due" className="text-sm font-medium block mb-1">Due date</label>
               <Input id="item-due" type="date" value={form.due_date} onChange={(e) => set("due_date", e.target.value)} />
+              <div className="mt-1.5 flex flex-wrap gap-1" role="group" aria-label="Quick due dates">
+                {quickDueDates().map((q) => (
+                  <button
+                    key={q.label}
+                    type="button"
+                    onClick={() => set("due_date", q.value)}
+                    aria-pressed={form.due_date === q.value}
+                    className="rounded-full border border-border px-2 py-0.5 text-xs text-foreground-muted transition-colors hover:border-primary hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary aria-pressed:text-foreground"
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium block mb-1">Priority</label>

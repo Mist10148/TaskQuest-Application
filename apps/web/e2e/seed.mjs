@@ -9,6 +9,9 @@
  */
 
 import { SERVER_ENV, USER_ID, SESSION_ID, PLAYERS } from './env.mjs';
+import safeDb from '../../../packages/shared/test/helpers/safeDb.js';
+
+safeDb.assertThrowawayDatabase({ name: SERVER_ENV.DB_NAME, host: SERVER_ENV.DB_HOST });
 
 Object.assign(process.env, SERVER_ENV);
 

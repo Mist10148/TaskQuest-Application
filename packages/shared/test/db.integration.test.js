@@ -14,6 +14,7 @@ const assert = require('node:assert/strict');
 const enabled = Boolean(process.env.TEST_DB_NAME);
 
 if (enabled) {
+    require('./helpers/safeDb').assertThrowawayDatabase({ name: process.env.TEST_DB_NAME, host: process.env.TEST_DB_HOST || '127.0.0.1' });
     process.env.DB_URL = '';
     process.env.DB_HOST = process.env.TEST_DB_HOST || '127.0.0.1';
     process.env.DB_PORT = process.env.TEST_DB_PORT || '5432';

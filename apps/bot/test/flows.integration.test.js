@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 
 const enabled = Boolean(process.env.TEST_DB_NAME);
 if (enabled) {
+    require('../../../packages/shared/test/helpers/safeDb').assertThrowawayDatabase({ name: process.env.TEST_DB_NAME, host: process.env.TEST_DB_HOST || '127.0.0.1' });
     Object.assign(process.env, {
         DB_URL: '',
         XP_WEEKLY_MODIFIER: 'off',

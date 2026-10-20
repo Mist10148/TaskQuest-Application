@@ -8,12 +8,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import safeDb from '../../../packages/shared/test/helpers/safeDb.js';
 
 const enabled = Boolean(process.env.TEST_DB_NAME);
 const SECRET = 'test-secret-'.padEnd(48, 'x');
 const ORIGIN = 'http://localhost:8080';
 
 if (enabled) {
+    safeDb.assertThrowawayDatabase({ name: process.env.TEST_DB_NAME, host: process.env.TEST_DB_HOST || '127.0.0.1' });
     Object.assign(process.env, {
         NODE_ENV: 'test',
         DB_URL: '',

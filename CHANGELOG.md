@@ -149,6 +149,8 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Evals: p95 summarizer latency, an optional LLM-as-judge (`--judge`), and 50 retrieval queries.
 - CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-mysql` job).
 - [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) explains how the LangChain/LangGraph service is built.
+- Quick due-date picks (Today, Tomorrow, Next week, No date) in the task form.
+- Docs: `docs/ROADMAP.md`, `docs/TESTING.md`, `CODE_OF_CONDUCT.md`, a longer web README, and corrections to migration numbers, costs, quotas and several contradictions.
 
 ### Changed
 
@@ -195,6 +197,14 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- Ids above 2147483647 now fail validation (400) instead of reaching Postgres and returning a 500, in the shared validator, the route schemas and the AI service.
+- The AI chat assistant was told today's UTC date and retrieved with it; it now uses the user's own day.
+- Keyboard shortcuts `x`, `e` and `d` no longer act on a hidden row after switching to the board or calendar view, or while selecting tasks; the `j`/`k` cursor is announced to screen readers.
+- Completing a task shows it as done at once and rolls back if the server refuses.
+- Long task names wrap to two lines on the Today page and the board instead of being cut off.
+- The AI answer stream honours backpressure from a slow browser.
+- Concurrent leaderboard cache misses share one query.
+- The integration suites and the e2e seed refuse to wipe a database whose name does not contain `test` or `e2e`, or that is not on localhost.
 - **Chat:** after a new conversation got its URL, opening another thread or "New chat" bounced back to it; Enter while a reply streamed cleared the draft without sending; a long conversation opened at the top; history had no loading or error state; a failed delete toasted twice. Thread ids are URL-encoded and a dropped stream says "offline".
 - **Monthly repeats keep their day.** Re-saving a monthly task with the same date (bulk edit does) reset its anchor, so a task on the 31st moved to the 28th for good after February.
 - **A task edit with a move is one transaction**, so a failed move no longer leaves half the edit applied.

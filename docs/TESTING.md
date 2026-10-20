@@ -12,7 +12,7 @@ npm test            # unit tests in every workspace, including the web app's Vit
 npm run build       # the web bundle
 ```
 
-With no `TEST_DB_NAME`, the database-backed suites are **skipped**, so a green `npm test` does not mean they ran. The test run prints a notice when that happens.
+With no `TEST_DB_NAME`, the database-backed suites are **skipped**, so a green `npm test` does not mean they ran: look for `set TEST_DB_NAME to run` among the skipped tests.
 
 ## Database tests
 

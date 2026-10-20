@@ -64,4 +64,4 @@ Things that look like gaps but are decisions, with the reason.
 
 ## Roadmap
 
-See [PRD §11](PRD.md#11-roadmap).
+See the [ROADMAP](ROADMAP.md) (and [PRD §11](PRD.md#11-roadmap)).

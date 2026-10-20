@@ -172,8 +172,13 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   // The keyboard cursor: j and k move over the rows, x completes, e edits, d deletes (list view only).
   const [cursorId, setCursorId] = useState<number | null>(null);
   const cursorRow = cursorId !== null ? items.find((i) => i.id === cursorId) : undefined;
+  // The row keys (j k x e d i) only act on rows that are drawn: not in the board or calendar view, and not while selecting.
+  const rowKeysActive = view === "list" && !selectMode;
+  // Spoken when the cursor moves, because the ring around the row is only visual.
+  const cursorPosition = cursorRow && rowKeysActive ? visibleOrder.indexOf(cursorRow.id) + 1 : 0;
+  const cursorAnnouncement = cursorPosition > 0 ? `${cursorRow?.name}, task ${cursorPosition} of ${visibleOrder.length}${cursorRow?.completed ? ", done" : ""}` : "";
   const moveCursor = (direction: 1 | -1) => {
-    if (view !== "list" || selectMode) return;
+    if (!rowKeysActive) return;
     const next = stepCursor(visibleOrder, cursorId, direction);
     setCursorId(next);
     if (next !== null) requestAnimationFrame(() => document.querySelector(`[data-task-id="${next}"]`)?.scrollIntoView({ block: "nearest" }));
@@ -182,10 +187,10 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   useHotkeys({
     j: () => moveCursor(1),
     k: () => moveCursor(-1),
-    x: () => { if (editable && cursorRow) onToggleItem(cursorRow.id); },
-    i: () => { if (view === "list" && !selectMode && cursorRow) setDetailId(cursorRow.id); },
-    e: (e) => { if (editable && cursorRow) { e.preventDefault(); onEditItem(cursorRow.id); } },
-    d: () => { if (editable && cursorRow && cursorRow.can_delete !== false) onDeleteItem(cursorRow.id); },
+    x: () => { if (editable && rowKeysActive && cursorRow) onToggleItem(cursorRow.id); },
+    i: () => { if (rowKeysActive && cursorRow) setDetailId(cursorRow.id); },
+    e: (e) => { if (editable && rowKeysActive && cursorRow) { e.preventDefault(); onEditItem(cursorRow.id); } },
+    d: () => { if (editable && rowKeysActive && cursorRow && cursorRow.can_delete !== false) onDeleteItem(cursorRow.id); },
     n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
     "/": (e) => { if (!editable) return; e.preventDefault(); quickAddRef.current?.focus(); },
     s: () => { if (!editable) return; if (selectMode) leaveSelectMode(); else setSelectMode(true); },
@@ -452,6 +457,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
           }
         }}
       />
+      <div role="status" aria-live="polite" className="sr-only">{cursorAnnouncement}</div>
       <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
       <TaskDetailSheet
         item={detailItem}

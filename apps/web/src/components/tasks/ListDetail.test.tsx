@@ -13,7 +13,7 @@ const item = (id: number, extra: Partial<Item> = {}): Item => ({ id, list_id: 1,
 const list = (items: Item[]): ListWithItems => ({ id: 1, name: "Chores", description: null, priority: null, deadline: null, isOwner: true, role: "owner", items }) as unknown as ListWithItems;
 
 const noop = () => {};
-const renderList = (items: Item[]) =>
+const renderList = (items: Item[], props: Partial<React.ComponentProps<typeof ListDetail>> = {}) =>
   render(
     <MemoryRouter>
       <ListDetail
@@ -36,6 +36,7 @@ const renderList = (items: Item[]) =>
         onBulkDelete={noop}
         onBulkEdit={async () => undefined}
         onReorder={async () => undefined}
+        {...props}
       />
     </MemoryRouter>
   );
@@ -74,5 +75,56 @@ describe("ListDetail filters and groups", () => {
     renderList(tasks);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Due" }), "overdue");
     expect(screen.getByText("No tasks match these filters.")).toBeInTheDocument();
+  });
+});
+
+describe("ListDetail keyboard cursor", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    Element.prototype.scrollIntoView = vi.fn(); // jsdom has none, and the cursor scrolls its row into view
+  });
+  afterEach(() => window.localStorage.clear());
+
+  const tasks = [item(1), item(2), item(3, { completed: true })];
+
+  it("moves with j and k and says where it is", async () => {
+    renderList(tasks);
+    await userEvent.keyboard("j");
+    expect(screen.getByRole("status")).toHaveTextContent("Task 1, task 1 of 3");
+    await userEvent.keyboard("jj");
+    expect(screen.getByRole("status")).toHaveTextContent("Task 3, task 3 of 3, done");
+    await userEvent.keyboard("k");
+    expect(screen.getByRole("status")).toHaveTextContent("Task 2, task 2 of 3");
+  });
+
+  it("completes the highlighted task with x", async () => {
+    const onToggleItem = vi.fn();
+    renderList(tasks, { onToggleItem });
+    await userEvent.keyboard("jx");
+    expect(onToggleItem).toHaveBeenCalledWith(1);
+  });
+
+  it("ignores x, e and d once the tasks are shown as a board", async () => {
+    const onToggleItem = vi.fn();
+    const onEditItem = vi.fn();
+    const onDeleteItem = vi.fn();
+    renderList(tasks, { onToggleItem, onEditItem, onDeleteItem });
+    await userEvent.keyboard("j");
+    await userEvent.click(screen.getByRole("button", { name: "Board" }));
+    await userEvent.keyboard("xed");
+    expect(onToggleItem).not.toHaveBeenCalled();
+    expect(onEditItem).not.toHaveBeenCalled();
+    expect(onDeleteItem).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
+  it("ignores x, e and d while selecting tasks", async () => {
+    const onToggleItem = vi.fn();
+    const onDeleteItem = vi.fn();
+    renderList(tasks, { onToggleItem, onDeleteItem });
+    await userEvent.keyboard("js");
+    await userEvent.keyboard("xd");
+    expect(onToggleItem).not.toHaveBeenCalled();
+    expect(onDeleteItem).not.toHaveBeenCalled();
   });
 });

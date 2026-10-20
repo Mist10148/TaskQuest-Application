@@ -4,7 +4,7 @@
  * showing fake data.
  */
 
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
@@ -493,6 +493,19 @@ export function useToggleItem() {
         // `quiet` is for a batch: the caller shows one summary toast instead of one per task.
         mutationFn: (arg: number | { itemId: number; completed?: boolean; quiet?: boolean }) =>
             typeof arg === 'number' ? itemsApi.toggle(arg) : itemsApi.toggle(arg.itemId, arg.completed),
+        // Optimistic when the wanted state is explicit: the row flips at once and is put back if the server refuses.
+        // Rewards, achievements and a repeating task's next copy still come from the server's answer.
+        onMutate: async (arg) => {
+            if (typeof arg === 'number' || arg.completed === undefined) return { previous: [] as Array<[QueryKey, ListWithItems]> };
+            await qc.cancelQueries({ queryKey: ['lists'] });
+            const previous: Array<[QueryKey, ListWithItems]> = [];
+            for (const [key, data] of qc.getQueriesData<ListWithItems>({ queryKey: ['lists'] })) {
+                if (!data || !Array.isArray(data.items) || !data.items.some((i) => i.id === arg.itemId)) continue;
+                previous.push([key, data]);
+                qc.setQueryData<ListWithItems>(key, { ...data, items: data.items.map((i) => (i.id === arg.itemId ? { ...i, completed: arg.completed as boolean } : i)) });
+            }
+            return { previous };
+        },
         onSuccess: (result, arg) => {
             qc.invalidateQueries({ queryKey: ['lists'] });
             qc.invalidateQueries({ queryKey: ['items'] });
@@ -512,7 +525,10 @@ export function useToggleItem() {
             }
             showAchievementNotifications(result.newAchievements, qc);
         },
-        onError: showError,
+        onError: (error, _arg, context) => {
+            for (const [key, data] of context?.previous ?? []) qc.setQueryData(key, data);
+            showError(error);
+        },
     });
 }
 

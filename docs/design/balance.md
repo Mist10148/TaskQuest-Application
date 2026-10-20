@@ -18,7 +18,7 @@ A level costs 100 lifetime XP (`XP_PER_LEVEL`). A steeper curve (for example 100
 
 Reasons:
 
-- **Nobody's level may drop.** A new curve either lowers the level that existing XP maps to, or needs a rule such as "level = the larger of the stored and the computed level", after which the level no longer follows from XP and progress bars, prestige and the level achievements disagree with each other. A flat curve keeps `level = ⌊lifetime XP / 100⌋ + 1` true for everyone, including the veterans reconstructed by migration 002.
+- **Nobody's level may drop.** A new curve either lowers the level that existing XP maps to, or needs a rule such as "level = the larger of the stored and the computed level", after which the level no longer follows from XP and progress bars, prestige and the level achievements disagree with each other. A flat curve keeps `level = ⌊lifetime XP / 100⌋ + 1` true for everyone, including the veterans reconstructed by the old MySQL migration `002_upgrade_legacy` (squashed into `001_baseline`).
 - **Level-scaled effects were tuned against it.** Wizard's Wisdom (level × 2, capped at 50), the Tank shield cap (3 + level ÷ 3, max 15), the Archer hit chance (80% + 0.5% × level) and Hero's Oath (25 + level, max 50) assume levels arrive at today's rate. Slowing levels would quietly nerf all of them.
 - **Prestige and the shop are the late-game sinks.** Level 30 (2,900 lifetime XP) is the prestige gate, and cosmetics cost 200 to 2000 XP. A steeper curve would be a second, overlapping sink.
 

@@ -17,7 +17,7 @@ Questions: the [player FAQ](PLAYER_FAQ.md). Discord commands: [COMMANDS](COMMAND
 1. Read the [README](../README.md) quick start and [CONTRIBUTING](../CONTRIBUTING.md) (setup, where code belongs, tests).
 2. The rules live in one place, `packages/shared/src` (`constants.js`, `xp.js`). The bot, the web server and the web app all use them. [ARCHITECTURE](ARCHITECTURE.md) shows how the pieces fit.
 3. Changing a number? Run `npm run balance`, paste `node scripts/balance-sim.js --markdown` into the CLASS_GUIDE tables, update [balance design](design/balance.md) and the test bands in `packages/shared/test/balance.test.js`. `npm test` checks the GAMEPLAY tables, the class and skill texts and the CLASS_GUIDE tables against the code.
-4. Changing the database? A new migration (PostgreSQL, from `004`), never an edit of one that shipped ([DATABASE](DATABASE.md); the MySQL-to-Postgres move is in [MIGRATION_POSTGRES](MIGRATION_POSTGRES.md)).
+4. Changing the database? A new migration (PostgreSQL, from `007`), never an edit of one that shipped ([DATABASE](DATABASE.md); the MySQL-to-Postgres move is in [MIGRATION_POSTGRES](MIGRATION_POSTGRES.md)).
 5. Need a database? `npm run db:up` starts a local PostgreSQL with pgvector in Docker (three databases: dev, tests, browser tests). Run the database tests against the throwaway ones: see "Tests" in CONTRIBUTING.
 
 Running it for others: [DEPLOYMENT](DEPLOYMENT.md), [OPERATIONS](OPERATIONS.md), [SECURITY](../SECURITY.md).

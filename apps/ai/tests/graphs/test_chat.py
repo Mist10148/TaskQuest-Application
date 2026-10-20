@@ -430,3 +430,25 @@ async def test_side_calls_book_tokens_without_spending_quota(seeded):
         await usage.record(conn, UID, "chat", input_tokens=5, output_tokens=2)
         await usage.record(conn, UID, "chat", input_tokens=7, output_tokens=1, requests=0)
         assert await usage.requests_today(conn, UID) == 1
+
+
+async def test_chat_prompt_uses_the_users_day_not_utc(seeded, monkeypatch):
+    from datetime import date
+
+    from app import usage
+
+    async def far_from_utc(discord_id):
+        return date(2030, 5, 17)
+
+    monkeypatch.setattr(usage, "user_today", far_from_utc)
+    seen: list = []
+
+    class SpyLLM(FakeChatLLM):
+        def _generate(self, messages, *args, **kwargs):
+            seen.append(messages)
+            return super()._generate(messages, *args, **kwargs)
+
+    llm = SpyLLM(messages=iter([AIMessage("Done.")]), structured=[RouterOut(intent="task_question")] * 3)
+    await collect(chat_service.stream_turn(deps_for(llm), UID, "tday", chat_service.user_input(UID, "what day is it?")))
+    system = next(m[0].content for m in seen if m and getattr(m[0], "type", "") == "system")
+    assert "Today: 2030-05-17" in system

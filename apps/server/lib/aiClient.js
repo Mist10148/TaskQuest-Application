@@ -37,6 +37,20 @@ async function toError(response) {
     return new TaskQuestError('AI_UNAVAILABLE', UNAVAILABLE, 503);
 }
 
+/** Resolves when the response has room again (or the client is gone), so a slow reader slows the stream instead of filling memory. */
+function drained(res) {
+    return new Promise((resolve) => {
+        if (res.destroyed || res.writableEnded) return resolve();
+        const done = () => {
+            res.off('drain', done);
+            res.off('close', done);
+            resolve();
+        };
+        res.on('drain', done);
+        res.on('close', done);
+    });
+}
+
 export function assertEnabled() {
     if (!config.ai.enabled) throw new TaskQuestError('AI_DISABLED', 'AI features are not enabled on this server.', 503);
 }
@@ -107,7 +121,7 @@ export const aiClient = {
         try {
             for await (const chunk of upstream.body) {
                 armIdleTimer();
-                res.write(chunk);
+                if (!res.write(chunk)) await drained(res); // a slow browser must not make the server buffer the whole answer
             }
         } catch {
             // The browser leaving is fine. An upstream drop or stall mid-stream would otherwise look like a clean, truncated answer.

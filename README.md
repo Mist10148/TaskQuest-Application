@@ -196,7 +196,10 @@ Vite only exposes `VITE_*` variables to the browser, so the secrets in that file
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Render, environment variables, Discord setup, operations |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Backups and restore, troubleshooting, and the first live Gemini run |
 | [docs/design/](docs/design/) | Design records for what was built: shared lists and parties, Tailwind 4, arcade anti-cheat, and the balance rationale |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations (the roadmap is in the PRD) |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known limitations |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is open next and later, and the open product decisions |
+| [docs/TESTING.md](docs/TESTING.md) | Every check and test suite, locally and in CI |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | How we treat each other |
 | [SECURITY.md](SECURITY.md) | Security model, fixed vulnerabilities, required secret rotation, reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow, tests, conventions |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |

@@ -103,7 +103,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **Optional web push** for reminders: a service worker, VAPID keys, a Settings switch per browser and `POST /internal/push` for the bot, all off unless the `WEB_PUSH_*` variables are set. Push endpoints are limited to the browsers' own push services on port 443. Migration `017_web_push`.
 - **Days follow your time zone.** Daily caps, the first-of-day bonus, Monk Rhythm, Ranger and Necromancer due-date checks, daily, weekly and monthly quests, the weekly review and the Stats page use your own day, Monday-to-Monday week and month (UTC until you set a zone), with DST-safe local midnights. A zone change is allowed once every 24 hours so zone hopping cannot reset caps (migration `015_timezone_days`). The weekly leaderboard stays on one global UTC week.
 - **Arcade anti-cheat.** Snake, Dino Runner and Space Invaders are deterministic fixed-step simulators shared by the web app and the server; the browser records every input, and the server replays the run and pays on the score it derives itself. Runs that do not replay, run too long, press too fast or do not fit the elapsed time are rejected. Design: [arcade-anti-cheat](docs/design/arcade-anti-cheat.md).
-- **Playwright e2e suite** (`npm run test:e2e`, own CI job against MySQL 8) for the main flows: dashboard, tasks, Focus, Stats, Review, shared lists and parties.
+- **Playwright e2e suite** (`npm run test:e2e`, own CI job against PostgreSQL) for the main flows: dashboard, tasks, Focus, Stats, Review, shared lists and parties.
 - **Shared lists and parties.** Invite people to a list as viewer, editor or manager (members, roles, accept or decline, leave, 7-day invitations) and form a party of up to six with a shared weekly quest (12 tasks per active member, +60 XP each for 6 tasks of their own). XP, caps, quests and stats belong to whoever acted. Invitations name a person by their exact Discord username with a confirmation step on the web, and the AI service never reaches a list you merely belong to. Migrations `018_list_members`, `019_parties` and `021_sharing_hardening`. Design: [shared-lists](docs/design/shared-lists.md).
 - **Docs:** [XP_GUIDE.md](docs/XP_GUIDE.md), [CLASS_GUIDE.md](docs/CLASS_GUIDE.md), [PLAYER_FAQ.md](docs/PLAYER_FAQ.md), [design/balance.md](docs/design/balance.md), a docs index ([docs/README.md](docs/README.md)) and a test that fails when GAMEPLAY.md disagrees with `constants.js`.
 - **Tasks grow up.** Each task can have its own due date, priority, up to five tags, one level of subtasks and a repeat rule (daily / weekly / monthly: completing a repeating task creates the next copy, with no creation XP). Migration `007_item_fields`.
@@ -139,7 +139,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - The summarizer's model call is now a LangChain LCEL chain.
 - Explicit Gemini safety settings, and a friendly reply when a response is blocked.
 - Evals: p95 summarizer latency, an optional LLM-as-judge (`--judge`), and 50 retrieval queries.
-- CI: the AI service's SQL runs against MySQL 8 with the migrations applied (`ai-mysql` job).
+- CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-mysql` job).
 - [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) explains how the LangChain/LangGraph service is built.
 
 ### Changed
@@ -312,7 +312,7 @@ The Discord bot (`taskquest-botv2` v3.8.3) and the web app (`taskquest-web_deplo
   - a 3-second cooldown between free-game rounds
 - Web login screen (`AuthGate`), typed API client, MySQL-backed sessions and the Vite dev proxy.
 - Tests: rules unit tests, plus integration tests for services, the HTTP API and every bot flow.
-- GitHub Actions CI: lint, typecheck, build, syntax check, tests on MySQL 8, and a production audit.
+- GitHub Actions CI: lint, typecheck, build, syntax check, tests on PostgreSQL, and a production audit.
 - Documentation: README, PRD, architecture, API, commands, gameplay, database, deployment, security, contributing, known issues.
 
 ### Changed

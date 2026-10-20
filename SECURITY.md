@@ -42,7 +42,7 @@ This monorepo was created **without importing either history**, and `.gitignore`
   - Rate limits, strict zod schemas, a 16 KB body limit, and generic 5xx responses.
 - **Secrets.** Only environment variables; nothing in the repository. The server refuses to start in production without a strong `SESSION_SECRET`.
 - **Transport to the database.** TLS with certificate verification by default when `DB_SSL=true`, including for `DB_URL`.
-- **Least data.** Only the Discord ID, display name and avatar hash are stored. The leaderboard never exposes Discord IDs.
+- **Least data.** Only the Discord ID, username, display name and avatar hash are stored. The leaderboard never exposes Discord IDs.
 
 ## 3. Vulnerabilities fixed in 4.0
 
@@ -58,7 +58,7 @@ This monorepo was created **without importing either history**, and `.gitignore`
 | **Lost or duplicated XP from races.** Absolute XP writes from stale reads, and double purchases on double click. | both apps | `applyXP` with row locks; purchases validated inside the lock. |
 | **XP farming.** Toggling an item, or creating and deleting lists and items, repeated rewards. Risk-free RPS paid back the bet (up to 1000 XP per click). | both apps | Completion XP once per item, daily caps for creation rewards, a fixed RPS reward, a free-game cap and cooldowns. |
 | **Login CSRF / session fixation.** No OAuth `state`; session not regenerated at login. | web OAuth | Random `state` bound to the session, constant-time compare, `session.regenerate()`. |
-| **Lost bets.** The bet was deducted, then the session creation failed. | bot `startBlackjack` | Bet, session and deal happen in one transaction; expired hands are refunded. |
+| **Lost bets.** The bet was deducted, then the session creation failed. | bot `startBlackjack` | Bet, session and deal happen in one transaction; expired hands are settled as a stand and never refunded. |
 
 ### Medium / low
 

@@ -44,7 +44,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 ## Time zones and "your day"
 
-Set your zone with `/timezone` or in Settings (UTC until you do). Your zone decides when your day starts (daily caps, the first-task-of-the-day bonus, Monk Rhythm, due-today checks, daily quests), when your week starts (Monday 00:00; weekly quests, the weekly review) and your month (the monthly boss), and when reminders arrive. The daily reward ignores calendar days, and the weekly leaderboard and a party's week always run Monday to Monday in UTC for everyone.
+Set your zone with `/timezone` or in Settings (UTC until you do). Your zone decides when your day starts (daily caps, the first-task-of-the-day bonus, Monk Rhythm, due-today checks, daily quests), when your week starts (Monday 00:00; weekly quests, the weekly review) and your month (the monthly boss), and when reminders arrive. The daily reward streak follows calendar days (the 24-hour cooldown between two claims is counted from your last claim), and the weekly leaderboard and a party's week always run Monday to Monday in UTC for everyone.
 
 **Why can't I change my zone again?** A zone change is allowed once every 24 hours (the first change, and saving the zone you already have, always work). Otherwise hopping between zones would reset your daily caps again and again. Changing zone is not retroactive: XP you already earned keeps its moment, and the change can shift when today's caps reset.
 

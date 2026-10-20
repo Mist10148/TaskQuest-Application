@@ -52,7 +52,7 @@ Assumptions behind it:
 
 - A player completes tasks at a steady pace every day; classes with counters (Assassin, Tank, Monk, Artisan) sit at or near their caps.
 - "Favourable mix" is the situation each class is designed for. It is generous for Necromancer (it needs a backlog) and Ranger (it needs due dates set a day ahead).
-- Skills are bought in tree order and the whole tree is bought. Prices are 50 to 360 XP per skill level, so a full tree costs 1,220 to 1,910 XP.
+- Skills are bought in tree order and the whole tree is bought. Prices are 50 to 360 XP per skill level, so a full tree costs 1,090 to 2,190 XP (see [CLASS_GUIDE](../CLASS_GUIDE.md)).
 - A full-tree Wizard at level 25 or more (about 12.6×, Wisdom stops at 50) is still the highest figure in the table, while at level 5 it is among the weakest paid classes; that is the intended "strongest late" promise, now at a more reasonable height than the 35× it used to reach, and it no longer grows past it (a level-100 Wizard used to pay 45×, a level-200 one 88×).
 
 ## Small actions are capped
@@ -89,7 +89,7 @@ These are undecided; changing any of them is a balance change that needs a GAMEP
 
 1. **Gambler and Archer (addressed).** They paid about 5× the base with no skills. The Gambler's bonus range is now 0 to (2 × base + 40) and the class costs 450 XP, the Archer's streak, headshot and perfect-shot numbers were cut: about 3.4× and 3.5× unskilled. Re-check with real data.
 2. **Hero's Champion (addressed).** Champion is +35% (it was ×2, then +50%) and works only while the Hero is equipped; Legendary is +15%. The full tree is 8.2× at most levels and 11× on every fifth level (12.2× with a HIGH mix).
-3. **The Artisan's project reset (fixed).** Clearing a list used to set progress back to 0, so in the model clearing lists of ten paid less (2.6×) than never clearing (3.0×). A clear now keeps half the progress and pays +8 per progress instead of +5.
+3. **The Artisan's project reset (fixed).** Clearing a list used to set progress back to 0, so in the model clearing lists of ten paid less (2.6×) than never clearing (3.0×). A clear now keeps half the progress and pays +6 XP per progress on top of the +2 each action already paid.
 4. **Priority labels are unverified (bounded).** Paladin, Archer's Sniper, Hero's Rally and Crusade trust the HIGH priority the player sets, so only the first 3 HIGH completions of a day count as HIGH for them (`LIMITS.HIGH_BONUS_PER_DAY`). Nothing stops marking everything HIGH, but it no longer pays past three tasks a day.
 5. **Overdue as a resource.** Necromancer pays for overdue tasks and is meant for backlogs, but the bonus also rewards leaving tasks to lapse (capped at 30 XP of days overdue, and the 24-hour due-date rule blocks backdating).
 6. **Weak early game (addressed in part).** Tank now starts at 1.7× (cap `min(15, 5 + level ÷ 3)`, +7% per stack), the Ranger without due dates at 1.5×, the Necromancer without overdue tasks at 1.4× (a soul every 10th task) and the Wizard at 1.6× at level 5 (the Wizard is still meant to be weak early). Cheaper first skills (Fortify 70) were used for the Tank.

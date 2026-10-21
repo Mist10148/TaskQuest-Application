@@ -7,19 +7,42 @@
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** Today's date in the browser's own time zone, as YYYY-MM-DD. */
-export function localToday(now: Date = new Date()): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
+/** The user's time zone setting (set by AuthProvider), or null to use the browser's own zone. */
+let userZone: string | null = null;
+
+/**
+ * Read "today" in `zone`: the user's time zone setting, which is the day the server uses for overdue, due today and the
+ * date bonuses. Null (no account loaded, or no zone saved yet) falls back to the browser's zone.
+ */
+export function setUserZone(zone: string | null | undefined): void {
+  userZone = zone || null;
+}
+
+/** YYYY-MM-DD from a Date's browser-local parts. */
+function browserDay(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/** Today's date as YYYY-MM-DD in the user's time zone (see setUserZone), else the browser's. */
+export function localToday(now: Date = new Date(), zone: string | null = userZone): string {
+  if (zone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    } catch {
+      // an unknown zone name: use the browser's day
+    }
+  }
+  return browserDay(now);
 }
 
 /** `day` ("YYYY-MM-DD") moved by `days` calendar days, without going through UTC. */
 export function addDays(day: string, days: number): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(day));
   if (!m) return "";
-  return localToday(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
+  return browserDay(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
 }
 
 /** The quick picks next to a due-date field. "" clears the date. */

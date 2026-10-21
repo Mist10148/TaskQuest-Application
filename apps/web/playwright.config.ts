@@ -18,6 +18,8 @@ export default defineConfig({
     reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
     use: {
         baseURL: BASE_URL,
+        // The web saves the browser's zone for an account without one; UTC keeps "today" the same day in the tests and the seed.
+        timezoneId: 'UTC',
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
     },

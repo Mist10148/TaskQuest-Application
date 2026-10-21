@@ -16,13 +16,13 @@ describe("TaskCalendar", () => {
   it("shows the current month with the open count on each day", () => {
     render(<TaskCalendar items={[item(1, "2030-01-15"), item(2, "2030-01-15"), item(3, "2030-01-20", { completed: true })]} onToggle={() => {}} onEdit={() => {}} />);
     expect(screen.getByText("January 2030")).toBeInTheDocument();
-    expect(screen.getByRole("gridcell", { name: "2030-01-15, 2 open of 2" })).toHaveTextContent("2 open");
-    expect(screen.getByRole("gridcell", { name: "2030-01-20, 0 open of 1" })).toHaveTextContent("done");
+    expect(screen.getByRole("gridcell", { name: "Tuesday, January 15, 2030, 2 open of 2" })).toHaveTextContent("2 open");
+    expect(screen.getByRole("gridcell", { name: "Sunday, January 20, 2030, 0 open of 1" })).toHaveTextContent("done");
   });
 
   it("says overdue in words, not only in colour, and groups days into rows", () => {
     render(<TaskCalendar items={[item(1, "2030-01-05")]} onToggle={() => {}} onEdit={() => {}} />);
-    const day = screen.getByRole("gridcell", { name: "2030-01-05, 1 open of 1, overdue" });
+    const day = screen.getByRole("gridcell", { name: "Saturday, January 5, 2030, 1 open of 1, overdue" });
     expect(day).toHaveTextContent("1 overdue");
     expect(day.closest('[role="row"]')).not.toBeNull();
   });
@@ -30,8 +30,8 @@ describe("TaskCalendar", () => {
   it("lists the tasks of the picked day and completes one", async () => {
     const onToggle = vi.fn();
     render(<TaskCalendar items={[item(1, "2030-01-15"), item(2, "2030-01-16")]} onToggle={onToggle} onEdit={() => {}} />);
-    await userEvent.click(screen.getByRole("gridcell", { name: /2030-01-15/ }));
-    const day = screen.getByRole("region", { name: "Tasks due 2030-01-15" });
+    await userEvent.click(screen.getByRole("gridcell", { name: /Tuesday, January 15, 2030/ }));
+    const day = screen.getByRole("region", { name: "Tasks due Tuesday, January 15, 2030" });
     expect(within(day).getByText("Task 1")).toBeInTheDocument();
     expect(within(day).queryByText("Task 2")).not.toBeInTheDocument();
     await userEvent.click(within(day).getByRole("button", { name: 'Mark "Task 1" done' }));
@@ -43,23 +43,23 @@ describe("TaskCalendar", () => {
     expect(screen.getByText(/1 open task has no due date/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Next month" }));
     expect(screen.getByText("February 2030")).toBeInTheDocument();
-    expect(screen.getByRole("gridcell", { name: "2030-02-03, 1 open of 1" })).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "Sunday, February 3, 2030, 1 open of 1" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
     expect(screen.getByText("January 2030")).toBeInTheDocument();
   });
 
   it("has one tab stop and moves between days with the arrow keys, across months", async () => {
     render(<TaskCalendar items={[item(1, "2030-02-01")]} onToggle={() => {}} onEdit={() => {}} />);
-    const start = screen.getByRole("gridcell", { name: "2030-01-10" });
+    const start = screen.getByRole("gridcell", { name: "Thursday, January 10, 2030, today" });
     expect(screen.getAllByRole("gridcell").filter((c) => c.tabIndex === 0)).toEqual([start]);
     start.focus();
     await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
-    const endOfJan = screen.getByRole("gridcell", { name: "2030-01-31" });
+    const endOfJan = screen.getByRole("gridcell", { name: "Thursday, January 31, 2030" });
     expect(endOfJan).toHaveFocus();
     await userEvent.keyboard("{ArrowRight}");
     expect(screen.getByText("February 2030")).toBeInTheDocument();
-    expect(screen.getByRole("gridcell", { name: "2030-02-01, 1 open of 1" })).toHaveFocus();
-    expect(screen.getByRole("region", { name: "Tasks due 2030-02-01" })).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "Friday, February 1, 2030, 1 open of 1" })).toHaveFocus();
+    expect(screen.getByRole("region", { name: "Tasks due Friday, February 1, 2030" })).toBeInTheDocument();
   });
 });
 

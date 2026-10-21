@@ -195,3 +195,41 @@ describe("ListDetail view and selection keys", () => {
     expect(screen.getByText(/3 selected/i)).toBeInTheDocument();
   });
 });
+
+describe("ListDetail bulk delete", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+  const many = (n: number) => Array.from({ length: n }, (_, i) => item(i + 1));
+
+  it("deletes a small selection at once", async () => {
+    const onBulkDelete = vi.fn();
+    renderList(many(5), { onBulkDelete });
+    await userEvent.keyboard("sA");
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onBulkDelete).toHaveBeenCalledWith([1, 2, 3, 4, 5]);
+  });
+
+  it("asks before deleting more than five, and does nothing on Cancel", async () => {
+    const onBulkDelete = vi.fn();
+    renderList(many(6), { onBulkDelete });
+    await userEvent.keyboard("sA");
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onBulkDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Delete 6 tasks?");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onBulkDelete).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete 6 tasks" }));
+    expect(onBulkDelete).toHaveBeenCalledWith([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe("ListDetail empty quest", () => {
+  it("shows the quick add syntax to people who can add tasks", () => {
+    renderList([]);
+    expect(screen.getByText(/No tasks yet/)).toBeInTheDocument();
+    expect(screen.getByText("Finish report fri !high #work")).toBeInTheDocument();
+  });
+});

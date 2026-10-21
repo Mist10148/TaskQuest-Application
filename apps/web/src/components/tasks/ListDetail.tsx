@@ -23,6 +23,7 @@ import { TASK_VIEWS, type TaskView } from "@/lib/taskViews";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { stepCursor } from "@/lib/cursor";
+import { ConfirmDeleteDialog } from "./ConfirmDeleteDialog";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { canDeleteList, canEditTasks, canManageList, peopleLabel, roleLabel, roleOf } from "@/lib/sharing";
 
@@ -61,6 +62,9 @@ interface Props {
   /** Saves the full new order of every task id in the list. */
   onReorder: (itemIds: number[]) => Promise<unknown>;
 }
+
+/** Deleting more tasks than this at once asks first (a smaller selection is covered by Undo alone). */
+const BULK_DELETE_CONFIRM_ABOVE = 5;
 
 const PRIORITY_BADGE: Record<string, string> = {
   HIGH: "bg-red-500/20 text-red-700 dark:text-red-400 border border-red-500/30",
@@ -148,6 +152,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     onTaskOpened?.(); // a task that is not on this quest (deleted, or a wrong link) just opens the quest
   }, [openTaskId, list.items, onTaskOpened]);
   const detailItem = detailId !== null ? items.find((i) => i.id === detailId) ?? null : null;
+  const [confirmBulk, setConfirmBulk] = useState<number[] | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkEditing, setBulkEditing] = useState(false);
   const quickAddRef = useRef<HTMLInputElement>(null);
@@ -365,6 +370,11 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         <div className="text-center py-12 text-foreground-muted">
           <Scroll className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>{editable ? "No tasks yet. Type one above or press Add Task." : "No tasks yet."}</p>
+          {editable && (
+            <p className="mt-2 text-sm">
+              Quick add understands dates, priority and tags: try <code className="rounded bg-background-secondary px-1.5 py-0.5 text-xs">Finish report fri !high #work</code>
+            </p>
+          )}
         </div>
       ) : shownItems.length === 0 ? (
         <div className="text-center py-12 text-foreground-muted">
@@ -440,7 +450,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
               {moveTargets.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
           )}
-          <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { onBulkDelete(deletableIds); leaveSelectMode(); }}>
+          <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { if (deletableIds.length > BULK_DELETE_CONFIRM_ABOVE) setConfirmBulk(deletableIds); else { onBulkDelete(deletableIds); leaveSelectMode(); } }}>
             <Trash2 className="h-4 w-4" /> Delete{deletableIds.length && deletableIds.length < selectedIds.length ? ` (${deletableIds.length})` : ""}
           </Button>
           <Button size="sm" variant="ghost" aria-label="Leave select mode" onClick={leaveSelectMode}><X className="h-4 w-4" /></Button>
@@ -471,6 +481,14 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         }}
       />
       <div role="status" aria-live="polite" className="sr-only">{cursorAnnouncement}</div>
+      <ConfirmDeleteDialog
+        open={confirmBulk !== null}
+        onOpenChange={(open) => { if (!open) setConfirmBulk(null); }}
+        title={`Delete ${confirmBulk?.length ?? 0} tasks?`}
+        description="They are removed from this quest. You can undo for a few seconds afterwards."
+        confirmLabel={`Delete ${confirmBulk?.length ?? 0} tasks`}
+        onConfirm={() => { if (confirmBulk) onBulkDelete(confirmBulk); setConfirmBulk(null); leaveSelectMode(); }}
+      />
       <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
       <TaskDetailSheet
         item={detailItem}

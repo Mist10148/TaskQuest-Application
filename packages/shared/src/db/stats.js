@@ -7,6 +7,8 @@
 
 const { getPool } = require('./pool');
 const { userZone } = require('./progression');
+const { getUserSkills } = require('./users');
+const { liveStreak } = require('../xp');
 const tz = require('../tz');
 const { actorSql } = require('./access');
 const { WEEKLY_XP_SOURCES } = require('../constants');
@@ -128,8 +130,9 @@ async function getStatsSummary(discordId, now = new Date()) {
     const zone = await userZone(pool, id);
     const { starts, end } = dayStarts(zone, now, 90);
     const since = (n) => starts[starts.length - n];
-    const [[[user]], [[done]], [sources], [weekdayRows]] = await Promise.all([
-        pool.query('SELECT streak_count FROM users WHERE discord_id = ?', [id]),
+    const [[[user]], skills, [[done]], [sources], [weekdayRows]] = await Promise.all([
+        pool.query('SELECT timezone, player_class, streak_count, last_daily_claim FROM users WHERE discord_id = ?', [id]),
+        getUserSkills(id),
         pool.query(
             `SELECT COUNT(*) AS n FROM items i
              WHERE ${actorSql('first_completed_by')} AND i.first_completed_at >= ? AND i.first_completed_at < ?`,
@@ -157,7 +160,8 @@ async function getStatsSummary(discordId, now = new Date()) {
     const best = Math.max(...perWeekday);
     const index = perWeekday.indexOf(best); // ties go to the earliest weekday, Sunday first
     return {
-        streak: user ? Number(user.streak_count) : 0,
+        // The live streak, as Today shows it: 0 once it has lapsed, even before a claim resets the stored count.
+        streak: user ? liveStreak(user, skills, now.getTime()) : 0,
         tasksCompleted7d: Number(done.n),
         xpBySource30d: sources.map((r) => ({ source: r.source, label: sourceLabel(r.source), xp: Number(r.xp) })),
         busiestWeekday: best > 0 ? { index, name: WEEKDAYS[index], count: best } : null

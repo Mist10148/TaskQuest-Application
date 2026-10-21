@@ -1010,6 +1010,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { list: plan } = await db.tasks.createList(E, { name: 'Plan' });
         const due = [];
         for (let n = 0; n < 3; n++) due.push(await add(E, plan.id, { due_date: day(0) }));
+        for (const id of due) await ageDue(id); // planned a day ahead
+        // dates given just now are not planned ahead: three fresh tasks due today, all finished, pay nothing
+        const E2 = '100000000000000599';
+        await db.users.ensureUser(E2);
+        const { list: rushed } = await db.tasks.createList(E2, { name: 'Rushed' });
+        for (let n = 0; n < 3; n++) assert.ok(!keys(await db.tasks.setItemCompleted(E2, await add(E2, rushed.id, { due_date: day(0) }))).includes('perfect_day'));
         assert.ok(!keys(await db.tasks.setItemCompleted(E, due[0])).includes('perfect_day'));
         assert.ok(!keys(await db.tasks.setItemCompleted(E, due[1])).includes('perfect_day'));
         const perfect = await db.tasks.setItemCompleted(E, due[2]);

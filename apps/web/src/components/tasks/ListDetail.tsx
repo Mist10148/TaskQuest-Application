@@ -78,8 +78,6 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     () => (list.items || []).filter((i: Item) => !hiddenIds.has(i.id) && !(i.parent_id && hiddenIds.has(i.parent_id))),
     [list.items, hiddenIds]
   );
-  const completed = items.filter((i: Item) => i.completed).length;
-  const progress = items.length > 0 ? (completed / items.length) * 100 : 0;
 
   const { topLevel, childrenOf } = useMemo(() => {
     const kids = new Map<number, Item[]>();
@@ -90,6 +88,9 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     }
     return { topLevel: top, childrenOf: kids };
   }, [items]);
+  // Progress counts tasks, not their subtasks, like the quest log's counts (`itemsTotal` / `itemsCompleted`).
+  const completed = topLevel.filter((i: Item) => i.completed).length;
+  const progress = topLevel.length > 0 ? (completed / topLevel.length) * 100 : 0;
 
   // Filters and grouping (remembered per browser). A tag this quest does not use counts as "any tag".
   const [prefs, setPrefs] = useState(loadFilterPrefs);
@@ -202,6 +203,10 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
     "/": (e) => { if (!editable) return; e.preventDefault(); quickAddRef.current?.focus(); },
     s: () => { if (!editable) return; if (selectMode) leaveSelectMode(); else setSelectMode(true); },
+    "1": () => { if (items.length > 0) setView("list"); },
+    "2": () => { if (items.length > 0) setView("board"); },
+    "3": () => { if (items.length > 0) setView("calendar"); },
+    A: () => { if (editable && selectMode) setSelected(new Set(visibleOrder)); },
     "?": () => setShowHelp(true),
     Escape: () => (selectMode ? leaveSelectMode() : onBack()),
   });
@@ -311,7 +316,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         <div className="relative">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-foreground-muted">Quest Progress</span>
-            <span className="font-medium font-heading">{completed}/{items.length} Tasks</span>
+            <span className="font-medium font-heading">{completed}/{topLevel.length} Tasks</span>
           </div>
           <div className="h-3 rounded-full bg-background-secondary overflow-hidden" role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100} aria-label="Quest progress">
             <motion.div

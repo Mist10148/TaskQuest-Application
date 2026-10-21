@@ -159,3 +159,39 @@ describe("ListDetail opening a task from a link", () => {
     expect(onTaskOpened).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ListDetail progress", () => {
+  it("counts tasks, not their subtasks", () => {
+    window.localStorage.clear();
+    renderList([item(1, { completed: true }), item(2), item(3, { parent_id: 2, completed: true }), item(4, { parent_id: 2 })]);
+    expect(screen.getByText("1/2 Tasks")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Quest progress" })).toHaveAttribute("aria-valuenow", "50");
+  });
+});
+
+describe("ListDetail view and selection keys", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("switches the view with 1, 2 and 3", async () => {
+    renderList([item(1), item(2)]);
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.keyboard("2");
+    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.keyboard("3");
+    expect(screen.getByRole("button", { name: "Calendar" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.keyboard("1");
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("selects every task with Shift A in select mode, and only there", async () => {
+    renderList([item(1), item(2), item(3)]);
+    await userEvent.keyboard("A");
+    expect(screen.queryByText(/selected/i)).not.toBeInTheDocument();
+    await userEvent.keyboard("s");
+    await userEvent.keyboard("A");
+    expect(screen.getByText(/3 selected/i)).toBeInTheDocument();
+  });
+});

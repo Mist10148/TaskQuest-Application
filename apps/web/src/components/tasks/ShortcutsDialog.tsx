@@ -12,6 +12,8 @@ const SHORTCUTS: Array<[string, string]> = [
   ["i", "Open the details of the highlighted task"],
   ["e", "Edit the highlighted task"],
   ["d", "Delete the highlighted task (with Undo)"],
+  ["1 / 2 / 3", "Show the tasks as a list, a board or a calendar (inside a quest)"],
+  ["Shift A", "Select every task shown (in select mode)"],
   ["Esc", "Leave select mode or go back to the quest log"],
   ["?", "Show this list"],
   ["Ctrl K", "Command palette: go to a page, new quest or task, switch theme (works anywhere)"],

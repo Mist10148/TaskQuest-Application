@@ -58,4 +58,4 @@ If you bought one of the four skills above for a class you do not play, it stays
 
 ## Still to come
 
-See the roadmap in the [PRD](PRD.md#11-roadmap) and the [known issues](KNOWN_ISSUES.md).
+See the [ROADMAP](ROADMAP.md) and the [known issues](KNOWN_ISSUES.md).

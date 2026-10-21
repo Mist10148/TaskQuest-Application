@@ -54,8 +54,8 @@ async function getFocusStatus(discordId, now = new Date()) {
     return withTransaction(async (conn) => {
         await expireStale(conn, id, now);
         const [[active]] = await conn.query("SELECT * FROM focus_sessions WHERE discord_id = ? AND state = 'active' ORDER BY id DESC LIMIT 1", [id]);
-        const sessions = await finishedToday(conn, id);
-        const xp = await sumToday(conn, id, 'focus_session');
+        const sessions = await finishedToday(conn, id, now);
+        const xp = await sumToday(conn, id, 'focus_session', now);
         return {
             active: active ? view(active) : null,
             today: {
@@ -73,7 +73,7 @@ async function startFocus(discordId, minutes, now = new Date()) {
     const planned = validateMinutes(minutes);
     return withTransaction(async (conn) => {
         const user = await lockUser(conn, discordId);
-        if ((await finishedToday(conn, user)) >= LIMITS.FOCUS_SESSIONS_PER_DAY) {
+        if ((await finishedToday(conn, user, now)) >= LIMITS.FOCUS_SESSIONS_PER_DAY) {
             throw errors.conflict(`You have already finished ${LIMITS.FOCUS_SESSIONS_PER_DAY} focus sessions today.`);
         }
         await conn.query("UPDATE focus_sessions SET state = 'cancelled', finished_at = ? WHERE discord_id = ? AND state = 'active'", [now, user.discord_id]);
@@ -122,7 +122,7 @@ async function finishFocus(discordId, sessionId, now = new Date()) {
         const wanted = Math.floor(credited * REWARDS.FOCUS_XP_PER_MINUTE);
         let paid = null;
         let capped = true;
-        if ((await finishedToday(conn, user)) < LIMITS.FOCUS_SESSIONS_PER_DAY) {
+        if ((await finishedToday(conn, user, now)) < LIMITS.FOCUS_SESSIONS_PER_DAY) {
             paid = await awardFlat(conn, user, 'focus_session', wanted, { dailyCap: LIMITS.FOCUS_XP_PER_DAY, referenceId: sid });
             capped = !paid || paid.xp < wanted;
         }

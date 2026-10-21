@@ -8,6 +8,7 @@
 const { getPool } = require('./pool');
 const { STREAK_WARNING } = require('../constants');
 const { getUserSkills } = require('./users');
+const { actorSql } = require('./access');
 const { dayWindow } = require('./progression');
 const { getReflection, getGoal } = require('./goals');
 const { SEASONS } = require('../constants');
@@ -65,7 +66,8 @@ async function getToday(discordId, now = new Date()) {
           WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL`,
         [today, today, id, id, id]
     );
-    const [[done]] = await pool.query('SELECT COUNT(*) AS n FROM items WHERE first_completed_by = ? AND first_completed_at >= ? AND first_completed_at < ?', [id, from, to]);
+    // Counted like Stats, the review and quests: older rows with no recorded actor count for the list owner.
+    const [[done]] = await pool.query(`SELECT COUNT(*) AS n FROM items i WHERE ${actorSql('first_completed_by')} AND i.first_completed_at >= ? AND i.first_completed_at < ?`, [id, id, from, to]);
 
     const season = currentSeason(SEASONS, now);
     return {

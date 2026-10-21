@@ -1102,6 +1102,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(claimed.xp, 16);
         await assert.rejects(db.goals.claimGoal(R), { code: 'CONFLICT' });
         await assert.rejects(db.goals.setGoal(R, 10), { code: 'CONFLICT' }, 'a claimed goal is closed');
+        // a time zone change re-keys the week: a claim made under the old key still closes the real week
+        await db.query("UPDATE weekly_goals SET week_key = to_char(week_key::date - 1, 'YYYY-MM-DD') WHERE discord_id = ?", [R]);
+        const rekeyed = await db.goals.getGoal(R);
+        assert.equal(rekeyed.claimed, true, 'the claim still counts under another key');
+        assert.equal(rekeyed.claimable, false);
+        await assert.rejects(db.goals.setGoal(R, 10), { code: 'CONFLICT' });
         assert.equal(db.goals.goalReward(60), 80, 'the reward is capped at 80');
         assert.equal(db.goals.goalReward(5), 20);
     });

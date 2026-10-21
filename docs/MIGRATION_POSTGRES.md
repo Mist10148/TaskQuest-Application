@@ -132,7 +132,7 @@ Bookkeeping writes leave it alone: reminder flags, XP flags and quest facts.
 | `DB_PORT` | `3306` default | `5432` default |
 | `DB_USER` | `root` default | `postgres` default |
 | `DB_SSL`, `DB_SSL_CA`, `DB_SSL_REJECT_UNAUTHORIZED` | unchanged | unchanged |
-| `TEST_DB_*`, `E2E_DB_*` | MySQL | Postgres (CI uses `postgres` / `postgres` on `localhost:5432`) |
+| `TEST_DB_*`, `E2E_DB_*` | MySQL | Postgres (CI uses user `postgres`, password `ci-postgres-password`, on `localhost:5432`) |
 | `AI_TEST_DB_URL` | `mysql://…` | `postgresql://…` |
 
 The AI service builds its SQLAlchemy URL from the same variables (`postgresql+asyncpg://…`), so nothing extra is needed for it.

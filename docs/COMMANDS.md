@@ -15,7 +15,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/game` | — | Ephemeral | Game centre (Blackjack, Rock Paper Scissors, Hangman). Resumes an unfinished hand. |
 | `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. The reply also shows the Daily Surprise and any milestone chest. |
 | `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill) |
-| `/quests` | — | Ephemeral | 📜 Daily and weekly quests with progress bars and Claim buttons |
+| `/quests` | — | Ephemeral | 📜 Daily and weekly quests, and the monthly boss, with progress bars and Claim buttons |
 | `/review` | — | Ephemeral | 📝 This week's review: tasks finished, XP earned, streak, and a Claim button for the once-a-week bonus (needs at least one finished task; same rules as the web review page). |
 | `/prestige` | — | Ephemeral | ✦ Shows your prestige title, bonus and whether you can start over (level 30+). **Prestige...** opens a warning listing what is lost and kept; only **Yes, reset** on that second screen resets, **Cancel** backs out. |
 | `/shop` | `section` (titles, frames or accents; default titles) | Ephemeral | 🛍️ Spend XP on cosmetics. Tabs for Titles, Frames and Accents list every item with its price and owned or locked state. Pick one from the menu to see the price and your balance after, then **Buy**, **Equip** or **Unequip**. A title you equip shows in `/profile`. |
@@ -33,7 +33,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/ping` | — | Ephemeral | Bot and API latency |
 | `/summary` | `mode` (briefing / recap / one quest), `quest` (autocomplete), `range` (today / week) | Ephemeral | ✨ AI summary of your quests. Needs AI enabled. |
 | `/prioritize` | `limit` (1–10, default 5) | Ephemeral | 🎯 AI ranking of what to do next, with reasons |
-| `/ask` | `question` (required, ≤ 2000 characters) | Ephemeral | 💬 Ask the AI assistant about your quests or how TaskQuest works. It can also create or complete quests after you approve. |
+| `/ask` | `question` (required, ≤ 2000 characters) | Ephemeral | 💬 Ask the AI assistant about your quests or how TaskQuest works. It can also create, change, complete or break down quests and tasks after you approve. |
 | `/forget` | none | Ephemeral | 🧹 Make the AI forget your conversation with it in this channel |
 | `/ai-format` | `format` (plain messages / embeds) | Ephemeral | 🎨 How the AI replies when you mention it |
 

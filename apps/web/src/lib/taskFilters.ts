@@ -13,13 +13,15 @@ export interface TaskFilter {
   /** A tag, or "" for any. */
   tag: string;
   assignee: "any" | "me" | "unassigned";
+  /** Words to find in a task's name or description (not remembered between visits). */
+  text: string;
 }
 
 export type GroupBy = "none" | "priority" | "due" | "tag";
 
-export const DEFAULT_FILTER: TaskFilter = { status: "all", priority: "any", due: "any", tag: "", assignee: "any" };
+export const DEFAULT_FILTER: TaskFilter = { status: "all", priority: "any", due: "any", tag: "", assignee: "any", text: "" };
 
-export const isFiltering = (f: TaskFilter): boolean => f.status !== "all" || f.priority !== "any" || f.due !== "any" || f.tag !== "" || f.assignee !== "any";
+export const isFiltering = (f: TaskFilter): boolean => f.status !== "all" || f.priority !== "any" || f.due !== "any" || f.tag !== "" || f.assignee !== "any" || f.text.trim() !== "";
 
 const dueDay = (item: Pick<Item, "due_date">): string | null => (item.due_date ? String(item.due_date).slice(0, 10) : null);
 
@@ -49,6 +51,11 @@ export function matchesFilter(item: Item, f: TaskFilter, listPriority: Priority 
   if (f.tag && !parseTags(item.tags).includes(f.tag)) return false;
   if (f.assignee === "me" && !item.assignee?.isYou) return false;
   if (f.assignee === "unassigned" && item.assignee) return false;
+  const words = f.text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length) {
+    const haystack = `${item.name} ${item.description ?? ""}`.toLowerCase();
+    if (!words.every((w) => haystack.includes(w))) return false;
+  }
   return true;
 }
 
@@ -123,6 +130,7 @@ export function loadFilterPrefs(): { filter: TaskFilter; groupBy: GroupBy } {
         due: pick(saved.due, DUE, DEFAULT_FILTER.due),
         tag: typeof saved.tag === "string" ? saved.tag : "",
         assignee: pick(saved.assignee, ASSIGNEE, DEFAULT_FILTER.assignee),
+        text: "",
       },
       groupBy: pick(saved.groupBy, GROUPS, "none"),
     };
@@ -133,7 +141,7 @@ export function loadFilterPrefs(): { filter: TaskFilter; groupBy: GroupBy } {
 
 export function saveFilterPrefs(filter: TaskFilter, groupBy: GroupBy): void {
   try {
-    window.localStorage.setItem(PREFS_KEY, JSON.stringify({ ...filter, groupBy }));
+    window.localStorage.setItem(PREFS_KEY, JSON.stringify({ ...filter, text: "", groupBy }));
   } catch {
     /* the choice just is not remembered */
   }

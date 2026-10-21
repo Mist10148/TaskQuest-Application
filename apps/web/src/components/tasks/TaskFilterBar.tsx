@@ -25,6 +25,15 @@ export const TaskFilterBar = ({ filter, onFilter, tags, showAssignee, groupBy, o
   const active = isFiltering(filter);
   return (
     <div role="group" aria-label="Filter tasks" className="mb-4 flex flex-wrap items-center gap-2">
+      <input
+        type="search"
+        aria-label="Search this quest"
+        placeholder="Search this quest"
+        value={filter.text}
+        onChange={(e) => set({ text: e.target.value })}
+        maxLength={100}
+        className="h-8 w-44 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+      />
       <select aria-label="Status" className={selectClass} value={filter.status} onChange={(e) => set({ status: e.target.value as TaskFilter["status"] })}>
         <option value="all">All tasks</option>
         <option value="open">Open</option>

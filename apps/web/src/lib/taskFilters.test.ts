@@ -85,3 +85,25 @@ describe("groupTasks and tagsIn", () => {
     expect(tagsIn(tasks)).toEqual(["home", "work"]);
   });
 });
+
+describe("text search in a quest", () => {
+  const f = (text: string) => ({ ...DEFAULT_FILTER, text });
+
+  it("matches words in the name or description, in any order and any case", () => {
+    const t = item(1, { name: "Pay the RENT", description: "Landlord, by bank transfer" });
+    expect(matchesFilter(t, f("rent"), null, TODAY)).toBe(true);
+    expect(matchesFilter(t, f("landlord pay"), null, TODAY)).toBe(true);
+    expect(matchesFilter(t, f("rent mortgage"), null, TODAY)).toBe(false);
+    expect(matchesFilter(item(2), f("rent"), null, TODAY)).toBe(false);
+  });
+
+  it("counts as filtering unless it is blank, and keeps a parent whose subtask matches", () => {
+    expect(isFiltering(f("   "))).toBe(false);
+    expect(isFiltering(f("rent"))).toBe(true);
+    const parent = item(1, { name: "Flat" });
+    const child = item(2, { name: "Pay rent", parent_id: 1 });
+    const out = filterTasks([parent], new Map([[1, [child]]]), f("rent"), null, TODAY);
+    expect(out.topLevel).toEqual([parent]);
+    expect(out.childrenOf.get(1)).toEqual([child]);
+  });
+});

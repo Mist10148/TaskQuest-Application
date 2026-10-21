@@ -71,6 +71,14 @@ describe("ListDetail filters and groups", () => {
     expect(screen.getByRole("combobox", { name: "Group by" })).toHaveValue("priority");
   });
 
+  it("searches the quest by name and says how many are shown", async () => {
+    renderList(tasks);
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search this quest" }), "task 3");
+    expect(screen.queryByText("Task 1")).not.toBeInTheDocument();
+    expect(screen.getByText("Task 3")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 3")).toBeInTheDocument();
+  });
+
   it("explains an empty result", async () => {
     renderList(tasks);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Due" }), "overdue");

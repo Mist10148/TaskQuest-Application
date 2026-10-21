@@ -38,6 +38,10 @@ const PAIRS: Array<[string, string, number]> = [
   ["foreground-muted", "background-secondary", 4.5],
   ["primary-foreground", "primary", 4.5],
   ["destructive-foreground", "destructive", 4.5],
+  // Toast descriptions (sonner) use muted-foreground, and its cancel button puts it on muted.
+  ["muted-foreground", "background", 4.5],
+  ["muted-foreground", "card", 4.5],
+  ["muted-foreground", "muted", 4.5],
   ["xp", "card", 4.5],
   ["success", "card", 4.5],
   ["primary", "card", 3],

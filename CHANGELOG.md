@@ -150,6 +150,13 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Quick due-date picks (Today, Tomorrow, Next week, No date) in the task form.
 - Search inside a quest, `?task=` links that open a task's drawer (from search results and the command palette), keys `1` `2` `3` for the views and `Shift A` to select all, a confirmation before deleting more than five tasks, and a quick-add hint in an empty quest.
 - Docs: `docs/ROADMAP.md`, `docs/TESTING.md`, `CODE_OF_CONDUCT.md`, a longer web README, and corrections to migration numbers, costs, quotas and several contradictions.
+- Today lists what is coming up this week (`upcoming` in `/api/today`: up to six open tasks due in the next seven days).
+- Relative due dates ("Today", "Tomorrow", "in 3 days") on task rows, board cards, Today and the task drawer.
+- Snooze to tomorrow on an open task; on phones the row actions sit in one More actions menu.
+- Command palette actions: claim the daily reward, start a 25-minute focus session, show overdue and due today.
+- The quest log remembers its tab, filters and sort; `/games?play=<game>` links, so Back returns to the games menu.
+- Each page has its own tab title, and moving to another page focuses its content.
+- Docs: the AI service's HTTP API, `/internal/index` and `/internal/forget` request shapes, a README troubleshooting table, and known issues #63-#66.
 
 ### Changed
 
@@ -193,6 +200,9 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Dark-theme colours that failed contrast (the Assassin badge was 1.5:1, destructive button text 3.8:1) were fixed.
 - Node 22 is now required. Node 20 is end-of-life, and its test runner could not expand the test globs, which had broken CI since 8 October.
 - LangChain, LangGraph and `langgraph-checkpoint` are pinned to their tested major versions.
+- **A daily claim within the rolling 48/72/96-hour window continues the streak.** With the 24-hour cooldown, someone who claimed at 23:30 could only keep the streak by claiming in the last half hour of the next day.
+- **Perfect day counts only tasks whose due date was set at least 24 hours before,** like the early and overdue bonuses; three tasks given today's date and ticked off at once no longer pay it.
+- The web reads "today" in the account's time zone, and saves the browser's zone once for an account that has none, so overdue and due today match the server.
 
 ### Fixed
 
@@ -293,6 +303,16 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - `/summary` read a quest whose name is only digits (e.g. "2026") as a list id, and a failed autocomplete lookup was unhandled.
 - A shared in-memory SQLite connection made the chat confirmation tests fail on Python 3.12.
 - The AI reconcile job now notices edits to a quest itself (name, deadline, priority), not only to its subtasks. New migration `004_lists_updated_at` adds `lists.updated_at`.
+- Quests and the weekly review showed Claim after a time zone change although claiming answered 409; they now match claims by time as well as by period key.
+- The owner adding to one list and a member adding to another at the same moment could both take the last free task slot; adds, subtasks and moves now lock the list owner.
+- An expired invitation was meant to be marked revoked, but the update was rolled back by the error; it now sticks (lists and parties).
+- The Stats page showed a lapsed streak; it now reads 0 like Today.
+- A failure saving the user during the Discord callback sent JSON 500 to the browser instead of the login page; the session store no longer turns an error thrown by its callback into an unhandled rejection.
+- Focus limits honoured the given time only in part, and Today's done-today count left out older completions with no recorded actor.
+- Web: a failed game history load said "No games played yet"; Dashboard quest cards showed no deadline; the suggested weekly goal could exceed 60; deleting a task already gone showed an error.
+- Web accessibility: radio groups take arrow keys, the sort menu marks the chosen order, the filter button includes its count, labels point at their controls, login errors and quick-add previews are announced, calendar days are read in full, delete confirmations are alert dialogs, shortcut hints show ⌘ on Apple devices, and invalid link-in-button nesting is gone.
+- Web on phones: long quest names are shortened instead of pushing the priority badge out, and calendar badges fit their cells.
+- Focus and Stats no longer say their days are UTC.
 
 ### Removed
 

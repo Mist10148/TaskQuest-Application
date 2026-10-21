@@ -2,7 +2,7 @@ import type { User as UserRecord } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { Sword, Sparkles, Settings, LogOut, Menu, Flame, Search } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { ClassBadge, PlayerClass } from "@/components/game/ClassBadge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -14,12 +14,16 @@ import { AI_NAV_ITEM, NAV_ITEMS } from "@/components/layout/navItems";
 import { openCommandPalette } from "@/lib/commands";
 import { PrestigeTag } from "@/components/game/PrestigeTag";
 import { AvatarFrame, EquippedTitle } from "@/components/game/AvatarFrame";
+import { pageTitle } from "@/lib/pageTitle";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 const XP_PER_LEVEL = 100; // mirrors packages/shared XP_PER_LEVEL
+
+/** The page the layout last showed. Each page renders its own layout, so this outlives a single mount. */
+let lastPath: string | null = null;
 
 /** Thin XP progress toward the next level. */
 const LevelBar = ({ lifetimeXP, level, className }: { lifetimeXP: number; level: number; className?: string }) => {
@@ -155,6 +159,15 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
 export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuth();
+  const { pathname } = useLocation();
+
+  // A layout effect runs before the page's own effects, so a page that decorates the title (Focus's countdown) builds on this one.
+  useLayoutEffect(() => {
+    document.title = pageTitle(pathname);
+    // After moving to another page, start keyboard and screen reader users at its content, not wherever focus was left.
+    if (lastPath !== null && lastPath !== pathname) document.getElementById("main")?.focus({ preventScroll: true });
+    lastPath = pathname;
+  }, [pathname]);
   const dbUser: Partial<UserRecord> = user?.user ?? {};
   const level = dbUser.player_level || 1;
 

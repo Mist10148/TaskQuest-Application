@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Props {
   open: boolean;
@@ -13,25 +15,28 @@ interface Props {
   onConfirm: () => void;
 }
 
-/** Destructive confirmation used for deleting quests and tasks. */
+/**
+ * Destructive confirmation used for deleting quests and tasks. An alert dialog: it is announced as one, and a click outside
+ * does not dismiss it. The caller closes it once the delete has gone through, so it stays open while `pending`.
+ */
 export const ConfirmDeleteDialog = ({ open, onOpenChange, title, description, confirmLabel, pending, onConfirm }: Props) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-3">
+  <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialogContent className="sm:max-w-md">
+      <AlertDialogHeader>
+        <AlertDialogTitle className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-destructive/20 flex items-center justify-center">
-            <Trash2 className="h-5 w-5 text-destructive-text" />
+            <Trash2 className="h-5 w-5 text-destructive-text" aria-hidden />
           </div>
           {title}
-        </DialogTitle>
-        <DialogDescription className="pt-2">{description}</DialogDescription>
-      </DialogHeader>
-      <DialogFooter className="gap-2 sm:gap-0">
-        <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        </AlertDialogTitle>
+        <AlertDialogDescription className="pt-2">{description}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter className="gap-2 sm:gap-0">
+        <AlertDialogCancel>Cancel</AlertDialogCancel>
         <Button variant="destructive" onClick={onConfirm} disabled={pending}>
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : confirmLabel}
         </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 );

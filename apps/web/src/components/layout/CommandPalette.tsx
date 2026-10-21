@@ -9,6 +9,7 @@ import { NAV_ITEMS, AI_NAV_ITEM } from "./navItems";
 import { useTaskSearch } from "@/hooks/useApi";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { searchableQuery } from "@/lib/taskSearch";
+import { modKeyLabel } from "@/lib/platform";
 
 /** `hint` is a muted note on the right (a task's quest). */
 type Entry = PaletteCommand & { icon: React.ElementType; run: () => void; hint?: string };
@@ -141,7 +142,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
           })}
         </ul>
         <p className="flex items-center gap-1.5 border-t border-border px-4 py-2 text-xs text-foreground-muted">
-          <Command className="h-3 w-3" aria-hidden /> Ctrl+K toggles this palette
+          <Command className="h-3 w-3" aria-hidden /> {modKeyLabel()}+K toggles this palette
         </p>
       </DialogContent>
     </Dialog>

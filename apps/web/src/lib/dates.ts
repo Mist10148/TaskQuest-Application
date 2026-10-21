@@ -92,3 +92,26 @@ export function formatDayLabel(day: string): string {
     Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
   );
 }
+
+/** Calendar days from `from` to `to` (both "YYYY-MM-DD"), negative when `to` is earlier; NaN when either is missing. */
+export function daysBetween(from: string, to: string): number {
+  const a = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(from));
+  const b = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(to));
+  if (!a || !b) return Number.NaN;
+  return Math.round((Date.UTC(+b[1], +b[2] - 1, +b[3]) - Date.UTC(+a[1], +a[2] - 1, +a[3])) / 86_400_000);
+}
+
+/**
+ * A task's due date as people say it near today: "Today", "Tomorrow", "Yesterday", "in 3 days", "4 days ago", and the plain
+ * date (formatDeadline) from a week away on. Pair it with the plain date as a tooltip.
+ */
+export function formatDue(due: string | null | undefined, today: string = localToday()): string {
+  const days = daysBetween(today, dateOnly(due));
+  if (Number.isNaN(days)) return "";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  if (days > 1 && days < 7) return `in ${days} days`;
+  if (days < -1 && days > -7) return `${-days} days ago`;
+  return formatDeadline(due, today);
+}

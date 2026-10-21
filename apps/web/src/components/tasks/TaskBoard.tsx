@@ -3,7 +3,7 @@ import { Check, Circle } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { boardColumns, canMoveToColumn, columnPriority, effectivePriority, type BoardColumn } from "@/lib/taskViews";
 import { cn } from "@/lib/utils";
-import { formatDeadline } from "@/lib/dates";
+import { formatDeadline, formatDue } from "@/lib/dates";
 
 interface Props {
   items: readonly Item[];
@@ -115,7 +115,7 @@ export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onS
                     </button>
                     <button type="button" onClick={() => onEdit(item.id)} disabled={readOnly} className="min-w-0 flex-1 text-left text-sm disabled:cursor-default">
                       <span className={cn("line-clamp-2 break-words font-medium", item.completed && "line-through")}>{item.name}</span>
-                      {item.due_date && <span className="block text-xs text-foreground-muted">{formatDeadline(item.due_date)}</span>}
+                      {item.due_date && <span className="block text-xs text-foreground-muted" title={formatDeadline(item.due_date)}>{formatDue(item.due_date)}</span>}
                     </button>
                     {canDrag && (
                       <select

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, compareDeadlines, formatDayLabel, formatDeadline, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
+import { addDays, compareDeadlines, daysBetween, formatDayLabel, formatDeadline, formatDue, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
 
 describe("deadline helpers", () => {
   it("does not treat a list due today as overdue", () => {
@@ -31,6 +31,25 @@ describe("deadline helpers", () => {
       setUserZone(null);
     }
     expect(localToday(new Date(2030, 0, 5, 23, 59))).toBe("2030-01-05");
+  });
+
+  it("counts calendar days between two dates, across months and years", () => {
+    expect(daysBetween("2030-01-31", "2030-02-01")).toBe(1);
+    expect(daysBetween("2030-12-31", "2031-01-01")).toBe(1);
+    expect(daysBetween("2030-03-10", "2030-03-01")).toBe(-9);
+    expect(daysBetween("", "2030-03-01")).toBeNaN();
+  });
+
+  it("says a due date relative to today within a week, and as a date beyond", () => {
+    const today = "2030-03-10";
+    expect(formatDue("2030-03-10", today)).toBe("Today");
+    expect(formatDue("2030-03-11", today)).toBe("Tomorrow");
+    expect(formatDue("2030-03-09", today)).toBe("Yesterday");
+    expect(formatDue("2030-03-14", today)).toBe("in 4 days");
+    expect(formatDue("2030-03-06", today)).toBe("4 days ago");
+    expect(formatDue("2030-03-17", today)).toBe("Mar 17");
+    expect(formatDue("2029-12-01", today)).toBe("Dec 1, 2029");
+    expect(formatDue(null, today)).toBe("");
   });
 
   it("reads a day out in full for labels, without shifting it", () => {

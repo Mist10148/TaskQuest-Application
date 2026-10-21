@@ -35,17 +35,20 @@ async function completionExtras(conn, user, item, ctx, now = new Date()) {
         if (r) out.push({ key, label: BONUS_LABELS[key], xp: r.xp });
         return r;
     };
+    // A due date only counts once it was set at least DUE_DATE_MIN_AGE_HOURS ago (as for the early and overdue bonuses), so three
+    // tasks given today's date and ticked off at once are not a perfect day.
+    const plannedBy = new Date(now.getTime() - LIMITS.DUE_DATE_MIN_AGE_HOURS * 3600e3);
     const dueToday = item.due_date && String(item.due_date).slice(0, 10) === ctx.today;
 
-    // Perfect day: every top-level task due today on your own lists is done (at least 3 of them), once a day.
+    // Perfect day: every top-level task due today on your own lists is done (at least 3 of them planned ahead), once a day.
     if (dueToday && (await countToday(conn, user, 'perfect_day', now)) === 0) {
         const [[due]] = await conn.query(
-            `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE i.completed = 0) AS open
+            `SELECT COUNT(*) FILTER (WHERE i.due_date_set_at <= ?) AS planned, COUNT(*) FILTER (WHERE i.completed = 0) AS open
                FROM items i JOIN lists l ON l.id = i.list_id
               WHERE l.discord_id = ? AND i.parent_id IS NULL AND i.due_date = ?`,
-            [user.discord_id, ctx.today]
+            [plannedBy, user.discord_id, ctx.today]
         );
-        if (Number(due.total) >= LIMITS.PERFECT_DAY_MIN_TASKS && Number(due.open) === 0) await pay('perfect_day', REWARDS.PERFECT_DAY, { referenceId: item.id });
+        if (Number(due.planned) >= LIMITS.PERFECT_DAY_MIN_TASKS && Number(due.open) === 0) await pay('perfect_day', REWARDS.PERFECT_DAY, { referenceId: item.id });
     }
 
     // Inbox zero: this completion cleared the last overdue task, after at least 3 overdue ones this week, once a week.

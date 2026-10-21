@@ -24,7 +24,7 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `overdue_clear` | +10 for completing an overdue task | Shares 100 XP a day with `early_finish` | No |
 | `subtasks_done` | +10 for finishing the last open subtask of a parent | Once per parent; 10 XP a day | No |
 | `habit_bonus` | +2 per step of a repeating task's habit streak from a streak of 2, max +20 per completion | 60 XP a day | No |
-| `perfect_day` | +30 when every top-level task due today on your own lists is done (at least 3) | Once a day | No |
+| `perfect_day` | +30 when every top-level task due today on your own lists is done (at least 3 with a due date set 24 hours or more before) | Once a day | No |
 | `inbox_zero` | +40 when your completion clears the last overdue task, after 3 overdue tasks cleared that week | Once a week | No |
 | `boss_defeated` | +30 for the last open subtask of a task with at least 4 subtasks | Once per task, 60 XP a day | No |
 | `comeback` | +25 for the first completion after 3 idle days | Once a week | No |

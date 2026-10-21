@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, compareDeadlines, formatDeadline, isPastDeadline, localToday, quickDueDates } from "./dates";
+import { addDays, compareDeadlines, formatDeadline, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
 
 describe("deadline helpers", () => {
   it("does not treat a list due today as overdue", () => {
@@ -17,6 +17,24 @@ describe("deadline helpers", () => {
 
   it("builds the local date from local parts", () => {
     expect(localToday(new Date(2030, 0, 5, 23, 59))).toBe("2030-01-05");
+  });
+
+  it("reads today in the user's time zone, the day the server counts by", () => {
+    const instant = new Date("2030-01-06T01:00:00Z"); // still Jan 5 in Los Angeles, already Jan 6 in Manila
+    expect(localToday(instant, "America/Los_Angeles")).toBe("2030-01-05");
+    expect(localToday(instant, "Asia/Manila")).toBe("2030-01-06");
+    setUserZone("America/Los_Angeles");
+    try {
+      expect(localToday(instant)).toBe("2030-01-05");
+      expect(isPastDeadline("2030-01-05", localToday(instant))).toBe(false);
+    } finally {
+      setUserZone(null);
+    }
+    expect(localToday(new Date(2030, 0, 5, 23, 59))).toBe("2030-01-05");
+  });
+
+  it("falls back to the browser's day for an unknown zone", () => {
+    expect(localToday(new Date(2030, 0, 5, 12), "Not/AZone")).toBe("2030-01-05");
   });
 
   it("sorts deadlines chronologically with missing ones last", () => {

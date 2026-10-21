@@ -186,7 +186,7 @@ const Dashboard = () => {
               {lists.slice(0, 3).map((list: ListWithCounts, index: number) => (
                 <motion.div key={list.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + index * 0.05 }}>
                   <Link to={`/tasks?list=${list.id}`}>
-                    <TaskListCard name={list.name} description={list.description} itemsCompleted={list.itemsCompleted || 0} itemsTotal={list.itemsTotal || 0} category={list.category} priority={list.priority} shared={list.shared ? { count: list.memberCount ?? 2, subtitle: sharedSubtitle(list) } : undefined} />
+                    <TaskListCard name={list.name} description={list.description} itemsCompleted={list.itemsCompleted || 0} itemsTotal={list.itemsTotal || 0} category={list.category} priority={list.priority} deadline={list.deadline ?? undefined} shared={list.shared ? { count: list.memberCount ?? 2, subtitle: sharedSubtitle(list) } : undefined} />
                   </Link>
                 </motion.div>
               ))}

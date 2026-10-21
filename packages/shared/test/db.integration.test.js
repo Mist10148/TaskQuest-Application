@@ -2801,6 +2801,33 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.access.forItem(conn, SL.viewer, f.a.id)).item.list_name, 'Household');
         assert.equal(await db.access.roleOn(conn, SL.stranger, f.list.id), null);
         assert.equal(await db.access.roleOn(conn, SL.editor, f.list.id), 'editor');
+        assert.equal(await db.access.canUseList(conn, SL.viewer, f.list.id), true);
+        assert.equal(await db.access.canUseList(conn, SL.owner, f.list.id), true);
+        assert.equal(await db.access.canUseList(conn, SL.stranger, f.list.id), false);
+        assert.equal(await db.access.canUseList(conn, SL.owner, 99999999), false);
+
+        // A stranger asking for a locked task is refused at once, without queuing behind the list's lock.
+        let locked;
+        let release;
+        const lockTaken = new Promise((r) => (locked = r));
+        const held = new Promise((r) => (release = r));
+        const holder = db.withTransaction(async (c) => {
+            await c.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [f.list.id]);
+            locked();
+            await held;
+        });
+        await lockTaken;
+        try {
+            const started = Date.now();
+            await assert.rejects(
+                db.withTransaction((c) => db.access.forItem(c, SL.stranger, f.a.id, 'viewer', { lock: true })),
+                { code: 'NOT_FOUND' }
+            );
+            assert.ok(Date.now() - started < 1000, 'the stranger did not wait for the lock');
+        } finally {
+            release();
+            await holder;
+        }
     });
 
     await t.test('shared lists: role matrix over every task and list operation', async () => {

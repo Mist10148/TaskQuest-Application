@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CalendarCheck, CheckCircle2, Flame, Gift, Loader2, PenLine, Target, Timer } from "lucide-react";
+import { AlertTriangle, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Loader2, PenLine, Target, Timer } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
 import { PriorityPanel } from "@/components/ai/PriorityPanel";
@@ -162,6 +162,13 @@ const TodayView = ({ data }: { data: TodayData }) => (
         <ul className="space-y-2">{data.tasks.map((t) => <TaskLine key={t.id} task={t} today={data.day} />)}</ul>
       )}
     </section>
+
+    {data.upcoming && data.upcoming.length > 0 && (
+      <section aria-labelledby="upcoming-title">
+        <h2 id="upcoming-title" className="mb-2 flex items-center gap-2 font-heading font-semibold"><CalendarClock className="h-5 w-5 text-primary-text" aria-hidden /> Coming up this week</h2>
+        <ul className="space-y-2">{data.upcoming.map((t) => <TaskLine key={t.id} task={t} today={data.day} />)}</ul>
+      </section>
+    )}
 
     <PriorityPanel />
 

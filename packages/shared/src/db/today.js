@@ -17,6 +17,9 @@ const { todayInZone, daysBetween, hourInZone } = require('../dates');
 const { liveStreak, getSkillBonuses, streakWindowDays, claimGapDays } = require('../xp');
 
 const TASK_LIMIT = 6;
+/** The Upcoming list: open top-level tasks due in the next week (not already in the main list). */
+const UPCOMING_DAYS = 7;
+const UPCOMING_LIMIT = 6;
 
 /**
  * The tasks that are "mine" for Today: every task on a list I own, plus the tasks assigned to me on a list shared with me (the
@@ -36,6 +39,20 @@ function streakState(user, skills, now) {
     // streak is only alive through the rolling grace window (a late claim), which is just as much at risk.
     const daysLeft = bonuses.streakUnstoppable || !last ? null : Math.max(0, streakWindowDays(user, bonuses) - claimGapDays(user, last, now.getTime()));
     return { count, live, claimedToday, daysLeft, atRisk: live >= 2 && !claimedToday && daysLeft === 0 };
+}
+
+function shapeTask(r, today) {
+    const due = r.due_date ? String(r.due_date).slice(0, 10) : null;
+    return {
+        id: r.id,
+        name: r.name,
+        listId: r.list_id,
+        listName: r.list_name,
+        dueDate: due,
+        priority: r.priority || null,
+        estimateMinutes: r.estimate_minutes === null || r.estimate_minutes === undefined ? null : Number(r.estimate_minutes),
+        overdueDays: due && due < today ? daysBetween(due, today) : 0
+    };
 }
 
 async function getToday(discordId, now = new Date()) {
@@ -67,6 +84,14 @@ async function getToday(discordId, now = new Date()) {
         [today, today, id, id, id]
     );
     // Counted like Stats, the review and quests: older rows with no recorded actor count for the list owner.
+    const [upcomingRows] = await pool.query(
+        `SELECT i.id, i.name, i.list_id, l.name AS list_name, i.due_date, COALESCE(i.priority, l.priority) AS priority, i.estimate_minutes
+           FROM items i JOIN lists l ON l.id = i.list_id
+          WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL AND i.due_date > ?::date AND i.due_date <= ?::date + ${UPCOMING_DAYS}
+          ORDER BY i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 0 END, i.id
+          LIMIT ${TASK_LIMIT + UPCOMING_LIMIT}`,
+        [id, id, id, today, today]
+    );
     const [[done]] = await pool.query(`SELECT COUNT(*) AS n FROM items i WHERE ${actorSql('first_completed_by')} AND i.first_completed_at >= ? AND i.first_completed_at < ?`, [id, id, from, to]);
 
     const season = currentSeason(SEASONS, now);
@@ -75,19 +100,12 @@ async function getToday(discordId, now = new Date()) {
         season: { key: season.key, name: season.name, blurb: season.blurb, doubles: season.doubles, enabled: process.env.XP_WEEKLY_MODIFIER !== 'off' },
         streak: streakState(u, skills, now),
         counts: { dueToday: Number(counts.dueToday), overdue: Number(counts.overdue), doneToday: Number(done.n) },
-        tasks: rows.map((r) => {
-            const due = r.due_date ? String(r.due_date).slice(0, 10) : null;
-            return {
-                id: r.id,
-                name: r.name,
-                listId: r.list_id,
-                listName: r.list_name,
-                dueDate: due,
-                priority: r.priority || null,
-                estimateMinutes: r.estimate_minutes === null || r.estimate_minutes === undefined ? null : Number(r.estimate_minutes),
-                overdueDays: due && due < today ? daysBetween(due, today) : 0
-            };
-        }),
+        tasks: rows.map((r) => shapeTask(r, today)),
+        // A HIGH task due this week is already in `tasks`; it is not listed twice.
+        upcoming: upcomingRows
+            .filter((r) => !rows.some((t) => t.id === r.id))
+            .slice(0, UPCOMING_LIMIT)
+            .map((r) => shapeTask(r, today)),
         reflection: await getReflection(id, now),
         goal: await getGoal(id, now),
         xpEnabled: Boolean(u.gamification_enabled)

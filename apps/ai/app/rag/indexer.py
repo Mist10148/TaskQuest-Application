@@ -146,18 +146,23 @@ async def stale_lists(conn: AsyncConnection, store: EmbeddingStore) -> list[tupl
             )
         )
     ).all()
+    # A row is keyed by (source_id, model) alone, so after a hand-over it still names the old owner until the new owner's
+    # re-index takes it over: the owner is part of "up to date".
     embedded = {
-        r[0]: repo.to_datetime(r[1])
+        r[0]: (repo.to_datetime(r[1]), r[2])
         for r in (
             await conn.execute(
-                text("SELECT source_id, updated_at FROM ai_embeddings WHERE source_type = 'list' AND model = :m"),
+                text("SELECT source_id, updated_at, discord_id FROM ai_embeddings WHERE source_type = 'list' AND model = :m"),
                 {"m": store.model},
             )
         ).all()
     }
     out = []
     for discord_id, list_id, list_updated, last_item, members in lists:
-        at = embedded.get(f"L{list_id}")
+        at, embedded_owner = embedded.get(f"L{list_id}", (None, None))
+        if at is not None and embedded_owner != discord_id and not members:
+            out.append((discord_id, list_id))  # handed over: the new owner's index replaces the old owner's rows
+            continue
         if members:
             # A shared quest is never indexed. If it was indexed before it was shared, it is stale until index_list purges it.
             if at is not None:

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { radioKeyDown } from "@/lib/radioGroup";
 
 const OPTIONS = [
   { value: "system", label: "System", icon: Monitor },
@@ -18,8 +19,10 @@ export const ThemeToggle = ({ className }: { className?: string }) => {
 
   return (
     <div role="radiogroup" aria-label="Theme" className={cn("inline-flex rounded-lg border border-border p-0.5 bg-background-secondary", className)}>
-      {OPTIONS.map(({ value, label, icon: Icon }) => {
+      {OPTIONS.map(({ value, label, icon: Icon }, index) => {
         const active = mounted && theme === value;
+        // One tab stop for the group: the chosen option (the first before the theme is known); arrows move between options.
+        const focusable = mounted && OPTIONS.some((o) => o.value === theme) ? active : index === 0;
         return (
           <button
             key={value}
@@ -28,7 +31,9 @@ export const ThemeToggle = ({ className }: { className?: string }) => {
             aria-checked={active}
             aria-label={`${label} theme`}
             title={`${label} theme`}
+            tabIndex={focusable ? 0 : -1}
             onClick={() => setTheme(value)}
+            onKeyDown={(e) => radioKeyDown(e, index, OPTIONS.map((o) => o.value), setTheme)}
             className={cn(
               "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
               active ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground"

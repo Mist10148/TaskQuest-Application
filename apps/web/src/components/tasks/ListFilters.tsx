@@ -74,7 +74,7 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
             <Button variant="outline" size="icon" className="relative" aria-label="Filter quests">
               <Filter className="h-4 w-4" />
               {filters.activeFilters > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] flex items-center justify-center font-bold">
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[0.625rem] flex items-center justify-center font-bold">
                   {filters.activeFilters}
                 </span>
               )}

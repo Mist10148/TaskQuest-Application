@@ -24,7 +24,7 @@ const Preview = ({ item, name, avatarUrl }: { item: CosmeticItem; name: string; 
   if (item.kind === "title") {
     return (
       <p className="truncate text-sm font-semibold">
-        {name} <span className="text-[11px] font-medium italic text-foreground-muted">{item.name}</span>
+        {name} <span className="text-[0.6875rem] font-medium italic text-foreground-muted">{item.name}</span>
       </p>
     );
   }

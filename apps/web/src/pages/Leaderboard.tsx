@@ -91,7 +91,7 @@ const CompactPodium = ({ entries, unit, nameOf, emojiOf }: { entries: Leaderboar
         <p className="text-xs font-semibold truncate">{nameOf(e)}</p>
         <div className="flex justify-center"><PrestigeTag prestige={e.prestige} title={e.prestigeTitle} /></div>
         <p className="text-xs font-bold text-xp truncate">{e.score.toLocaleString()} {unit}</p>
-        <p className="text-[10px] text-foreground-muted">Lv.{e.level} {emojiOf(e)}</p>
+        <p className="text-[0.625rem] text-foreground-muted">Lv.{e.level} {emojiOf(e)}</p>
       </div>
     ))}
   </div>

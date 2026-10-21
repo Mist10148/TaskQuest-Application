@@ -183,7 +183,7 @@ const Skills = () => {
             {skillTiers(selectedTree.skills).map((tier, tierIndex) => (
               <div key={tierIndex} className="flex flex-1 flex-col gap-3 sm:gap-4 lg:min-w-0">
                 {tierIndex > 0 && <div className="text-center text-foreground-muted lg:hidden" aria-hidden>↓</div>}
-                <div className="hidden text-center text-[10px] uppercase tracking-wide text-foreground-muted lg:block">{tierIndex === 0 ? "Start" : `Tier ${tierIndex + 1}`}</div>
+                <div className="hidden text-center text-[0.625rem] uppercase tracking-wide text-foreground-muted lg:block">{tierIndex === 0 ? "Start" : `Tier ${tierIndex + 1}`}</div>
             {tier.map((skill: Skill) => {
               const status = getSkillStatus(skill);
               const canAfford = userXP >= skill.cost;
@@ -212,9 +212,9 @@ const Skills = () => {
                     <span className="text-lg sm:text-xl">{skill.emoji}</span>
                     <h4 className="font-heading font-semibold text-sm sm:text-base">{skill.name}</h4>
                   </div>
-                  <p className="text-[10px] sm:text-xs text-foreground-muted mb-2 sm:mb-3">{skill.description}</p>
+                  <p className="text-[0.625rem] sm:text-xs text-foreground-muted mb-2 sm:mb-3">{skill.description}</p>
                   {preview && skill.currentLevel < skill.maxLevel && preview.gains[skill.id] !== undefined && (
-                    <p className="text-[10px] sm:text-xs mb-2 sm:mb-3" data-testid={`skill-gain-${skill.id}`}>
+                    <p className="text-[0.625rem] sm:text-xs mb-2 sm:mb-3" data-testid={`skill-gain-${skill.id}`}>
                       {preview.gains[skill.id] > 0 ? (
                         <span className="text-xp font-medium">≈ +{preview.gains[skill.id]} XP per task</span>
                       ) : (
@@ -230,11 +230,11 @@ const Skills = () => {
                           style={i < skill.currentLevel ? { backgroundColor: color } : undefined} />
                       ))}
                     </div>
-                    <span className="text-[10px] sm:text-xs text-foreground-muted">{skill.currentLevel}/{skill.maxLevel}</span>
+                    <span className="text-[0.625rem] sm:text-xs text-foreground-muted">{skill.currentLevel}/{skill.maxLevel}</span>
                   </div>
 
                   {isClassLocked && (
-                    <div className="text-center text-[10px] sm:text-xs text-destructive-text font-medium flex items-center justify-center gap-1">
+                    <div className="text-center text-[0.625rem] sm:text-xs text-destructive-text font-medium flex items-center justify-center gap-1">
                       <Lock className="h-3 w-3" /> Buy {selectedTree.name} class first
                     </div>
                   )}
@@ -248,9 +248,9 @@ const Skills = () => {
                       {unlockingId === skill.id ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> : canAfford ? `Upgrade (${skill.cost} XP)` : `Need ${skill.cost - userXP} XP`}
                     </Button>
                   )}
-                  {status === 'maxed' && <div className="text-center text-[10px] sm:text-xs text-success font-medium">MAX LEVEL</div>}
+                  {status === 'maxed' && <div className="text-center text-[0.625rem] sm:text-xs text-success font-medium">MAX LEVEL</div>}
                   {status === 'locked' && !isClassLocked && skill.requires && (
-                    <div className="text-center text-[10px] sm:text-xs text-foreground-muted">Requires: {selectedTree.skills.find((s: Skill) => s.id === skill.requires)?.name}</div>
+                    <div className="text-center text-[0.625rem] sm:text-xs text-foreground-muted">Requires: {selectedTree.skills.find((s: Skill) => s.id === skill.requires)?.name}</div>
                   )}
                 </motion.div>
               );

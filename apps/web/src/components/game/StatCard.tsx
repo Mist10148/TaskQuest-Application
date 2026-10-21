@@ -85,7 +85,7 @@ export const StatCard = ({
       
       <div className="relative flex items-start justify-between gap-2">
         <div className="flex flex-col min-w-0">
-          <span className="text-[10px] sm:text-sm font-medium text-foreground-muted mb-0.5 sm:mb-1 truncate">
+          <span className="text-[0.625rem] sm:text-sm font-medium text-foreground-muted mb-0.5 sm:mb-1 truncate">
             {label}
           </span>
           <span className={cn(
@@ -95,7 +95,7 @@ export const StatCard = ({
             {typeof value === "number" ? value.toLocaleString() : value}
           </span>
           {subValue && (
-            <span className="text-[10px] sm:text-sm text-foreground-muted mt-0.5 sm:mt-1 flex items-center gap-1 truncate">
+            <span className="text-[0.625rem] sm:text-sm text-foreground-muted mt-0.5 sm:mt-1 flex items-center gap-1 truncate">
               {trend === "up" && <span className="text-success">↑</span>}
               {trend === "down" && <span className="text-destructive-text">↓</span>}
               {subValue}

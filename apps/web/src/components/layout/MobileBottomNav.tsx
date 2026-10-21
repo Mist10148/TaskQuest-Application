@@ -21,14 +21,14 @@ export const MobileBottomNav = ({ onMore }: { onMore: () => void }) => {
             key={item.path}
             to={item.path}
             aria-current={active ? "page" : undefined}
-            className={cn("flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", active ? "text-primary-text" : "text-foreground-muted")}
+            className={cn("flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", active ? "text-primary-text" : "text-foreground-muted")}
           >
             <item.icon className="h-5 w-5" aria-hidden />
             {item.label}
           </Link>
         );
       })}
-      <button type="button" onClick={onMore} className="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-foreground-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+      <button type="button" onClick={onMore} className="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-medium text-foreground-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
         <Menu className="h-5 w-5" aria-hidden />
         More
       </button>

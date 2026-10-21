@@ -147,7 +147,7 @@ const Chat = () => {
             <Button size="icon" variant="ghost" className="lg:hidden" aria-label={showThreads ? "Hide conversations" : "Show conversations"} aria-expanded={showThreads} aria-controls="chat-threads" onClick={() => setShowThreads((v) => !v)}><PanelLeft className="h-4 w-4" /></Button>
             <Bot className="h-5 w-5 text-primary-text" />
             <h1 className="font-heading font-semibold">Quest Assistant</h1>
-            <span className="ml-auto text-[11px] text-foreground-muted hidden sm:inline">AI-generated. Changes always ask first.</span>
+            <span className="ml-auto text-[0.6875rem] text-foreground-muted hidden sm:inline">AI-generated. Changes always ask first.</span>
           </header>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">

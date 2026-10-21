@@ -19,7 +19,7 @@ export const AvatarFrame = ({ frame, children, className }: { frame?: EquippedCo
 export const EquippedTitle = ({ title, className }: { title?: string | null; className?: string }) => {
   if (!title) return null;
   return (
-    <span className={cn("shrink-0 text-[11px] font-medium italic text-foreground-muted", className)} data-testid="equipped-title">
+    <span className={cn("shrink-0 text-[0.6875rem] font-medium italic text-foreground-muted", className)} data-testid="equipped-title">
       {title}
     </span>
   );

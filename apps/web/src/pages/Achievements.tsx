@@ -197,12 +197,12 @@ const Achievements = () => {
                                 <div className="h-1.5 overflow-hidden rounded-full bg-background-tertiary" role="progressbar" aria-label={`${ach.name} progress`} aria-valuemin={0} aria-valuemax={p.goal} aria-valuenow={p.current}>
                                   <div className="h-full rounded-full bg-primary" style={{ width: `${p.percent}%` }} />
                                 </div>
-                                <p className="mt-0.5 text-[10px] sm:text-xs text-foreground-muted">{p.current.toLocaleString()}/{p.goal.toLocaleString()} {p.unit}</p>
+                                <p className="mt-0.5 text-[0.625rem] sm:text-xs text-foreground-muted">{p.current.toLocaleString()}/{p.goal.toLocaleString()} {p.unit}</p>
                               </div>
                             );
                           })()}
                           {ach.unlocked && ach.unlockedAt && (
-                            <p className="text-[10px] sm:text-xs text-xp mt-1 flex items-center gap-1">
+                            <p className="text-[0.625rem] sm:text-xs text-xp mt-1 flex items-center gap-1">
                               <Sparkles className="h-3 w-3" />
                               {new Date(ach.unlockedAt).toLocaleDateString()}
                             </p>

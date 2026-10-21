@@ -163,7 +163,7 @@ const Profile = () => {
                   <span className="text-xl sm:text-2xl font-heading font-bold text-xp">{totalXP.toLocaleString()}</span>
                 </div>
                 <p className="text-xs text-foreground-muted">XP Balance</p>
-                <p className="text-[10px] sm:text-xs text-foreground-muted">{lifetimeXP.toLocaleString()} Lifetime XP</p>
+                <p className="text-[0.625rem] sm:text-xs text-foreground-muted">{lifetimeXP.toLocaleString()} Lifetime XP</p>
               </div>
             </div>
 
@@ -207,10 +207,10 @@ const Profile = () => {
                 </div>
                 <div className="min-w-0">
                   <p className="text-lg sm:text-2xl font-heading font-bold truncate">{stat.value}</p>
-                  <p className="text-[10px] sm:text-xs text-foreground-muted truncate">{stat.label}</p>
+                  <p className="text-[0.625rem] sm:text-xs text-foreground-muted truncate">{stat.label}</p>
                 </div>
               </div>
-              <p className="text-[10px] sm:text-xs text-foreground-muted truncate">{stat.sub}</p>
+              <p className="text-[0.625rem] sm:text-xs text-foreground-muted truncate">{stat.sub}</p>
             </motion.div>
           ))}
         </div>

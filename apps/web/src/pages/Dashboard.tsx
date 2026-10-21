@@ -126,7 +126,7 @@ const Dashboard = () => {
               </div>
               <div className="text-left sm:text-right">
                 <p className="text-xl sm:text-2xl font-heading font-bold text-xp drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]">{100 - currentXP}</p>
-                <p className="text-[10px] sm:text-xs text-foreground-muted">XP to next level</p>
+                <p className="text-[0.625rem] sm:text-xs text-foreground-muted">XP to next level</p>
               </div>
             </div>
             <XPProgressBar currentXP={currentXP} xpToNextLevel={100} level={level} />

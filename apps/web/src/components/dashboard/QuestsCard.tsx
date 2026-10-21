@@ -15,7 +15,7 @@ const QuestRow = ({ quest, onClaim, claiming }: { quest: Quest; onClaim: (key: s
         <div className="flex items-baseline justify-between gap-2">
           <p className={cn("truncate text-sm font-medium", quest.claimed && "text-foreground-muted line-through")}>{quest.name}</p>
           {quest.rotating && (
-            <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-text">This week's pick</span>
+            <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[0.625rem] font-semibold leading-none text-primary-text">This week's pick</span>
           )}
           <span className="shrink-0 text-xs font-medium text-xp">+{quest.reward} XP</span>
         </div>

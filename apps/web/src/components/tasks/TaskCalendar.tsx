@@ -86,7 +86,7 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
                 >
                   <span className="font-medium">{Number(cell.date.slice(8, 10))}</span>
                   {tasks.length > 0 && (
-                    <span className={cn("mt-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
+                    <span className={cn("mt-auto rounded-full px-1.5 py-0.5 text-[0.625rem] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
                       {overdue ? `${open} overdue` : open > 0 ? `${open} open` : "done"}
                     </span>
                   )}

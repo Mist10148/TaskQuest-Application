@@ -81,7 +81,7 @@ export function ChatMessage({ message }: { message: Message }) {
         {!isUser && doneTools.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {doneTools.map((t, i) => (
-              <span key={i} className={cn("inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border", t.status === "declined" ? "border-border text-foreground-muted" : "border-primary/20 text-primary-text bg-primary/5")}>
+              <span key={i} className={cn("inline-flex items-center gap-1 text-[0.6875rem] px-2 py-0.5 rounded-full border", t.status === "declined" ? "border-border text-foreground-muted" : "border-primary/20 text-primary-text bg-primary/5")}>
                 <Wrench className="h-3 w-3" /> {t.status === "declined" ? "Declined" : TOOL_LABELS[t.name] ?? t.name}
               </span>
             ))}

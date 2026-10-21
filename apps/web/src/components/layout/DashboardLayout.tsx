@@ -36,7 +36,7 @@ const LevelBar = ({ lifetimeXP, level, className }: { lifetimeXP: number; level:
       >
         <div className="h-full rounded-full bg-xp transition-all duration-500" style={{ width: `${(current / XP_PER_LEVEL) * 100}%` }} />
       </div>
-      <p className="mt-1 text-[11px] text-foreground-muted">{current}/{XP_PER_LEVEL} XP to level {level + 1}</p>
+      <p className="mt-1 text-[0.6875rem] text-foreground-muted">{current}/{XP_PER_LEVEL} XP to level {level + 1}</p>
     </div>
   );
 };
@@ -64,7 +64,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
           </div>
           <div className="min-w-0">
             <p className="font-heading font-bold text-lg sm:text-xl text-foreground">TaskQuest</p>
-            <p className="text-[10px] sm:text-xs text-foreground-muted truncate">Level up your productivity</p>
+            <p className="text-[0.625rem] sm:text-xs text-foreground-muted truncate">Level up your productivity</p>
           </div>
         </Link>
       </div>
@@ -104,7 +104,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
         >
           <Search className="h-4 w-4" aria-hidden />
           <span className="flex-1 text-left">Search…</span>
-          <kbd className="hidden rounded border border-border px-1.5 text-[10px] font-mono lg:inline">Ctrl K</kbd>
+          <kbd className="hidden rounded border border-border px-1.5 text-[0.625rem] font-mono lg:inline">Ctrl K</kbd>
         </button>
       </div>
 

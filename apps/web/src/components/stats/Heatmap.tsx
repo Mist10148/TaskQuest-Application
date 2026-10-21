@@ -22,7 +22,7 @@ export const Heatmap = ({ days, today }: { days: readonly XPHistoryDay[]; today?
   return (
     <div data-testid="heatmap">
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        <div className="flex flex-col gap-1 pr-1 text-[10px] leading-4 text-foreground-muted" aria-hidden>
+        <div className="flex flex-col gap-1 pr-1 text-[0.625rem] leading-4 text-foreground-muted" aria-hidden>
           {ROW_LABELS.map((l, i) => <span key={i} className="h-4">{l}</span>)}
         </div>
         <ul className="flex gap-1" aria-label="Tasks completed per day, last 12 weeks">
@@ -45,7 +45,7 @@ export const Heatmap = ({ days, today }: { days: readonly XPHistoryDay[]; today?
           ))}
         </ul>
       </div>
-      <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-foreground-muted" aria-hidden>
+      <div className="mt-2 flex items-center justify-end gap-1 text-[0.625rem] text-foreground-muted" aria-hidden>
         Less
         {([0, 1, 2, 3, 4] as const).map((l) => <span key={l} className={cn("h-3 w-3 rounded-xs", LEVEL_CLASS[l])} />)}
         More

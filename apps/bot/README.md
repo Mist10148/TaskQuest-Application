@@ -25,6 +25,9 @@ npm test                        # node:test (from the repo root: npm test -w @ta
 | `chat.js` | Replies to @mentions, replies and DMs through the AI service's `/v1/converse` |
 | `utils/reminders.js`, `utils/digest.js`, `utils/streakWarning.js` | Deadline and task reminder DMs (and web push), the weekly digest and the streak-at-risk warning |
 | `utils/aiSync.js` | Re-indexes quests in the AI service after edits made in Discord |
+| `utils/aiFormat.js` | Embeds and buttons for `/summary`, `/prioritize` and `/ask` (pure functions of the AI service's answers) |
+| `utils/job.js` | Background-job wrapper: logs failures and never starts a run while the previous one is still going |
+| `utils/profile.js` | Keeps the cached Discord profile fresh for anyone who uses a command, so bot-only players can be invited by username |
 | `utils/ui.js` | Embeds, buttons, menus and modals |
 | `utils/respond.js` | Error and reward responses |
 

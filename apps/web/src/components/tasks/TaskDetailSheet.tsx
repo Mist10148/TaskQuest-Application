@@ -2,7 +2,7 @@ import { Calendar, Check, Pencil, Repeat, Timer, UserRound } from "lucide-react"
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatDeadline, isPastDeadline } from "@/lib/dates";
+import { formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { parseTags } from "@/lib/tags";
 import { TaskThread } from "./TaskThread";
@@ -60,6 +60,7 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                 <Field label="Due">
                   <span className={cn("inline-flex items-center gap-1", overdue && "text-destructive-text")}>
                     <Calendar className="h-4 w-4" aria-hidden /> {overdue && <span className="sr-only">Overdue: </span>}{formatDeadline(item.due_date)}
+                    {formatDue(item.due_date) !== formatDeadline(item.due_date) && <span className="text-foreground-muted">· {formatDue(item.due_date)}</span>}
                   </span>
                 </Field>
               )}

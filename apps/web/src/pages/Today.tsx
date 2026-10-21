@@ -9,14 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useClaimGoal, useSetGoal, useToday, useToggleItem, useWriteReflection } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
-import { formatDeadline } from "@/lib/dates";
+import { formatDeadline, formatDue } from "@/lib/dates";
 import { todayHeadline, goalPercent } from "@/lib/today";
 import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import type { TodayData, TodayTask } from "@/lib/api";
 
 const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "bg-xp", LOW: "bg-success" };
 
-const TaskLine = ({ task }: { task: TodayTask }) => {
+const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
   const toggle = useToggleItem();
   return (
     <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
@@ -34,9 +34,9 @@ const TaskLine = ({ task }: { task: TodayTask }) => {
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-foreground-muted">
           <span>{task.listName}</span>
           {task.dueDate && (
-            <span className={cn(task.overdueDays > 0 && "text-destructive-text")}>
+            <span className={cn(task.overdueDays > 0 && "text-destructive-text")} title={formatDeadline(task.dueDate)}>
               {task.overdueDays > 0 ? <span className="sr-only">Overdue: </span> : null}
-              {formatDeadline(task.dueDate)}
+              {formatDue(task.dueDate, today)}
             </span>
           )}
           {task.estimateMinutes ? (
@@ -159,7 +159,7 @@ const TodayView = ({ data }: { data: TodayData }) => (
           <Button asChild size="sm" className="mt-3"><Link to="/tasks">Go to your quests</Link></Button>
         </div>
       ) : (
-        <ul className="space-y-2">{data.tasks.map((t) => <TaskLine key={t.id} task={t} />)}</ul>
+        <ul className="space-y-2">{data.tasks.map((t) => <TaskLine key={t.id} task={t} today={data.day} />)}</ul>
       )}
     </section>
 

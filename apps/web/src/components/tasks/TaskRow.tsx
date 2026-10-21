@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Info, ListPlus, MessageSquare, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
-import { formatDeadline, isPastDeadline } from "@/lib/dates";
+import { formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import { swipeAction, swipeOffset } from "@/lib/swipe";
@@ -155,9 +155,9 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         {(item.due_date || item.recurrence || item.estimate_minutes || tags.length > 0 || item.assignee || (item.comment_count ?? 0) > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
+              <span title={formatDeadline(item.due_date)} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
                 <Calendar className="h-3 w-3" aria-hidden /> {overdue && <span className="sr-only">Overdue: </span>}
-                {formatDeadline(item.due_date)}
+                {formatDue(item.due_date)}
               </span>
             )}
             {item.recurrence && (

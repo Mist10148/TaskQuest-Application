@@ -408,8 +408,24 @@ export function useUpdateItem() {
     return useMutation({
         mutationFn: ({ itemId, data }: { itemId: number; data: Partial<ItemInput> & { position?: number } }) =>
             itemsApi.update(itemId, data),
+        // A priority change on its own (a card dragged between board columns) shows at once and is put back if refused.
+        onMutate: async ({ itemId, data }) => {
+            const previous: Array<[QueryKey, ListWithItems]> = [];
+            const keys = Object.keys(data);
+            if (keys.length !== 1 || keys[0] !== 'priority') return { previous };
+            await qc.cancelQueries({ queryKey: ['lists'] });
+            for (const [key, cached] of qc.getQueriesData<ListWithItems>({ queryKey: ['lists'] })) {
+                if (!cached || !Array.isArray(cached.items) || !cached.items.some((i) => i.id === itemId)) continue;
+                previous.push([key, cached]);
+                qc.setQueryData<ListWithItems>(key, { ...cached, items: cached.items.map((i) => (i.id === itemId ? { ...i, priority: data.priority ?? null } : i)) });
+            }
+            return { previous };
+        },
         onSuccess: () => invalidateTaskViews(qc),
-        onError: showError,
+        onError: (error, _arg, context) => {
+            for (const [key, cached] of context?.previous ?? []) qc.setQueryData(key, cached);
+            showError(error);
+        },
     });
 }
 

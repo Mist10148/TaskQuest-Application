@@ -4040,6 +4040,11 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.deleteItem(Q, recurring.id);
         await db.tasks.deleteItem(Q, parent.id);
         await db.tasks.addItem(Q, base.id, { name: 'fits now' });
+        // One slot left: the owner adding to one list and a member adding to another at the same moment take it once.
+        const other = (await db.query("SELECT id FROM lists WHERE discord_id = ? AND name = 'Room again'", [Q]))[0].id;
+        const race = await Promise.allSettled([db.tasks.addItem(Q, other, { name: 'owner last' }), db.tasks.addItem(M, base.id, { name: 'member last' })]);
+        assert.equal(race.filter((r) => r.status === 'fulfilled').length, 1, 'the quota is counted one add at a time');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [Q]))[0].n), L.MAX_ITEMS_PER_USER);
     });
 
     await t.test('a re-opened list does not pay the Artisan clear bonus or list_cleared a second time', async () => {

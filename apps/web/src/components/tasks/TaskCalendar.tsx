@@ -86,8 +86,16 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
                 >
                   <span className="font-medium">{Number(cell.date.slice(8, 10))}</span>
                   {tasks.length > 0 && (
-                    <span className={cn("mt-auto rounded-full px-1.5 py-0.5 text-[0.625rem] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
-                      {overdue ? `${open} overdue` : open > 0 ? `${open} open` : "done"}
+                    // On a phone a cell is about 40px wide: show just the count there, the words from sm up (the label says it all).
+                    <span aria-hidden className={cn("mt-auto max-w-full truncate rounded-full px-1.5 py-0.5 text-[0.625rem] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
+                      {overdue ? (
+                        <>{open}<span className="hidden sm:inline"> overdue</span></>
+                      ) : open > 0 ? (
+                        <>{open}<span className="hidden sm:inline"> open</span></>
+                      ) : (
+                        <Check className="inline h-3 w-3 sm:hidden" />
+                      )}
+                      {!overdue && open === 0 && <span className="hidden sm:inline">done</span>}
                     </span>
                   )}
                 </button>

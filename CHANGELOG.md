@@ -150,6 +150,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-mysql` job).
 - [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) explains how the LangChain/LangGraph service is built.
 - Quick due-date picks (Today, Tomorrow, Next week, No date) in the task form.
+- Search inside a quest, `?task=` links that open a task's drawer (from search results and the command palette), keys `1` `2` `3` for the views and `Shift A` to select all, a confirmation before deleting more than five tasks, and a quick-add hint in an empty quest.
 - Docs: `docs/ROADMAP.md`, `docs/TESTING.md`, `CODE_OF_CONDUCT.md`, a longer web README, and corrections to migration numbers, costs, quotas and several contradictions.
 
 ### Changed
@@ -204,6 +205,11 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Long task names wrap to two lines on the Today page and the board instead of being cut off.
 - The AI answer stream honours backpressure from a slow browser.
 - Concurrent leaderboard cache misses share one query.
+- A stranger who guessed a task or quest id could briefly delay the owner's writes by queuing for a list lock; access is now checked before any lock is taken.
+- A weekly goal claimed under one time-zone key no longer pays again after a zone change re-keys the week (the real time of the claim is checked, as for quests).
+- A list handed over to a new owner is re-embedded for them by the AI reconcile job; before, it stayed under the old owner.
+- A card dragged to another priority column moves at once and is put back if the server refuses.
+- The quest's progress label counts tasks, not their subtasks, like the quest log; the smallest text (10px and 11px) now follows the Text size setting; dark-theme muted text on the muted surface (toast buttons) reaches 4.5:1.
 - The integration suites and the e2e seed refuse to wipe a database whose name does not contain `test` or `e2e`, or that is not on localhost.
 - **Chat:** after a new conversation got its URL, opening another thread or "New chat" bounced back to it; Enter while a reply streamed cleared the draft without sending; a long conversation opened at the top; history had no loading or error state; a failed delete toasted twice. Thread ids are URL-encoded and a dropped stream says "offline".
 - **Monthly repeats keep their day.** Re-saving a monthly task with the same date (bulk edit does) reset its anchor, so a task on the 31st moved to the 28th for good after February.

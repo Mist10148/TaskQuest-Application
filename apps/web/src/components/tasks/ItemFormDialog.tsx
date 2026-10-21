@@ -3,7 +3,7 @@ import { Check, Loader2, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { quickDueDates } from "@/lib/dates";
 import { PRIORITIES, TEXT_LIMITS } from "./constants";
@@ -48,6 +48,7 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
             {creating ? <Plus className="h-5 w-5 text-primary-text" /> : <Pencil className="h-5 w-5 text-primary-text" />}
             {creating ? "Add Task" : "Edit Task"}
           </DialogTitle>
+          <DialogDescription className="sr-only">{creating ? "Name your task and set its details." : "Change this task's details."}</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4 py-2"

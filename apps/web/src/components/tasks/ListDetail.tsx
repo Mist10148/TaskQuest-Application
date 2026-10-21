@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems, Priority } from "@/lib/api";
@@ -23,11 +23,15 @@ import { TASK_VIEWS, type TaskView } from "@/lib/taskViews";
 import { useItemDragReorder } from "./useItemDragReorder";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { stepCursor } from "@/lib/cursor";
+import { ConfirmDeleteDialog } from "./ConfirmDeleteDialog";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { canDeleteList, canEditTasks, canManageList, peopleLabel, roleLabel, roleOf } from "@/lib/sharing";
 
 interface Props {
   list: ListWithItems;
+  /** A task to open in the detail drawer once the quest has loaded (from ?task=); `onTaskOpened` then clears the request. */
+  openTaskId?: number | null;
+  onTaskOpened?: () => void;
   aiEnabled: boolean;
   quickAddPending: boolean;
   /** Tasks hidden while their delete can still be undone. */
@@ -59,6 +63,9 @@ interface Props {
   onReorder: (itemIds: number[]) => Promise<unknown>;
 }
 
+/** Deleting more tasks than this at once asks first (a smaller selection is covered by Undo alone). */
+const BULK_DELETE_CONFIRM_ABOVE = 5;
+
 const PRIORITY_BADGE: Record<string, string> = {
   HIGH: "bg-red-500/20 text-red-700 dark:text-red-400 border border-red-500/30",
   MEDIUM: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-500/30",
@@ -66,7 +73,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
+export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -75,8 +82,6 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
     () => (list.items || []).filter((i: Item) => !hiddenIds.has(i.id) && !(i.parent_id && hiddenIds.has(i.parent_id))),
     [list.items, hiddenIds]
   );
-  const completed = items.filter((i: Item) => i.completed).length;
-  const progress = items.length > 0 ? (completed / items.length) * 100 : 0;
 
   const { topLevel, childrenOf } = useMemo(() => {
     const kids = new Map<number, Item[]>();
@@ -87,6 +92,9 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
     }
     return { topLevel: top, childrenOf: kids };
   }, [items]);
+  // Progress counts tasks, not their subtasks, like the quest log's counts (`itemsTotal` / `itemsCompleted`).
+  const completed = topLevel.filter((i: Item) => i.completed).length;
+  const progress = topLevel.length > 0 ? (completed / topLevel.length) * 100 : 0;
 
   // Filters and grouping (remembered per browser). A tag this quest does not use counts as "any tag".
   const [prefs, setPrefs] = useState(loadFilterPrefs);
@@ -138,7 +146,13 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   };
   // The task shown in the detail drawer (looked up by id, so it follows edits and completion).
   const [detailId, setDetailId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!openTaskId) return;
+    if ((list.items || []).some((i: Item) => i.id === openTaskId)) setDetailId(openTaskId);
+    onTaskOpened?.(); // a task that is not on this quest (deleted, or a wrong link) just opens the quest
+  }, [openTaskId, list.items, onTaskOpened]);
   const detailItem = detailId !== null ? items.find((i) => i.id === detailId) ?? null : null;
+  const [confirmBulk, setConfirmBulk] = useState<number[] | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkEditing, setBulkEditing] = useState(false);
   const quickAddRef = useRef<HTMLInputElement>(null);
@@ -194,6 +208,10 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
     n: (e) => { if (!editable) return; e.preventDefault(); onAddItem(); },
     "/": (e) => { if (!editable) return; e.preventDefault(); quickAddRef.current?.focus(); },
     s: () => { if (!editable) return; if (selectMode) leaveSelectMode(); else setSelectMode(true); },
+    "1": () => { if (items.length > 0) setView("list"); },
+    "2": () => { if (items.length > 0) setView("board"); },
+    "3": () => { if (items.length > 0) setView("calendar"); },
+    A: () => { if (editable && selectMode) setSelected(new Set(visibleOrder)); },
     "?": () => setShowHelp(true),
     Escape: () => (selectMode ? leaveSelectMode() : onBack()),
   });
@@ -303,7 +321,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         <div className="relative">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-foreground-muted">Quest Progress</span>
-            <span className="font-medium font-heading">{completed}/{items.length} Tasks</span>
+            <span className="font-medium font-heading">{completed}/{topLevel.length} Tasks</span>
           </div>
           <div className="h-3 rounded-full bg-background-secondary overflow-hidden" role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100} aria-label="Quest progress">
             <motion.div
@@ -352,6 +370,11 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         <div className="text-center py-12 text-foreground-muted">
           <Scroll className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>{editable ? "No tasks yet. Type one above or press Add Task." : "No tasks yet."}</p>
+          {editable && (
+            <p className="mt-2 text-sm">
+              Quick add understands dates, priority and tags: try <code className="rounded bg-background-secondary px-1.5 py-0.5 text-xs">Finish report fri !high #work</code>
+            </p>
+          )}
         </div>
       ) : shownItems.length === 0 ? (
         <div className="text-center py-12 text-foreground-muted">
@@ -427,7 +450,7 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
               {moveTargets.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
           )}
-          <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { onBulkDelete(deletableIds); leaveSelectMode(); }}>
+          <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { if (deletableIds.length > BULK_DELETE_CONFIRM_ABOVE) setConfirmBulk(deletableIds); else { onBulkDelete(deletableIds); leaveSelectMode(); } }}>
             <Trash2 className="h-4 w-4" /> Delete{deletableIds.length && deletableIds.length < selectedIds.length ? ` (${deletableIds.length})` : ""}
           </Button>
           <Button size="sm" variant="ghost" aria-label="Leave select mode" onClick={leaveSelectMode}><X className="h-4 w-4" /></Button>
@@ -458,6 +481,14 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
         }}
       />
       <div role="status" aria-live="polite" className="sr-only">{cursorAnnouncement}</div>
+      <ConfirmDeleteDialog
+        open={confirmBulk !== null}
+        onOpenChange={(open) => { if (!open) setConfirmBulk(null); }}
+        title={`Delete ${confirmBulk?.length ?? 0} tasks?`}
+        description="They are removed from this quest. You can undo for a few seconds afterwards."
+        confirmLabel={`Delete ${confirmBulk?.length ?? 0} tasks`}
+        onConfirm={() => { if (confirmBulk) onBulkDelete(confirmBulk); setConfirmBulk(null); leaveSelectMode(); }}
+      />
       <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
       <TaskDetailSheet
         item={detailItem}

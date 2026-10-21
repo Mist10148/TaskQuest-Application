@@ -237,6 +237,21 @@ async def test_reconcile_catches_list_only_edits(seeded):
         assert await indexer.stale_lists(conn, store) == []
 
 
+async def test_a_handed_over_list_is_reindexed_for_its_new_owner(seeded):
+    store, emb = make_store(), FakeEmbedder()
+    async with seeded.begin() as conn:
+        await indexer.reconcile(conn, store, emb)
+        await conn.execute(text("UPDATE ai_embeddings SET updated_at = '2030-01-01 00:00:00'"))  # newer than any edit
+        assert await indexer.stale_lists(conn, store) == []
+        # The hand-over changes the owner and nothing else (no updated_at bump)
+        await conn.execute(text("UPDATE lists SET discord_id = :o WHERE id = 1"), {"o": OTHER})
+        assert (OTHER, 1) in await indexer.stale_lists(conn, store)
+        await indexer.reconcile(conn, store, emb)
+        owner = (await conn.execute(text("SELECT discord_id FROM ai_embeddings WHERE source_id = 'L1'"))).scalar()
+        assert owner == OTHER
+        assert (OTHER, 1) not in await indexer.stale_lists(conn, store)
+
+
 async def test_unchanged_text_is_not_stale_twice(seeded):
     store, emb = make_store(), FakeEmbedder()
     async with seeded.begin() as conn:

@@ -3,7 +3,7 @@ import type { AiSummary } from "@/lib/api";
 
 export function AiBadge() {
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary-text border border-primary/20">
+    <span className="inline-flex items-center gap-1 text-[0.625rem] uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary-text border border-primary/20">
       <Sparkles className="h-3 w-3" /> AI-generated
     </span>
   );
@@ -46,7 +46,7 @@ export function SummaryCard({ summary }: { summary: AiSummary }) {
       )}
 
       {summary.referenced_ids.length > 0 && (
-        <p className="text-[11px] text-foreground-muted">Based on: {summary.referenced_ids.join(", ")}{summary.cached ? " · cached" : ""}</p>
+        <p className="text-[0.6875rem] text-foreground-muted">Based on: {summary.referenced_ids.join(", ")}{summary.cached ? " · cached" : ""}</p>
       )}
     </div>
   );

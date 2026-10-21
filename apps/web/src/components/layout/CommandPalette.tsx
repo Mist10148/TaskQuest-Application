@@ -73,7 +73,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
         group: "Tasks",
         icon: Scroll,
         hint: t.list_name,
-        run: () => navigate(`/tasks?list=${t.list_id}`),
+        run: () => navigate(`/tasks?list=${t.list_id}&task=${t.id}`),
       })),
     [query, taskQuery.data, navigate],
   );
@@ -122,7 +122,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
             const showGroup = i === 0 || results[i - 1].group !== r.group;
             return (
               <li key={r.id} role="presentation">
-                {showGroup && <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-foreground-muted" aria-hidden>{r.group}</p>}
+                {showGroup && <p className="px-3 pb-1 pt-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-foreground-muted" aria-hidden>{r.group}</p>}
                 <div
                   id={`palette-${r.id}`}
                   role="option"

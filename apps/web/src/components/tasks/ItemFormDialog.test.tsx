@@ -30,3 +30,22 @@ describe("ItemFormDialog due date quick picks", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe("ItemFormDialog form", () => {
+  it("asks for a name and does not submit with a blank one", async () => {
+    const onSubmit = vi.fn();
+    render(<ItemFormDialog open onOpenChange={() => {}} mode="create" initial={{ ...initial, name: "" }} parentOptions={[]} pending={false} onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByLabelText("Task Name *"), "   "); // passes the browser's "required", not ours
+    await userEvent.click(screen.getByRole("button", { name: /add task/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Give your task a name.");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits the edited values", async () => {
+    const onSubmit = vi.fn();
+    renderDialog(onSubmit);
+    await userEvent.type(screen.getByLabelText("Tags"), "home");
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ name: "Pay rent", tags: "home" }));
+  });
+});

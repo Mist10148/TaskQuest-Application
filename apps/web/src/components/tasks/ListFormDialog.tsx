@@ -3,7 +3,7 @@ import { Check, Loader2, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { localToday } from "@/lib/dates";
 import { CATEGORIES, PRIORITIES, TEXT_LIMITS } from "./constants";
@@ -48,6 +48,7 @@ export const ListFormDialog = ({ open, onOpenChange, mode, initial, resetKey = n
             {creating ? <Plus className="h-5 w-5 text-primary-text" /> : <Pencil className="h-5 w-5 text-primary-text" />}
             {creating ? "Create Quest" : "Edit Quest"}
           </DialogTitle>
+          <DialogDescription className="sr-only">{creating ? "Name your quest and set its details." : "Change this quest's details."}</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4 py-4"

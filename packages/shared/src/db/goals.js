@@ -76,7 +76,10 @@ async function goalState(conn, user, now) {
     const [[row]] = await conn.query('SELECT target, claimed_at FROM weekly_goals WHERE discord_id = ? AND week_key = ?', [user.discord_id, period.start]);
     const progress = await completedThisWeek(conn, user.discord_id, period);
     const target = row ? Number(row.target) : null;
-    const claimed = Boolean(row && row.claimed_at);
+    // Changing time zone re-keys the week (the same real week can have two keys), so the key alone cannot say "already claimed":
+    // a claim made at or after this week's real start counts too, as it does for quests.
+    const [[recent]] = await conn.query('SELECT 1 AS x FROM weekly_goals WHERE discord_id = ? AND claimed_at >= ? LIMIT 1', [user.discord_id, period.startsAt]);
+    const claimed = Boolean((row && row.claimed_at) || recent);
     return {
         period,
         weekStart: period.start,

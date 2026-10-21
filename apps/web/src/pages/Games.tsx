@@ -1603,7 +1603,7 @@ const Games = () => {
                 <div>
                   <h3 className="font-heading font-bold text-lg flex items-center gap-2">
                     {g.name}
-                    {g.webOnly && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary-text">WEB</span>}
+                    {g.webOnly && <span className="text-[0.625rem] px-1.5 py-0.5 rounded bg-primary/20 text-primary-text">WEB</span>}
                   </h3>
                   <p className="text-sm text-foreground-muted">{g.desc}</p>
                 </div>

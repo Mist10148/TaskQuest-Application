@@ -94,7 +94,18 @@ async function forItem(conn, discordId, itemId, min = 'viewer', { lock = false }
     const id = v.id(itemId);
     if (!id.ok) throw errors.notFound('Task not found.');
     const me = String(discordId);
-    if (lock) await lockItemList(conn, id.value);
+    if (lock) {
+        // A stranger must not even queue for the list lock (it would delay the owner's writes): check access without a lock first.
+        // The locked query below checks again, so access revoked in between is still refused.
+        const [[mayUse]] = await conn.query(
+            `SELECT 1 AS ok FROM items i JOIN lists l ON l.id = i.list_id
+             LEFT JOIN list_members m ON m.list_id = l.id AND m.discord_id = ?
+             WHERE i.id = ? AND (l.discord_id = ? OR m.discord_id IS NOT NULL)`,
+            [me, id.value, me]
+        );
+        if (!mayUse) throw errors.notFound('Task not found.');
+        await lockItemList(conn, id.value);
+    }
     const [[row]] = await conn.query(
         `SELECT i.*, l.name AS list_name, l.priority AS list_priority, l.discord_id AS owner_id, m.role AS member_role
          FROM items i JOIN lists l ON l.id = i.list_id
@@ -139,4 +150,17 @@ async function roleOn(conn, discordId, listId) {
     }
 }
 
-module.exports = { forList, forItem, accessSql, actorSql, roleOn, atLeast, RANK };
+/** True when the user owns the list or is a member of it (any role). No lock: use it to decide whether to queue for one. */
+async function canUseList(conn, discordId, listId) {
+    const id = v.id(listId);
+    if (!id.ok) return false;
+    const me = String(discordId);
+    const [[row]] = await conn.query(
+        `SELECT 1 AS ok FROM lists l LEFT JOIN list_members m ON m.list_id = l.id AND m.discord_id = ?
+         WHERE l.id = ? AND (l.discord_id = ? OR m.discord_id IS NOT NULL)`,
+        [me, id.value, me]
+    );
+    return Boolean(row);
+}
+
+module.exports = { forList, forItem, canUseList, accessSql, actorSql, roleOn, atLeast, RANK };

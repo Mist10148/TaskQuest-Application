@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Item, ListWithItems } from "@/lib/api";
 
 vi.mock("@/components/ai/SummarizeButton", () => ({ SummarizeButton: () => null }));
+// The real drawer loads comments and history through React Query; these tests only care whether it is open and for which task.
+vi.mock("./TaskDetailSheet", () => ({ TaskDetailSheet: ({ item }: { item: { name: string } | null }) => (item ? <div role="dialog">{item.name}</div> : null) }));
 
 import { ListDetail } from "./ListDetail";
 
@@ -71,6 +73,14 @@ describe("ListDetail filters and groups", () => {
     expect(screen.getByRole("combobox", { name: "Group by" })).toHaveValue("priority");
   });
 
+  it("searches the quest by name and says how many are shown", async () => {
+    renderList(tasks);
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search this quest" }), "task 3");
+    expect(screen.queryByText("Task 1")).not.toBeInTheDocument();
+    expect(screen.getByText("Task 3")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 3")).toBeInTheDocument();
+  });
+
   it("explains an empty result", async () => {
     renderList(tasks);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Due" }), "overdue");
@@ -126,5 +136,100 @@ describe("ListDetail keyboard cursor", () => {
     await userEvent.keyboard("xd");
     expect(onToggleItem).not.toHaveBeenCalled();
     expect(onDeleteItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("ListDetail opening a task from a link", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("opens the drawer for the requested task once, then clears the request", () => {
+    const onTaskOpened = vi.fn();
+    renderList([item(1), item(2, { name: "Pay the rent" })], { openTaskId: 2, onTaskOpened });
+    expect(screen.getByRole("dialog")).toHaveTextContent("Pay the rent");
+    expect(onTaskOpened).toHaveBeenCalledTimes(1);
+  });
+
+  it("just opens the quest when the task is not on it", () => {
+    const onTaskOpened = vi.fn();
+    renderList([item(1)], { openTaskId: 99, onTaskOpened });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onTaskOpened).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ListDetail progress", () => {
+  it("counts tasks, not their subtasks", () => {
+    window.localStorage.clear();
+    renderList([item(1, { completed: true }), item(2), item(3, { parent_id: 2, completed: true }), item(4, { parent_id: 2 })]);
+    expect(screen.getByText("1/2 Tasks")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Quest progress" })).toHaveAttribute("aria-valuenow", "50");
+  });
+});
+
+describe("ListDetail view and selection keys", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("switches the view with 1, 2 and 3", async () => {
+    renderList([item(1), item(2)]);
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.keyboard("2");
+    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.keyboard("3");
+    expect(screen.getByRole("button", { name: "Calendar" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.keyboard("1");
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("selects every task with Shift A in select mode, and only there", async () => {
+    renderList([item(1), item(2), item(3)]);
+    await userEvent.keyboard("A");
+    expect(screen.queryByText(/selected/i)).not.toBeInTheDocument();
+    await userEvent.keyboard("s");
+    await userEvent.keyboard("A");
+    expect(screen.getByText(/3 selected/i)).toBeInTheDocument();
+  });
+});
+
+describe("ListDetail bulk delete", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+  const many = (n: number) => Array.from({ length: n }, (_, i) => item(i + 1));
+
+  it("deletes a small selection at once", async () => {
+    const onBulkDelete = vi.fn();
+    renderList(many(5), { onBulkDelete });
+    await userEvent.keyboard("sA");
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onBulkDelete).toHaveBeenCalledWith([1, 2, 3, 4, 5]);
+  });
+
+  it("asks before deleting more than five, and does nothing on Cancel", async () => {
+    const onBulkDelete = vi.fn();
+    renderList(many(6), { onBulkDelete });
+    await userEvent.keyboard("sA");
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onBulkDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Delete 6 tasks?");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onBulkDelete).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete 6 tasks" }));
+    expect(onBulkDelete).toHaveBeenCalledWith([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe("ListDetail empty quest", () => {
+  it("shows the quick add syntax to people who can add tasks", () => {
+    renderList([]);
+    expect(screen.getByText(/No tasks yet/)).toBeInTheDocument();
+    expect(screen.getByText("Finish report fri !high #work")).toBeInTheDocument();
   });
 });

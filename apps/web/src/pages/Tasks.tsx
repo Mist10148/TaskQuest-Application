@@ -50,9 +50,30 @@ const Tasks = () => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       if (id) next.set("list", String(id));
-      else next.delete("list");
+      else {
+        next.delete("list");
+        next.delete("task");
+      }
       return next;
     }, { replace: id === null });
+  }, [setSearchParams]);
+  // /tasks?list=42&task=7 opens the quest with that task's drawer (links from search results and the command palette).
+  const openTaskId: number | null = Number(searchParams.get("task")) || null;
+  const openListAndTask = useCallback((listId: number, taskId?: number) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("list", String(listId));
+      if (taskId) next.set("task", String(taskId));
+      else next.delete("task");
+      return next;
+    });
+  }, [setSearchParams]);
+  const clearTaskParam = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("task");
+      return next;
+    }, { replace: true });
   }, [setSearchParams]);
   const { data: selectedList, refetch: refetchList, isLoading: listLoading, isError: listFailed, error: listError, isFetching: listFetching } = useList(selectedListId || 0);
   const filters = useListFilters(lists);
@@ -289,6 +310,8 @@ const Tasks = () => {
       {detail ? (
         <ListDetail
           list={detail}
+          openTaskId={openTaskId}
+          onTaskOpened={clearTaskParam}
           onBack={() => setSelectedListId(null)}
           onOpenMembers={() => setMembersOpen(true)}
           aiEnabled={Boolean(user?.features?.ai)}
@@ -330,7 +353,7 @@ const Tasks = () => {
           </div>
         )
       ) : (
-        <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={setSelectedListId} onCreate={() => setListDialog("create")} onOpenTemplates={() => setTemplatesOpen(true)} />
+        <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={openListAndTask} onCreate={() => setListDialog("create")} onOpenTemplates={() => setTemplatesOpen(true)} />
       )}
 
       <ListFormDialog

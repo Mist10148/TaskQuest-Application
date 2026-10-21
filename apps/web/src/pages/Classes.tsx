@@ -94,7 +94,7 @@ const Classes = () => {
                   style={{ borderColor: classInfo.equipped ? undefined : classInfo.owned ? classColor(classInfo.key, 0.5) : undefined }}
                 >
                   {classInfo.equipped && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-1 bg-primary text-primary-foreground rounded-full text-[10px] sm:text-xs font-semibold flex items-center gap-1">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-1 bg-primary text-primary-foreground rounded-full text-[0.625rem] sm:text-xs font-semibold flex items-center gap-1">
                       <Check className="h-3 w-3" /> EQUIPPED
                     </div>
                   )}

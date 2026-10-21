@@ -106,7 +106,7 @@ packages/shared/src
     ├── review.js    the weekly review
     ├── today.js     the Today page data and the streak-at-risk warnings
     ├── goals.js     the daily reflection and the weekly goal (claims)
-    ├── extras.js    smaller queries that do not belong to one area
+    ├── extras.js    engagement bonuses on a first completion (perfect day, inbox zero, boss ...)
     ├── maintenance.js  scheduled clean-up and archive jobs
     ├── stats.js     XP history and summary for the Stats page
     ├── templates.js task templates
@@ -136,8 +136,8 @@ sequenceDiagram
     C->>S: (discordId, itemId)
     S->>DB: BEGIN
     S->>DB: SELECT users ... FOR UPDATE
-    S->>DB: SELECT item JOIN list WHERE owner = discordId FOR UPDATE
-    alt not owner / missing
+    S->>DB: access.forItem: lock the list, then the item (owner, or a member with the editor role)
+    alt no access / missing
         S-->>C: NOT_FOUND (404)
     end
     S->>DB: UPDATE items SET completed
@@ -205,7 +205,7 @@ Achievement unlocks happen in the same transaction (`ON CONFLICT DO NOTHING` on 
 | Login CSRF | OAuth `state` bound to the session and compared in constant time. |
 | IDOR | Access is decided in one place (`access.js`: ownership or a membership row with a sufficient role) and a stranger gets 404. Discord IDs of other people are never sent to a client (members are addressed by an opaque key, tasks expose display names). |
 | XSS / clickjacking | helmet CSP (`script-src 'self'`, `frame-ancestors 'none'`, `img-src 'self' cdn.discordapp.com`). React escapes output. |
-| Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games), 30 comments per minute. |
+| Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games), 20 per minute (AI), 30 comments per minute; invitations 30 per 15 min and 100 a day per account, 60 per 15 min and 300 a day per address. |
 | Mass assignment / bad input | `.strict()` zod schemas, then service-level validation. 16 KB body limit. |
 | Information leaks | Generic 500s. The health check reveals no error text. The leaderboard has no Discord IDs. |
 | Weak secrets | The server refuses to start in production without a SESSION_SECRET of 32+ characters. No fallback secret. |
@@ -214,7 +214,7 @@ See [SECURITY.md](../SECURITY.md) for the full list of fixed vulnerabilities.
 
 ## 7. Bot design
 
-- **Intents:** `Guilds` only. No privileged intents are needed: commands arrive as interactions, and DMs are sent, never read.
+- **Intents:** `Guilds` only while AI is off: commands arrive as interactions, and DMs are sent, never read. With `AI_ENABLED=true` the bot adds `GuildMessages` and `DirectMessages` to read mentions and DMs for the chat, and `MessageContent` (privileged) only with `AI_CHAT_MESSAGE_CONTENT=true`.
 - **Routing:** `index.js` dispatches by interaction type, command name and `customId` prefix to the modules in `commands/` (`list`, `game`, `gamification`, `quests`, `review`, `prestige`, `shop`, `sharing`, `party`, `timezone`, `weekly`, `quick`, `ai`); [COMMANDS.md](COMMANDS.md#interaction-ids-for-developers) lists the prefixes.
 - **Ownership:** `/list` replies are public, so anyone in the channel can click their buttons. A click on a message that belongs to another user is refused up front, and every handler passes the clicking user's ID to the services, so clicks on a list they have no part in only ever return "not found". On a shared list the service also checks the clicker's role (a viewer's edit click is refused).
 - **Privacy:** XP, achievements, games and `/profile` are ephemeral. `/profile @user` never creates a row for the target.
@@ -222,7 +222,7 @@ See [SECURITY.md](../SECURITY.md) for the full list of fixed vulnerabilities.
 
 ## 8. Background jobs
 
-All jobs run in the bot process. Each is wrapped so that a failure is logged and never crashes the process.
+All jobs run in the bot process, and game session expiry also runs in the web server (it is idempotent, so both can). Each is wrapped so that a failure is logged and never crashes the process.
 
 | Job | Schedule | What it does |
 |---|---|---|
@@ -245,7 +245,7 @@ All jobs run in the bot process. Each is wrapped so that a failure is logged and
 
 1. It requires `DISCORD_TOKEN`.
 2. It pings the database and runs migrations.
-3. It starts the health endpoint on `$PORT` (200 when connected to Discord, 503 otherwise) and logs in.
+3. It starts the health endpoint on `$BOT_PORT`, falling back to `$PORT` (200 when connected to Discord, 503 otherwise) and logs in.
 
 Migrations take a Postgres advisory lock (`pg_try_advisory_lock(hashtext('taskquest_migrations'))`, session-level, which is why Supabase is reached through its session pooler), so the bot and server can start at the same moment safely. Each migration runs in its own transaction.
 

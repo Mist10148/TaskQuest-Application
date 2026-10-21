@@ -31,7 +31,7 @@ const Stats = () => {
       <div className="mx-auto max-w-4xl space-y-4 sm:space-y-6">
         <header>
           <h1 className="font-heading text-2xl font-bold sm:text-3xl">Stats</h1>
-          <p className="text-sm text-foreground-muted">How your XP and finished tasks add up. Days are UTC days.</p>
+          <p className="text-sm text-foreground-muted">How your XP and finished tasks add up. Days follow your time zone (Settings).</p>
         </header>
 
         <QueryState query={summary} what="your stats" skeleton={<Skeleton className="h-24" />}>

@@ -34,7 +34,7 @@ const TodayCard = ({ status }: { status: FocusStatus }) => (
       <Meter label="Focus XP" value={status.today.xp} max={status.config.xpPerDay} />
     </div>
     <p className="mt-3 text-xs text-foreground-muted">
-      Each focused minute pays {status.config.xpPerMinute} XP, up to {status.config.xpPerDay} XP and {status.config.sessionsPerDay} sessions a day (UTC).
+      Each focused minute pays {status.config.xpPerMinute} XP, up to {status.config.xpPerDay} XP and {status.config.sessionsPerDay} sessions a day (your day, in your time zone).
     </p>
   </section>
 );

@@ -469,7 +469,15 @@ export function useDeleteComment() {
 export function useDeleteItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (itemId: number) => itemsApi.delete(itemId),
+        // A task that is already gone (its quest was deleted inside the Undo window, or someone else removed it) is what a
+        // delete wants, so a 404 counts as done rather than an error toast.
+        mutationFn: async (itemId: number) => {
+            try {
+                await itemsApi.delete(itemId);
+            } catch (err) {
+                if (!(typeof err === 'object' && err !== null && (err as { status?: number }).status === 404)) throw err;
+            }
+        },
         onSuccess: () => {
             invalidateTaskViews(qc);
             qc.invalidateQueries({ queryKey: ['auth'] });

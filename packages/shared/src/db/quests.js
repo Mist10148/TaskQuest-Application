@@ -78,17 +78,22 @@ async function metricProgress(conn, discordId, metric, windowFrom, to) {
 }
 
 async function questState(conn, discordId, now = new Date(), zone = null) {
-    const [claims] = await conn.query('SELECT quest_key, period_start FROM quest_claims WHERE discord_id = ? AND period_start >= ?', [
+    const weekly = questPeriod('weekly', now, zone);
+    const monthly = questPeriod('monthly', now, zone);
+    // A time zone change re-keys the period, so a claim made since the period's real start counts too (claimQuest refuses it).
+    const [claims] = await conn.query('SELECT quest_key, period_start, claimed_at FROM quest_claims WHERE discord_id = ? AND (period_start >= ? OR claimed_at >= ?)', [
         discordId,
-        [questPeriod('weekly', now, zone).start, questPeriod('monthly', now, zone).start].sort()[0]
+        [weekly.start, monthly.start].sort()[0],
+        new Date(Math.min(weekly.startsAt.getTime(), monthly.startsAt.getTime()))
     ]);
     const claimed = new Set(claims.map((c) => `${c.quest_key}@${String(c.period_start).slice(0, 10)}`));
+    const claimedAfter = (key, startsAt) => claims.some((c) => c.quest_key === key && new Date(c.claimed_at) >= startsAt);
 
     const out = [];
     for (const [key, q] of liveQuests(now, zone)) {
         const period = questPeriod(q.period, now, zone);
         const progress = Math.min(q.target, await metricProgress(conn, discordId, q.metric, period.startsAt, period.endsAt));
-        const isClaimed = claimed.has(`${key}@${period.start}`);
+        const isClaimed = claimed.has(`${key}@${period.start}`) || claimedAfter(key, period.startsAt);
         out.push({
             key,
             name: q.name,

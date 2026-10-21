@@ -777,6 +777,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { item: c } = await db.tasks.addItem(QID, list.id, { name: 'c', priority: 'high' });
         await db.tasks.setItemCompleted(QID, c.id, true);
         assert.equal(await progress('DAILY_HIGH_1'), 1);
+        // a claim made under another time zone key still reads as claimed, since claiming again would be refused
+        await db.quests.claimQuest(QID, 'DAILY_HIGH_1');
+        await db.getPool().query("UPDATE quest_claims SET period_start = period_start - 1 WHERE discord_id = ? AND quest_key = 'DAILY_HIGH_1'", [QID]);
+        const high = (await db.quests.getQuests(QID)).find((q) => q.key === 'DAILY_HIGH_1');
+        assert.deepEqual([high.claimed, high.claimable], [true, false]);
+        await assert.rejects(db.quests.claimQuest(QID, 'DAILY_HIGH_1'), { code: 'CONFLICT' });
 
         // imported tasks (even completed ones) satisfy no quest
         const before = { done: await progress('DAILY_COMPLETE_3'), adds: await progress('DAILY_ADD_3') };
@@ -2055,6 +2061,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(db.review.claimReview(U), { code: 'CONFLICT' });
         const [[row]] = await db.getPool().query("SELECT COUNT(*) AS n FROM quest_claims WHERE discord_id = ? AND quest_key = 'WEEKLY_REVIEW'", [U]);
         assert.equal(Number(row.n), 1);
+        // a time zone change re-keys the week: the review must not read as claimable when claiming it would be refused
+        await db.query("UPDATE quest_claims SET period_start = period_start - 1 WHERE discord_id = ? AND quest_key = 'WEEKLY_REVIEW'", [U]);
+        const rekeyed = await db.review.getReview(U);
+        assert.deepEqual([rekeyed.claimed, rekeyed.claimable], [true, false]);
 
         // Next week it opens again, but only for work done in that week.
         const nextWeek = new Date(Date.now() + 7 * 86400e3);

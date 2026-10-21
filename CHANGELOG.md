@@ -43,7 +43,6 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **A streak strip on the dashboard.** The Today page's seven-day strip also shows under the dashboard stats.
 - **Calendar keyboard navigation.** The calendar is one tab stop; arrows, Home/End and PageUp/PageDown move between days and months.
 - **Repository templates.** GitHub issue and pull request templates, and Dependabot for npm, pip and GitHub Actions.
-
 - **A task detail drawer.** An info button on each task (and `i` on the highlighted one) opens a side drawer with the full description, priority, due date, repeat, estimate, tags and subtasks, with Mark done / Reopen and Edit for anyone who can edit. A viewer of a shared quest can read it too.
 - **Bulk edit.** In select mode an **Edit** button changes the priority, due date and (see above) tags of the selected tasks together (keep, set or clear each), through the existing update endpoint with one summary toast.
 - **The command palette finds tasks.** Ctrl+K lists tasks whose name or description match (two or more characters, the same search as the quest log) with their quest, and opens that quest.
@@ -53,7 +52,6 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **An offline banner and a plain network error.** A notice shows while the browser is offline, and a request that fails before reaching the server says "You appear to be offline" instead of "Failed to fetch". Nothing is queued offline, so rewards stay server-authoritative.
 - **A keyboard cursor over tasks.** Inside a quest, `j` and `k` move a highlighted row, `x` completes or reopens it, `e` edits it and `d` deletes it (with Undo). Listed in the `?` dialog.
 - **A route error boundary.** A page that fails to render or load (typically a code chunk replaced by a deploy while the tab was open) shows a Reload card instead of a white screen, and a `vite:preloadError` reloads once.
-
 - **A README screenshot capture spec.** `apps/web/e2e/screenshots.e2e.ts` (skipped unless `CAPTURE_SCREENSHOTS=1`) signs in as the seeded player and saves twelve pages to `docs/images`; the images themselves are not captured yet (known issue #26).
 - **Live-Gemini preparation.** `python -m app.preflight [--check-models] [--url ...]` checks the key, token, model ids, `EMBED_DIM` against the pgvector column and the AI tables, optionally asks Google which configured model ids exist and can do the job (a header, never the URL, carries the key), and exits 1 on any failure; `python -m tests.evals.compare report.json [--baseline earlier.json]` judges a saved eval report against the live targets and flags regressions. The golden sets grew to 70 retrieval queries (incl. a cross-user bait query), 10 summary and 10 prioritizer cases, with four new seeded users, and the red-team set grew too; they still pass offline. Nothing here calls Gemini: the default model ids are unchanged, and known issues #17 and #18 stay open until a real run.
 - **Push for AI results, where it helps.** The Monday digest's AI recap headline is also sent as a web push when push is set up (only when a recap was written, once the digest is final, best effort), and a summary or "what should I do next?" that finishes while the player is on another tab shows a local notification through the service worker (`announceResult`: only when the page is hidden, notifications are already allowed and push was turned on; it never asks for permission). A server push per AI reply is deliberately not built: the answer already reaches the open page.
@@ -147,7 +145,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - The summarizer's model call is now a LangChain LCEL chain.
 - Explicit Gemini safety settings, and a friendly reply when a response is blocked.
 - Evals: p95 summarizer latency, an optional LLM-as-judge (`--judge`), and 50 retrieval queries.
-- CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-mysql` job).
+- CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-postgres` job).
 - [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) explains how the LangChain/LangGraph service is built.
 - Quick due-date picks (Today, Tomorrow, Next week, No date) in the task form.
 - Search inside a quest, `?task=` links that open a task's drawer (from search results and the command palette), keys `1` `2` `3` for the views and `Shift A` to select all, a confirmation before deleting more than five tasks, and a quick-add hint in an empty quest.
@@ -222,7 +220,6 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **Limits from one place:** the API's tag limit (it allowed 10 tags of 30 characters) now matches the service (5 of 20), the import body is validated, and copied names use the real list name limit.
 - **Reorder is one statement per 1000 tasks** instead of one per task.
 - **Web:** bulk complete never reopens a task finished elsewhere; the bulk edit dialog starts blank every time; the heatmap ends on your own today (not UTC); the command palette opens blank and says when it is still searching; Escape that closes the tour no longer also leaves the quest; Undo toasts disappear once leaving a page made the delete final; tags are trimmed and de-duplicated; a second deploy in the same tab reloads too; several icon-only buttons have proper screen reader names.
-
 - **Web rough edges from the October review** (known issue #53): the welcome tour resumes at its step on the next page instead of restarting; finishing several tasks at once shows one summary toast instead of one per task; the open quest is in the URL (`/tasks?list=42`), so refresh keeps it and the browser's Back button returns to the quest log; and two quick reorders no longer flicker (only the last one to settle refetches).
 - **Shared and server fixes from the October review.**
   - Repeating tasks respect the task quota and keep `estimate_minutes` on the next copy.

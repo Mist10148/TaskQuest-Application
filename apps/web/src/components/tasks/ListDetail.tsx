@@ -47,6 +47,8 @@ interface Props {
   onEditItem: (itemId: number) => void;
   /** Set one task's priority (moving a card between the board's columns). */
   onSetPriority: (itemId: number, priority: Priority | null) => void;
+  /** Move an open task's due date to tomorrow. */
+  onSnooze?: (itemId: number) => void;
   /** A shared quest's owner and members, for assigning tasks (absent on a quest nobody shares). */
   assignOptions?: ReadonlyArray<{ memberKey: string; name: string | null; isYou: boolean }>;
   onAssign?: (itemId: number, memberKey: string | null) => void;
@@ -73,7 +75,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
+export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, onSnooze, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -247,6 +249,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         readOnly={!editable}
         focused={view === "list" && cursorId === item.id}
         onAddSubtask={(id) => onAddItem(id)}
+        onSnooze={onSnooze}
         onMove={reorderable ? (id, dir) => move(id, dir, siblings) : undefined}
         canMoveUp={index > 0}
         canMoveDown={index < siblings.length - 1}

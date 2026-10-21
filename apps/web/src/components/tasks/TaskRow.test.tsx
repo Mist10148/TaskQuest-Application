@@ -62,5 +62,31 @@ describe("TaskRow details button", () => {
     expect(screen.getByText("Sam")).toBeInTheDocument();
     expect(screen.getByText("comments")).toBeInTheDocument();
   });
+  it("snoozes an open task to tomorrow, and offers nothing to snooze on a finished one", async () => {
+    const onSnooze = vi.fn();
+    renderRow({}, { onSnooze });
+    await userEvent.click(screen.getByRole("button", { name: 'Snooze "Pay rent" to tomorrow' }));
+    expect(onSnooze).toHaveBeenCalledWith(7);
+  });
+
+  it("has no snooze action once the task is done", () => {
+    renderRow({ completed: 1 }, { onSnooze: vi.fn() });
+    expect(screen.queryByRole("button", { name: 'Snooze "Pay rent" to tomorrow' })).toBeNull();
+  });
+
+  it("gathers the row actions in one menu for small screens", async () => {
+    const onSnooze = vi.fn();
+    const { onDelete } = renderRow({}, { onSnooze });
+    await userEvent.click(screen.getByRole("button", { name: 'More actions for "Pay rent"' }));
+    expect(screen.getByRole("menuitem", { name: "Snooze to tomorrow" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith(7);
+  });
+
+  it("has no action menu for a viewer", () => {
+    renderRow({}, { readOnly: true });
+    expect(screen.queryByRole("button", { name: 'More actions for "Pay rent"' })).toBeNull();
+  });
 });
 

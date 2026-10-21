@@ -291,7 +291,7 @@ There are 96 skills in 17 trees (Default plus the sixteen classes).
 
 - **Cooldown:** 24 hours from your last claim.
 - **Streak:**
-  - The streak counts **your calendar days** (your time zone): claiming on the day after your last claim continues it. Claiming at least 24 hours after the last claim is still required.
+  - The streak counts **your calendar days** (your time zone): claiming on the day after your last claim continues it. Claiming at least 24 hours after the last claim is still required, so a claim within 48 hours of the last one (72 with protection, 96 with Sanctuary) also continues it: a late-evening claim never forces you to catch a few minutes before the next midnight.
   - With Streak Shield (or as a Paladin), one missed day is forgiven (a claim up to 2 days after the last one continues the streak). Paladin with Sanctuary: two missed days (3 days).
   - With Unstoppable, the streak always continues.
   - Otherwise the streak resets to 1.

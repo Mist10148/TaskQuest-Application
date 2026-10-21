@@ -31,8 +31,9 @@ function streakState(user, skills, now) {
     const live = liveStreak(user, skills, now.getTime());
     const bonuses = getSkillBonuses(skills);
     const claimedToday = Boolean(last) && claimGapDays(user, last, now.getTime()) === 0;
-    // Unstoppable never lapses; otherwise the claim has `windowDays - gap` days left, today included at zero.
-    const daysLeft = bonuses.streakUnstoppable || !last ? null : streakWindowDays(user, bonuses) - claimGapDays(user, last, now.getTime());
+    // Unstoppable never lapses; otherwise the claim has `windowDays - gap` days left, today included at zero. Below zero the
+    // streak is only alive through the rolling grace window (a late claim), which is just as much at risk.
+    const daysLeft = bonuses.streakUnstoppable || !last ? null : Math.max(0, streakWindowDays(user, bonuses) - claimGapDays(user, last, now.getTime()));
     return { count, live, claimedToday, daysLeft, atRisk: live >= 2 && !claimedToday && daysLeft === 0 };
 }
 

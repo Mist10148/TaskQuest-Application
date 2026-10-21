@@ -113,6 +113,22 @@ test('daily reward: cooldown, streaks and Streak Shield', () => {
     assert.equal(shielded.newStreak, 10);
 });
 
+test('daily reward: a late claim keeps the streak through the rolling window', () => {
+    // Claimed at 23:30 UTC; the cooldown ends at 23:30 the next day, so a claim just after the following midnight is two
+    // calendar days later but only 24 h 40 min after the last one.
+    const last = new Date('2030-01-08T23:30:00Z');
+    const late = shared.calculateDailyReward(user({ last_daily_claim: last, streak_count: 4 }), [], Date.parse('2030-01-10T00:10:00Z'), { rng: seq(0.99) });
+    assert.equal(late.newStreak, 5);
+    assert.equal(late.streakBroken, false);
+    assert.equal(shared.liveStreak(user({ last_daily_claim: last, streak_count: 4 }), [], Date.parse('2030-01-10T00:10:00Z')), 4);
+
+    // Past 48 h the streak still lapses without a shield.
+    const lapsed = shared.calculateDailyReward(user({ last_daily_claim: last, streak_count: 4 }), [], Date.parse('2030-01-11T00:10:00Z'));
+    assert.equal(lapsed.newStreak, 1);
+    assert.equal(lapsed.streakBroken, true);
+    assert.equal(shared.liveStreak(user({ last_daily_claim: last, streak_count: 4 }), [], Date.parse('2030-01-11T00:10:00Z')), 0);
+});
+
 test('achievements', () => {
     const got = shared.evaluateAchievements({ total_lists_created: 5, lifetime_xp: 600, player_level: 7, owns_hero: 1 }, ['FIRST_LIST']);
     const keys = got.map((a) => a.key);

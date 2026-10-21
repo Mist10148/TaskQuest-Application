@@ -1,4 +1,5 @@
 import { clampBet, parseBetInput } from "@/lib/gameHelpers";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -1441,7 +1442,10 @@ const Games = () => {
   const { data: allowance } = useGameAllowance();
   const { sound, setSound } = usePreferences();
   useEffect(() => setSoundEnabled(sound), [sound]);
-  const [game, setGame] = useState<GameType>("menu");
+  // The open game lives in the URL (/games?play=snake), so the browser's Back button returns to the menu.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [bet, setBet] = useState(BLACKJACK_CONFIG.MIN_BET);
   const arcadeRun = useRef<number | null>(null);
   const arcadeStarting = useRef<Promise<{ sessionId: number; seed: number }> | null>(null);
@@ -1450,6 +1454,9 @@ const Games = () => {
   const xp = Number(user?.user?.player_xp) || 0;
   const maxBet = Math.min(Math.floor(xp * BLACKJACK_CONFIG.MAX_BET_PERCENT), BLACKJACK_CONFIG.HARD_CAP);
   const canBet = maxBet >= BLACKJACK_CONFIG.MIN_BET;
+  const asked = gamesList.find((g) => g.id === searchParams.get("play"));
+  // A betting game opened from a link without enough XP to bet shows the menu instead (once the balance is known).
+  const game: GameType = asked && !(asked.requiresBet && user && !canBet) ? (asked.id as GameType) : "menu";
 
   /** Refresh balance, history and leaderboard after any settled round. */
   const onSettled = useCallback(() => {
@@ -1494,10 +1501,11 @@ const Games = () => {
       return;
     }
     if (gameConfig?.requiresBet && bet > maxBet) setBet(Math.max(BLACKJACK_CONFIG.MIN_BET, maxBet));
-    setGame(id as GameType);
+    setSearchParams({ play: id }, { state: { fromMenu: true } });
   };
 
-  const back = () => setGame("menu");
+  // Opened from the menu: step back in history. Opened from a link: replace it with the menu.
+  const back = () => ((location.state as { fromMenu?: boolean } | null)?.fromMenu ? navigate(-1) : setSearchParams({}, { replace: true }));
 
   if (game === "blackjack") return <DashboardLayout><BlackjackGame onBack={back} bet={Math.min(bet, Math.max(maxBet, BLACKJACK_CONFIG.MIN_BET))} onSettled={onSettled} /></DashboardLayout>;
   if (game === "rps") return <DashboardLayout><RPSGame onBack={back} onSettled={onSettled} /></DashboardLayout>;

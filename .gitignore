@@ -20,6 +20,9 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage
+
+# Vitest reporter output (e.g. --reporter=json)
+.vitest
 *.lcov
 
 # nyc test coverage

@@ -655,7 +655,10 @@ async function moveItemToList(discordId, itemId, targetListId) {
     const result = await withTransaction(async (conn) => {
         const [[peek]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [id]);
         if (!peek) throw errors.notFound('Task not found.');
-        for (const lid of [...new Set([peek.list_id, targetId])].sort((a, b) => a - b)) {
+        // Only queue for the locks of lists the caller can use: a stranger is refused below without delaying anyone.
+        const lockable = [];
+        for (const lid of new Set([peek.list_id, targetId])) if (await access.canUseList(conn, me, lid)) lockable.push(lid);
+        for (const lid of lockable.sort((a, b) => a - b)) {
             await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [lid]);
         }
         const { item, role } = await access.forItem(conn, me, id, 'editor', { lock: true });

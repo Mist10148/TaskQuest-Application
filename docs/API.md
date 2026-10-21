@@ -107,7 +107,7 @@ Every list in `GET /api/lists`, `GET /api/lists/:id` and `PATCH /api/lists/:id` 
 | PATCH | `/api/lists/:id/reorder` | `{itemIds: [int]}`: every task id of the list, exactly once, in the new order | The list's items in the new order. Positions become 0..n-1. `400` if the ids are not exactly the list's tasks. |
 | POST | `/api/lists/:listId/items` | `{name (1–200), description? (≤1000), due_date?: "YYYY-MM-DD"\|null, priority?, tags?: string\|string[], recurrence?: "daily"\|"weekly"\|"monthly"\|null, estimate_minutes?: 1–600\|null, parent_id?: int\|null}` | `201 {...item, xpResult, newAchievements}` |
 | PATCH | `/api/items/:id` | Any subset of the create fields, plus `position? (int ≥0)` and `assignee?: string \| null`; ≥1. A position moves the task there and closes the gaps. `assignee` is a member key from `GET /api/lists/:id/members` (`"owner"` for the owner), or `null` to unassign; anything else is `400` "That person is not on this quest." | Updated item (with `list_name`, `list_priority`) |
-| PATCH | `/api/items/:id/toggle` | optional `{completed: boolean}` (no body toggles) | `{...item, completed, xpResult, bonuses, newAchievements, nextItem}`. XP only on the **first** completion. `bonuses` is `[{key, label, xp}]`, the flat extras paid with that first completion (`first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus`; see [GAMEPLAY](GAMEPLAY.md#5c-bonus-xp-sources)), empty when none. `nextItem` is the newly created copy when a repeating task is completed (else `null`). |
+| PATCH | `/api/items/:id/toggle` | optional `{completed: boolean}` (no body toggles) | `{...item, completed, xpResult, bonuses, newAchievements, nextItem}`. XP only on the **first** completion. `bonuses` is `[{key, label, xp}]`, the flat extras paid with that first completion (`first_of_day`, `list_cleared`, `early_finish`, `overdue_clear`, `subtasks_done`, `habit_bonus`; see [GAMEPLAY](GAMEPLAY.md#5c-bonus-xp-sources)), empty when none. `nextItem` is the newly created copy when a repeating task is completed (else `null`). `completed` is a boolean here and in search results, but the stored `0`/`1` in list, update and move responses: treat it as truthy. |
 | DELETE | `/api/items/:id` | — | `{success:true}` |
 | GET | `/api/items/:id/activity` | — | `{activity: [{id, kind, actor: {name, isYou} \| null, from, to, createdAt}]}`, the task's history newest first, at most 50 entries. Anyone on the quest may read it. See [Task history](#task-history). |
 | GET | `/api/items/:id/comments` | — | `{comments: [{id, body, author: {name, isYou}, createdAt, canDelete}]}`, oldest first (the latest 200). Anyone on the quest may read them. See [Comments](#comments). |
@@ -164,7 +164,7 @@ All routes are 🔒. A user is in at most one party (up to 6 people, the owner i
 | DELETE | `/api/parties/members/:memberKey` | — | Owner only: remove a member, addressed by the opaque `memberKey` from the status. `403` for a non-owner, `400` for yourself (disband instead), `404` for an unknown key or someone who is not in your party. |
 | DELETE | `/api/parties` | — | Disband the party for everyone (owner only). |
 | POST | `/api/parties/claim` | — | `{success:true, weekStart, xp, balance, level, leveledUp, newAchievements}`. Flat +60 XP, once per person per week; `400` while the quest is unfinished or you have not finished at least `minToClaim` (6) tasks yourself since joining, `409` if you already claimed a party reward this week, `403` when XP is off. |
-| POST 🔒 | `/api/parties/focus/claim` | — | Claim the party focus quest reward: `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. +40 XP once a week; `400` until the party has focused its target minutes or when you have under 20 focus minutes of your own; `409` once claimed; `403` when XP is off; `404` without a party. |
+| POST | `/api/parties/focus/claim` | — | Claim the party focus quest reward: `{success, weekStart, xp, balance, level, leveledUp, newAchievements}`. +40 XP once a week; `400` until the party has focused its target minutes or when you have under 20 focus minutes of your own; `409` once claimed; `403` when XP is off; `404` without a party. |
 
 The party quest is described in [GAMEPLAY](GAMEPLAY.md#5i-parties).
 
@@ -302,9 +302,9 @@ All routes are 🔒. Outcomes, shuffles and payouts are decided on the server. C
 - it is longer than the per-game maximum (6,000 steps for Snake, 36,000 for Dino and Invaders), has too many inputs, or gives more inputs per rolling second than a person can (15 / 8 / 20);
 - the recorded play time (`ticks` × step length) exceeds the server-measured time since `start` (5 % plus 2 s of slack), or the measured time exceeds it by more than 10 minutes;
 - the replayed score is above the old plausibility bound (`seconds × rate + 1`);
+- `ticks` or `inputs` are missing (a client from before this check): the error says to refresh the page.
 
 A run that passes every check but has less than 5 seconds of recorded play (`ticks` × step length) is not rejected: it pays 0 XP and the result says `tooShort: true`.
-- `ticks` or `inputs` are missing (a client from before this check): the error says to refresh the page.
 
 The body limit for `/api/games/arcade/*` is 128 KB (other routes: 16 KB).
 
@@ -357,20 +357,27 @@ A `confirm` event pauses the turn. Nothing has been changed yet. Answer with `PO
 
 ## Internal API (service to service)
 
-`/internal/*` is **not** for browsers: it has no session or CSRF layer and is only mounted when `AI_ENABLED=true`. Every request must carry the shared `X-AI-Token` (checked in constant time; a wrong or missing token returns `404`, so the routes do not reveal themselves). The AI service calls these after the user confirmed an action in chat; they run through the same services as the public API, so XP, caps and achievements behave identically. The acting Discord ID comes from the trusted caller in the body. These routes are **owner-only**: they go through `db.tasks.asOwner`, so a list the user merely belongs to (shared with them) answers `404` even when their role there is manager. So the AI can change the user's own lists, including ones they share with others. Its reads are narrower: it reads only the user's own lists that nobody else is on, so a shared list is never embedded or summarised into anyone's data.
+`/internal/*` is **not** for browsers: it has no session or CSRF layer. The routes are always mounted, but answer `404` unless `AI_ENABLED=true` and `AI_INTERNAL_TOKEN` is set, so a server with AI off does not reveal them. Every request must carry the shared `X-AI-Token` (checked in constant time); a wrong or missing token returns `401 UNAUTHENTICATED`. The AI service calls these after the user confirmed an action in chat; they run through the same services as the public API, so XP, caps and achievements behave identically. The acting Discord ID comes from the trusted caller in the body. These routes are **owner-only**: they go through `db.tasks.asOwner`, so a list the user merely belongs to (shared with them) answers `404` even when their role there is manager. So the AI can change the user's own lists, including ones they share with others. Its reads are narrower: it reads only the user's own lists that nobody else is on, so a shared list is never embedded or summarised into anyone's data.
 
 | Method | Path | Body | Description |
 |---|---|---|---|
 | POST | `/internal/lists` | `{discordId, name, description?, category?, priority?, deadline?, items?: string[] (≤20)}` | Create a list (and optional tasks) |
-| POST | `/internal/lists/:id/items` | `{discordId, name, description?, due_date?, priority?, tags?, recurrence?, parent_id?}` | Add a task with its own fields (same validation as `POST /api/lists/:id/items`) |
-| PATCH | `/internal/items/:id` | `{discordId, name?, description?, due_date?, priority?, tags?, recurrence?, parent_id?}` (at least one field; no `position`) | Change a task's own fields. 404 when the task is not the user's |
+| POST | `/internal/lists/:id/items` | `{discordId, name, description?, due_date?, priority?, tags?, recurrence?, estimate_minutes?, parent_id?}` | Add a task with its own fields (same validation as `POST /api/lists/:id/items`) |
+| PATCH | `/internal/items/:id` | `{discordId, name?, description?, due_date?, priority?, tags?, recurrence?, estimate_minutes?, parent_id?}` (at least one field; no `position`) | Change a task's own fields. 404 when the task is not the user's |
 | POST | `/internal/items/:id/subtasks` | `{discordId, names: string[] (2-8)}` | Break a top-level task down: creates the subtasks under it in one transaction (all or none) and returns `{parent, items, newAchievements, xpResult}`. 400 when the task is itself a subtask, 404 when it is not the user's |
 | PATCH | `/internal/items/:id/toggle` | `{discordId, completed?}` | Complete or reopen a task |
 | PATCH | `/internal/lists/:id` | `{discordId, priority?, deadline?}` | Change a list's priority or deadline |
 
-**`POST /internal/push`** `{discordId, title (≤100), body? (≤300), url? (a path like /tasks)}` asks the server to send a web push to all of that user's subscribed browsers. Unlike the routes above it is mounted whenever web push is configured (not only with AI on) and is checked with the same `X-AI-Token` header against `WEB_PUSH_INTERNAL_TOKEN` (falling back to `AI_INTERNAL_TOKEN`); it is `404` when push is off or no token is set. Response: `{sent, pruned, failed, skipped?}`, where `skipped` is `opted-out` or `no-subscriptions`. A subscription the push service reports gone (`404` or `410`) is deleted (`pruned`). The text is clipped and an off-site `url` is replaced by `/`.
+**`POST /internal/push`** `{discordId, title (≤100), body? (≤300), url? (a path like /tasks)}` asks the server to send a web push to all of that user's subscribed browsers. Unlike the routes above it is mounted whenever web push is configured (not only with AI on) and is checked with the same `X-AI-Token` header against `WEB_PUSH_INTERNAL_TOKEN` (falling back to `AI_INTERNAL_TOKEN`); it is `404` when push is off or no token is set, and `401 UNAUTHENTICATED` for a wrong or missing token. Response: `{sent, pruned, failed, skipped?}`, where `skipped` is `opted-out` or `no-subscriptions`. A subscription the push service reports gone (`404` or `410`) is deleted (`pruned`). The text is clipped and an off-site `url` is replaced by `/`.
 
-The reverse direction (Express and the bot to the AI service: `POST /internal/index`, `POST /internal/forget`) is documented in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). `POST /internal/forget` with only a `discordId` removes everything stored about the user: vectors, chat threads with their checkpoints, and cached summaries (the daily usage counter is kept, so a reset cannot refill the AI quota).
+The reverse direction, Express and the bot calling the AI service, uses the same `X-AI-Token` header. Both routes take `{discordId, listId?}` and answer `204` with no body:
+
+| Method | Path | Effect |
+|---|---|---|
+| POST | `/internal/index` | Re-embed one list, or the user's whole library without `listId`. For a user who turned AI off it deletes their vectors instead; without a Gemini key it does nothing. |
+| POST | `/internal/forget` | Delete one deleted list's vectors, or with no `listId` everything stored about the user. |
+
+`POST /internal/forget` with only a `discordId` removes everything stored about the user: vectors, chat threads with their checkpoints, and cached summaries (the daily usage counter is kept, so a reset cannot refill the AI quota).
 
 ## Removed in 4.0
 

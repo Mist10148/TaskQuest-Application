@@ -8,7 +8,7 @@ The browser never calls this service. Express authenticates the user and forward
 
 ```bash
 python -m venv .venv
-.venv/Scripts/activate            # Linux/macOS: source .venv/bin/activate
+. .venv/bin/activate              # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 ```

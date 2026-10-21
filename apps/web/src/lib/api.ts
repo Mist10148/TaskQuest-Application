@@ -1140,6 +1140,8 @@ export interface TodayData {
     streak: { count: number; live: number; claimedToday: boolean; daysLeft: number | null; atRisk: boolean };
     counts: { dueToday: number; overdue: number; doneToday: number };
     tasks: TodayTask[];
+    /** Open tasks due in the next 7 days that are not in `tasks` (older servers leave it out). */
+    upcoming?: TodayTask[];
     reflection: ReflectionStatus;
     goal: WeeklyGoal;
     xpEnabled: boolean;

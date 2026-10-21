@@ -1222,6 +1222,15 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual([r.counts.dueToday, r.counts.overdue, r.counts.doneToday], [1, 1, 1], 'subtasks and finished tasks are not counted');
         assert.equal(r.tasks[0].id, late);
         assert.equal(r.tasks[2].id, urgent);
+        // upcoming: open tasks due in the next week, soonest first; nothing past a week, and nothing already listed above
+        assert.deepEqual(r.upcoming.map((x) => x.name), ['later']);
+        await add({ name: 'far', due_date: day(8) });
+        await add({ name: 'soon', due_date: day(1) });
+        await add({ name: 'big', due_date: day(3), priority: 'high' });
+        const next = await db.today.getToday(Y);
+        assert.deepEqual(next.upcoming.map((x) => x.name), ['soon', 'later']);
+        assert.ok(next.tasks.some((x) => x.name === 'big'), 'a HIGH task due this week is in the main list');
+        assert.equal(next.upcoming[0].dueDate, day(1));
 
         // the streak: claimed today is safe; a streak last claimed yesterday has until the end of today
         await db.query('UPDATE users SET streak_count = 5, last_daily_claim = CURRENT_TIMESTAMP WHERE discord_id = ?', [Y]);

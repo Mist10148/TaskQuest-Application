@@ -250,7 +250,7 @@ A server-timed work timer. The server measures the time; the client only says st
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET 🔒 | `/api/today` | — | The Today screen in one read: `{day, season: {key, name, blurb, doubles, enabled}, streak: {count, live, claimedToday, daysLeft, atRisk}, counts: {dueToday, overdue, doneToday}, tasks: [{id, name, listId, listName, dueDate, priority, estimateMinutes, overdueDays}] (up to 6 open top-level tasks that are overdue, due today or HIGH priority, most urgent first: tasks on your own lists, and tasks assigned to you on lists shared with you; `counts` cover the same tasks, each once), reflection, goal, xpEnabled}`. `streak.atRisk` is true when the streak is alive, today's reward is unclaimed and today is the last day to keep it. Read only. |
+| GET 🔒 | `/api/today` | — | The Today screen in one read: `{day, season: {key, name, blurb, doubles, enabled}, streak: {count, live, claimedToday, daysLeft, atRisk}, counts: {dueToday, overdue, doneToday}, tasks: [{id, name, listId, listName, dueDate, priority, estimateMinutes, overdueDays}] (up to 6 open top-level tasks that are overdue, due today or HIGH priority, most urgent first: tasks on your own lists, and tasks assigned to you on lists shared with you; `counts` cover the same tasks, each once), upcoming: [same shape] (up to 6 open top-level tasks due in the next 7 days, soonest first, leaving out any already in `tasks`), reflection, goal, xpEnabled}`. `streak.atRisk` is true when the streak is alive, today's reward is unclaimed and today is the last day to keep it. Read only. |
 
 ## Reflection and weekly goal
 

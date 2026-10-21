@@ -3162,6 +3162,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.query('UPDATE list_invites SET expires_at = CURRENT_TIMESTAMP - make_interval(hours => 1) WHERE id = ?', [first.id]);
         assert.deepEqual(await S.listInvites(a), []);
         await assert.rejects(S.respond(a, first.id, true), { code: 'CONFLICT', message: /expired/ });
+        assert.equal((await db.query('SELECT status FROM list_invites WHERE id = ?', [first.id]))[0].status, 'revoked', 'the revocation is kept');
         const second = await S.invite(O, list.id, { discordId: a, role: 'viewer' });
         assert.deepEqual((await S.listInvites(a)).map((i) => i.id), [second.id]);
         assert.deepEqual(await S.respond(a, second.id, true), { accepted: true, list: { id: list.id, name: 'Service list' }, role: 'viewer' });
@@ -3712,6 +3713,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.query('UPDATE party_invites SET expires_at = CURRENT_TIMESTAMP - make_interval(hours => 1) WHERE id = ?', [again.id]);
         assert.deepEqual(await PA.listInvites(more.at(-1)), []);
         await assert.rejects(PA.respond(more.at(-1), again.id, true), { code: 'CONFLICT', message: /expired/ });
+        assert.equal((await db.query('SELECT status FROM party_invites WHERE id = ?', [again.id]))[0].status, 'revoked', 'the revocation is kept');
         const declined = await PA.invite(u.own, { discordId: more.at(-1) });
         assert.equal((await PA.respond(more.at(-1), declined.id, false)).accepted, false);
         // Disbanding removes everyone; a member who was in it is free to join elsewhere.

@@ -169,7 +169,7 @@ Then set the same `AI_ENABLED` and `AI_INTERNAL_TOKEN` for the web server and th
 All apps share one git-ignored `.env` at the repository root, documented in [`.env.example`](.env.example) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#3-environment-variables). Settings are read in this order, and the first one found wins:
 
 1. Real environment variables (Render, CI, your shell).
-2. Optional per-app overrides in `apps/bot/.env` or `apps/server/.env`.
+2. Optional per-app overrides in `apps/bot/.env`, `apps/server/.env` or `apps/ai/.env`.
 3. The root `.env`.
 
 Vite only exposes `VITE_*` variables to the browser, so the secrets in that file never reach the client.

@@ -1,11 +1,13 @@
 # Deployment and operations
 
-TaskQuest runs as two processes sharing one PostgreSQL database:
+TaskQuest runs as two required processes sharing one PostgreSQL database, plus two optional ones:
 
 | Process | Start command | Needs |
 |---|---|---|
 | **Web** (API + built SPA) | `npm run build && npm run start:server` | Public HTTPS URL, Discord OAuth credentials, session secret, DB |
 | **Bot** | `npm run start:bot` | Discord bot token, DB. It must stay running (gateway connection). |
+| **AI service** (optional, private) | `uvicorn app.main:app` in `apps/ai` | Gemini API key, shared `AI_INTERNAL_TOKEN`, DB. Only when `AI_ENABLED=true` (see [AI service](#ai-service-appsai-optional)). |
+| **Archive job** (optional, weekly) | `npm run archive -- --days 365` | DB. A scheduled task, not a long-running process (see §4). |
 
 ## Contents
 
@@ -73,7 +75,7 @@ GRANT USAGE, CREATE ON SCHEMA public TO taskquest;
 For local development, everything lives in one git-ignored file at the repository root: `cp .env.example .env`. Settings are read in this order, and the first one found wins:
 
 1. Real environment variables (Render, CI, your shell).
-2. `apps/bot/.env` or `apps/server/.env` (optional per-app overrides).
+2. `apps/bot/.env`, `apps/server/.env` or `apps/ai/.env` (optional per-app overrides).
 3. The root `.env`.
 
 In production, set the variables in your host's dashboard instead. Because the bot and server can share a file, they use `BOT_PORT` and `SERVER_PORT`. Each falls back to `PORT`, which hosting platforms set per service.
@@ -162,9 +164,9 @@ The AI service reads the same root `.env` as the other apps, plus the database v
 **Local run**
 
 ```bash
-npm run dev                                   # web + server
+npm run dev:server                            # API (another terminal: npm run dev:web)
 cd apps/ai
-python -m venv .venv && .venv/Scripts/activate   # Linux/macOS: source .venv/bin/activate
+python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 python -m app.rag.index_docs                  # once: embed the help docs
@@ -207,6 +209,7 @@ The repository includes [`render.yaml`](../render.yaml).
    - In the `taskquest-database` group: `DB_URL` (the Supabase session-pooler URL, see §2), plus `DB_SSL_CA` if you pin the CA.
    - On `taskquest-web`: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `PUBLIC_URL`.
    - On `taskquest-bot`: `DISCORD_TOKEN`, `CLIENT_ID` and `WEB_APP_URL`.
+   - For the optional AI service: `AI_SERVICE_URL` on `taskquest-web` and `taskquest-bot`, and `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`. Leave them empty if you keep AI off.
    - `SESSION_SECRET` is generated for you.
 3. After the first deploy, set `PUBLIC_URL` to the web service URL (or your custom domain). Add `<PUBLIC_URL>/api/auth/callback` to Discord's OAuth2 redirects.
 4. Register slash commands from your machine (see §1).

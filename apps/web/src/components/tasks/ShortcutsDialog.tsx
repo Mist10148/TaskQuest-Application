@@ -1,6 +1,7 @@
 import { Keyboard, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openCommandPalette } from "@/lib/commands";
+import { modKeyLabel } from "@/lib/platform";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const SHORTCUTS: Array<[string, string]> = [
@@ -16,7 +17,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Shift A", "Select every task shown (in select mode)"],
   ["Esc", "Leave select mode or go back to the quest log"],
   ["?", "Show this list"],
-  ["Ctrl K", "Command palette: go to a page, new quest or task, switch theme (works anywhere)"],
+  [`${modKeyLabel()} K`, "Command palette: go to a page, new quest or task, switch theme (works anywhere)"],
 ];
 
 /** Keyboard shortcut cheat sheet, opened with "?". */

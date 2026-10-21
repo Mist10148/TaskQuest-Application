@@ -165,7 +165,7 @@ const Dashboard = () => {
             <h2 className="text-lg sm:text-xl font-heading font-semibold flex items-center gap-2">
               <ListTodo className="h-4 w-4 sm:h-5 sm:w-5 text-primary-text" /> Recent Quests
             </h2>
-            <Link to="/tasks"><Button variant="ghost" size="sm" className="text-xs sm:text-sm hover:text-primary-text">View All</Button></Link>
+            <Button asChild variant="ghost" size="sm" className="text-xs sm:text-sm hover:text-primary-text"><Link to="/tasks">View All</Link></Button>
           </div>
 
           {listsQuery.isError ? (
@@ -179,7 +179,7 @@ const Dashboard = () => {
               <ListTodo className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-foreground-muted mb-4" />
               <h3 className="font-heading font-semibold mb-2 text-sm sm:text-base">No quests yet</h3>
               <p className="text-foreground-muted mb-4 text-xs sm:text-sm">Create your first quest to get started!</p>
-              <Link to="/tasks"><Button variant="glow" size="sm"><Plus className="h-4 w-4 mr-2" />Create Quest</Button></Link>
+              <Button asChild variant="glow" size="sm"><Link to="/tasks?new=quest"><Plus className="h-4 w-4 mr-2" aria-hidden />Create Quest</Link></Button>
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">

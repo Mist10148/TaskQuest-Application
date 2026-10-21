@@ -15,6 +15,7 @@ import { openCommandPalette } from "@/lib/commands";
 import { PrestigeTag } from "@/components/game/PrestigeTag";
 import { AvatarFrame, EquippedTitle } from "@/components/game/AvatarFrame";
 import { pageTitle } from "@/lib/pageTitle";
+import { modKeyLabel } from "@/lib/platform";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -108,7 +109,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
         >
           <Search className="h-4 w-4" aria-hidden />
           <span className="flex-1 text-left">Search…</span>
-          <kbd className="hidden rounded border border-border px-1.5 text-[0.625rem] font-mono lg:inline">Ctrl K</kbd>
+          <kbd className="hidden rounded border border-border px-1.5 text-[0.625rem] font-mono lg:inline">{modKeyLabel()} K</kbd>
         </button>
       </div>
 

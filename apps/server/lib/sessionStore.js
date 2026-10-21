@@ -5,6 +5,18 @@
 
 import session from 'express-session';
 
+/**
+ * Settle `promise` into a node-style callback, called outside the promise chain (as express-session's MemoryStore defers its
+ * callbacks): an error thrown by `cb` then surfaces as an ordinary exception instead of an unhandled rejection that leaves the
+ * request hanging.
+ */
+function settle(promise, cb) {
+    promise.then(
+        (value) => setImmediate(cb, null, value),
+        (err) => setImmediate(cb, err)
+    );
+}
+
 export class DbSessionStore extends session.Store {
     /**
      * @param {{ query: Function }} pool the shared pool (packages/shared/src/db/pool.js)
@@ -24,32 +36,39 @@ export class DbSessionStore extends session.Store {
     }
 
     get(sid, cb) {
-        this.pool
-            .query('SELECT data FROM web_sessions WHERE session_id = ? AND expires >= ?', [sid, Math.floor(Date.now() / 1000)])
-            .then(([rows]) => (rows[0] ? JSON.parse(rows[0].data) : null))
-            .then((data) => cb(null, data), cb);
+        settle(
+            this.pool
+                .query('SELECT data FROM web_sessions WHERE session_id = ? AND expires >= ?', [sid, Math.floor(Date.now() / 1000)])
+                .then(([rows]) => (rows[0] ? JSON.parse(rows[0].data) : null)),
+            cb
+        );
     }
 
     set(sid, sess, cb = () => {}) {
-        this.pool
-            .query(
-                `INSERT INTO web_sessions (session_id, expires, data) VALUES (?, ?, ?)
-                 ON CONFLICT (session_id) DO UPDATE SET expires = EXCLUDED.expires, data = EXCLUDED.data`,
-                [sid, this.expiresAt(sess), JSON.stringify(sess)]
-            )
-            .then(() => cb(null), cb);
+        settle(
+            this.pool
+                .query(
+                    `INSERT INTO web_sessions (session_id, expires, data) VALUES (?, ?, ?)
+                     ON CONFLICT (session_id) DO UPDATE SET expires = EXCLUDED.expires, data = EXCLUDED.data`,
+                    [sid, this.expiresAt(sess), JSON.stringify(sess)]
+                )
+                .then(() => undefined),
+            cb
+        );
     }
 
     touch(sid, sess, cb = () => {}) {
-        this.pool
-            .query('UPDATE web_sessions SET expires = ? WHERE session_id = ?', [this.expiresAt(sess), sid])
-            .then(() => cb(null), cb);
+        settle(
+            this.pool.query('UPDATE web_sessions SET expires = ? WHERE session_id = ?', [this.expiresAt(sess), sid]).then(() => undefined),
+            cb
+        );
     }
 
     destroy(sid, cb = () => {}) {
-        this.pool
-            .query('DELETE FROM web_sessions WHERE session_id = ?', [sid])
-            .then(() => cb(null), cb);
+        settle(
+            this.pool.query('DELETE FROM web_sessions WHERE session_id = ?', [sid]).then(() => undefined),
+            cb
+        );
     }
 
     async clearExpired() {

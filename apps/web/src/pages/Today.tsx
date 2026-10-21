@@ -84,7 +84,8 @@ const GoalCard = ({ data }: { data: TodayData }) => {
   const setGoal = useSetGoal();
   const claim = useClaimGoal();
   const g = data.goal;
-  const [target, setTarget] = useState(String(Math.max(g.min, g.progress + 5)));
+  // A suggestion above this week's progress, within the allowed range (a default over the maximum could not be submitted).
+  const [target, setTarget] = useState(String(Math.min(g.max, Math.max(g.min, g.progress + 5))));
   const pct = goalPercent(g.progress, g.target);
   return (
     <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="goal-title">

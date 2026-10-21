@@ -1437,7 +1437,7 @@ const GAME_NAMES: Record<string, string> = {
 const Games = () => {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const { data: history, isLoading } = useGameHistory();
+  const { data: history, isLoading, isError: historyFailed, refetch: refetchHistory } = useGameHistory();
   const { data: allowance } = useGameAllowance();
   const { sound, setSound } = usePreferences();
   useEffect(() => setSoundEnabled(sound), [sound]);
@@ -1625,6 +1625,11 @@ const Games = () => {
           <div className="rounded-xl bg-card border border-border overflow-hidden">
             {isLoading ? (
               <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary-text" /></div>
+            ) : historyFailed ? (
+              <div className="p-8 text-center text-foreground-muted" role="alert">
+                Could not load your recent games.{" "}
+                <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => void refetchHistory()}>Try again</button>
+              </div>
             ) : !history?.length ? (
               <div className="p-8 text-center text-foreground-muted">No games played yet. Try your luck!</div>
             ) : (

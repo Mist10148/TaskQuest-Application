@@ -33,10 +33,12 @@ async function reviewState(conn, user, now) {
          WHERE discord_id = ? AND amount > 0 AND created_at >= ? AND created_at < ? AND source IN (${marks})`,
         [user.discord_id, period.startsAt, period.endsAt, ...WEEKLY_XP_SOURCES]
     );
-    const [[claim]] = await conn.query('SELECT id FROM quest_claims WHERE discord_id = ? AND quest_key = ? AND period_start = ?', [
+    // By key or by claim time: a time zone change re-keys the week, and claimReview refuses a second claim in the same real week.
+    const [[claim]] = await conn.query('SELECT id FROM quest_claims WHERE discord_id = ? AND quest_key = ? AND (period_start = ? OR claimed_at >= ?) LIMIT 1', [
         user.discord_id,
         WEEKLY_REVIEW_KEY,
-        period.start
+        period.start,
+        period.startsAt
     ]);
     return {
         period,

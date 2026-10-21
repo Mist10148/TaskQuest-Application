@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { itemsApi, type Item, type ListWithItems } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { dateOnly } from "@/lib/dates";
+import { addDays, dateOnly, localToday } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import {
@@ -327,6 +327,9 @@ const Tasks = () => {
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
           onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
+          onSnooze={(itemId) =>
+            updateItem.mutate({ itemId, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success("Snoozed to tomorrow") })
+          }
           assignOptions={assignOptions}
           onAssign={(itemId, memberKey) => updateItem.mutate({ itemId, data: { assignee: memberKey } })}
           moveTargets={moveTargets}

@@ -21,6 +21,7 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 - [Quick start](#quick-start)
 - [Scripts](#scripts)
 - [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
 - [Security](#security)
 
@@ -39,7 +40,7 @@ A task completed in Discord shows up on the web immediately, and a class bought 
 | **Games** | Blackjack (bet XP, with double down, flat payouts), Rock Paper Scissors and Hangman on both platforms; Snake, Dino Runner and Space Invaders on the web, verified by server replay. Every outcome is decided by the server. |
 | **Automation** | Deadline and per-task reminder DMs at your own reminder hour and time zone (with Snooze), an overdue notice, an opt-in weekly summary DM, optional browser push, and optional clean-up of finished lists. |
 | **Your data** | JSON and CSV export, reward-free JSON and CSV import, and a private calendar feed (`.ics`) of deadlines and due dates. |
-| **Web app** | Dashboard, Stats, Focus, Review, Shop and Party pages, light and dark themes, a Ctrl+K command palette, keyboard shortcuts (including `j`/`k`/`x`/`e`/`d` on tasks), an installable home-screen app, a responsive layout with an accessible mobile drawer, reduce-motion setting, on-screen game controls. |
+| **Web app** | Dashboard, Stats, Focus, Review, Shop and Party pages, light and dark themes, a Ctrl+K (⌘K on a Mac) command palette, keyboard shortcuts on tasks (`n` new, `/` search, `j`/`k` move, `x` complete, `i` details, `e` edit, `d` delete, `s` select, `Shift A` select all, `1`/`2`/`3` list, board or calendar, `Esc` back, `?` the full list), an installable home-screen app, a responsive layout with an accessible mobile drawer, reduce-motion setting, on-screen game controls. |
 | **AI assistant** (optional) | Summaries of a quest, your day or your week; a "what should I do next?" ranking; and a chat that knows your quests, answers how-to questions, and can create, update, break down or complete tasks after you confirm. Gemini + LangChain + LangGraph. See [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md). |
 | **Leaderboard** | Boards for lifetime XP, XP earned this week, streaks and balance, filterable by class. Discord IDs are never exposed. |
 
@@ -174,11 +175,23 @@ All apps share one git-ignored `.env` at the repository root, documented in [`.e
 
 Vite only exposes `VITE_*` variables to the browser, so the secrets in that file never reach the client.
 
+## Troubleshooting
+
+| Symptom | What to check |
+|---|---|
+| `npm test` passes but the database tests never ran | The database suites are skipped unless `TEST_DB_NAME` is set; see [Quick start](#quick-start) and [docs/TESTING.md](docs/TESTING.md). |
+| Discord login comes back with `?error=invalid_state` or loops | Register `<PUBLIC_URL>/api/auth/callback` exactly as an OAuth2 redirect, and keep `PUBLIC_URL` matching the address in the browser. |
+| `npm run dev:server` or `dev:web` says the port is in use | The API listens on `SERVER_PORT` (default 3001) and the Vite dev server on 8080; stop the other process or change `SERVER_PORT`. |
+| The AI pages, `/summary` and `/ask` are missing or answer "unavailable" | `AI_ENABLED=true` and the same `AI_INTERNAL_TOKEN` must be set for the web server, the bot and the AI service, and the service must be running. |
+| Dates, quests or reminders reset at an odd hour | They follow your time zone setting (`/timezone` or Settings); the web saves your browser's zone the first time if none is set. |
+
+More in [docs/OPERATIONS.md](docs/OPERATIONS.md#troubleshooting).
+
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [docs/README.md](docs/README.md) | Index of every document, with the date it was last checked against the code |
+| [docs/README.md](docs/README.md) | Index of every document, and when they were last checked against the code |
 | [docs/START_HERE.md](docs/START_HERE.md) | A short path for players and one for contributors |
 | [docs/WHATS_NEW.md](docs/WHATS_NEW.md) | A player's view of what changed in 4.0 and the balance pass that followed |
 | [docs/PRD.md](docs/PRD.md) | Product requirements: goals, personas, user stories, requirements, roadmap |

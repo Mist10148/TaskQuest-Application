@@ -6,10 +6,10 @@ import { searchableQuery, snippetAround } from "@/lib/taskSearch";
 
 interface Props {
   query: string;
-  onOpen: (listId: number) => void;
+  onOpen: (listId: number, taskId?: number) => void;
 }
 
-/** Tasks whose name or description matches the search text, each linking to its quest. */
+/** Tasks whose name or description matches the search text, each opening its quest and the task itself. */
 export const TaskSearchResults = ({ query, onOpen }: Props) => {
   const q = searchableQuery(useDebouncedValue(query));
   const { data, isFetching, isError, error, refetch } = useTaskSearch(q);
@@ -31,7 +31,7 @@ export const TaskSearchResults = ({ query, onOpen }: Props) => {
           <li key={task.id}>
             <button
               type="button"
-              onClick={() => onOpen(task.list_id)}
+              onClick={() => onOpen(task.list_id, task.id)}
               className="w-full text-left rounded-xl border border-border bg-card p-3 hover:border-primary/50 transition-colors flex gap-3"
             >
               {task.completed ? <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0 text-success" aria-label="Done" /> : <Circle className="h-5 w-5 mt-0.5 shrink-0 text-foreground-muted" aria-label="Not done" />}

@@ -73,7 +73,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
         group: "Tasks",
         icon: Scroll,
         hint: t.list_name,
-        run: () => navigate(`/tasks?list=${t.list_id}`),
+        run: () => navigate(`/tasks?list=${t.list_id}&task=${t.id}`),
       })),
     [query, taskQuery.data, navigate],
   );

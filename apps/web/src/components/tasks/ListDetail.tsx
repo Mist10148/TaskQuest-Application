@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems, Priority } from "@/lib/api";
@@ -28,6 +28,9 @@ import { canDeleteList, canEditTasks, canManageList, peopleLabel, roleLabel, rol
 
 interface Props {
   list: ListWithItems;
+  /** A task to open in the detail drawer once the quest has loaded (from ?task=); `onTaskOpened` then clears the request. */
+  openTaskId?: number | null;
+  onTaskOpened?: () => void;
   aiEnabled: boolean;
   quickAddPending: boolean;
   /** Tasks hidden while their delete can still be undone. */
@@ -66,7 +69,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
+export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -138,6 +141,11 @@ export const ListDetail = ({ list, aiEnabled, quickAddPending, hiddenIds, onBack
   };
   // The task shown in the detail drawer (looked up by id, so it follows edits and completion).
   const [detailId, setDetailId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!openTaskId) return;
+    if ((list.items || []).some((i: Item) => i.id === openTaskId)) setDetailId(openTaskId);
+    onTaskOpened?.(); // a task that is not on this quest (deleted, or a wrong link) just opens the quest
+  }, [openTaskId, list.items, onTaskOpened]);
   const detailItem = detailId !== null ? items.find((i) => i.id === detailId) ?? null : null;
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkEditing, setBulkEditing] = useState(false);

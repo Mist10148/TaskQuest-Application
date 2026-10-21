@@ -21,7 +21,7 @@ interface Props {
   onRetry?: () => void;
   retrying?: boolean;
   filters: ReturnType<typeof useListFilters>;
-  onOpen: (listId: number) => void;
+  onOpen: (listId: number, taskId?: number) => void;
   onCreate: () => void;
   onOpenTemplates: () => void;
 }

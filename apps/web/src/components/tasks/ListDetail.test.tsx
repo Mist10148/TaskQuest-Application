@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Item, ListWithItems } from "@/lib/api";
 
 vi.mock("@/components/ai/SummarizeButton", () => ({ SummarizeButton: () => null }));
+// The real drawer loads comments and history through React Query; these tests only care whether it is open and for which task.
+vi.mock("./TaskDetailSheet", () => ({ TaskDetailSheet: ({ item }: { item: { name: string } | null }) => (item ? <div role="dialog">{item.name}</div> : null) }));
 
 import { ListDetail } from "./ListDetail";
 
@@ -134,5 +136,26 @@ describe("ListDetail keyboard cursor", () => {
     await userEvent.keyboard("xd");
     expect(onToggleItem).not.toHaveBeenCalled();
     expect(onDeleteItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("ListDetail opening a task from a link", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("opens the drawer for the requested task once, then clears the request", () => {
+    const onTaskOpened = vi.fn();
+    renderList([item(1), item(2, { name: "Pay the rent" })], { openTaskId: 2, onTaskOpened });
+    expect(screen.getByRole("dialog")).toHaveTextContent("Pay the rent");
+    expect(onTaskOpened).toHaveBeenCalledTimes(1);
+  });
+
+  it("just opens the quest when the task is not on it", () => {
+    const onTaskOpened = vi.fn();
+    renderList([item(1)], { openTaskId: 99, onTaskOpened });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onTaskOpened).toHaveBeenCalledTimes(1);
   });
 });

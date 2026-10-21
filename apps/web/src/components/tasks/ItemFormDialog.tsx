@@ -87,18 +87,18 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium block mb-1">Priority</label>
+              <label htmlFor="item-priority" className="text-sm font-medium block mb-1">Priority</label>
               <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
-                <SelectTrigger aria-label="Priority"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="item-priority" aria-label="Priority"><SelectValue /></SelectTrigger>
                 <SelectContent>{PRIORITIES.filter((p) => p.value !== "all").map((p) => <SelectItem key={p.value} value={p.value}>{p.emoji} {p.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium block mb-1">Repeat</label>
+              <label htmlFor="item-repeat" className="text-sm font-medium block mb-1">Repeat</label>
               <Select value={form.recurrence} onValueChange={(v) => set("recurrence", v)}>
-                <SelectTrigger aria-label="Repeat"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="item-repeat" aria-label="Repeat"><SelectValue /></SelectTrigger>
                 <SelectContent>{REPEATS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
@@ -114,9 +114,9 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
           </div>
           {parentOptions.length > 0 && (
             <div>
-              <label className="text-sm font-medium block mb-1">Subtask of</label>
+              <label htmlFor="item-parent" className="text-sm font-medium block mb-1">Subtask of</label>
               <Select value={form.parent_id} onValueChange={(v) => set("parent_id", v)}>
-                <SelectTrigger aria-label="Subtask of"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="item-parent" aria-label="Subtask of"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Not a subtask</SelectItem>
                   {parentOptions.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}

@@ -60,15 +60,18 @@ export const QuickAddBar = forwardRef<HTMLInputElement, Props>(({ pending, aiEna
           </Button>
         )}
       </div>
-      {text.trim() && understood && (
-        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-foreground-muted" aria-live="polite">
-          <span className="font-medium text-foreground">{parsed.name || "…"}</span>
-          {parsed.due_date && <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" aria-hidden /> {formatDeadline(parsed.due_date)}</span>}
-          {parsed.priority && <span>❗ {parsed.priority.toLowerCase()}</span>}
-          {parsed.recurrence && <span className="inline-flex items-center gap-1"><Repeat className="h-3 w-3" aria-hidden /> {parsed.recurrence}</span>}
-          {parsed.tags.map((t) => <span key={t} className="text-primary-text">#{t}</span>)}
-        </p>
-      )}
+      {/* The live region stays in the page: one that appears with its first message is often not announced. */}
+      <div aria-live="polite">
+        {text.trim() && understood && (
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-foreground-muted">
+            <span className="font-medium text-foreground">{parsed.name || "…"}</span>
+            {parsed.due_date && <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" aria-hidden /> {formatDeadline(parsed.due_date)}</span>}
+            {parsed.priority && <span>❗ {parsed.priority.toLowerCase()}</span>}
+            {parsed.recurrence && <span className="inline-flex items-center gap-1"><Repeat className="h-3 w-3" aria-hidden /> {parsed.recurrence}</span>}
+            {parsed.tags.map((t) => <span key={t} className="text-primary-text">#{t}</span>)}
+          </p>
+        )}
+      </div>
     </form>
   );
 });

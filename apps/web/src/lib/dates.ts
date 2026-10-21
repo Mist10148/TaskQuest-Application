@@ -83,3 +83,12 @@ export function compareDeadlines(a: string | null | undefined, b: string | null 
   if (!y) return -1;
   return x < y ? -1 : x > y ? 1 : 0;
 }
+
+/** A calendar day read out in full, e.g. "Tuesday, January 15, 2030" (for labels; the string is never shifted by a time zone). */
+export function formatDayLabel(day: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(day));
+  if (!m) return "";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(
+    Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  );
+}

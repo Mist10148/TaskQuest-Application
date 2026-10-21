@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, compareDeadlines, formatDeadline, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
+import { addDays, compareDeadlines, formatDayLabel, formatDeadline, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
 
 describe("deadline helpers", () => {
   it("does not treat a list due today as overdue", () => {
@@ -31,6 +31,12 @@ describe("deadline helpers", () => {
       setUserZone(null);
     }
     expect(localToday(new Date(2030, 0, 5, 23, 59))).toBe("2030-01-05");
+  });
+
+  it("reads a day out in full for labels, without shifting it", () => {
+    expect(formatDayLabel("2030-01-15")).toBe("Tuesday, January 15, 2030");
+    expect(formatDayLabel("2030-01-15T00:00:00.000Z")).toBe("Tuesday, January 15, 2030");
+    expect(formatDayLabel("")).toBe("");
   });
 
   it("falls back to the browser's day for an unknown zone", () => {

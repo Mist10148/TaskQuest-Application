@@ -2322,6 +2322,11 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].includes(summary.busiestWeekday.name));
         const none = await db.stats.getStatsSummary('100000000000000199');
         assert.deepEqual([none.streak, none.tasksCompleted7d, none.xpBySource30d.length, none.busiestWeekday], [0, 0, 0, null]);
+        // a lapsed streak reads 0, as on Today, before any claim resets the stored count
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 5) WHERE discord_id = ?", [U]);
+        assert.equal((await db.stats.getStatsSummary(U)).streak, 0);
+        await db.query("UPDATE users SET last_daily_claim = CURRENT_TIMESTAMP - make_interval(hours => 2) WHERE discord_id = ?", [U]);
+        assert.equal((await db.stats.getStatsSummary(U)).streak, 6);
     });
 
     await t.test('CSV export round-trips through csvToImport and importAll without rewards', async () => {

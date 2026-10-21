@@ -207,7 +207,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <SidebarContent />
       </aside>
 
-      <CommandPalette aiEnabled={Boolean(user?.features?.ai)} />
+      <CommandPalette aiEnabled={Boolean(user?.features?.ai)} xpEnabled={dbUser.gamification_enabled !== 0 && dbUser.gamification_enabled !== false} />
       <OnboardingTour />
 
       <main id="main" tabIndex={-1} className="flex-1 min-h-screen w-full min-w-0 focus:outline-hidden">

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ListWithCounts } from "@/lib/api";
 import { compareDeadlines, isPastDeadline } from "@/lib/dates";
 import { PRIORITY_ORDER, type ListTab } from "./constants";
+import { loadQuestLogPrefs, saveQuestLogPrefs } from "@/lib/questLogPrefs";
 
 const isComplete = (list: ListWithCounts) => list.itemsTotal > 0 && list.itemsCompleted === list.itemsTotal;
 
@@ -9,14 +10,19 @@ const isComplete = (list: ListWithCounts) => list.itemsTotal > 0 && list.itemsCo
 export type SearchScope = "quests" | "tasks";
 
 export function useListFilters(lists: ListWithCounts[]) {
+  // The tab, filters and sort are remembered in this browser, so coming back to the quest log keeps them; the search text is not.
+  const [saved] = useState(loadQuestLogPrefs);
   const [searchQuery, setSearchQuery] = useState("");
   // "tasks" searches inside task names and descriptions on the server; "quests" filters the loaded quests here.
-  const [searchScope, setSearchScope] = useState<SearchScope>("quests");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState<ListTab>("all");
-  const [sortBy, setSortBy] = useState("newest");
+  const [searchScope, setSearchScope] = useState<SearchScope>(saved.searchScope);
+  const [categoryFilter, setCategoryFilter] = useState(saved.categoryFilter);
+  const [priorityFilter, setPriorityFilter] = useState(saved.priorityFilter);
+  const [statusFilter, setStatusFilter] = useState(saved.statusFilter);
+  const [activeTab, setActiveTab] = useState<ListTab>(saved.activeTab);
+  const [sortBy, setSortBy] = useState(saved.sortBy);
+  useEffect(() => {
+    saveQuestLogPrefs({ searchScope, categoryFilter, priorityFilter, statusFilter, activeTab, sortBy });
+  }, [searchScope, categoryFilter, priorityFilter, statusFilter, activeTab, sortBy]);
 
   const visible = useMemo(() => {
     const query = searchScope === "quests" ? searchQuery.toLowerCase() : "";

@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { aiApi, ApiError, type AiConfirmAction, type AiSource, type AiToolEvent, type ChatEvent } from '@/lib/api';
 import { isPendingConflict, PENDING_CONFIRM_NOTICE, withoutFailedTurn } from '@/lib/chatTurn';
 import { invalidateProgress, showAchievementNotifications, showError, showXPNotification } from '@/hooks/useApi';
+import { isSessionExpired } from '@/lib/session';
 
 export interface ChatMessage {
     id: string;
@@ -48,6 +49,15 @@ export function applyEvent(messages: ChatMessage[], event: ChatEvent): ChatMessa
 
 export function useChat(initialThreadId: string | null) {
     const qc = useQueryClient();
+    // The chat calls the API directly, outside React Query's cache, so a 401 here must end the session the same way App does.
+    const endSessionIfExpired = useCallback(
+        (err: unknown) => {
+            if (!isSessionExpired(err)) return false;
+            qc.setQueryData(['auth', 'me'], null);
+            return true;
+        },
+        [qc]
+    );
     const [threadId, setThreadId] = useState<string | null>(initialThreadId);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [pending, setPending] = useState<AiConfirmAction[]>([]);
@@ -95,6 +105,7 @@ export function useChat(initialThreadId: string | null) {
             .catch((err) => {
                 // A request for a thread the reader already left must not toast or change the screen.
                 if (cancelled) return;
+                if (endSessionIfExpired(err)) return;
                 if (err instanceof ApiError && err.status === 404) {
                     showError(err);
                     setHistory('missing');
@@ -105,7 +116,7 @@ export function useChat(initialThreadId: string | null) {
         return () => {
             cancelled = true;
         };
-    }, [initialThreadId, reloadKey]);
+    }, [initialThreadId, reloadKey, endSessionIfExpired]);
 
     /** Try loading the open thread's history again after a failure. */
     const retryHistory = useCallback(() => {
@@ -159,9 +170,11 @@ export function useChat(initialThreadId: string | null) {
                     setMessages((prev) => withoutFailedTurn(prev));
                     setNotice(PENDING_CONFIRM_NOTICE);
                     const id = threadRef.current;
-                    if (id) aiApi.thread(id).then((t) => setPending(t.pendingConfirm)).catch(() => undefined);
+                    // Only while that conversation is still open: a card from another thread would answer the wrong one.
+                    if (id) aiApi.thread(id).then((t) => { if (threadRef.current === id) setPending(t.pendingConfirm); }).catch(() => undefined);
                     return 'blocked';
                 }
+                if (endSessionIfExpired(err)) return 'ok';
                 if ((err as Error).name !== 'AbortError') {
                     onFail?.();
                     showError(err);
@@ -176,7 +189,7 @@ export function useChat(initialThreadId: string | null) {
             }
             return 'ok';
         },
-        []
+        [endSessionIfExpired]
     );
 
     const send = useCallback(
@@ -220,6 +233,25 @@ export function useChat(initialThreadId: string | null) {
         setMessages((prev) => prev.map((m) => ({ ...m, streaming: false })));
     }, []);
 
+    /**
+     * Start an empty conversation: stops a reply in flight and clears the screen. "New chat" needs this on /chat itself, where the
+     * URL (and so the thread id) does not change, for example after a first message that failed.
+     */
+    const reset = useCallback(() => {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        threadRef.current = null;
+        loadedFor.current = null;
+        touchedRef.current = false;
+        setThreadId(null);
+        setCreatedThreadId(null);
+        setMessages([]);
+        setPending([]);
+        setNotice(null);
+        setIsStreaming(false);
+        setHistory('idle');
+    }, []);
+
     return {
         threadId,
         createdThreadId,
@@ -235,5 +267,6 @@ export function useChat(initialThreadId: string | null) {
         send,
         respond,
         stop,
+        reset,
     };
 }

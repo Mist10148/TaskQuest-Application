@@ -12,8 +12,11 @@ interface Props {
 /** The assistant wants to change something. Nothing happens until the user approves here. */
 export function ConfirmActionCard({ actions, busy, onRespond }: Props) {
   const approveRef = useRef<HTMLButtonElement>(null);
-  // The message box is disabled while an action waits, so move focus to the answer instead of dropping it on the page.
-  useEffect(() => approveRef.current?.focus(), []);
+  // The message box is disabled while an action waits, so move focus to the answer instead of dropping it on the page. A card that
+  // arrives mid-reply has Approve disabled (it cannot take focus yet), so focus it once the reply ends.
+  useEffect(() => {
+    if (!busy) approveRef.current?.focus();
+  }, [busy]);
   return (
     <div role="group" aria-label="Confirm assistant action" className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-3">
       <div className="flex items-center gap-2 text-sm font-medium">

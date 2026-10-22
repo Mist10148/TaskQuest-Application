@@ -17,6 +17,8 @@ import { ApiError } from "@/lib/api";
 import { applyEvent, useChat, type ChatMessage } from "./useChat";
 
 const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>;
+/** A wrapper around a client the test can read back. */
+const withClient = (client: QueryClient) => ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 const assistant = (over: Partial<ChatMessage> = {}): ChatMessage => ({ id: "a", role: "assistant", text: "", sources: [], tools: [], streaming: true, ...over });
 
 /** A chat stream that answers with one token and then finishes on `threadId`. */
@@ -91,5 +93,58 @@ describe("useChat", () => {
     act(() => result.current.retryHistory());
     await waitFor(() => expect(result.current.messages.map((m) => m.text)).toEqual(["earlier"]));
     expect(result.current.historyFailed).toBe(false);
+  });
+  it("New chat clears a failed first message on /chat, where the thread id does not change", async () => {
+    api.chatStream.mockRejectedValue(new ApiError("Boom", 500));
+    const { result } = renderHook(() => useChat(null), { wrapper });
+    await act(() => result.current.send("hello"));
+    expect(result.current.messages.length).toBeGreaterThan(0);
+    act(() => result.current.reset());
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.threadId).toBeNull();
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("New chat stops a reply in flight", async () => {
+    let signal: AbortSignal | undefined;
+    api.chatStream.mockImplementation((_b: unknown, _e: unknown, s: AbortSignal) => {
+      signal = s;
+      return new Promise(() => undefined);
+    });
+    const { result } = renderHook(() => useChat(null), { wrapper });
+    act(() => void result.current.send("hello"));
+    await waitFor(() => expect(signal).toBeDefined());
+    act(() => result.current.reset());
+    expect(signal?.aborted).toBe(true);
+    expect(result.current.messages).toEqual([]);
+  });
+
+  it("an expired session signs out instead of showing a retry that cannot work", async () => {
+    const client = new QueryClient();
+    client.setQueryData(["auth", "me"], { user: { id: "1" } });
+    api.thread.mockRejectedValue(new ApiError("Not authenticated", 401));
+    const { result } = renderHook(() => useChat("t1"), { wrapper: withClient(client) });
+    await waitFor(() => expect(client.getQueryData(["auth", "me"])).toBeNull());
+    expect(result.current.historyFailed).toBe(false);
+
+    client.setQueryData(["auth", "me"], { user: { id: "1" } });
+    api.chatStream.mockRejectedValue(new ApiError("Not authenticated", 401));
+    const fresh = renderHook(() => useChat(null), { wrapper: withClient(client) });
+    await act(() => fresh.result.current.send("hello"));
+    expect(client.getQueryData(["auth", "me"])).toBeNull();
+  });
+
+  it("a waiting approval fetched after a 409 is dropped if the reader opened another thread", async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    api.thread.mockResolvedValueOnce({ messages: [], pendingConfirm: [] });
+    const { result, rerender } = renderHook(({ id }) => useChat(id), { wrapper, initialProps: { id: "a" } });
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+    api.chatStream.mockRejectedValue(new ApiError("Waiting", 409, "CONFIRM_PENDING"));
+    api.thread.mockReturnValueOnce(new Promise((r) => { answer = r; })).mockResolvedValue({ messages: [], pendingConfirm: [] });
+    await act(() => result.current.send("hello"));
+    rerender({ id: "b" });
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+    await act(async () => answer({ messages: [], pendingConfirm: [{ id: "x", action: "complete_item", args: {}, preview: "Complete A?" }] }));
+    expect(result.current.pending).toEqual([]);
   });
 });

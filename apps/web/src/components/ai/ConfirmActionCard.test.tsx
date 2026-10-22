@@ -22,4 +22,11 @@ describe("ConfirmActionCard", () => {
     expect(screen.getByRole("button", { name: /Approve/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Cancel/ })).toBeDisabled();
   });
+
+  it("a card that arrives mid-reply takes focus once the reply ends", () => {
+    const { rerender } = render(<ConfirmActionCard actions={actions} busy onRespond={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /Approve/ })).not.toHaveFocus();
+    rerender(<ConfirmActionCard actions={actions} busy={false} onRespond={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /Approve/ })).toHaveFocus();
+  });
 });

@@ -4,14 +4,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCalendarToken, useCsvImport, useImportData } from "@/hooks/useApi";
-import { ApiError, type CsvImportCheck } from "@/lib/api";
+import { ApiError, apiUrl, type CsvImportCheck } from "@/lib/api";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { csvCounts, csvErrorLines, csvFileProblem } from "@/lib/csvImport";
 import { SettingRow } from "./SettingsSection";
 
 const MAX_IMPORT_BYTES = 1_000_000; // the server accepts 1 MB for imports
 
-/** Calendar feed address for a token, on this site's own origin. */
-const feedUrl = (token: string) => `${window.location.origin}/api/calendar/${token}.ics`;
+/** Calendar feed address for a token: on the API's own host, which is this site's unless VITE_API_URL splits them. */
+const feedUrl = (token: string) => apiUrl(`/api/calendar/${token}.ics`);
 
 /** Check a spreadsheet, show what it contains and any row problems, then import it only if it is clean. */
 const CsvImport = () => {
@@ -30,12 +31,14 @@ const CsvImport = () => {
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
+    // The text is kept, so the picker can be cleared now: choosing the same file again after fixing it must fire a change.
+    if (fileRef.current) fileRef.current.value = "";
     const problem = csvFileProblem(file);
     if (problem) return void toast.error(problem);
-    const content = await file.text();
-    setText(content);
-    setFileName(file.name);
     try {
+      const content = await file.text();
+      setText(content);
+      setFileName(file.name);
       setResult(await check.mutateAsync(content));
     } catch (error) {
       reset();
@@ -140,8 +143,8 @@ export const DataSettings = () => {
     <div>
       <SettingRow label="Export your data" description="Everything you own: quests, tasks, dates and tags.">
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm"><a href="/api/user/export" download><Download className="h-4 w-4 mr-2" />JSON</a></Button>
-          <Button asChild variant="outline" size="sm"><a href="/api/user/export.csv" download><Download className="h-4 w-4 mr-2" />CSV</a></Button>
+          <Button asChild variant="outline" size="sm"><a href={apiUrl("/api/user/export")} download><Download className="h-4 w-4 mr-2" />JSON</a></Button>
+          <Button asChild variant="outline" size="sm"><a href={apiUrl("/api/user/export.csv")} download><Download className="h-4 w-4 mr-2" />CSV</a></Button>
         </div>
       </SettingRow>
       <SettingRow label="Import from JSON" description="Adds quests from a TaskQuest export. Nothing you have is changed, and imports earn no XP.">
@@ -161,6 +164,8 @@ export const DataSettings = () => {
 export const CalendarFeed = ({ token, loading = false }: { token: string | null | undefined; loading?: boolean }) => {
   const { create, revoke } = useCalendarToken();
   const [shown, setShown] = useState(false);
+  // Both change the address every subscribed calendar uses, so they ask first.
+  const [confirm, setConfirm] = useState<"rotate" | "off" | null>(null);
   const url = token ? feedUrl(token) : "";
 
   const copy = async () => {
@@ -202,13 +207,31 @@ export const CalendarFeed = ({ token, loading = false }: { token: string | null 
         <Button type="button" variant="outline" size="icon" aria-label="Copy feed address" onClick={() => void copy()}><Copy className="h-4 w-4" /></Button>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={create.isPending} onClick={() => create.mutate()}>
+        <Button type="button" variant="outline" size="sm" disabled={create.isPending} onClick={() => setConfirm("rotate")}>
           <RefreshCw className="h-4 w-4 mr-2" />New address
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="text-destructive-text" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
+        <Button type="button" variant="ghost" size="sm" className="text-destructive-text" disabled={revoke.isPending} onClick={() => setConfirm("off")}>
           <Trash2 className="h-4 w-4 mr-2" />Turn off
         </Button>
       </div>
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => { if (!open) setConfirm(null); }}
+        title={confirm === "off" ? "Turn off the calendar feed?" : "Make a new feed address?"}
+        description={
+          <p>
+            {confirm === "off"
+              ? "Calendars subscribed to this feed stop updating. You can create a new feed later."
+              : "The current address stops working at once, so every calendar subscribed to it needs the new one."}
+          </p>
+        }
+        confirmLabel={confirm === "off" ? "Turn off" : "New address"}
+        onConfirm={() => {
+          if (confirm === "off") revoke.mutate();
+          else create.mutate();
+          setConfirm(null);
+        }}
+      />
     </div>
   );
 };

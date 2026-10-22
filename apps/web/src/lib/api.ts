@@ -12,6 +12,9 @@ import { isNetworkFailure, OFFLINE_MESSAGE } from './online';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
+/** The full address of an API path, for links the browser follows itself (downloads, the calendar feed). */
+export const apiUrl = (path: string): string => (API_BASE ? `${API_BASE}${path}` : `${window.location.origin}${path}`);
+
 export class ApiError extends Error {
     constructor(message: string, public status: number, public code?: string, public details?: unknown) {
         super(message);

@@ -102,6 +102,8 @@ test('paging the list select keeps the sort, filter and category row of the mess
 
     const asked = [];
     const realGetLists = db.tasks.getLists;
+    const realGetUser = db.users.getUser;
+    db.users.getUser = async () => ({ timezone: 'UTC' });
     db.tasks.getLists = async (userId, opts) => {
         asked.push(opts);
         return Array.from({ length: 30 }, (_, n) => ({ id: n + 1, name: `L${n}`, category: null, items_total: 0, items_completed: 0 }));
@@ -120,7 +122,24 @@ test('paging the list select keeps the sort, filter and category row of the mess
         assert.equal(sent[0].components[0].toJSON().components[0].custom_id, 'filter_category');
     } finally {
         db.tasks.getLists = realGetLists;
+        db.users.getUser = realGetUser;
     }
+});
+
+test("overdue follows the viewer's own date: due Oct 21 is not overdue on the evening of Oct 21 in Los Angeles", () => {
+    // 01:00 UTC on Oct 22 is 18:00 on Oct 21 in America/Los_Angeles.
+    const { todayInZone } = require('@taskquest/shared');
+    const today = todayInZone('America/Los_Angeles', new Date('2026-10-22T01:00:00Z'));
+    assert.equal(today, '2026-10-21');
+    const dueList = { ...list, deadline: '2026-10-21' };
+    const task = item(1, { due_date: '2026-10-21' });
+    assert.doesNotMatch(ui.itemMeta(task, today), /⚠️/);
+    assert.match(ui.itemMeta(task, '2026-10-22'), /⚠️/, 'and it is overdue once that day is over');
+    const view = ui.listViewEmbed(dueList, [task], 'view', null, today).toJSON();
+    assert.doesNotMatch(view.description, /⚠️/);
+    assert.doesNotMatch(view.footer.text, /Overdue/);
+    assert.doesNotMatch(ui.listsOverviewEmbed([dueList], '', '', today).toJSON().description, /⚠️/);
+    assert.match(ui.listsOverviewEmbed([dueList], '', '', '2026-10-22').toJSON().description, /⚠️/);
 });
 
 test('the lists overview stays under the embed limit for a user with hundreds of lists', () => {

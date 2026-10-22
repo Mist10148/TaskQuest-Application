@@ -16,7 +16,7 @@
 
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { tasks, users } = require('@taskquest/shared/db');
-const { isPastDeadline } = require('@taskquest/shared');
+const { isPastDeadline, todayInZone } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const aiSync = require('../utils/aiSync');
 const { EPHEMERAL, handleError, sendRewards, idFrom } = require('../utils/respond');
@@ -40,13 +40,16 @@ function overviewComponents(lists, { withCategoryFilter = false, page = 0 } = {}
 /** A viewer of a shared list never gets edit mode, whatever button was pressed. */
 const canEdit = (list) => list.role !== 'viewer';
 
+/** The user's own date, so "overdue" and "expired" agree with the web app and the reminders, not with UTC. */
+const todayFor = async (userId) => todayInZone((await users.getUser(userId))?.timezone);
+
 async function renderList(userId, listId, mode) {
     const list = await tasks.getList(userId, listId);
     if (!list) return null;
     const items = await tasks.getItems(userId, listId);
     const shown = mode === 'edit' && !canEdit(list) ? 'view' : mode;
     return {
-        embeds: [ui.listViewEmbed(list, items, shown)],
+        embeds: [ui.listViewEmbed(list, items, shown, null, await todayFor(userId))],
         components: shown === 'edit' ? ui.editButtons(list.id, { role: list.role, isOwner: list.is_owner }) : ui.viewButtons(list.id, { canEdit: canEdit(list) })
     };
 }
@@ -75,7 +78,7 @@ function notOwner(interaction) {
 const rejectNotOwner = (interaction) =>
     interaction.reply({ embeds: [ui.error("This isn't your list view", 'Run **/list** to open your own.')], ...EPHEMERAL });
 
-const isExpired = (list) => isPastDeadline(list.deadline);
+const isExpired = (list, today) => isPastDeadline(list.deadline, today);
 
 // ─── Slash command ───────────────────────────────────────────────────────────
 
@@ -91,7 +94,7 @@ async function execute(interaction) {
     }
 
     const lists = await tasks.getLists(userId);
-    return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists)], components: overviewComponents(lists) });
+    return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists, '', '', await todayFor(userId))], components: overviewComponents(lists) });
 }
 
 async function autocomplete(interaction) {
@@ -126,20 +129,21 @@ async function routeButton(interaction) {
     if (id === 'sort_az' || id === 'sort_date' || id === 'sort_pri') {
         const sortBy = id === 'sort_az' ? 'name' : id === 'sort_date' ? 'created_at' : 'priority';
         const lists = await tasks.getLists(userId, { sortBy, order: id === 'sort_az' ? 'ASC' : 'DESC' });
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, sortBy)], components: overviewComponents(lists) });
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, sortBy, '', await todayFor(userId))], components: overviewComponents(lists) });
     }
     if (id === 'filter_cat') {
         const lists = await tasks.getLists(userId);
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, 'category')], components: overviewComponents(lists, { withCategoryFilter: true }) });
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, 'category', '', await todayFor(userId))], components: overviewComponents(lists, { withCategoryFilter: true }) });
     }
     if (['filter_all', 'filter_current', 'filter_expired', 'filter_completed', 'back'].includes(id)) {
         let lists = await tasks.getLists(userId);
+        const today = await todayFor(userId);
         let label = '';
         if (id === 'filter_all') label = 'All';
-        if (id === 'filter_current') (label = 'Current'), (lists = lists.filter((l) => !isExpired(l)));
-        if (id === 'filter_expired') (label = 'Expired'), (lists = lists.filter(isExpired));
+        if (id === 'filter_current') (label = 'Current'), (lists = lists.filter((l) => !isExpired(l, today)));
+        if (id === 'filter_expired') (label = 'Expired'), (lists = lists.filter((l) => isExpired(l, today)));
         if (id === 'filter_completed') (label = 'Completed'), (lists = lists.filter((l) => l.items_total > 0 && l.items_completed === l.items_total));
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, '', label)], components: overviewComponents(lists) });
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, '', label, today)], components: overviewComponents(lists) });
     }
     if (id === 'create') return interaction.showModal(ui.listModal());
 
@@ -151,7 +155,7 @@ async function routeButton(interaction) {
             const list = listId && (await tasks.getList(userId, listId));
             if (!list) return denied(interaction);
             const items = await tasks.getItems(userId, listId, { sortBy, order });
-            return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view')], components: ui.viewButtons(listId, { canEdit: canEdit(list) }) });
+            return interaction.update({ embeds: [ui.listViewEmbed(list, items, 'view', null, await todayFor(userId))], components: ui.viewButtons(listId, { canEdit: canEdit(list) }) });
         }
     }
     if (id.startsWith('search_')) return interaction.showModal(ui.searchModal());
@@ -255,7 +259,7 @@ async function routeSelect(interaction) {
         if (val === 'NONE') lists = lists.filter((l) => !l.category);
         else if (val !== 'ALL') lists = lists.filter((l) => l.category === val);
         const label = val === 'ALL' ? 'All Categories' : val === 'NONE' ? 'Uncategorized' : val;
-        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, `category: ${label}`)], components: overviewComponents(lists, { withCategoryFilter: true }) });
+        return interaction.update({ embeds: [ui.listsOverviewEmbed(lists, `category: ${label}`, '', await todayFor(userId))], components: overviewComponents(lists, { withCategoryFilter: true }) });
     }
 
     if (id === 'sel_list') {
@@ -349,7 +353,7 @@ function overviewViewOf(message) {
 }
 
 /** The lists an overview view (see overviewViewOf) shows, sorted and filtered the way its buttons would. */
-async function listsForView(userId, { sort, filter }) {
+async function listsForView(userId, { sort, filter }, today) {
     const sorts = { name: { sortBy: 'name', order: 'ASC' }, created_at: { sortBy: 'created_at', order: 'DESC' }, priority: { sortBy: 'priority', order: 'DESC' } };
     let lists = await tasks.getLists(userId, sorts[sort]);
     if (sort.startsWith('category: ')) {
@@ -357,8 +361,8 @@ async function listsForView(userId, { sort, filter }) {
         if (label === 'Uncategorized') lists = lists.filter((l) => !l.category);
         else if (label !== 'All Categories') lists = lists.filter((l) => l.category === label);
     }
-    if (filter === 'Current') lists = lists.filter((l) => !isExpired(l));
-    else if (filter === 'Expired') lists = lists.filter(isExpired);
+    if (filter === 'Current') lists = lists.filter((l) => !isExpired(l, today));
+    else if (filter === 'Expired') lists = lists.filter((l) => isExpired(l, today));
     else if (filter === 'Completed') lists = lists.filter((l) => l.items_total > 0 && l.items_completed === l.items_total);
     return lists;
 }
@@ -369,9 +373,10 @@ async function pageSelect(interaction, id, page) {
     if (id === 'sel_list') {
         // Paging must not reset the view: recover the sort/filter from the message's footer and its category row.
         const view = overviewViewOf(interaction.message);
-        const lists = await listsForView(userId, view);
+        const today = await todayFor(userId);
+        const lists = await listsForView(userId, view, today);
         return interaction.update({
-            embeds: [ui.listsOverviewEmbed(lists, view.sort, view.filter)],
+            embeds: [ui.listsOverviewEmbed(lists, view.sort, view.filter, today)],
             components: overviewComponents(lists, { page, withCategoryFilter: view.withCategoryFilter })
         });
     }
@@ -467,7 +472,7 @@ async function routeModal(interaction) {
     if (id.startsWith('m_details_')) {
         const item = await tasks.updateItem(userId, idFrom(id, 'm_details_'), parseDetails((name) => field(interaction, name)));
         aiSync.reindex(userId, item?.list_id);
-        return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**\n${ui.itemMeta(item) || 'No details set.'}`)], ...EPHEMERAL });
+        return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**\n${ui.itemMeta(item, await todayFor(userId)) || 'No details set.'}`)], ...EPHEMERAL });
     }
 
     if (id.startsWith('m_desc_')) {
@@ -482,7 +487,7 @@ async function routeModal(interaction) {
         const lists = await tasks.searchLists(userId, q);
         if (!lists.length) return interaction.reply({ embeds: [ui.info('No Results', `Nothing found for "${q.slice(0, 100)}"`)], ...EPHEMERAL });
         const sel = ui.listSelect(lists);
-        return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists, `Search: ${q.slice(0, 100)}`)], components: sel ? [sel] : [], ...EPHEMERAL });
+        return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists, `Search: ${q.slice(0, 100)}`, '', await todayFor(userId))], components: sel ? [sel] : [], ...EPHEMERAL });
     }
 }
 

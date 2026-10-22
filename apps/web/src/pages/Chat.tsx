@@ -119,7 +119,7 @@ const Chat = () => {
     <DashboardLayout>
       <div className="relative flex gap-4 h-[calc(100dvh-11rem)] min-h-[480px] lg:h-[calc(100dvh-7rem)]">
         <aside id="chat-threads" aria-label="Conversations" className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-0 w-auto lg:static" : "hidden lg:flex")}>
-          <Button size="sm" variant="glow" className="gap-1" onClick={() => { navigate("/chat"); setShowThreads(false); }}>
+          <Button size="sm" variant="glow" className="gap-1" onClick={() => { chat.reset(); setAnnounced(null); navigate("/chat"); setShowThreads(false); inputRef.current?.focus(); }}>
             <MessageSquarePlus className="h-4 w-4" /> New chat
           </Button>
           <div className="flex-1 overflow-y-auto space-y-1">

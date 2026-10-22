@@ -129,6 +129,18 @@ function id(value) {
     return Number.isSafeInteger(n) && n > 0 && n <= MAX_ID ? ok(n) : fail('Invalid id.');
 }
 
+/**
+ * Largest id of a BIGSERIAL row (item_comments, item_activity) that JavaScript numbers carry exactly. Those tables can pass
+ * 2^31 rows long before any other, so their ids are checked against this instead of MAX_ID.
+ */
+const MAX_BIG_ID = Number.MAX_SAFE_INTEGER;
+
+/** Positive integer id of a BIGSERIAL row. */
+function bigId(value) {
+    const n = typeof value === 'number' ? value : Number(String(value));
+    return Number.isSafeInteger(n) && n > 0 && n <= MAX_BIG_ID ? ok(n) : fail('Invalid id.');
+}
+
 /** Escape % and _ so user input is matched literally in LIKE patterns. */
 function escapeLike(value) {
     return String(value).replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -136,6 +148,8 @@ function escapeLike(value) {
 
 module.exports = {
     MAX_ID,
+    MAX_BIG_ID,
+    bigId,
     cleanText,
     comment,
     partyName,

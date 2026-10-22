@@ -70,19 +70,21 @@ export function ChatMessage({ message }: { message: Message }) {
 
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
-      <div className={cn("h-8 w-8 shrink-0 rounded-full flex items-center justify-center", isUser ? "bg-primary/20" : "bg-card border border-border")}>
+      <div aria-hidden className={cn("h-8 w-8 shrink-0 rounded-full flex items-center justify-center", isUser ? "bg-primary/20" : "bg-card border border-border")}>
         {isUser ? <UserIcon className="h-4 w-4 text-primary-text" /> : <Bot className="h-4 w-4 text-primary-text" />}
       </div>
       <div className={cn("max-w-[85%] space-y-2", isUser && "items-end")}>
         <div className={cn("rounded-2xl px-4 py-2.5 text-sm leading-relaxed", isUser ? "bg-primary text-primary-foreground" : "bg-card border border-border")}>
+          {/* The avatar is decorative, so say who is speaking in words. */}
+          <span className="sr-only">{isUser ? "You said:" : "Assistant said:"}</span>
           {isUser ? <p className="whitespace-pre-wrap">{message.text}</p> : message.text ? renderBody(message.text, known) : message.streaming ? <span className="inline-block h-4 w-2 bg-primary/60 animate-pulse rounded-sm" role="img" aria-label="Thinking" /> : null}
-          {!isUser && message.streaming && message.text && <span className="inline-block h-4 w-1.5 ml-0.5 align-middle bg-primary/60 animate-pulse rounded-sm" />}
+          {!isUser && message.streaming && message.text && <span aria-hidden className="inline-block h-4 w-1.5 ml-0.5 align-middle bg-primary/60 animate-pulse rounded-sm" />}
         </div>
         {!isUser && doneTools.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {doneTools.map((t, i) => (
               <span key={i} className={cn("inline-flex items-center gap-1 text-[0.6875rem] px-2 py-0.5 rounded-full border", t.status === "declined" ? "border-border text-foreground-muted" : "border-primary/20 text-primary-text bg-primary/5")}>
-                <Wrench className="h-3 w-3" /> {t.status === "declined" ? "Declined" : TOOL_LABELS[t.name] ?? t.name}
+                <Wrench className="h-3 w-3" aria-hidden /> {t.status === "declined" ? "Declined" : TOOL_LABELS[t.name] ?? t.name}
               </span>
             ))}
           </div>

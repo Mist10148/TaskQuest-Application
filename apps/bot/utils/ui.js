@@ -188,7 +188,8 @@ function itemLines(it, nested, today) {
     return out;
 }
 
-function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
+/** `today` is the viewer's own date (todayInZone of their time zone): a deadline is overdue once their day has passed, not UTC's. */
+function listViewEmbed(list, items, mode = 'view', filterLabel = null, today = todayInZone()) {
     const done = items.filter(i => i.completed).length;
     const total = items.length;
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -234,7 +235,7 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
         const ordered = orderItems(items);
         let shown = 0;
         for (const { item, nested } of ordered) {
-            const lines = itemLines(item, nested);
+            const lines = itemLines(item, nested, today);
             if (desc.length + lines.length > DESCRIPTION_BUDGET) break;
             desc += lines;
             shown++;
@@ -248,8 +249,8 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     const footerParts = [];
     if (list.priority) footerParts.push(`${PRIORITY_LABEL[list.priority]} Priority`);
     if (list.deadline) {
-        const dateStr = formatDeadline(list.deadline);
-        footerParts.push(isPastDeadline(list.deadline) ? `⚠️ Overdue: ${dateStr}` : `Due: ${dateStr}`);
+        const dateStr = formatDeadline(list.deadline, today);
+        footerParts.push(isPastDeadline(list.deadline, today) ? `⚠️ Overdue: ${dateStr}` : `Due: ${dateStr}`);
     }
     if (list.shared) footerParts.push(list.is_owner ? `👥 ${list.member_count} people` : `👥 ${list.role} · by ${escapeDiscord(list.owner_name, { max: 60 }) || 'someone'}`);
     footerParts.push(mode === 'edit' ? '✏️ Edit Mode' : list.shared && list.role === 'viewer' ? '👁️ View only' : '👁️ View Mode');
@@ -259,7 +260,7 @@ function listViewEmbed(list, items, mode = 'view', filterLabel = null) {
     return embed;
 }
 
-function listsOverviewEmbed(lists, sort = '', filter = '') {
+function listsOverviewEmbed(lists, sort = '', filter = '', today = todayInZone()) {
     const embed = new EmbedBuilder()
         .setColor(COLORS.primary)
         .setTitle('📋 Your Lists');
@@ -299,8 +300,8 @@ function listsOverviewEmbed(lists, sort = '', filter = '') {
         
         // Deadline - properly formatted
         if (l.deadline) {
-            const dateStr = formatDeadline(l.deadline);
-            if (dateStr) metaParts.push(isPastDeadline(l.deadline) ? `⚠️ ${dateStr}` : `📅 ${dateStr}`);
+            const dateStr = formatDeadline(l.deadline, today);
+            if (dateStr) metaParts.push(isPastDeadline(l.deadline, today) ? `⚠️ ${dateStr}` : `📅 ${dateStr}`);
         }
         
         if (l.shared) metaParts.push(l.is_owner ? `shared with ${Number(l.member_count) - 1}` : `${l.role} · by ${escapeDiscord(l.owner_name, { max: 60 }) || 'someone'}`);

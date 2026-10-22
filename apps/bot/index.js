@@ -91,7 +91,7 @@ const cleanupLists = job('AUTO-DELETE', async () => {
 
 const expireGames = job('GAMES', async () => {
     const expired = await db.games.expireStaleSessions();
-    if (expired > 0) log('🧹', 'GAMES', `Expired ${expired} abandoned game sessions (bets refunded)`);
+    if (expired > 0) log('🧹', 'GAMES', `Expired ${expired} abandoned game sessions (open Blackjack hands stand)`);
 });
 
 const timers = [];

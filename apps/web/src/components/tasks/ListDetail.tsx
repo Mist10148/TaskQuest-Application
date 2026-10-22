@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Download, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { downloadText, exportFileName, listToCsv, listToMarkdown } from "@/lib/exportList";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems, Priority } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -300,6 +302,18 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
             {editable && <Button variant={selectMode ? "default" : "outline"} size="sm" onClick={() => (selectMode ? leaveSelectMode() : setSelectMode(true))} className="gap-1" aria-pressed={selectMode} title="Select tasks (s)">
               <CheckSquare className="h-4 w-4" /><span className="hidden sm:inline">Select</span>
             </Button>}
+            {/* Anyone on the quest can take a copy of what they can already read. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1" aria-label="Export this quest">
+                  <Download className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Export</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => downloadText(exportFileName(list, "csv"), listToCsv(list), "text/csv;charset=utf-8")}>CSV (can be imported again)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => downloadText(exportFileName(list, "md"), listToMarkdown(list), "text/markdown;charset=utf-8")}>Markdown checklist</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {editable && (
               <Button variant="outline" size="sm" onClick={onSaveTemplate} className="gap-1" title="Save this quest's tasks as a template">
                 <FilePlus className="h-4 w-4" /><span className="hidden sm:inline">Template</span>

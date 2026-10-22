@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Calendar, Check, Pencil, Repeat, Timer, UserRound } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,8 @@ interface Props {
   onOpenSubtask: (id: number) => void;
   /** People the task can be assigned to (a shared quest's owner and members); leave out on a quest nobody shares. */
   assignOptions?: ReadonlyArray<{ memberKey: string; name: string | null; isYou: boolean }>;
-  onAssign?: (id: number, memberKey: string | null) => void;
+  /** May return the save's promise: the choice shows at once and goes back if the save fails. */
+  onAssign?: (id: number, memberKey: string | null) => void | Promise<unknown>;
   /** Quests a top-level task can be moved to (with its subtasks). */
   moveTargets?: ReadonlyArray<{ id: number; name: string }>;
   onMove?: (id: number, listId: number) => void;
@@ -43,6 +45,13 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
   const tags = parseTags(item?.tags);
   const overdue = item ? !completed && isPastDeadline(item.due_date) : false;
   const doneSubtasks = subtasks.filter((s) => s.completed).length;
+  // The assignee just picked, shown until the task data catches up (or the save fails), so the menu does not snap back meanwhile.
+  const [chosen, setChosen] = useState<{ id: number; key: string } | null>(null);
+  const savedKey = item?.assignee?.memberKey ?? "";
+  useEffect(() => {
+    if (chosen && (chosen.id !== item?.id || chosen.key === savedKey)) setChosen(null);
+  }, [chosen, item?.id, savedKey]);
+  const shownKey = chosen && chosen.id === item?.id ? chosen.key : savedKey;
 
   return (
     <Sheet open={item !== null} onOpenChange={onOpenChange}>
@@ -93,8 +102,12 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                   <select
                     aria-label="Assignee"
                     className={selectClass}
-                    value={item.assignee?.memberKey ?? ""}
-                    onChange={(e) => onAssign(item.id, e.target.value || null)}
+                    value={shownKey}
+                    onChange={(e) => {
+                      const key = e.target.value;
+                      setChosen({ id: item.id, key });
+                      void Promise.resolve(onAssign(item.id, key || null)).catch(() => setChosen(null));
+                    }}
                   >
                     <option value="">Nobody</option>
                     {assignOptions.map((p) => (
@@ -133,7 +146,8 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                 <Button onClick={() => onToggle(item.id)}>{completed ? "Reopen" : "Mark done"}</Button>
               </SheetFooter>
             )}
-            {showThread && <TaskThread itemId={item.id} canComment={!readOnly} />}
+            {/* Keyed by task: a half-written comment must not carry over to the subtask opened from this drawer. */}
+            {showThread && <TaskThread key={item.id} itemId={item.id} canComment={!readOnly} />}
           </>
         )}
       </SheetContent>

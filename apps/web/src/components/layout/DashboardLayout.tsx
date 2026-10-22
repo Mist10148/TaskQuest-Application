@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useAuth, getAvatarUrl } from "@/contexts/AuthContext";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
+import { GlobalShortcuts } from "./GlobalShortcuts";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { AI_NAV_ITEM, NAV_ITEMS } from "@/components/layout/navItems";
 import { openCommandPalette } from "@/lib/commands";
@@ -209,6 +210,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
       <CommandPalette aiEnabled={Boolean(user?.features?.ai)} xpEnabled={dbUser.gamification_enabled !== 0 && dbUser.gamification_enabled !== false} />
       <OnboardingTour />
+      <GlobalShortcuts aiEnabled={Boolean(user?.features?.ai)} />
 
       <main id="main" tabIndex={-1} className="flex-1 min-h-screen w-full min-w-0 focus:outline-hidden">
         <div className="pt-18 lg:pt-4 pb-20 lg:pb-4 px-4 lg:px-8">{children}</div>

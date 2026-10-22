@@ -492,7 +492,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         confirmLabel={`Delete ${confirmBulk?.length ?? 0} tasks`}
         onConfirm={() => { if (confirmBulk) onBulkDelete(confirmBulk); setConfirmBulk(null); leaveSelectMode(); }}
       />
-      <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
+      <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} aiEnabled={aiEnabled} />
       <TaskDetailSheet
         item={detailItem}
         subtasks={detailItem ? childrenOf.get(detailItem.id) || [] : []}

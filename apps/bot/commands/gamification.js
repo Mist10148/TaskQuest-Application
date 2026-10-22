@@ -195,17 +195,19 @@ const CLASS_INFO = Object.fromEntries(
 async function profile(interaction) {
     const targetUser = interaction.options.getUser('user') || interaction.user;
     const userId = targetUser.id;
+    // Several database reads follow: acknowledge first so a slow one cannot miss Discord's 3 second window.
+    await interaction.deferReply(EPHEMERAL);
 
     // Viewing someone else never creates a record for them.
     if (userId === interaction.user.id) await users.ensureUser(userId);
     const stats = await users.getUserStats(userId);
     if (!stats) {
-        return interaction.reply({ embeds: [ui.info('No profile yet', `${escapeDiscord(targetUser.username, { max: 60 })} hasn't used TaskQuest yet.`)], ...EPHEMERAL });
+        return interaction.editReply({ embeds: [ui.info('No profile yet', `${escapeDiscord(targetUser.username, { max: 60 })} hasn't used TaskQuest yet.`)] });
     }
     const user = stats.user;
     // Turning XP off takes a player off the leaderboard; their XP, tasks and games are not anyone else's to read either.
     if (userId !== interaction.user.id && !Number(user.gamification_enabled)) {
-        return interaction.reply({ embeds: [ui.info('Profile is private', `${escapeDiscord(targetUser.username, { max: 60 })} has XP and progress turned off.`)], ...EPHEMERAL });
+        return interaction.editReply({ embeds: [ui.info('Profile is private', `${escapeDiscord(targetUser.username, { max: 60 })} has XP and progress turned off.`)] });
     }
     const userSkills = await users.getUserSkills(userId);
 
@@ -347,8 +349,8 @@ async function profile(interaction) {
     const statusText = user.gamification_enabled ? '✅ XP Active' : '💤 XP Disabled';
     embed.setFooter({ text: `${statusText} · /class to change class · /achievements for badges` });
 
-    // XP details are personal, so profiles are always ephemeral.
-    await interaction.reply({ embeds: [embed], ...EPHEMERAL });
+    // XP details are personal, so profiles are always ephemeral (the deferred reply above).
+    await interaction.editReply({ embeds: [embed] });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -361,14 +363,14 @@ const achievementsData = new SlashCommandBuilder()
 
 async function achievements(interaction) {
     const userId = interaction.user.id;
+    await interaction.deferReply(EPHEMERAL);
     const userAchs = await users.getAchievements(userId);
     const page = 0;
     const total = Math.ceil(Object.keys(ACHIEVEMENTS).length / 8) || 1;
 
-    await interaction.reply({
+    await interaction.editReply({
         embeds: [ui.achievementsEmbed(userAchs, ACHIEVEMENTS, page)],
-        components: [ui.achButtons(page, total)],
-        flags: MessageFlags.Ephemeral
+        components: [ui.achButtons(page, total)]
     });
 }
 
@@ -442,13 +444,11 @@ function respecPreview(userSkills, classKey) {
 
 async function classShop(interaction) {
     const userId = interaction.user.id;
+    await interaction.deferReply(EPHEMERAL);
     const user = await users.ensureUser(userId);
 
     // Start in browse mode with the current class selected
-    await interaction.reply({
-        ...(await classView(userId, user, user.player_class)),
-        flags: MessageFlags.Ephemeral
-    });
+    await interaction.editReply(await classView(userId, user, user.player_class));
 }
 
 async function handleClassButton(interaction) {

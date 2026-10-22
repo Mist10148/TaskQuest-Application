@@ -41,7 +41,8 @@ test('/profile @someone with XP turned off shows nothing of their progress', asy
         await profile({
             user: { id: '1' },
             options: { getUser: () => ({ id: '9', username: 'quiet' }) },
-            reply: async (p) => void sent.push(p)
+            deferReply: async () => {},
+            editReply: async (p) => void sent.push(p)
         });
         const text = JSON.stringify(sent[0].embeds[0].toJSON());
         assert.match(text, /Profile is private/);

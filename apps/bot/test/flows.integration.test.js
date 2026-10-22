@@ -62,6 +62,7 @@ function fake({ userId = USER, customId, commandName, values, fields = {}, optio
         editReply: record('editReply'),
         followUp: record('followUp'),
         deferReply: record('deferReply'),
+        deleteReply: record('deleteReply'),
         deferUpdate: record('deferUpdate'),
         showModal: record('showModal'),
         respond: record('respond'),
@@ -268,7 +269,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         for (let n = 1; n <= 30; n++) await db.tasks.createList(PAGER, { name: `L${String(n).padStart(2, '0')}` });
         const overview = fake({ userId: PAGER, commandName: 'list' });
         await list.execute(overview);
-        const menu = overview.calls[0].payload.components.map((c) => c.toJSON()).find((c) => c.components[0].custom_id === 'sel_list').components[0];
+        const menu = overview.calls.at(-1).payload.components.map((c) => c.toJSON()).find((c) => c.components[0].custom_id === 'sel_list').components[0];
         const menuOf = (call) => call.payload.components.map((c) => c.toJSON()).find((c) => c.components[0].custom_id === 'sel_list').components[0];
         const labels = new Set();
         let current = menu;
@@ -527,11 +528,11 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         // /list shows the sharing marker and role; an editor edits, a viewer only reads.
         const ov = fake({ userId: P.ed, commandName: 'list' });
         await list.execute(ov);
-        assert.match(text(ov.calls[0]), /Flat chores[\s\S]*👥[\s\S]*editor · by bot\\\\_own/);
+        assert.match(text(ov.calls.at(-1)), /Flat chores[\s\S]*👥[\s\S]*editor · by bot\\\\_own/);
         const editorView = fake({ userId: P.ed, commandName: 'list', options: { name: 'Flat chores' } });
         await list.execute(editorView);
         const rowIds = (call) => call.payload.components.flatMap((r) => r.toJSON().components.map((c) => c.custom_id));
-        assert.ok(rowIds(editorView.calls[0]).includes(`edit_${shared.id}`));
+        assert.ok(rowIds(editorView.calls.at(-1)).includes(`edit_${shared.id}`));
         const editMode = fake({ userId: P.ed, customId: `edit_${shared.id}` });
         await list.handleButton(editMode);
         const editIds = rowIds(editMode.calls[0]);
@@ -539,8 +540,8 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.ok(!editIds.includes(`list_meta_${shared.id}`) && !editIds.includes(`list_del_${shared.id}`), 'an editor has no list settings and no delete');
         const viewerView = fake({ userId: P.vw, commandName: 'list', options: { name: 'Flat chores' } });
         await list.execute(viewerView);
-        assert.ok(!rowIds(viewerView.calls[0]).includes(`edit_${shared.id}`), 'a viewer gets no Edit button');
-        assert.match(text(viewerView.calls[0]), /View only/);
+        assert.ok(!rowIds(viewerView.calls.at(-1)).includes(`edit_${shared.id}`), 'a viewer gets no Edit button');
+        assert.match(text(viewerView.calls.at(-1)), /View only/);
         const forced = fake({ userId: P.vw, customId: `edit_${shared.id}` });
         await list.handleButton(forced);
         assert.equal(forced.calls[0].type, 'reply');

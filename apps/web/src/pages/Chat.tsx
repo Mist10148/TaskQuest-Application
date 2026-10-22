@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Bot, Loader2, MessageSquarePlus, PanelLeft, Send, Square, Trash2 } from "lucide-react";
+import { ArrowDown, Bot, Loader2, MessageSquarePlus, PanelLeft, Send, Square, Trash2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
@@ -42,6 +42,17 @@ const Chat = () => {
   const sectionRef = useRef<HTMLElement>(null);
   const threadsRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  // Scrolled up to reread: offer a way back down instead of pulling the reader there on every token.
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
+  const onScroll = () => {
+    const el = scrollerRef.current;
+    if (el) setAwayFromEnd(el.scrollHeight - el.scrollTop - el.clientHeight > 240);
+  };
+  const jumpToLatest = () => {
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
+    setAwayFromEnd(false);
+  };
   const { reduceMotion } = usePreferences();
   const waiting = chat.isStreaming && !chat.messages[chat.messages.length - 1]?.text;
   const slow = useSlow(waiting);
@@ -56,6 +67,14 @@ const Chat = () => {
 
   // A reply from the conversation the reader just left is not read out in the next one.
   useEffect(() => setAnnounced(null), [routeThreadId]);
+
+  // The message box grows with what is typed (up to its max height, then it scrolls), and shrinks back once sent.
+  useEffect(() => {
+    const box = inputRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${box.scrollHeight}px`;
+  }, [input]);
 
   // A brand-new conversation gets its id when the first turn ends; reflect it in the URL, once.
   const { createdThreadId, acknowledgeCreated } = chat;
@@ -149,7 +168,11 @@ const Chat = () => {
             <MessageSquarePlus className="h-4 w-4" /> New chat
           </Button>
           <div className="flex-1 overflow-y-auto space-y-1">
-            {threadsLoading && <p className="text-xs text-foreground-muted p-2 flex items-center gap-2" aria-busy="true"><Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Loading conversations…</p>}
+            {threadsLoading && (
+              <div role="status" aria-label="Loading conversations" className="space-y-2 p-1" data-testid="threads-skeleton">
+                {[0, 1, 2].map((n) => <div key={n} className="h-7 animate-pulse rounded-lg bg-card/60" />)}
+              </div>
+            )}
             {threadsFailed && <ErrorCard what="your conversations" onRetry={() => void refetchThreads()} retrying={threadsFetching} />}
             {!threadsLoading && !threadsFailed && threads.length === 0 && <p className="text-xs text-foreground-muted p-2">Your conversations will show up here.</p>}
             {threads.map((t) => (
@@ -168,7 +191,7 @@ const Chat = () => {
           </div>
         </aside>
 
-        <section ref={sectionRef} className="flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-background-secondary/30">
+        <section ref={sectionRef} className="relative flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-background-secondary/30">
           <header className="flex items-center gap-2 border-b border-border px-4 py-3">
             <Button ref={toggleRef} size="icon" variant="ghost" className="lg:hidden" aria-label={showThreads ? "Hide conversations" : "Show conversations"} aria-expanded={showThreads} aria-controls="chat-threads" onClick={() => setShowThreads((v) => !v)}><PanelLeft className="h-4 w-4" /></Button>
             <Bot className="h-5 w-5 text-primary-text" />
@@ -176,7 +199,7 @@ const Chat = () => {
             <span className="ml-auto text-[0.6875rem] text-foreground-muted hidden sm:inline">AI-generated. Changes always ask first.</span>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref={scrollerRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
             {/* Screen readers hear a reply once it is complete, not every streamed token. */}
             <div className="sr-only" role="status" aria-live="polite">{announced ? `${announced.text}${announced.n % 2 ? "" : ZERO_WIDTH_SPACE}` : ""}</div>
             {chat.historyLoading && (
@@ -205,6 +228,12 @@ const Chat = () => {
             {chat.pending.length > 0 && <ConfirmActionCard actions={chat.pending} busy={chat.isStreaming} onRespond={chat.respond} />}
             <div ref={bottomRef} />
           </div>
+
+          {awayFromEnd && chat.messages.length > 0 && (
+            <Button type="button" size="sm" variant="outline" onClick={jumpToLatest} className="absolute bottom-20 left-1/2 -translate-x-1/2 gap-1 rounded-full shadow-md bg-card">
+              <ArrowDown className="h-4 w-4" aria-hidden /> Jump to latest
+            </Button>
+          )}
 
           <form
             className="border-t border-border p-3 flex items-end gap-2"

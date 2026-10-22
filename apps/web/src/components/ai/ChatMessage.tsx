@@ -1,6 +1,7 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { Bot, User as UserIcon, Wrench } from "lucide-react";
+import { Bot, Check, Copy, User as UserIcon, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage as Message } from "@/hooks/useChat";
 import { SourceChips } from "./SourceChips";
@@ -63,6 +64,26 @@ function renderBody(text: string, knownIds: Map<string, string>): ReactNode {
   return <div className="space-y-2">{blocks}</div>;
 }
 
+/** Copy an answer as plain text (the way it was written, bullets and all). */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Couldn't copy. Select the text and copy it by hand.");
+    }
+  };
+  return (
+    <button type="button" onClick={() => void copy()} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.6875rem] text-foreground-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
+      {copied ? <Check className="h-3 w-3" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 export function ChatMessage({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const known = new Map(message.sources.map((s) => [s.id, s.title]));
@@ -90,6 +111,7 @@ export function ChatMessage({ message }: { message: Message }) {
           </div>
         )}
         {!isUser && message.sources.length > 0 && <SourceChips sources={message.sources} />}
+        {!isUser && !message.streaming && message.text && <CopyButton text={message.text} />}
       </div>
     </div>
   );

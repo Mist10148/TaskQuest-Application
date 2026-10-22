@@ -1403,7 +1403,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
         // archive: old rows move, recent ones stay, a dry run changes nothing, and the move can be repeated
         await db.query("UPDATE xp_transactions SET created_at = (created_at - make_interval(days => 400)) WHERE discord_id = ? AND source = 'item_add'", [A]);
-        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < (CURRENT_TIMESTAMP - make_interval(days => 365))", [A]))[0].n);
+        // A once-per-parent bonus row stays however old it is, so archiving cannot let it pay twice.
+        await db.query("INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id, created_at) VALUES (?, 15, 'subtasks_done', 0, 15, 424242, (CURRENT_TIMESTAMP - make_interval(days => 400)))", [A]);
+        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < (CURRENT_TIMESTAMP - make_interval(days => 365)) AND source <> 'subtasks_done'", [A]))[0].n);
         assert.ok(old >= 3);
         const dry = await db.maintenance.archiveOld({ days: 365, dryRun: true });
         assert.ok(dry.dryRun && dry.xpTransactions >= old && dry.gameSessions === null);
@@ -1414,6 +1416,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_add'", [A]))[0].n), 0);
         assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete'", [A]))[0].n), 3, 'recent rows stay');
         assert.equal((await db.maintenance.archiveOld({ days: 365 })).xpTransactions, 0, 'nothing is left to move');
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'subtasks_done'", [A]))[0].n), 1, 'the once-only bonus stays in the log');
         assert.equal((await db.query("SELECT player_class FROM xp_transactions_archive WHERE discord_id = ? LIMIT 1", [A]))[0].player_class, 'HERO');
         await assert.rejects(db.maintenance.archiveOld({ days: 0 }), /days/);
         await assert.rejects(db.maintenance.archiveOld({ batch: 0 }), /batch/);

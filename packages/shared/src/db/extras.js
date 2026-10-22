@@ -52,7 +52,7 @@ async function completionExtras(conn, user, item, ctx, now = new Date()) {
     }
 
     // Inbox zero: this completion cleared the last overdue task, after at least 3 overdue ones this week, once a week.
-    if (ctx.overdueDays > 0 && (await countThisWeek(conn, user, 'inbox_zero', now)) === 0) {
+    if (ctx.bonusOverdueDays > 0 && (await countThisWeek(conn, user, 'inbox_zero', now)) === 0) {
         const [[open]] = await conn.query(
             `SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id
               WHERE l.discord_id = ? AND i.parent_id IS NULL AND i.completed = 0 AND i.due_date < ?`,

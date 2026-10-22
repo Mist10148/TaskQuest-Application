@@ -806,7 +806,10 @@ function trustedDueDate(item, now) {
  */
 async function completionContext(conn, item, user, now = new Date()) {
     const today = todayInZone(user.timezone);
-    let dueDate = trustedDueDate(item, now);
+    // The trusted date for the flat deadline bonuses, which have their own daily XP cap; `dueDate` below may be cleared for
+    // the class rules only.
+    const trustedDue = trustedDueDate(item, now);
+    let dueDate = trustedDue;
     const [[counts]] = await conn.query(
         'SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE completed = 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
         [item.list_id]
@@ -859,6 +862,9 @@ async function completionContext(conn, item, user, now = new Date()) {
         // The stored date whatever its age: habit streaks follow the schedule, not the bonuses.
         scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null,
         overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
+        // The same two without the class cap: early_finish, overdue_clear and inbox_zero are not class rules.
+        bonusDueDate: trustedDue,
+        bonusOverdueDays: trustedDue ? Math.max(0, daysBetween(trustedDue, today)) : 0,
         firstOfDay: (await countToday(conn, user, 'item_complete', now)) === 0,
         // Imported tasks and auto-spawned copies (counts_for_quests = 0) never mark a list as cleared, so they must not pay the clear bonus either.
         listCleared: Number(item.counts_for_quests) !== 0 && !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0 && !(marked && marked.cleared_at)
@@ -892,10 +898,10 @@ async function completionBonuses(conn, user, item, ctx) {
     }
 
     const deadlineCap = { dailyCap: LIMITS.DEADLINE_BONUS_XP_PER_DAY, capSources: ['early_finish', 'overdue_clear'], referenceId: item.id };
-    if (ctx.dueDate && ctx.dueDate > ctx.today) {
-        const early = Math.min(LIMITS.EARLY_FINISH_MAX, REWARDS.EARLY_FINISH_PER_DAY * daysBetween(ctx.today, ctx.dueDate));
+    if (ctx.bonusDueDate && ctx.bonusDueDate > ctx.today) {
+        const early = Math.min(LIMITS.EARLY_FINISH_MAX, REWARDS.EARLY_FINISH_PER_DAY * daysBetween(ctx.today, ctx.bonusDueDate));
         await pay('early_finish', early, deadlineCap);
-    } else if (ctx.overdueDays > 0) {
+    } else if (ctx.bonusOverdueDays > 0) {
         await pay('overdue_clear', REWARDS.OVERDUE_CLEAR, deadlineCap);
     }
 

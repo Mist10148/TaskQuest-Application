@@ -6,7 +6,7 @@ Two short paths. Pick yours.
 
 1. **Claim your daily reward** on the dashboard (or `/daily`) every calendar day. The streak adds XP and pays chests at 7, 14 and 30 days.
 2. **Make a quest, add tasks, finish them.** Every action pays XP; finishing pays most. Give tasks due dates and priorities and the bonuses ([XP guide](XP_GUIDE.md)) start to add up.
-3. **Open Today.** It lists what is overdue, due today or HIGH priority, warns you when today is the last day to keep your streak, and has a one-line reflection (+10 XP) and a weekly goal.
+3. **Open Today.** It lists what is overdue, due today or HIGH priority and what is coming up this week, warns you when today is the last day to keep your streak, and has a one-line reflection (+10 XP) and a weekly goal.
 4. **Spend XP.** [Classes](CLASS_GUIDE.md) change how every action pays (17 to choose from); [skills](GAMEPLAY.md#4-skills) sharpen them. The Classes and Skills pages show what a purchase would earn you before you pay, and a skill tree can be reset for a 75% refund.
 5. **Go further:** focus sessions, the weekly review, a party with a shared quest, shared quests, the shop, prestige at level 30.
 

@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AlertTriangle, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Loader2, PenLine, Target, Timer } from "lucide-react";
+import { AlarmClock, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Loader2, PenLine, Target, Timer } from "lucide-react";
+import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
 import { PriorityPanel } from "@/components/ai/PriorityPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useClaimGoal, useSetGoal, useToday, useToggleItem, useWriteReflection } from "@/hooks/useApi";
+import { useClaimGoal, useSetGoal, useToday, useToggleItem, useUpdateItem, useWriteReflection } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
 import { formatDeadline, formatDue } from "@/lib/dates";
-import { todayHeadline, goalPercent, streakDeadline } from "@/lib/today";
+import { todayHeadline, goalPercent } from "@/lib/today";
+import { StreakAtRisk } from "@/components/dashboard/StreakAtRisk";
+import { addDays, localToday } from "@/lib/dates";
 import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import type { TodayData, TodayTask } from "@/lib/api";
 
@@ -18,6 +21,11 @@ const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "
 
 const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
   const toggle = useToggleItem();
+  const update = useUpdateItem();
+  // Due today or late: push it to tomorrow without opening the quest.
+  const canSnooze = Boolean(task.dueDate && task.dueDate <= today);
+  const snooze = () =>
+    update.mutate({ itemId: task.id, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success(`Snoozed "${task.name}" to tomorrow`) });
   return (
     <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
       <button
@@ -30,7 +38,7 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
         {toggle.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5 text-transparent hover:text-success" aria-hidden />}
       </button>
       <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 break-words text-sm font-medium sm:text-base">{task.name}</p>
+        <Link to={`/tasks?list=${task.listId}&task=${task.id}`} className="line-clamp-2 break-words text-sm font-medium hover:text-primary-text hover:underline underline-offset-2 sm:text-base">{task.name}</Link>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-foreground-muted">
           <span>{task.listName}</span>
           {task.dueDate && (
@@ -44,6 +52,11 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
           ) : null}
         </p>
       </div>
+      {canSnooze && (
+        <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs" disabled={update.isPending} onClick={snooze} aria-label={`Snooze "${task.name}" to tomorrow`}>
+          <AlarmClock className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Snooze</span>
+        </Button>
+      )}
       {task.priority && <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", PRIORITY_DOT[task.priority])} title={`${task.priority.toLowerCase()} priority`} role="img" aria-label={`${task.priority.toLowerCase()} priority`} />}
     </li>
   );
@@ -146,14 +159,7 @@ const TodayView = ({ data }: { data: TodayData }) => (
 
     <StreakStrip day={data.day} live={data.streak.live} claimedToday={data.streak.claimedToday} />
 
-    {data.streak.atRisk && (
-      <div role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm" data-testid="streak-warning">
-        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive-text" aria-hidden />
-        <p>
-          Your <strong>{data.streak.live}-day streak</strong> ends {streakDeadline(data.streak.expiresAt)} if you do not claim your daily reward. <Link to="/dashboard" className="font-medium underline">Claim it on the dashboard</Link>.
-        </p>
-      </div>
-    )}
+    {data.streak.atRisk && <StreakAtRisk live={data.streak.live} expiresAt={data.streak.expiresAt} />}
 
     <section aria-labelledby="todo-title">
       <h2 id="todo-title" className="mb-2 flex items-center gap-2 font-heading font-semibold"><Flame className="h-5 w-5 text-primary-text" aria-hidden /> What needs doing</h2>

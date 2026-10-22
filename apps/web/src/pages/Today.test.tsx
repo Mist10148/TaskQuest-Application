@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,8 +11,11 @@ const hooks = vi.hoisted(() => ({
   useWriteReflection: vi.fn(),
   useSetGoal: vi.fn(),
   useClaimGoal: vi.fn(),
+  useUpdateItem: vi.fn(),
 }));
+const daily = vi.hoisted(() => ({ claim: vi.fn(), pending: false, waitMs: 0, claimed: false, everClaimed: true }));
 vi.mock("@/hooks/useApi", () => hooks);
+vi.mock("@/hooks/useDailyClaim", () => ({ useDailyClaim: () => daily }));
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/components/ai/PriorityPanel", () => ({ PriorityPanel: () => null }));
 
@@ -52,6 +56,8 @@ describe("Today page", () => {
     hooks.useWriteReflection.mockReturnValue(idle);
     hooks.useSetGoal.mockReturnValue(idle);
     hooks.useClaimGoal.mockReturnValue(idle);
+    hooks.useUpdateItem.mockReturnValue({ ...idle, mutate: vi.fn() });
+    daily.claim.mockReset();
   });
 
   it("lists the week ahead under its own heading, with relative due dates", () => {
@@ -73,5 +79,29 @@ describe("Today page", () => {
     load(day({ upcoming: undefined }));
     show();
     expect(screen.queryByRole("region", { name: "Coming up this week" })).toBeNull();
+  });
+
+  it("claims the daily reward from the streak warning itself", async () => {
+    load(day({ streak: { count: 5, live: 5, claimedToday: false, daysLeft: 0, atRisk: true, expiresAt: null } }));
+    show();
+    const warning = screen.getByTestId("streak-warning");
+    expect(warning).toHaveTextContent("5-day streak");
+    await userEvent.click(within(warning).getByRole("button", { name: "Claim now" }));
+    expect(daily.claim).toHaveBeenCalled();
+  });
+
+  it("opens a task in its quest, and snoozes a task due today to tomorrow", async () => {
+    load(day());
+    show();
+    expect(screen.getByRole("link", { name: "Pay rent" })).toHaveAttribute("href", "/tasks?list=1&task=1");
+    await userEvent.click(screen.getByRole("button", { name: 'Snooze "Pay rent" to tomorrow' }));
+    const mutate = hooks.useUpdateItem.mock.results[0].value.mutate;
+    expect(mutate).toHaveBeenCalledWith({ itemId: 1, data: { due_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) } }, expect.anything());
+  });
+
+  it("offers no snooze for a task that is only HIGH priority, with no date", () => {
+    load(day({ tasks: [task(4, "Big thing", null, { priority: "HIGH" })] }));
+    show();
+    expect(screen.queryByRole("button", { name: /Snooze/ })).toBeNull();
   });
 });

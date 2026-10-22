@@ -6,15 +6,15 @@ import { StatCard } from "@/components/game/StatCard";
 import { TaskListCard } from "@/components/game/TaskComponents";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Sparkles, Flame, Target, ListTodo, Trophy, Gamepad2, Plus, Calendar, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLists, useClaimDaily, useToday } from "@/hooks/useApi";
+import { useLists, useToday } from "@/hooks/useApi";
+import { useDailyClaim } from "@/hooks/useDailyClaim";
 import { StreakStrip } from "@/components/dashboard/StreakStrip";
-import { toast } from "sonner";
+import { StreakAtRisk } from "@/components/dashboard/StreakAtRisk";
 import { Link } from "react-router-dom";
-import { useCountdown } from "@/hooks/useCountdown";
-import { formatCountdown, nextClaimAt } from "@/lib/countdown";
+import { formatCountdown } from "@/lib/countdown";
 import { orderQuestsForDashboard } from "@/lib/questOrder";
 import { BriefingCard } from "@/components/ai/BriefingCard";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
@@ -23,18 +23,15 @@ import { sharedSubtitle } from "@/lib/sharing";
 import { QuestsCard } from "@/components/dashboard/QuestsCard";
 import { NextUnlocks } from "@/components/dashboard/NextUnlocks";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
-import { dailyDescription } from "@/lib/classInfo";
 import { lifetimeTotal } from "@/lib/prestige";
 
 const Dashboard = () => {
   const { user } = useAuth();
   const listsQuery = useLists();
   const apiLists = listsQuery.data;
-  const claimDaily = useClaimDaily();
+  const daily = useDailyClaim();
   // The Today page's data: the streak strip needs the player's own day and whether today is claimed.
   const today = useToday();
-  // Earliest time the daily reward is claimable again, learned from this session's claim or server answer.
-  const [claimedUntil, setClaimedUntil] = useState<number | null>(null);
 
   const lists = useMemo(() => orderQuestsForDashboard(apiLists || []), [apiLists]);
   const discord = user?.discord || { username: 'Adventurer', globalName: 'Adventurer' };
@@ -56,33 +53,6 @@ const Dashboard = () => {
   const gamesPlayed = user?.games?.played || 0;
   const achievementCount = user?.achievements || 0;
 
-  // The reward has a rolling 24h cooldown from the last claim (from the server, so it is right after a reload too).
-  const lastClaim = dbUser.last_daily_claim ? new Date(dbUser.last_daily_claim).getTime() : 0;
-  const claimTarget = Math.max(nextClaimAt(lastClaim) ?? 0, claimedUntil ?? 0) || null;
-  const claimWaitMs = useCountdown(claimTarget);
-  const dailyClaimed = claimWaitMs > 0;
-
-  const handleClaimDaily = async () => {
-    try {
-      const result = await claimDaily.mutateAsync();
-      if (result.success) {
-        const description = dailyDescription(result);
-        
-        toast.success(`🎁 Daily reward claimed! +${result.totalXP} XP`, {
-          description: description || undefined,
-          duration: 4000,
-        });
-        setClaimedUntil(nextClaimAt(Date.now()));
-      } else {
-        const remaining = result.remaining ?? 0;
-        toast.error('Daily reward not ready yet', { description: remaining > 0 ? `Come back in ${formatCountdown(remaining)}.` : undefined });
-        if (remaining > 0) setClaimedUntil(Date.now() + remaining);
-      }
-    } catch {
-      /* error toast shown by the mutation */
-    }
-  };
-
   return (
     <DashboardLayout>
       <div className="space-y-6 sm:space-y-8">
@@ -97,18 +67,18 @@ const Dashboard = () => {
             </h1>
             <p className="text-foreground-muted text-sm sm:text-base">Here's your adventure progress</p>
           </div>
-          {xpEnabled && <Button variant="outline" onClick={handleClaimDaily} disabled={dailyClaimed || claimDaily.isPending} className="shrink-0 border-xp/50 text-xp hover:bg-xp/10 hover:border-xp hover:shadow-[0_0_15px_rgba(234,179,8,0.3)] transition-all">
+          {xpEnabled && <Button variant="outline" onClick={() => void daily.claim()} disabled={daily.claimed || daily.pending} className="shrink-0 border-xp/50 text-xp hover:bg-xp/10 hover:border-xp hover:shadow-[0_0_15px_rgba(234,179,8,0.3)] transition-all">
             <Calendar className="h-4 w-4 mr-2" />
-            {dailyClaimed ? `Next in ${formatCountdown(claimWaitMs)}` : 'Claim Daily Reward'}
+            {daily.claimed ? `Next in ${formatCountdown(daily.waitMs)}` : 'Claim Daily Reward'}
           </Button>}
         </motion.div>
 
         <OnboardingChecklist
           hasQuest={(user?.lists?.total ?? lists.length) > 0}
           hasTask={totalTasks > 0}
-          claimedDaily={lastClaim > 0 || claimedUntil !== null}
-          onClaimDaily={handleClaimDaily}
-          claiming={claimDaily.isPending}
+          claimedDaily={daily.everClaimed}
+          onClaimDaily={() => void daily.claim()}
+          claiming={daily.pending}
           xpEnabled={xpEnabled}
         />
 
@@ -153,6 +123,7 @@ const Dashboard = () => {
         </div>
 
         {today.data && <StreakStrip day={today.data.day} live={today.data.streak.live} claimedToday={today.data.streak.claimedToday} />}
+        {xpEnabled && today.data?.streak.atRisk && <StreakAtRisk live={today.data.streak.live} expiresAt={today.data.streak.expiresAt} />}
 
         <QuestsCard />
 

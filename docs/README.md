@@ -28,6 +28,20 @@ Last verified against code: 22 October 2026 (2026-10-22), after the review passe
 | [AI_INTEGRATION.md](AI_INTEGRATION.md) | The AI design record: goals, decisions and how the build differs from the plan |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Local setup, where code belongs, tests (unit, integration, browser, AI), style |
 
+## Package READMEs
+
+Each part of the repository has its own README with its commands and a map of its modules.
+
+| Document | What it is |
+|---|---|
+| [apps/web/README.md](../apps/web/README.md) | The web app: commands, how it is organised, its pages and address (URL) parameters, tests |
+| [apps/server/README.md](../apps/server/README.md) | The Express API: routes, middleware, configuration |
+| [apps/bot/README.md](../apps/bot/README.md) | The Discord bot: commands, background jobs, modules |
+| [apps/ai/README.md](../apps/ai/README.md) | The optional AI service: its HTTP API, graphs, tests |
+| [packages/shared/README.md](../packages/shared/README.md) | `@taskquest/shared`: every rules and database module |
+| [db/legacy/README.md](../db/legacy/README.md) | The MySQL-era SQL scripts kept for history (do not run) |
+| [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | How contributors are expected to behave |
+
 ## For operators
 
 | Document | What it is |

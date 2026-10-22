@@ -1355,7 +1355,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('streak warnings: only a live streak whose last day it is, in the evening, once a day', async () => {
         const W = '100000000000000931';
         await db.users.ensureUser(W);
-        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 1), automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?", [W]);
+        // Claimed at noon UTC yesterday, so the cooldown is over by this evening whatever time the suite runs.
+        const yesterdayNoon = new Date(Date.parse(`${require('../src').todayInZone()}T12:00:00Z`) - 86400e3);
+        await db.query('UPDATE users SET streak_count = 6, last_daily_claim = ?, automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?', [yesterdayNoon, W]);
         const at = (hour) => new Date(`${require('../src').todayInZone()}T${String(hour).padStart(2, '0')}:30:00Z`);
         const ids = async (hour) => (await db.today.getStreakWarnings(at(hour))).map((w) => w.discord_id);
 

@@ -6,7 +6,7 @@
 'use strict';
 
 const { getPool } = require('./pool');
-const { STREAK_WARNING } = require('../constants');
+const { STREAK_WARNING, DAILY } = require('../constants');
 const { getUserSkills } = require('./users');
 const { actorSql } = require('./access');
 const { dayWindow } = require('./progression');
@@ -14,7 +14,8 @@ const { getReflection, getGoal } = require('./goals');
 const { SEASONS } = require('../constants');
 const { currentSeason } = require('../quests');
 const { todayInZone, daysBetween, hourInZone } = require('../dates');
-const { liveStreak, getSkillBonuses, streakWindowDays, claimGapDays } = require('../xp');
+const { liveStreak, getSkillBonuses, streakWindowDays, streakWindowMs, claimGapDays } = require('../xp');
+const tz = require('../tz');
 
 const TASK_LIMIT = 6;
 /** The Upcoming list: open top-level tasks due in the next week (not already in the main list). */
@@ -28,7 +29,21 @@ const UPCOMING_LIMIT = 6;
  */
 const MINE = `(l.discord_id = ? OR (i.assignee_id = ? AND EXISTS (SELECT 1 FROM list_members tm WHERE tm.list_id = l.id AND tm.discord_id = ?)))`;
 
-/** The streak as the Today card needs it: is it alive, was today's reward claimed, is today the last day to keep it. */
+/**
+ * When a streak last claimed at `last` lapses: the later of the end of its calendar window and the end of its rolling window,
+ * since a claim within either continues it (streakContinues).
+ */
+function streakExpiry(user, bonuses, last) {
+    let calendarEnd = last;
+    for (let i = 0; i <= streakWindowDays(user, bonuses); i++) calendarEnd = tz.nextDayStart(user.timezone, calendarEnd).getTime();
+    return Math.max(calendarEnd, last + streakWindowMs(user, bonuses));
+}
+
+/**
+ * The streak as the Today card needs it: is it alive, was today's reward claimed, is today the last day to keep it, and when
+ * can it be claimed and when does it lapse. It is at risk only once the daily reward can actually be claimed again (the
+ * 24 hour cooldown), so a warning never asks for a claim the cooldown would refuse.
+ */
 function streakState(user, skills, now) {
     const count = Number(user.streak_count) || 0;
     const last = user.last_daily_claim ? new Date(user.last_daily_claim).getTime() : 0;
@@ -37,8 +52,20 @@ function streakState(user, skills, now) {
     const claimedToday = Boolean(last) && claimGapDays(user, last, now.getTime()) === 0;
     // Unstoppable never lapses; otherwise the claim has `windowDays - gap` days left, today included at zero. Below zero the
     // streak is only alive through the rolling grace window (a late claim), which is just as much at risk.
-    const daysLeft = bonuses.streakUnstoppable || !last ? null : Math.max(0, streakWindowDays(user, bonuses) - claimGapDays(user, last, now.getTime()));
-    return { count, live, claimedToday, daysLeft, atRisk: live >= 2 && !claimedToday && daysLeft === 0 };
+    const lapses = !bonuses.streakUnstoppable && Boolean(last);
+    const daysLeft = lapses ? Math.max(0, streakWindowDays(user, bonuses) - claimGapDays(user, last, now.getTime())) : null;
+    const claimableAt = last ? last + DAILY.COOLDOWN_MS : null;
+    const expiresAt = lapses ? streakExpiry(user, bonuses, last) : null;
+    const claimable = !claimableAt || now.getTime() >= claimableAt;
+    return {
+        count,
+        live,
+        claimedToday,
+        daysLeft,
+        claimableAt: claimableAt ? new Date(claimableAt).toISOString() : null,
+        expiresAt: live && expiresAt ? new Date(expiresAt).toISOString() : null,
+        atRisk: live >= 2 && !claimedToday && daysLeft === 0 && claimable
+    };
 }
 
 function shapeTask(r, today) {
@@ -115,7 +142,7 @@ async function getToday(discordId, now = new Date()) {
 /**
  * Players to warn right now: a streak of at least 3 days that is alive and unclaimed today, today is its last day, and it is
  * evening where they live. Only people with XP and reminders on, and not already warned today.
- * @returns {Promise<Array<{ discord_id: string, streak: number, day: string, timezone: string|null }>>}
+ * @returns {Promise<Array<{ discord_id: string, streak: number, day: string, timezone: string|null, expiresAt: string|null }>>}
  */
 async function getStreakWarnings(now = new Date()) {
     const pool = getPool();
@@ -130,7 +157,7 @@ async function getStreakWarnings(now = new Date()) {
         if (hourInZone(u.timezone, now) < STREAK_WARNING.FROM_HOUR) continue;
         if (u.streak_warned_day && String(u.streak_warned_day).slice(0, 10) >= day) continue;
         const state = streakState(u, await getUserSkills(u.discord_id), now);
-        if (state.atRisk && state.live >= STREAK_WARNING.MIN_STREAK) out.push({ discord_id: String(u.discord_id), streak: state.live, day, timezone: u.timezone });
+        if (state.atRisk && state.live >= STREAK_WARNING.MIN_STREAK) out.push({ discord_id: String(u.discord_id), streak: state.live, day, timezone: u.timezone, expiresAt: state.expiresAt });
     }
     return out;
 }

@@ -22,7 +22,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 **What is the Today page?** One screen for right now: the tasks that are overdue, due today or marked HIGH (tick them off from there), a warning when today is the last day to keep your streak, the week's bonus modifier, a one-line reflection (+10 XP once a day) and your weekly goal (pick 3 to 60 tasks, claim 10 + 2 XP per task, at most 80, once a week).
 
-**Will I be warned before I lose a streak?** If you have a streak of 3 or more days, reminders on (`/automation`) and XP on, the bot sends one DM on the evening (18:00 your time) of the last day you can still save it by claiming the daily reward, and a web push if you turned push on. The Today page shows the same warning.
+**Will I be warned before I lose a streak?** If you have a streak of 3 or more days, reminders on (`/automation`) and XP on, the bot sends one DM on the evening (18:00 your time) of the last day you can still save it by claiming the daily reward, once the reward can be claimed again, with the time the streak ends (often not midnight: a streak lasts at least 48 hours from your last claim), and a web push if you turned push on. The Today page shows the same warning.
 
 **Is the streak tied to midnight?** Yes, to your own midnight (your time zone setting): the streak needs a claim on each calendar day. The 24-hour cooldown between two claims is still counted from your last claim.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { goalPercent, todayHeadline } from "./today";
+import { goalPercent, streakDeadline, todayHeadline } from "./today";
 
 const data = (counts: Partial<{ dueToday: number; overdue: number; doneToday: number }>, tasks = 0) => ({
   counts: { dueToday: 0, overdue: 0, doneToday: 0, ...counts },
@@ -31,5 +31,20 @@ describe("goalPercent", () => {
   it("reads no goal as zero", () => {
     expect(goalPercent(5, null)).toBe(0);
     expect(goalPercent(5, 0)).toBe(0);
+  });
+});
+
+describe("streakDeadline", () => {
+  it("names the time and whether it is today or tomorrow", () => {
+    const now = new Date(2030, 2, 12, 19, 0);
+    const time = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const tonight = new Date(2030, 2, 12, 23, 30);
+    const morning = new Date(2030, 2, 13, 8, 0);
+    expect(streakDeadline(tonight.toISOString(), now)).toBe(`at ${time(tonight)} today`);
+    expect(streakDeadline(morning.toISOString(), now)).toBe(`at ${time(morning)} tomorrow`);
+  });
+  it("falls back to today without a time", () => {
+    expect(streakDeadline(null)).toBe("today");
+    expect(streakDeadline("nonsense")).toBe("today");
   });
 });

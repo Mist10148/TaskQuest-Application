@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useClaimGoal, useSetGoal, useToday, useToggleItem, useWriteReflection } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
 import { formatDeadline, formatDue } from "@/lib/dates";
-import { todayHeadline, goalPercent } from "@/lib/today";
+import { todayHeadline, goalPercent, streakDeadline } from "@/lib/today";
 import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import type { TodayData, TodayTask } from "@/lib/api";
 
@@ -144,7 +144,7 @@ const TodayView = ({ data }: { data: TodayData }) => (
       <div role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm" data-testid="streak-warning">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive-text" aria-hidden />
         <p>
-          Your <strong>{data.streak.live}-day streak</strong> ends today if you do not claim your daily reward. <Link to="/dashboard" className="font-medium underline">Claim it on the dashboard</Link>.
+          Your <strong>{data.streak.live}-day streak</strong> ends {streakDeadline(data.streak.expiresAt)} if you do not claim your daily reward. <Link to="/dashboard" className="font-medium underline">Claim it on the dashboard</Link>.
         </p>
       </div>
     )}

@@ -28,11 +28,11 @@ Use one Discord application for both the bot and web login.
 1. Go to the [Developer Portal](https://discord.com/developers/applications) and create an application. The **Application ID** is your `CLIENT_ID` / `DISCORD_CLIENT_ID`.
 2. **Bot** tab:
    - Reset the token. This is your `DISCORD_TOKEN`; keep it secret.
-   - No privileged gateway intents are required, so leave them off.
+   - No privileged gateway intents are required, so leave them off. The one exception: AI chat's reply mode (`AI_CHAT_MESSAGE_CONTENT=true`, see [§3](#3-environment-variables)) needs **Message Content**.
 3. **OAuth2** tab:
    - Copy the **Client Secret**. This is `DISCORD_CLIENT_SECRET`.
    - Add a redirect: `https://<your-web-domain>/api/auth/callback`. For local development, add `http://localhost:8080/api/auth/callback`.
-4. **Invite the bot.** In OAuth2 → URL Generator, select the scopes `bot` and `applications.commands`. Under bot permissions, select *Send Messages* and *Embed Links*. Open the URL to add the bot to a server.
+4. **Invite the bot.** In OAuth2 → URL Generator, select the scopes `bot` and `applications.commands`. Under bot permissions, select *Send Messages* and *Embed Links*; with AI chat on (`AI_ENABLED`), also *Read Message History* (the bot replies to the message that asked) and *Attach Files* (a long answer comes as `response.txt`). Open the URL to add the bot to a server.
 5. **Register commands.** Do this once, and again whenever command definitions change:
    ```bash
    DISCORD_TOKEN=... CLIENT_ID=... npm run deploy:commands                 # global (≤1h to appear)

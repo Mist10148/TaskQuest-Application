@@ -139,3 +139,24 @@ test('production config: a non-https public address fails, a missing proxy warns
     assert.equal(productionProblems({ isProduction: true, publicUrl: 'https://app.example.com', trustProxy: 0 }).warnings.length, 1);
     assert.equal(productionProblems({ isProduction: true, publicUrl: 'https://app.example.com', trustProxy: '10.0.0.0/8' }).warnings.length, 0);
 });
+
+test('heavyLimiter: the 21st simulation or CSV request in a minute from one account is refused with 429', async () => {
+    const { heavyLimiter } = await import('../lib/security.js');
+    const call = (discordId) =>
+        new Promise((resolve) => {
+            const req = { ip: '203.0.113.9', method: 'GET', headers: {}, get: () => undefined, app: { get: () => false }, session: { user: { discordId } } };
+            const res = fakeRes();
+            res.setHeader = () => {};
+            res.append = () => {};
+            res.headersSent = false;
+            res.status = (c) => ((res.statusCode = c), res);
+            res.json = (b) => ((res.body = b), resolve({ passed: false, res }), res);
+            heavyLimiter(req, res, () => resolve({ passed: true, res }));
+        });
+    for (let i = 0; i < 20; i++) assert.equal((await call('heavy-a')).passed, true, `request ${i + 1} passes`);
+    const refused = await call('heavy-a');
+    assert.equal(refused.passed, false);
+    assert.equal(refused.res.statusCode, 429);
+    assert.equal(refused.res.body.code, 'RATE_LIMITED');
+    assert.equal((await call('heavy-b')).passed, true, 'another account has its own budget');
+});

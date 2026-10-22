@@ -7,6 +7,7 @@ import { asyncRoute, parse, requireAuth, uid, avatarUrl } from '../lib/http.js';
 import { keyParam, skillParam, leaderboardQuery, previewQuery, respecBody } from '../lib/schemas.js';
 import { sealId, openId } from '../lib/avatarProxy.js';
 import { coalesce } from '../lib/coalesce.js';
+import { heavyLimiter } from '../lib/security.js';
 
 const { CLASSES, SKILL_TREES, ACHIEVEMENTS, classOwnershipColumn, simulateAverage, FAVOURABLE } = shared;
 
@@ -35,6 +36,7 @@ classesRouter.get(
  */
 classesRouter.get(
     '/:key/preview',
+    heavyLimiter,
     asyncRoute(async (req, res) => {
         const { key: raw } = parse(keyParam, req.params);
         const key = String(raw).toUpperCase();
@@ -96,6 +98,7 @@ const previewCache = new Map(); // key (class, level, mix, owned skills) -> { bo
  */
 skillsRouter.get(
     '/preview',
+    heavyLimiter,
     asyncRoute(async (req, res) => {
         const q = parse(previewQuery, req.query);
         const user = await db.users.ensureUser(uid(req));

@@ -33,8 +33,9 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
     } catch {
       return; // useUpdateList already showed the error; the suggestion stays so it can be tried again
     }
+    // The ranking is a manual AI request (it uses quota), so accepting one suggestion does not run it again: the change is made
+    // and its suggestion goes away. Refresh re-ranks when the player wants it.
     setDismissed((s) => new Set(s).add(task.id));
-    void refetch();
   };
 
   return (

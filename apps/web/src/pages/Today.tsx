@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AlertTriangle, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Loader2, PenLine, Target, Timer } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
@@ -126,6 +126,12 @@ const GoalCard = ({ data }: { data: TodayData }) => {
   );
 };
 
+/** "What should I do next?" on Today: a ranked quest opens in the Quest Log, as it does there. */
+const TodayPriorities = () => {
+  const navigate = useNavigate();
+  return <PriorityPanel onOpen={(listId) => navigate(`/tasks?list=${listId}`)} />;
+};
+
 const TodayView = ({ data }: { data: TodayData }) => (
   <div className="space-y-4 sm:space-y-6">
     <div className="flex flex-wrap gap-2 text-sm" role="group" aria-label="Today at a glance">
@@ -170,7 +176,7 @@ const TodayView = ({ data }: { data: TodayData }) => (
       </section>
     )}
 
-    <PriorityPanel />
+    <TodayPriorities />
 
     <div className="grid gap-4 md:grid-cols-2">
       <ReflectionCard data={data} />

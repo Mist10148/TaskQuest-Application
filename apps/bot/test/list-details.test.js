@@ -173,3 +173,30 @@ test('sharing autocomplete offers a shared list that shares a name with your own
     const share = autocompleteChoices(lists, () => true, 'wor');
     assert.deepEqual(share.map((c) => c.value), ['#1', '#2']);
 });
+
+test('/list acknowledges before reading the database, and a missing list is told privately', async () => {
+    const db = require('@taskquest/shared/db');
+    const { execute } = require('../commands/list');
+    const real = { ensureUser: db.users.ensureUser, getUser: db.users.getUser, getLists: db.tasks.getLists, getListByName: db.tasks.getListByName };
+    const calls = [];
+    db.users.ensureUser = async () => void calls.push('db');
+    db.users.getUser = async () => ({ timezone: 'UTC' });
+    db.tasks.getLists = async () => [];
+    db.tasks.getListByName = async () => null;
+    const fake = (name) => {
+        const rec = (type) => async (p) => void calls.push([type, p]);
+        return { user: { id: '1' }, options: { getString: () => name }, deferReply: rec('deferReply'), editReply: rec('editReply'), deleteReply: rec('deleteReply'), followUp: rec('followUp') };
+    };
+    try {
+        await execute(fake(null));
+        assert.equal(calls[0][0], 'deferReply', 'deferred first');
+        assert.equal(calls.at(-1)[0], 'editReply');
+        calls.length = 0;
+        await execute(fake('nope'));
+        assert.deepEqual(calls.filter(Array.isArray).map(([t]) => t), ['deferReply', 'deleteReply', 'followUp']);
+        assert.ok(calls.at(-1)[1].flags, 'the not-found note is ephemeral');
+    } finally {
+        Object.assign(db.users, { ensureUser: real.ensureUser, getUser: real.getUser });
+        Object.assign(db.tasks, { getLists: real.getLists, getListByName: real.getListByName });
+    }
+});

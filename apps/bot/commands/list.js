@@ -87,17 +87,23 @@ const isExpired = (list, today) => isPastDeadline(list.deadline, today);
 
 async function execute(interaction) {
     const userId = interaction.user.id;
+    // The view is public; acknowledge first so the database reads below cannot miss Discord's 3 second window.
+    await interaction.deferReply();
     await users.ensureUser(userId);
     const name = interaction.options.getString('name');
 
     if (name) {
         const list = await tasks.getListByName(userId, name);
-        if (!list) return interaction.reply({ embeds: [ui.error('Not Found', 'List not found.')], ...EPHEMERAL });
-        return interaction.reply(await renderList(userId, list.id, 'view'));
+        if (!list) {
+            // Only the person who asked needs to see this: swap the public placeholder for a private note.
+            await interaction.deleteReply().catch(() => {});
+            return interaction.followUp({ embeds: [ui.error('Not Found', 'List not found.')], ...EPHEMERAL });
+        }
+        return interaction.editReply(await renderList(userId, list.id, 'view'));
     }
 
     const lists = await tasks.getLists(userId);
-    return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists, '', '', await todayFor(userId))], components: overviewComponents(lists) });
+    return interaction.editReply({ embeds: [ui.listsOverviewEmbed(lists, '', '', await todayFor(userId))], components: overviewComponents(lists) });
 }
 
 async function autocomplete(interaction) {

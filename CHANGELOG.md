@@ -157,6 +157,14 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - The quest log remembers its tab, filters and sort; `/games?play=<game>` links, so Back returns to the games menu.
 - Each page has its own tab title, and moving to another page focuses its content.
 - Docs: the AI service's HTTP API, `/internal/index` and `/internal/forget` request shapes, a README troubleshooting table, and known issues #63-#66.
+- Today: the streak warning has its own **Claim now** button and says when the streak ends; each task opens in its quest, and a task due today or late can be snoozed to tomorrow. The Dashboard shows the same warning.
+- The task drawer can **Delete** (with Undo), **Snooze** and **Add subtask**.
+- **Undo** on a bulk completion, like on a single task.
+- **Export one quest** as CSV (the full export's columns, so it imports again) or a Markdown checklist, from the quest header.
+- Keyboard: `?` lists the shortcuts on every page, and `g` then a key goes to a page (`g t` Today, `g q` quest log, `g d` Dashboard, `g f` Focus, `g s` Stats, `g p` Profile, `g l` Leaderboard, `g c` AI Chat).
+- Chat: the message box grows as you type, **Jump to latest** when scrolled up, **Copy** on each answer, and placeholder rows while the conversation list loads.
+- `/api/today` returns `streak.claimableAt` and `streak.expiresAt`.
+- Docs: the web app's page addresses and URL parameters, an index of the package READMEs, the AI help corpus, and roadmap rows for #59 to #63.
 
 ### Changed
 
@@ -203,6 +211,12 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **A daily claim within the rolling 48/72/96-hour window continues the streak.** With the 24-hour cooldown, someone who claimed at 23:30 could only keep the streak by claiming in the last half hour of the next day.
 - **Perfect day counts only tasks whose due date was set at least 24 hours before,** like the early and overdue bonuses; three tasks given today's date and ticked off at once no longer pay it.
 - The web reads "today" in the account's time zone, and saves the browser's zone once for an account that has none, so overdue and due today match the server.
+- **The streak warning waits for the cooldown and gives the real deadline.** A streak is at risk only once `/daily` would succeed again, and the DM, the push and the Today page say when it lapses (the later of its calendar day and its 48/72/96-hour window), not "before midnight".
+- `/profile user:@someone` shows "Profile is private" for a player with XP off, as they are off the leaderboard too.
+- `/list`, `/profile`, `/class` and `/achievements` defer their reply before reading the database (the second half of #52).
+- Accepting a suggested priority in "What should I do next?" no longer re-runs the AI ranking (it spends quota); Refresh still does.
+- Calendar feed **New address** and **Turn off** ask first, since both stop subscribed calendars.
+- `npm run archive` leaves the `subtasks_done` and `boss_defeated` rows in `xp_transactions`, since their once-per-parent rule reads that log.
 
 ### Fixed
 
@@ -313,6 +327,13 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Web accessibility: radio groups take arrow keys, the sort menu marks the chosen order, the filter button includes its count, labels point at their controls, login errors and quick-add previews are announced, calendar days are read in full, delete confirmations are alert dialogs, shortcut hints show ⌘ on Apple devices, and invalid link-in-button nesting is gone.
 - Web on phones: long quest names are shortened instead of pushing the priority badge out, and calendar badges fit their cells.
 - Focus and Stats no longer say their days are UTC.
+- Bot: `/list` judged overdue and expired by UTC, not the user's time zone; task and quest names written by other members were not escaped in `/list` and `/quick` confirmations; `/summary` offered shared quests the AI always refuses.
+- Necromancer and Ranger lost `early_finish`, `overdue_clear` and Inbox Zero past their daily class deadline cap; the cap is the class's only.
+- The server mapped the AI service's 403 to 503 "unavailable" instead of `AI_OPTED_OUT`.
+- Comment ids past 2³¹ could not be deleted (closes #64).
+- Web chat: **New chat** on `/chat` cleared nothing and kept a reply streaming; a 401 left a retry that could not work instead of signing out; a pending approval fetched after a 409 could appear in another thread; an approval arriving mid-reply left focus on the page body; messages did not say who was speaking; the mobile conversation list did not take or return focus; identical replies were announced once.
+- Web: Today's ranked quests did nothing when clicked; a half-written comment carried over to a subtask opened from the drawer; the assignee menu snapped back until the refresh; "New task" from the palette skipped the view-only check while a quest loaded; the same CSV could not be chosen again after fixing it; exports and the calendar feed ignored `VITE_API_URL`; the Dashboard offered the daily reward with XP off; the leaderboard blamed gamification for a class filter and gave ranks 1 to 3 no text; the welcome tour took focus from typing and covered the phone navigation; Ctrl+K stacked over another dialog; quick focus trusted a minute-old status; the arcade loop restarted on background refreshes; the party board did not roll over at its reset.
+- Docs: Blackjack winnings count no lifetime XP (DATABASE); XP_GUIDE gains the weekly modifier, Last Stand and Tidy Mind; SECURITY's body limits, intents and residual risks; the bot's invite permissions for AI chat; the first streak day adds nothing (PLAYER_FAQ).
 
 ### Removed
 
@@ -324,6 +345,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Invitations cannot be used to probe who uses TaskQuest: every outcome the inviter must not learn gets one neutral answer, the lookup is rate limited per account and per address, and the web app asks the inviter to confirm the person it resolved. Discord IDs never leave the server (members use an opaque key).
 - Arcade scores are verified by replaying the recorded inputs instead of trusting the client.
 - Dev-only advisories in the Tailwind 3 toolchain are gone with the Tailwind 4 migration.
+- The skill and class previews and the CSV import share a 20-a-minute limit per account: each runs synchronous CPU work, and the general limit let one account block the server for minutes.
 
 ## [4.0.0] - 2026-10-08
 

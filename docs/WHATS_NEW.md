@@ -50,6 +50,16 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **Perfect day needs a plan:** only tasks whose due date was set at least a day ahead count towards the three.
 - Every page has its own tab title, and screen readers hear calendar days, login errors and quick-add previews.
 
+## Fewer clicks (end of October 2026)
+
+- **Save your streak from Today:** the warning has a Claim now button and tells you when the streak actually ends (often not midnight), and it only appears once the reward can be claimed. The Dashboard shows it too.
+- **Act on Today's tasks:** open one in its quest, or snooze it to tomorrow.
+- **More in a task's details:** delete it (with Undo), snooze it or add a subtask without closing the drawer.
+- **Undo a bulk completion,** and **export one quest** as a spreadsheet or a Markdown checklist.
+- **Keyboard everywhere:** press `?` on any page for the shortcuts, and `g` then a letter to jump: `g t` Today, `g q` your quests, `g d` Dashboard.
+- **Chat:** the box grows as you type, a Jump to latest button, Copy on every answer, and New chat really starts over.
+- **In Discord,** `/list` says overdue by your own date, and someone else's `/profile` stays private when they turned XP off.
+
 ## The balance pass (October 2026)
 
 The rules were checked with a simulator against every class, and a few numbers were wrong.

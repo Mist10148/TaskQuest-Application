@@ -8,7 +8,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import { asyncRoute, parse, uid } from '../lib/http.js';
 import { commentLimiter } from '../lib/security.js';
-import { idParam, commentBody } from '../lib/schemas.js';
+import { idParam, bigIdParam, commentBody } from '../lib/schemas.js';
 
 /** Mounted on /api/items, next to the task routes. */
 export const itemCommentsRouter = Router();
@@ -36,7 +36,7 @@ itemCommentsRouter.post(
 commentsRouter.delete(
     '/:id',
     asyncRoute(async (req, res) => {
-        const { id } = parse(idParam, req.params);
+        const { id } = parse(bigIdParam, req.params);
         await db.comments.deleteComment(uid(req), id);
         res.json({ success: true });
     })

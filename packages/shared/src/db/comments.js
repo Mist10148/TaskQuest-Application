@@ -64,7 +64,7 @@ async function addComment(discordId, itemId, body) {
 
 /** Delete a comment: its author, or a manager of the task's quest. A stranger to the quest gets NOT_FOUND. */
 async function deleteComment(discordId, commentId) {
-    const id = v.id(commentId);
+    const id = v.bigId(commentId);
     if (!id.ok) throw errors.notFound('Comment not found.');
     await withTransaction(async (conn) => {
         const [[peek]] = await conn.query('SELECT item_id FROM item_comments WHERE id = ?', [id.value]);

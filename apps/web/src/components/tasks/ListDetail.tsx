@@ -51,7 +51,7 @@ interface Props {
   onSnooze?: (itemId: number) => void;
   /** A shared quest's owner and members, for assigning tasks (absent on a quest nobody shares). */
   assignOptions?: ReadonlyArray<{ memberKey: string; name: string | null; isYou: boolean }>;
-  onAssign?: (itemId: number, memberKey: string | null) => void;
+  onAssign?: (itemId: number, memberKey: string | null) => void | Promise<unknown>;
   /** Other quests tasks can be moved to. */
   moveTargets?: ReadonlyArray<{ id: number; name: string }>;
   /** Move top-level tasks (their subtasks go with them) to another quest. */

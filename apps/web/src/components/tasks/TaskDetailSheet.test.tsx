@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Item } from "@/lib/api";
@@ -64,6 +64,18 @@ describe("TaskDetailSheet", () => {
     expect(onAssign).toHaveBeenCalledWith(7, "m1");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Assignee" }), "");
     expect(onAssign).toHaveBeenLastCalledWith(7, null);
+  });
+
+  it("shows the chosen assignee at once, and puts it back if the save fails", async () => {
+    let fail: (e: Error) => void = () => undefined;
+    const onAssign = vi.fn(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const people = [{ memberKey: "owner", name: "Me", isYou: true }, { memberKey: "m1", name: "Sam", isYou: false }];
+    renderSheet({}, { assignOptions: people, onAssign });
+    const menu = screen.getByRole("combobox", { name: "Assignee" });
+    await userEvent.selectOptions(menu, "m1");
+    expect(menu).toHaveValue("m1");
+    await act(async () => fail(new Error("refused")));
+    expect(menu).toHaveValue("");
   });
 
   it("only shows the assignee to a viewer", () => {

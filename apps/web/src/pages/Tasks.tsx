@@ -112,6 +112,8 @@ const Tasks = () => {
     if (!wantsNew) return;
     if (wantsNew === "quest") setListDialog("create");
     else if (wantsNew === "task") {
+      // Until the open quest has loaded its role is unknown: wait for it, or a viewer gets a form the server then refuses.
+      if (selectedListId && !selectedList) return;
       if (selectedListId && selectedList && !canEditTasks(roleOf(selectedList))) toast("You only have view access to this quest.");
       else if (selectedListId) setItemDialog({ mode: "create" });
       else toast("Open a quest first, then press N or use Add Task.");
@@ -331,7 +333,7 @@ const Tasks = () => {
             updateItem.mutate({ itemId, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success("Snoozed to tomorrow") })
           }
           assignOptions={assignOptions}
-          onAssign={(itemId, memberKey) => updateItem.mutate({ itemId, data: { assignee: memberKey } })}
+          onAssign={(itemId, memberKey) => updateItem.mutateAsync({ itemId, data: { assignee: memberKey } })}
           moveTargets={moveTargets}
           onMove={moveItems}
           onEditItem={openItemEditor}

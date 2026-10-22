@@ -36,7 +36,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `005_item_activity` | Adds `item_activity`, a task's history (see the table below). |
 | `006_item_comments` | Adds `item_comments`, comments on tasks (see the table below). |
 
-New migrations continue from the next free number. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
+New migrations continue from the next free number. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `foreignKeyExists(table, column, refTable)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
 
 The scripts in [`db/legacy/`](../db/legacy) are MySQL-era history, kept for reference. **Do not run them.**
 

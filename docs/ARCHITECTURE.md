@@ -74,6 +74,7 @@ packages/shared/src
 ├── constants.js     CLASSES, SKILL_TREES, ACHIEVEMENTS, QUESTS, REWARDS, LIMITS, PRESTIGE, COSMETICS, PARTY_QUEST, game config
 ├── xp.js            levelFromXP, calculateClassXP, getSkillBonuses, calculateFinalXP, calculateDailyReward (incl. streak freezes, prestige multiplier)
 ├── achievements.js  evaluateAchievements(stats, unlocked, events)
+├── simulate.js      simulateAverage: the average XP of a task for a class, skills and level (the Classes and Skills page previews)
 ├── tz.js            the user's day: zone validation, dayStart / weekStart / monthStart (DST-safe local midnights), todayInZone
 ├── dates.js         date-only helpers: isPastDeadline, formatDeadline, nextOccurrence, daysBetween (no zone shifts)
 ├── quests.js        questPeriod (the user's local day / Monday-to-Monday week / month), the rotating weekly pick

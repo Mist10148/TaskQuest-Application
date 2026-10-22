@@ -16,7 +16,7 @@
 
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { tasks, users } = require('@taskquest/shared/db');
-const { isPastDeadline, todayInZone } = require('@taskquest/shared');
+const { isPastDeadline, todayInZone, escapeDiscord } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const aiSync = require('../utils/aiSync');
 const { EPHEMERAL, handleError, sendRewards, idFrom } = require('../utils/respond');
@@ -53,6 +53,9 @@ async function renderList(userId, listId, mode) {
         components: shown === 'edit' ? ui.editButtons(list.id, { role: list.role, isOwner: list.is_owner }) : ui.viewButtons(list.id, { canEdit: canEdit(list) })
     };
 }
+
+/** A name for a reply: on a shared list another member wrote it, so it must not render as a masked link or markup. */
+const safe = (name) => escapeDiscord(name, { max: 200 });
 
 const viewOnly = (interaction) => interaction.reply({ embeds: [ui.error('View only', 'You only have view access to this list.')], ...EPHEMERAL });
 
@@ -222,14 +225,14 @@ async function routeButton(interaction) {
     if (id.startsWith('list_del_')) {
         const list = await tasks.getList(userId, idFrom(id, 'list_del_'));
         if (!list) return denied(interaction);
-        return interaction.reply({ embeds: [ui.warn('Confirm Delete', `Delete **${list.name}** and all its tasks?`)], components: [ui.confirmButtons(list.id)], ...EPHEMERAL });
+        return interaction.reply({ embeds: [ui.warn('Confirm Delete', `Delete **${safe(list.name)}** and all its tasks?`)], components: [ui.confirmButtons(list.id)], ...EPHEMERAL });
     }
     if (id.startsWith('yes_')) {
         const list = await tasks.getList(userId, idFrom(id, 'yes_'));
         if (!list) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
         await tasks.deleteList(userId, list.id);
         aiSync.forget(userId, list.id);
-        return interaction.update({ embeds: [ui.success('Deleted', `**${list.name}** deleted`)], components: [] });
+        return interaction.update({ embeds: [ui.success('Deleted', `**${safe(list.name)}** deleted`)], components: [] });
     }
     if (id.startsWith('no_')) return interaction.update({ embeds: [ui.info('Cancelled', 'Delete cancelled')], components: [] });
 }
@@ -298,7 +301,7 @@ async function routeSelect(interaction) {
         if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
         await tasks.deleteItem(userId, item.id);
         aiSync.reindex(userId, item.list_id);
-        return interaction.update({ embeds: [ui.success('Deleted', `**${item.name}** deleted`)], components: [] });
+        return interaction.update({ embeds: [ui.success('Deleted', `**${safe(item.name)}** deleted`)], components: [] });
     }
 
     if (id.startsWith('sel_done_')) {
@@ -308,7 +311,7 @@ async function routeSelect(interaction) {
         const note = result.completed && !result.firstCompletion ? '\n-# XP is only awarded the first time a task is completed.' : '';
         const bonuses = result.completed ? ui.bonusLines(result.bonuses) : '';
         await interaction.editReply({
-            embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${result.item.name}**${bonuses}${note}`)],
+            embeds: [ui.success(result.completed ? '✅ Completed' : '⬜ Uncompleted', `**${safe(result.item.name)}**${bonuses}${note}`)],
             components: []
         });
         return sendRewards(interaction, result);
@@ -438,7 +441,7 @@ async function routeModal(interaction) {
         });
         aiSync.reindex(userId, result.list.id);
         await interaction.reply({
-            embeds: [ui.success('Created!', `**${result.list.name}**\nPick a category and priority below (optional).`)],
+            embeds: [ui.success('Created!', `**${safe(result.list.name)}**\nPick a category and priority below (optional).`)],
             components: [ui.catSelect(`cat_${result.list.id}`), ui.priSelect(`pri_${result.list.id}`)],
             ...EPHEMERAL
         });
@@ -452,7 +455,7 @@ async function routeModal(interaction) {
             deadline: field(interaction, 'deadline')
         });
         aiSync.reindex(userId, list.id);
-        return interaction.reply({ embeds: [ui.success('Updated', `**${list.name}**`)], ...EPHEMERAL });
+        return interaction.reply({ embeds: [ui.success('Updated', `**${safe(list.name)}**`)], ...EPHEMERAL });
     }
 
     if (id.startsWith('m_additem_')) {
@@ -466,13 +469,13 @@ async function routeModal(interaction) {
     if (id.startsWith('m_edititem_')) {
         const item = await tasks.updateItem(userId, idFrom(id, 'm_edititem_'), { name: field(interaction, 'name') });
         aiSync.reindex(userId, item?.list_id);
-        return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**`)], ...EPHEMERAL });
+        return interaction.reply({ embeds: [ui.success('Updated', `**${safe(item.name)}**`)], ...EPHEMERAL });
     }
 
     if (id.startsWith('m_details_')) {
         const item = await tasks.updateItem(userId, idFrom(id, 'm_details_'), parseDetails((name) => field(interaction, name)));
         aiSync.reindex(userId, item?.list_id);
-        return interaction.reply({ embeds: [ui.success('Updated', `**${item.name}**\n${ui.itemMeta(item, await todayFor(userId)) || 'No details set.'}`)], ...EPHEMERAL });
+        return interaction.reply({ embeds: [ui.success('Updated', `**${safe(item.name)}**\n${ui.itemMeta(item, await todayFor(userId)) || 'No details set.'}`)], ...EPHEMERAL });
     }
 
     if (id.startsWith('m_desc_')) {

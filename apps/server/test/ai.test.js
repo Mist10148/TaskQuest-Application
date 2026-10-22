@@ -79,6 +79,8 @@ test('aiClient: upstream errors map to TaskQuest error codes', async () => {
         await assert.rejects(aiClient.post('/v1/chat/x/resume', '1', {}), { code: 'CONFLICT', status: 409 });
         status = 400;
         await assert.rejects(aiClient.post('/v1/summary', '1', {}), { code: 'VALIDATION', status: 400 });
+        status = 403;
+        await assert.rejects(aiClient.post('/v1/summary', '1', {}), { code: 'AI_OPTED_OUT', status: 403 });
     } finally {
         await ai.close();
     }

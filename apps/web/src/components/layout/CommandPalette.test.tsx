@@ -100,5 +100,39 @@ describe("CommandPalette task search", () => {
     await userEvent.type(input, "daily reward");
     expect(screen.queryByRole("option", { name: /Claim daily reward/ })).toBeNull();
   });
-});
 
+  it("asks the server before starting, even with a fresh 'no session' in the cache", async () => {
+    focusStart.mockReset();
+    focusGet.mockResolvedValue({ active: { id: 9 } });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
+    client.setQueryData(["focus"], { active: null });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CommandPalette aiEnabled={false} />
+          <Where />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    act(() => { window.dispatchEvent(new Event(OPEN_PALETTE_EVENT)); });
+    await userEvent.type(await screen.findByRole("combobox", { name: "Search commands" }), "25-minute");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/focus"));
+    expect(focusGet).toHaveBeenCalled();
+    expect(focusStart).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+K does not open on top of another dialog", async () => {
+    const client = new QueryClient();
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <div role="dialog" aria-label="Edit task" />
+          <CommandPalette aiEnabled={false} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await userEvent.keyboard("{Control>}k{/Control}");
+    expect(screen.queryByRole("combobox", { name: "Search commands" })).toBeNull();
+  });
+});

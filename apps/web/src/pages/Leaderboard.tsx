@@ -10,6 +10,7 @@ import { nextTabIndex } from "@/lib/tabs";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import type { LeaderboardBoard } from "@/lib/api";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const CLASS_EMOJIS: Record<string, string> = {
   DEFAULT: '⚪', HERO: '⚔️', GAMBLER: '🎲', ASSASSIN: '🗡️', WIZARD: '🔮', ARCHER: '🏹', TANK: '🛡️',
@@ -97,7 +98,17 @@ const CompactPodium = ({ entries, unit, nameOf, emojiOf }: { entries: Leaderboar
   </div>
 );
 
+/** Places 1 to 3 are a crown or a medal; the rank is said in words for screen readers. */
+const RankMark = ({ rank, size }: { rank: number; size: string }) => {
+  if (rank > 3) return <span className="font-heading font-bold text-foreground-muted">#{rank}</span>;
+  const Icon = rank === 1 ? Crown : Medal;
+  const colour = rank === 1 ? "text-yellow-500" : rank === 2 ? "text-gray-400" : "text-amber-600";
+  return <><Icon className={cn(size, colour)} aria-hidden /><span className="sr-only">Rank {rank}</span></>;
+};
+
 const Leaderboard = () => {
+  const { user } = useAuth();
+  const xpOn = user?.user?.gamification_enabled !== 0 && user?.user?.gamification_enabled !== false;
   const [by, setBy] = useState<LeaderboardBoard>("lifetime");
   const [classFilter, setClassFilter] = useState("ALL");
   const board = BOARDS.find((b) => b.value === by) ?? BOARDS[0];
@@ -181,9 +192,13 @@ const Leaderboard = () => {
         <p className="mb-4 text-sm text-foreground-muted" aria-live="polite">
           {mine.rank
             ? <>Your rank: <span className="font-heading font-bold text-primary-text">#{mine.rank}</span>{!youInList ? " (outside the top 10)" : ""}</>
-            : by === "weekly" || by === "streak"
-              ? "You're not on this board yet. Earn some XP or claim your daily reward!"
-              : "Turn on gamification to appear on the leaderboard."}
+            : !xpOn
+              ? "Turn on gamification to appear on the leaderboard."
+              : classFilter !== "ALL"
+                ? "You're not in this class's ranking. Choose All classes to see your rank."
+                : by === "weekly" || by === "streak"
+                  ? "You're not on this board yet. Earn some XP or claim your daily reward!"
+                  : "You're not on this board yet."}
         </p>
       )}
 
@@ -284,10 +299,7 @@ const Leaderboard = () => {
                 <div className="sm:hidden p-3">
                   <div className="flex items-center gap-3">
                     <div className="w-8 flex justify-center">
-                      {entry.rank === 1 ? <Crown className="h-5 w-5 text-yellow-500" /> : 
-                       entry.rank === 2 ? <Medal className="h-5 w-5 text-gray-400" /> : 
-                       entry.rank === 3 ? <Medal className="h-5 w-5 text-amber-600" /> : 
-                       <span className="font-heading font-bold text-foreground-muted">#{entry.rank}</span>}
+                      <RankMark rank={entry.rank} size="h-5 w-5" />
                     </div>
                     <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} frame={entry?.cosmetics?.frame} username={entry.username} size="sm" rank={entry.rank} />
                     <div className="flex-1 min-w-0">
@@ -314,10 +326,7 @@ const Leaderboard = () => {
                 {/* Desktop */}
                 <div className="hidden sm:grid grid-cols-12 gap-4 p-4 items-center">
                   <div className="col-span-1 flex justify-center">
-                    {entry.rank === 1 ? <Crown className="h-6 w-6 text-yellow-500" /> : 
-                     entry.rank === 2 ? <Medal className="h-6 w-6 text-gray-400" /> : 
-                     entry.rank === 3 ? <Medal className="h-6 w-6 text-amber-600" /> : 
-                     <span className="font-heading font-bold text-foreground-muted">#{entry.rank}</span>}
+                    <RankMark rank={entry.rank} size="h-6 w-6" />
                   </div>
                   <div className="col-span-4 flex items-center gap-3">
                     <PlayerAvatar avatarUrl={entry.avatarUrl ?? null} frame={entry?.cosmetics?.frame} username={entry.username} size="md" rank={entry.rank} />

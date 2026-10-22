@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Calendar, Check, Pencil, Repeat, Timer, UserRound } from "lucide-react";
+import { AlarmClock, Calendar, Check, ListPlus, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -27,6 +27,10 @@ interface Props {
   onMove?: (id: number, listId: number) => void;
   /** Show the comments and activity (they load from the server). */
   showThread?: boolean;
+  /** Delete (the caller offers Undo), push to tomorrow, or add a subtask under this task; each is left out when not given. */
+  onDelete?: (id: number) => void;
+  onSnooze?: (id: number) => void;
+  onAddSubtask?: (id: number) => void;
 }
 
 const selectClass = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
@@ -40,7 +44,7 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 );
 
 /** A side drawer with everything about one task, so it can be read without opening the edit form. */
-export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onToggle, onEdit, onOpenSubtask, assignOptions, onAssign, moveTargets, onMove, showThread }: Props) => {
+export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onToggle, onEdit, onOpenSubtask, assignOptions, onAssign, moveTargets, onMove, showThread, onDelete, onSnooze, onAddSubtask }: Props) => {
   const completed = Boolean(item?.completed);
   const tags = parseTags(item?.tags);
   const overdue = item ? !completed && isPastDeadline(item.due_date) : false;
@@ -141,10 +145,23 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
               )}
             </dl>
             {!readOnly && (
-              <SheetFooter className="mt-6 gap-2 sm:space-x-0">
-                <Button variant="outline" className="gap-1" onClick={() => onEdit(item.id)}><Pencil className="h-4 w-4" aria-hidden /> Edit</Button>
-                <Button onClick={() => onToggle(item.id)}>{completed ? "Reopen" : "Mark done"}</Button>
-              </SheetFooter>
+              <>
+                <SheetFooter className="mt-6 gap-2 sm:space-x-0">
+                  <Button variant="outline" className="gap-1" onClick={() => onEdit(item.id)}><Pencil className="h-4 w-4" aria-hidden /> Edit</Button>
+                  <Button onClick={() => onToggle(item.id)}>{completed ? "Reopen" : "Mark done"}</Button>
+                </SheetFooter>
+                <div className="mt-2 flex flex-wrap justify-end gap-1">
+                  {onSnooze && !completed && (
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => onSnooze(item.id)}><AlarmClock className="h-4 w-4" aria-hidden /> Snooze to tomorrow</Button>
+                  )}
+                  {onAddSubtask && !item.parent_id && (
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => onAddSubtask(item.id)}><ListPlus className="h-4 w-4" aria-hidden /> Add subtask</Button>
+                  )}
+                  {onDelete && item.can_delete !== false && (
+                    <Button variant="ghost" size="sm" className="gap-1 text-destructive-text" onClick={() => onDelete(item.id)}><Trash2 className="h-4 w-4" aria-hidden /> Delete</Button>
+                  )}
+                </div>
+              </>
             )}
             {/* Keyed by task: a half-written comment must not carry over to the subtask opened from this drawer. */}
             {showThread && <TaskThread key={item.id} itemId={item.id} canComment={!readOnly} />}

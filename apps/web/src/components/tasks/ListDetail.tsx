@@ -505,6 +505,9 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         onAssign={onAssign}
         moveTargets={moveTargets}
         onMove={onMove ? (id, listId) => { setDetailId(null); void onMove([id], listId); } : undefined}
+        onDelete={(id) => { setDetailId(null); onDeleteItem(id); }}
+        onSnooze={onSnooze}
+        onAddSubtask={(id) => { setDetailId(null); onAddItem(id); }}
         showThread
       />
 

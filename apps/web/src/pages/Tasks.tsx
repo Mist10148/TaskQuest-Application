@@ -223,20 +223,29 @@ const Tasks = () => {
   // Complete one after another so each task pays its own XP and achievements.
   // The reward toasts are folded into one summary for the batch.
   const completeItems = async (ids: number[]) => {
-    let done = 0;
+    const finished: number[] = [];
     let xp = 0;
     for (const id of ids) {
       try {
         const result = await toggleItem.mutateAsync({ itemId: id, completed: true, quiet: true });
         if (result.completed) {
-          done += 1;
+          finished.push(id);
           xp += result.xpResult?.finalXP ?? 0;
         }
       } catch {
         break; // error toast shown by the mutation hook
       }
     }
-    if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`);
+    const done = finished.length;
+    // Undo un-checks the batch again, like Undo on one task: the XP stays paid (once per task), and a repeating task's next copy
+    // stays too.
+    const undo = async () => {
+      let failed = false;
+      for (const id of finished) await itemsApi.toggle(id, false).catch(() => (failed = true));
+      if (failed) toast.error("Some tasks could not be reopened.");
+      refetchList();
+    };
+    if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`, { action: { label: "Undo", onClick: () => void undo() }, duration: 6000 });
     refetchList();
   };
 

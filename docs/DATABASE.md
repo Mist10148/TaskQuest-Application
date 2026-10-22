@@ -223,7 +223,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 | `prestige` | − | The balance leaving at a prestige (not spending: `xp_spent` is unchanged) |
 | `game_reward` | + | RPS, Hangman and arcade winnings. These count toward the free-game daily cap. |
 | `blackjack_bet` | − | Bet escrow (and double down) |
-| `blackjack_win`, `blackjack_blackjack` | + | Bet returned plus flat winnings (1:1, or 3:2 for a natural; no class or skill bonuses). Only the winnings count as lifetime XP |
+| `blackjack_win`, `blackjack_blackjack` | + | Bet returned plus flat winnings (1:1, or 3:2 for a natural; no class or skill bonuses). None of it counts as lifetime XP: neither the returned bet nor the winnings |
 | `blackjack_push` | + | Bet returned on a push. Not lifetime XP. |
 | `class_purchase`, `skill_purchase`, `streak_freeze`, `cosmetic_purchase` | − | Spending (counted in `xp_spent`) |
 | *legacy* `blackjack_loss`, `blackjack_refund`, `task_complete`, `item_create`, `manual` | ± | Written by pre-4.0 versions (and by the MySQL-era legacy upgrade's refund of stuck hands); current code never writes them |

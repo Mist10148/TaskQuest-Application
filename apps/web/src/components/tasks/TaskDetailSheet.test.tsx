@@ -95,5 +95,27 @@ describe("TaskDetailSheet", () => {
     renderSheet({ parent_id: 1 }, { moveTargets: [{ id: 3, name: "Work" }], onMove: vi.fn() });
     expect(screen.queryByRole("combobox", { name: "Move to another quest" })).toBeNull();
   });
-});
 
+  it("deletes, snoozes and adds a subtask from the drawer", async () => {
+    const onDelete = vi.fn();
+    const onSnooze = vi.fn();
+    const onAddSubtask = vi.fn();
+    renderSheet({}, { onDelete, onSnooze, onAddSubtask });
+    await userEvent.click(screen.getByRole("button", { name: /Snooze to tomorrow/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Add subtask/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Delete/ }));
+    expect([onSnooze.mock.calls, onAddSubtask.mock.calls, onDelete.mock.calls]).toEqual([[[7]], [[7]], [[7]]]);
+  });
+
+  it("offers no snooze on a done task, no subtask under a subtask, and no delete when it is not allowed", () => {
+    renderSheet({ completed: 1, parent_id: 3, can_delete: false } as Partial<Item>, { onDelete: vi.fn(), onSnooze: vi.fn(), onAddSubtask: vi.fn() });
+    expect(screen.queryByRole("button", { name: /Snooze/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add subtask/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Delete/ })).toBeNull();
+  });
+
+  it("a viewer gets none of them", () => {
+    renderSheet({}, { readOnly: true, onDelete: vi.fn(), onSnooze: vi.fn(), onAddSubtask: vi.fn() });
+    expect(screen.queryByRole("button", { name: /Delete|Snooze|Add subtask/ })).toBeNull();
+  });
+});

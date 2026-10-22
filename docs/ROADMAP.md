@@ -13,7 +13,12 @@ Work that is understood and waits only for time, a key or a decision.
 | AI service retention: thread and checkpoint pruning, an embed debounce, a multi-instance lock for confirmations (#51) | Nothing; a good first task |
 | Auto-delete versus quest progress (#49) | A product decision |
 | Persist the rate limiters and split the internal token (see KNOWN_ISSUES) | A choice of store (Postgres or Redis) and a change to deployed env vars |
-| Limit and cursor parameters for large quests and the calendar feed | An API design |
+| Limit and cursor parameters for large quests and the calendar feed (#60) | An API design |
+| Shared leaderboard caches and a cheaper weekly and streak board (#59) | A shared store, as for the rate limiters |
+| Hash the calendar feed token (#61) | Settings shows the address again today, so it would need a "shown once" flow |
+| Migration checksums, and a baseline that does not need `vector` with AI off (#62) | Nothing; a checksum column and a warning on mismatch |
+| Undo of a repeating task's completion also removes the copy it created (#63) | A rule for a copy that was already edited |
+| Index the player guides for the AI's how-to answers | A choice of which guides; see [AI_ARCHITECTURE](AI_ARCHITECTURE.md#3-rag-pipeline) |
 
 ## Later
 
@@ -29,3 +34,4 @@ Work that is understood and waits only for time, a key or a decision.
 - A party of one can claim both party rewards (#50).
 - The arcade plausibility bound, `arcade-report` calibration and a per-game cooldown (#39).
 - Whether a manager may delete a shared quest ([shared-lists](design/shared-lists.md)).
+- Whether the weekly goal pays only for tasks finished after it is set. Today the target can be set or lowered at any time while unclaimed (as long as it is above the progress), so a goal set on Sunday at progress + 1 pays as if it had been planned all week.

@@ -29,6 +29,8 @@ async function toError(response) {
     if (response.status === 429) {
         return new TaskQuestError('AI_QUOTA', message || 'Daily AI energy used up. It resets at your midnight.', 429);
     }
+    // The user switched AI off (perhaps on another device) after Express checked: say so, not "unavailable".
+    if (response.status === 403) return new TaskQuestError('AI_OPTED_OUT', message || 'AI features are turned off for your account.', 403);
     if (response.status === 404) return new TaskQuestError(body.code || 'NOT_FOUND', message || 'Not found.', 404);
     if (response.status === 409) return new TaskQuestError('CONFLICT', message || 'Nothing is waiting for confirmation.', 409);
     if (response.status === 400) {

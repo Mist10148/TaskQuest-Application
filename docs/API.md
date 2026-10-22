@@ -22,7 +22,7 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | 503 | `AI_DISABLED` / `AI_UNAVAILABLE` | AI is not enabled on this server; the AI service is down or timed out |
 | 500 | `INTERNAL` | Bug. Details are logged server-side only. |
 
-- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 starts (`/api/auth/discord`) and 30 callbacks per 15 min per client address (IPv6 clients are counted per /64; the callback answers a limit with a redirect to `?error=rate_limited`). `/api/games/*`: 90 per minute. `/api/ai/*`: 20 per minute per user (plus a daily per-user request quota enforced by the AI service). Posting a comment (`POST /api/items/:id/comments`): 30 per minute per user.
+- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 starts (`/api/auth/discord`) and 30 callbacks per 15 min per client address (IPv6 clients are counted per /64; the callback answers a limit with a redirect to `?error=rate_limited`). `/api/games/*`: 90 per minute. `/api/ai/*`: 20 per minute per user (plus a daily per-user request quota enforced by the AI service). Posting a comment (`POST /api/items/:id/comments`): 30 per minute per user. The simulations and the CSV import (`GET /api/skills/preview`, `GET /api/classes/:key/preview`, `POST /api/import/csv`): 20 per minute per user together, since each one is CPU work on the server's only thread.
 - **Reward fields.** Actions that can grant XP return `xpResult` and `newAchievements`:
 
 ```jsonc

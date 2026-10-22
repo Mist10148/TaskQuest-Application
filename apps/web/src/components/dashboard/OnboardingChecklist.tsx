@@ -21,18 +21,22 @@ interface Props {
   claimedDaily: boolean;
   onClaimDaily: () => void;
   claiming: boolean;
+  /** With XP off there is no daily reward to claim, so that step is left out. */
+  xpEnabled?: boolean;
 }
 
 /**
  * Three first steps for a new player, worked out from real data (so it is right on
  * every device and disappears by itself once it is done). It can be dismissed early.
  */
-export const OnboardingChecklist = ({ hasQuest, hasTask, claimedDaily, onClaimDaily, claiming }: Props) => {
+export const OnboardingChecklist = ({ hasQuest, hasTask, claimedDaily, onClaimDaily, claiming, xpEnabled = true }: Props) => {
   const [dismissed, setDismissed] = useState(wasDismissed);
   const steps = [
     { done: hasQuest, label: "Create your first quest", hint: "A quest is a list of tasks.", action: <Link to="/tasks" className="text-primary-text underline-offset-4 hover:underline">Open Quest Log</Link> },
     { done: hasTask, label: "Add a task to it", hint: "Press n inside a quest, or type in quick add.", action: <Link to="/tasks" className="text-primary-text underline-offset-4 hover:underline">Add a task</Link> },
-    { done: claimedDaily, label: "Claim your daily reward", hint: "Come back every day to build a streak.", action: <Button size="sm" variant="outline" onClick={onClaimDaily} disabled={claiming}>Claim now</Button> },
+    ...(xpEnabled
+      ? [{ done: claimedDaily, label: "Claim your daily reward", hint: "Come back every day to build a streak.", action: <Button size="sm" variant="outline" onClick={onClaimDaily} disabled={claiming}>Claim now</Button> }]
+      : []),
   ];
   const doneCount = steps.filter((s) => s.done).length;
   const allDone = doneCount === steps.length;

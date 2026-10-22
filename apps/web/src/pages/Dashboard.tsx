@@ -46,6 +46,8 @@ const Dashboard = () => {
   const lifetimeXP = lifetimeTotal(dbUser); // the never-reset total
   const currentXP = levelXP % 100;
   const streak = dbUser.streak_count || 0;
+  // With XP off the daily reward cannot be claimed (the server refuses), so it is not offered; the command palette does the same.
+  const xpEnabled = dbUser.gamification_enabled !== 0 && dbUser.gamification_enabled !== false;
   
   const totalTasks = parseInt(String(user?.items?.total)) || 0;
   const completedTasks = parseInt(String(user?.items?.completed)) || 0;
@@ -95,10 +97,10 @@ const Dashboard = () => {
             </h1>
             <p className="text-foreground-muted text-sm sm:text-base">Here's your adventure progress</p>
           </div>
-          <Button variant="outline" onClick={handleClaimDaily} disabled={dailyClaimed || claimDaily.isPending} className="shrink-0 border-xp/50 text-xp hover:bg-xp/10 hover:border-xp hover:shadow-[0_0_15px_rgba(234,179,8,0.3)] transition-all">
+          {xpEnabled && <Button variant="outline" onClick={handleClaimDaily} disabled={dailyClaimed || claimDaily.isPending} className="shrink-0 border-xp/50 text-xp hover:bg-xp/10 hover:border-xp hover:shadow-[0_0_15px_rgba(234,179,8,0.3)] transition-all">
             <Calendar className="h-4 w-4 mr-2" />
             {dailyClaimed ? `Next in ${formatCountdown(claimWaitMs)}` : 'Claim Daily Reward'}
-          </Button>
+          </Button>}
         </motion.div>
 
         <OnboardingChecklist
@@ -107,6 +109,7 @@ const Dashboard = () => {
           claimedDaily={lastClaim > 0 || claimedUntil !== null}
           onClaimDaily={handleClaimDaily}
           claiming={claimDaily.isPending}
+          xpEnabled={xpEnabled}
         />
 
         {/* XP Progress with neon effects */}

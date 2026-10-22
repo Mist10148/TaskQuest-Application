@@ -955,16 +955,6 @@ export function useChatThreads(enabled = true) {
     return useQuery({ queryKey: ['ai', 'threads'], queryFn: aiApi.threads, enabled, retry: false });
 }
 
-export function useThread(threadId: string | null) {
-    return useQuery({
-        queryKey: ['ai', 'threads', threadId],
-        queryFn: () => aiApi.thread(threadId as string),
-        enabled: Boolean(threadId),
-        staleTime: 0,
-        retry: false,
-    });
-}
-
 export function useDeleteThread() {
     const qc = useQueryClient();
     return useMutation({

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Crown, Gift, Loader2, LogOut, Mail, Send, Shield, Timer, Trash2, UserMinus, X } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -181,6 +182,12 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [confirmDisband, setConfirmDisband] = useState(false);
   const left = useCountdown(Date.parse(status.resetsAt), 60_000);
+  // When the week resets the quest, progress and claim all start over: fetch the new week instead of showing "resets in 0".
+  const qc = useQueryClient();
+  const resetPassed = left === 0;
+  useEffect(() => {
+    if (resetPassed) void qc.invalidateQueries({ queryKey: ["parties"] });
+  }, [resetPassed, qc]);
 
   const isOwner = status.party.isOwner;
   const invites = status.invites ?? [];

@@ -602,6 +602,11 @@ const GRID_SIZE = snakeSim.GRID_SIZE;
 const CELL_SIZE = 15;
 
 const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
+  // The page passes a new onResult on every render; the game loop must not restart (and drop a swipe in progress) because of it.
+  const onResultRef = useRef(onResult);
+  useEffect(() => {
+    onResultRef.current = onResult;
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
@@ -633,8 +638,8 @@ const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
     if (run.score > highScore) setHighScore(run.score);
     // Report the recorded inputs; the server replays them, derives the pellets eaten, converts them to XP and caps it.
     playSound("lose");
-    onResult(run);
-  }, [highScore, onResult]);
+    onResultRef.current(run);
+  }, [highScore]);
 
   useEffect(() => {
     if (gameState !== "playing") return;
@@ -829,6 +834,11 @@ const CANVAS_WIDTH = dinoSim.CANVAS_WIDTH;
 const CANVAS_HEIGHT = dinoSim.CANVAS_HEIGHT;
 
 const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
+  // The page passes a new onResult on every render; the game loop must not restart (and drop a swipe in progress) because of it.
+  const onResultRef = useRef(onResult);
+  useEffect(() => {
+    onResultRef.current = onResult;
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
@@ -862,8 +872,8 @@ const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
     setScore(run.score);
     if (run.score > highScore) setHighScore(run.score);
     playSound("lose");
-    onResult(run);
-  }, [highScore, onResult]);
+    onResultRef.current(run);
+  }, [highScore]);
 
   const jump = useCallback(() => {
     const g = simRef.current;
@@ -1164,6 +1174,11 @@ const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
+  // The page passes a new onResult on every render; the game loop must not restart (and drop a swipe in progress) because of it.
+  const onResultRef = useRef(onResult);
+  useEffect(() => {
+    onResultRef.current = onResult;
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
@@ -1202,8 +1217,8 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
     if (finalScore > highScore) setHighScore(finalScore);
     // Report the recorded inputs; the server replays them, derives the aliens destroyed, converts them to XP and caps it.
     playSound("lose");
-    onResult(run);
-  }, [highScore, onResult]);
+    onResultRef.current(run);
+  }, [highScore]);
 
   useEffect(() => {
     if (gameState !== "playing") return;

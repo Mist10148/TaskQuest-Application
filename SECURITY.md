@@ -39,7 +39,7 @@ This monorepo was created **without importing either history**, and `.gitignore`
   - Single origin with `SameSite=Lax` cookies.
   - CSRF origin/Referer checks and JSON-only bodies.
   - helmet (CSP, frame-ancestors none, HSTS, nosniff, referrer policy).
-  - Rate limits, strict zod schemas, a 16 KB body limit, and generic 5xx responses.
+  - Rate limits, strict zod schemas, a 16 KB JSON body limit (raised per route only where a request must carry more, after the session, rate limit and login checks: 1 MB for `/api/user/import`, 2 MB for `/api/import`, 128 KB for `/api/games/arcade`), and generic 5xx responses.
 - **Secrets.** Only environment variables; nothing in the repository. The server refuses to start in production without a strong `SESSION_SECRET`.
 - **Transport to the database.** TLS with certificate verification by default when `DB_SSL=true`, including for `DB_URL`.
 - **Least data.** Only the Discord ID, username, display name and avatar hash are stored. The leaderboard never exposes Discord IDs.
@@ -75,7 +75,7 @@ This monorepo was created **without importing either history**, and `.gitignore`
 | `LIKE` wildcards in search not escaped | `escapeLike` with `ESCAPE '\\'` |
 | `/profile @user` created database rows for arbitrary users and showed their XP publicly | Ephemeral, and read-only for others |
 | Mock-data fallback hid auth failures (a fake player was shown when logged out) | Real login gate and error states |
-| Privileged `GuildMembers` intent requested without need | `Guilds` intent only |
+| Privileged `GuildMembers` intent requested without need | `Guilds` intent only, plus `GuildMessages` and `DirectMessages` when AI chat is on (`AI_ENABLED`), and the privileged `MessageContent` only when `AI_CHAT_MESSAGE_CONTENT=true` |
 | `/app` linked to an unowned domain when unconfigured | No fallback URL |
 | Vulnerable dependencies: mysql2 ≤ 3.23 (via express-mysql-session), react-router < 7.18, vite ≤ 6.4 | Upgraded; `express-mysql-session` replaced; production `npm audit` is clean |
 | Dev server bound to all interfaces (`host: "::"`) | Binds to `localhost` |
@@ -96,6 +96,10 @@ These are accepted, bounded and documented rather than fixed:
 - **Offline arcade solvers.** A run is verified by replaying its recorded inputs on the server, so a script that solves the game offline can submit a perfect, valid recording. The damage is bounded by the per-run payout, the cooldown and the shared free-game cap (500 XP a day across all free games), not by detection.
 - **Dependencies.** The Tailwind 4 migration removed the dev-only advisories that the Tailwind 3 toolchain carried: `npm audit` is clean for the whole tree. Keep Dependabot or a regular audit on.
 - **Time zone hopping.** The time zone decides when a user's day (and so the daily caps) reset. Changing it is limited to once per 24 hours, so moving the zone back and forth can open one extra capped day now and then; this is worth about 70 XP a day at most.
+- **Rate-limit counters live in memory** (known issue #57). A restart or deploy resets them, and with several web instances each counts alone. Run one instance, or move the counters to a shared store.
+- **One internal token** (#58). `AI_INTERNAL_TOKEN` protects every `/internal/*` route (and is the fallback push token), and `/internal` trusts the Discord ID in the body, so anything holding it can act as any user. Keep it in the private environment group only.
+- **The calendar feed address is a bearer secret** (#13, #61). Anyone with the address sees that user's deadlines, and the token is stored in plain text so Settings can show the address again. Rotating it (Settings, which now asks first) cuts off every old copy at once.
+- **AI approvals are locked per process** (#51). The lock that makes a double click on Approve run once is in memory, so with several AI service instances two clicks could reach two instances and run a confirmed write twice. Run one AI instance.
 - **Invitation probing.** An invite call answers the same neutral message whether the name matches nobody, the person turned invitations off, declined this inviter within 7 days, or (for a party) is already in one, and whether or not an invitation really went out; the confirmation step shows a name only for a person who can be invited. The calls are limited per account (30 per 15 minutes) and per address (60), with daily lookup ceilings of 100 per account and 300 per address, plus 30 sends a day. What stays visible: the inviter's own pending-invitations list shows the invitations that were really created, so a patient manager can still tell a sent invitation from a skipped one by looking there, and someone who can be invited can be previewed by their exact username (display name and default avatar, never an ID).
 
 ## 5. Reporting a vulnerability

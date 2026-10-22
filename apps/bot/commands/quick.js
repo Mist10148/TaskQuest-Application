@@ -9,10 +9,12 @@
 
 const { SlashCommandBuilder } = require('discord.js');
 const { tasks, users } = require('@taskquest/shared/db');
-const { parseQuickAdd, todayInZone, formatDeadline } = require('@taskquest/shared');
+const { parseQuickAdd, todayInZone, formatDeadline, escapeDiscord } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const aiSync = require('../utils/aiSync');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
+
+const safe = (name) => escapeDiscord(name, { max: 200 });
 
 const data = new SlashCommandBuilder()
     .setName('quick')
@@ -47,7 +49,7 @@ async function execute(interaction) {
             parsed.tags.length ? parsed.tags.map((t) => `#${t}`).join(' ') : null,
             parsed.recurrence ? `🔁 ${parsed.recurrence}` : null
         ].filter(Boolean);
-        await interaction.editReply({ embeds: [ui.success('Task added', `**${result.item.name}** in **${list.name}**${details.length ? `\n${details.join(' · ')}` : ''}`)] });
+        await interaction.editReply({ embeds: [ui.success('Task added', `**${safe(result.item.name)}** in **${safe(list.name)}**${details.length ? `\n${details.join(' · ')}` : ''}`)] });
         await sendRewards(interaction, result);
     } catch (err) {
         await handleError(interaction, err);

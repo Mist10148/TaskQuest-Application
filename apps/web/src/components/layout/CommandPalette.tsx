@@ -44,7 +44,8 @@ export const CommandPalette = ({ aiEnabled, xpEnabled = true }: { aiEnabled: boo
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((v) => !v);
+        // Over another dialog (a form, a confirmation) it would stack a second modal: only close itself, never open there.
+        setOpen((v) => (v ? false : !document.querySelector('[role="dialog"], [role="alertdialog"]')));
       }
     };
     const onOpen = () => setOpen(true);
@@ -81,7 +82,8 @@ export const CommandPalette = ({ aiEnabled, xpEnabled = true }: { aiEnabled: boo
     // An unfinished session would be cancelled by starting another: then just show it.
     async function quickFocus() {
       try {
-        const status = await qc.fetchQuery({ queryKey: ["focus"], queryFn: focusApi.get });
+        // Always ask the server: a cached "no session" up to a minute old would start a second one over a session already running.
+        const status = await qc.fetchQuery({ queryKey: ["focus"], queryFn: focusApi.get, staleTime: 0 });
         if (!status.active) await startFocus.mutateAsync(QUICK_FOCUS_MINUTES);
       } catch {
         /* the mutation shows its own error; the Focus page explains a full day */

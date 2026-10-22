@@ -31,4 +31,12 @@ describe("OnboardingTour", () => {
     await new Promise((r) => setTimeout(r, 1000));
     expect(screen.queryByRole("region", { name: "Welcome tour" })).toBeNull();
   });
+
+  it("does not take focus from someone typing when it appears", async () => {
+    render(<MemoryRouter><input aria-label="Quick add" /><OnboardingTour /></MemoryRouter>);
+    const box = screen.getByRole("textbox", { name: "Quick add" });
+    box.focus();
+    await screen.findByText("Step 1 of 4", undefined, wait);
+    expect(box).toHaveFocus();
+  });
 });

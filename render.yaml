@@ -6,6 +6,7 @@
 #
 #   taskquest-web  Express API + built React app on ONE origin (first-party cookies)
 #   taskquest-bot  Discord bot (long-lived gateway connection)
+#   taskquest-ai   optional private AI service (FastAPI + LangGraph); see the note below
 #   taskquest-archive  weekly cron job that moves XP rows older than a year to the archive table
 #
 # After the first deploy:

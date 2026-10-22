@@ -203,6 +203,10 @@ async function profile(interaction) {
         return interaction.reply({ embeds: [ui.info('No profile yet', `${escapeDiscord(targetUser.username, { max: 60 })} hasn't used TaskQuest yet.`)], ...EPHEMERAL });
     }
     const user = stats.user;
+    // Turning XP off takes a player off the leaderboard; their XP, tasks and games are not anyone else's to read either.
+    if (userId !== interaction.user.id && !Number(user.gamification_enabled)) {
+        return interaction.reply({ embeds: [ui.info('Profile is private', `${escapeDiscord(targetUser.username, { max: 60 })} has XP and progress turned off.`)], ...EPHEMERAL });
+    }
     const userSkills = await users.getUserSkills(userId);
 
     // Get Discord member info

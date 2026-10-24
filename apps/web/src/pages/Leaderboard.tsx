@@ -84,7 +84,7 @@ const FALLBACK_CLASS_FILTERS = ["DEFAULT", "HERO", "GAMBLER", "ASSASSIN", "WIZAR
 
 /** Three small tiles (2nd, 1st, 3rd) for phones, where the full podium does not fit. */
 const CompactPodium = ({ entries, unit, nameOf, emojiOf }: { entries: LeaderboardEntry[]; unit: string; nameOf: (e: LeaderboardEntry) => string; emojiOf: (e: LeaderboardEntry) => string }) => (
-  <div className="sm:hidden mb-6 grid grid-cols-3 gap-2" aria-label="Top three players">
+  <div className="sm:hidden mb-6 grid grid-cols-3 gap-2" aria-hidden="true">
     {[entries[1], entries[0], entries[2]].map((e) => (
       <div key={`${e.username}-${e.rank}`} className={cn("rounded-xl border p-2 text-center", e.rank === 1 ? "border-yellow-500/40 bg-yellow-500/10" : "border-border bg-card")}>
         {e.rank === 1 ? <Crown className="h-4 w-4 mx-auto text-yellow-500" aria-hidden /> : <Medal className={cn("h-4 w-4 mx-auto", e.rank === 2 ? "text-gray-400" : "text-amber-600")} aria-hidden />}
@@ -120,6 +120,7 @@ const Leaderboard = () => {
     : FALLBACK_CLASS_FILTERS.map((k) => ({ key: k, emoji: CLASS_EMOJIS[k] ?? "", name: k.charAt(0) + k.slice(1).toLowerCase() }));
   const emojiOf = (e: { playerClass: string }) => classOptions.find((c) => c.key === e.playerClass)?.emoji || CLASS_EMOJIS[e.playerClass] || '⚪';
   const entries = leaderboard || [];
+  const myClass = user?.user?.player_class && user.user.player_class !== "DEFAULT" ? user.user.player_class : null; // "DEFAULT" is no class worth filtering by
   const showStreakColumn = by !== "streak"; // on the Streak board the score already is the streak
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const next = nextTabIndex(e.key, BOARDS.findIndex((b) => b.value === by), BOARDS.length);
@@ -171,6 +172,11 @@ const Leaderboard = () => {
         </div>
         <div className="flex items-center gap-3">
           <label htmlFor="class-filter" className="text-sm text-foreground-muted">Class</label>
+          {myClass && classFilter !== myClass && (
+            <button type="button" onClick={() => setClassFilter(myClass)} className="h-9 rounded-md border border-input px-3 text-sm text-foreground-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
+              My class
+            </button>
+          )}
           <select
             id="class-filter"
             value={classFilter}
@@ -186,7 +192,7 @@ const Leaderboard = () => {
       </div>
 
       <div id="board-tabpanel" role="tabpanel" aria-labelledby={`board-tab-${by}`}>
-      {mineLoading && <p className="mb-4 text-sm text-foreground-muted" aria-busy="true">Checking your rank…</p>}
+      {mineLoading && <p className="mb-4 min-h-5 text-sm text-foreground-muted" aria-busy="true">Checking your rank…</p>}
       {mineFailed && <p className="mb-4 text-sm text-destructive-text" role="alert">Couldn't load your rank.</p>}
       {mine && (
         <p className="mb-4 text-sm text-foreground-muted" aria-live="polite">
@@ -206,7 +212,7 @@ const Leaderboard = () => {
 
       {/* Top 3 Podium */}
       {entries.length >= 3 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="hidden sm:grid grid-cols-3 gap-4 mb-8">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} aria-hidden="true" className="hidden sm:grid grid-cols-3 gap-4 mb-8">
           {/* 2nd Place */}
           <div className="mt-8">
             <motion.div whileHover={{ y: -4 }} className="rounded-xl bg-linear-to-b from-gray-400/20 to-gray-400/5 border border-gray-400/30 p-5 text-center relative overflow-hidden group">
@@ -282,13 +288,15 @@ const Leaderboard = () => {
             <p>{classFilter === "ALL" ? "No rankings yet. Be the first!" : "Nobody in this class has a score on this board yet."}</p>
           </div>
         ) : (
-          entries.map((entry: LeaderboardEntry, index: number) => {
+          <div role="list" aria-label="Rankings">
+          {entries.map((entry: LeaderboardEntry, index: number) => {
             const isCurrentUser = Boolean(entry.isYou);
             const rankBg = entry.rank === 1 ? 'bg-yellow-500/10' : entry.rank === 2 ? 'bg-gray-400/10' : entry.rank === 3 ? 'bg-amber-600/10' : '';
 
             return (
               <motion.div
                 key={`${by}-${classFilter}-${entry.rank}`}
+                role="listitem"
                 aria-current={isCurrentUser ? "true" : undefined}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -365,7 +373,8 @@ const Leaderboard = () => {
                 </div>
               </motion.div>
             );
-          })
+          })}
+          </div>
         )}
       </motion.div>
       </div>

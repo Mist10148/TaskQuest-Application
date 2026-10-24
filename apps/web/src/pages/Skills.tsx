@@ -203,14 +203,18 @@ const Skills = () => {
                   )}
                   style={status === 'unlocked' || status === 'maxed' ? { borderColor: color } : undefined}
                 >
-                  <div className="absolute -top-2 -right-2">
+                  <div className="absolute -top-2 -right-2" aria-hidden="true">
                     {status === 'maxed' && <div className="h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-success flex items-center justify-center"><Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" /></div>}
                     {(status === 'locked' || isClassLocked) && <div className="h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-background-tertiary flex items-center justify-center"><Lock className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-foreground-muted" /></div>}
                   </div>
 
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg sm:text-xl">{skill.emoji}</span>
-                    <h4 className="font-heading font-semibold text-sm sm:text-base">{skill.name}</h4>
+                    <h3 className="font-heading font-semibold text-sm sm:text-base">
+                      {skill.name}
+                      {status === 'maxed' && <span className="sr-only"> (maxed)</span>}
+                      {(status === 'locked' || isClassLocked) && <span className="sr-only"> (locked)</span>}
+                    </h3>
                   </div>
                   <p className="text-[0.625rem] sm:text-xs text-foreground-muted mb-2 sm:mb-3">{skill.description}</p>
                   {preview && skill.currentLevel < skill.maxLevel && preview.gains[skill.id] !== undefined && (
@@ -224,7 +228,7 @@ const Skills = () => {
                   )}
                   
                   <div className="flex items-center justify-between mb-2 sm:mb-3">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1" aria-hidden="true">
                       {Array.from({ length: skill.maxLevel }).map((_, i) => (
                         <div key={i} className={cn("h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full", i < skill.currentLevel ? "bg-current" : "bg-background-secondary")} 
                           style={i < skill.currentLevel ? { backgroundColor: color } : undefined} />

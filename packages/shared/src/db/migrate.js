@@ -14,6 +14,7 @@
 'use strict';
 
 const path = require('path');
+const crypto = require('crypto');
 const fs = require('fs');
 const { getPool, closePool, isUndefinedTable } = require('./pool');
 
@@ -108,6 +109,28 @@ async function acquireLock(conn) {
     }
 }
 
+/** A short fingerprint of a migration's code, stored when it is applied so a later edit of a shipped migration can be noticed. */
+function checksumOf(m) {
+    return crypto.createHash('sha256').update(String(m.up)).digest('hex').slice(0, 32);
+}
+
+/**
+ * Things worth a warning before migrating: applied migrations this code does not know (an older deploy running against a newer
+ * schema) and shipped migrations whose code changed since they were applied. Warnings only: neither stops the app.
+ * @param {{id: string, up: Function}[]} known migrations on disk
+ * @param {{id: string, checksum?: string|null}[]} appliedRows rows of schema_migrations
+ */
+function migrationWarnings(known, appliedRows) {
+    const byId = new Map(known.map((m) => [m.id, m]));
+    const notes = [];
+    for (const row of appliedRows) {
+        const m = byId.get(row.id);
+        if (!m) notes.push(`the database has migration ${row.id}, which this version does not know: an older version is running against a newer schema.`);
+        else if (row.checksum && row.checksum !== checksumOf(m)) notes.push(`migration ${row.id} was changed after it was applied. Never edit a shipped migration; add a new one.`);
+    }
+    return notes;
+}
+
 /**
  * Apply all pending migrations. Uses an advisory lock so two processes (bot and
  * web booting together) never migrate concurrently.
@@ -126,17 +149,27 @@ async function runMigrations({ log = console.log } = {}) {
             applied_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         )`);
 
-        const [rows] = await conn.query('SELECT id FROM schema_migrations');
+        // The checksum column is added here rather than by a migration: it is the runner's own bookkeeping, and it must exist before any migration is checked.
+        await conn.query('ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)');
+
+        const [rows] = await conn.query('SELECT id, checksum FROM schema_migrations');
         const done = new Set(rows.map((r) => r.id));
+        const all = loadMigrations();
+        for (const note of migrationWarnings(all, rows)) log(`⚠ ${note}`);
+        // A migration applied before checksums existed is trusted as it is now and stamped, so only later edits are noticed.
+        for (const m of all) {
+            const row = rows.find((r) => r.id === m.id);
+            if (row && !row.checksum) await conn.query('UPDATE schema_migrations SET checksum = ? WHERE id = ?', [checksumOf(m), m.id]);
+        }
         const h = helpers(conn);
 
-        for (const m of loadMigrations()) {
+        for (const m of all) {
             if (done.has(m.id)) continue;
             log(`→ migrating ${m.id}${m.description ? ` (${m.description})` : ''}`);
             await conn.beginTransaction();
             try {
                 await m.up(h);
-                await conn.query('INSERT INTO schema_migrations (id) VALUES (?)', [m.id]);
+                await conn.query('INSERT INTO schema_migrations (id, checksum) VALUES (?, ?)', [m.id, checksumOf(m)]);
                 await conn.commit();
             } catch (err) {
                 await conn.rollback().catch(() => {});
@@ -168,13 +201,15 @@ async function assertSchemaCurrent() {
     } catch (err) {
         if (!isUndefinedTable(err)) throw err;
     }
+    const unknown = done.filter((id) => !all.includes(id));
+    if (unknown.length) console.warn(`⚠ the database has migration(s) this version does not know (${unknown.join(', ')}): an older version is running against a newer schema.`);
     const pending = all.filter((id) => !done.includes(id));
     if (pending.length) {
         throw new Error(`Database schema is out of date. Pending migrations: ${pending.join(', ')}. Run "npm run db:migrate".`);
     }
 }
 
-module.exports = { runMigrations, assertSchemaCurrent, loadMigrations };
+module.exports = { runMigrations, assertSchemaCurrent, loadMigrations, migrationWarnings, checksumOf };
 
 if (require.main === module) {
     require('../env').loadEnv(process.cwd());

@@ -85,6 +85,7 @@ function invalidateTaskViews(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['items'] }); // a task's history and comments in the detail drawer
     qc.invalidateQueries({ queryKey: ['today'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
+    qc.invalidateQueries({ queryKey: ['parties'] }); // the party's weekly task count
 }
 
 /** Refresh everything that depends on the player's XP balance. */
@@ -101,6 +102,8 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['stats'] });
     qc.invalidateQueries({ queryKey: ['prestige'] });
     qc.invalidateQueries({ queryKey: ['today'] });
+    qc.invalidateQueries({ queryKey: ['parties'] }); // party progress counts tasks and focus minutes
+    qc.invalidateQueries({ queryKey: ['xp-history'] });
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────

@@ -52,7 +52,7 @@ DB_SSL=true
 
 - Use the **session** pooler on port **5432**. It is reachable over IPv4 (Render has no IPv6), and it is session-level, so the migration advisory lock and the AI service's prepared statements work. The transaction pooler (port 6543) breaks both, and the direct host `db.<project-ref>.supabase.co` is IPv6-only.
 - Supabase certificates chain to a public root, so `DB_SSL_CA` can stay empty; to pin it, paste the CA from Database → Settings → SSL Configuration.
-- The free tier limits pooler clients. The web server, bot, AI service and archive job each open a pool, so keep `DB_POOL_SIZE` small (5 or lower per Node service).
+- The free tier limits pooler clients. The web server, bot, AI service and archive job each open a pool, so keep `DB_POOL_SIZE` small (5 or lower per Node service; the default is 10, so set it). `DB_POOL_SIZE` is one variable shared by the Node apps and the AI service: setting it in a shared environment overrides the AI service's own default of 5, and the blueprint does not set it.
 
 **Self-hosted Postgres.**
 
@@ -219,7 +219,7 @@ The repository includes [`render.yaml`](../render.yaml).
 - The web service builds with `npm ci --include=dev && npm run build`, because dev dependencies are needed to build the SPA.
 - Render background workers need a paid plan. The bot also exposes a health endpoint on `$PORT`, so it can run as a free **web** service, but free services sleep when idle, which disconnects the bot. Use a paid worker for reliability.
 - **Archive job.** `render.yaml` also defines a weekly cron job `taskquest-archive` (a paid plan) that runs `npm run archive -- --days 365` against the same database. It only moves old `xp_transactions` rows to the archive table and deletes task history (`item_activity`) older than the window; take the usual backup first and remove the job from the blueprint if you do not want it.
-- **AI service.** `render.yaml` also defines a private service `taskquest-ai` (a paid plan) and a `taskquest-ai` env group holding a generated `AI_INTERNAL_TOKEN`, shared with the web service and the bot. To enable AI: set `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`, set `AI_SERVICE_URL` (its internal host) on `taskquest-web` and `taskquest-bot`, then flip `AI_ENABLED` to `true` on both. Re-register slash commands (`npm run deploy:commands`) so `/summary`, `/prioritize` and `/ask` appear. Its build command embeds the help docs; that step is skipped, not failed, if the database or key is unavailable at build time.
+- **AI service.** `render.yaml` also defines a private service `taskquest-ai` (a paid plan) and a `taskquest-ai` env group holding a generated `AI_INTERNAL_TOKEN`, shared with the web service and the bot. To enable AI: set `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`, set `AI_SERVICE_URL` (its internal host) on `taskquest-web` and `taskquest-bot`, then flip `AI_ENABLED` to `true` on both. The AI commands (`/summary`, `/prioritize`, `/ask`, `/forget`, `/ai-format`) are always registered, whether or not AI is on; until `AI_ENABLED` is `true` they answer that AI is off, so no re-registration is needed. Its build command embeds the help docs; that step is skipped, not failed, if the database or key is unavailable at build time.
 - The first AI request after a free web instance wakes can take 10 to 30 seconds. The UI shows a "waking up" message after 5 seconds.
 - Health checks: the web service uses `GET /api/health`. The bot's `GET /` returns 200 once it is connected to Discord.
 

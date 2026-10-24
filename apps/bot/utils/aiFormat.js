@@ -4,6 +4,7 @@
  */
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { escapeDiscord } = require('@taskquest/shared');
 const { COLORS, PRIORITY_DOT } = require('./ui');
 
 const AI_COLOR = 0x9B59B6;
@@ -19,8 +20,19 @@ function truncate(text, max) {
     return s.length <= max ? s : `${s.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
 
+/**
+ * Free model prose keeps its markdown (bold, lists), but a masked link, a bare link or a mention in it is made inert: the text can
+ * echo a task name or a document someone else wrote.
+ */
+function defang(text) {
+    return String(text ?? '')
+        .replace(/\]\(/g, '] (')
+        .replace(/:\/\//g, ':​//')
+        .replace(/@/g, '@​');
+}
+
 function bullets(lines, max = FIELD_LIMIT) {
-    return truncate(lines.map((l) => `• ${l}`).join('\n'), max);
+    return truncate(lines.map((l) => `• ${escapeDiscord(l)}`).join('\n'), max);
 }
 
 const SUMMARY_TITLES = {
@@ -39,7 +51,7 @@ function summaryEmbed(summary, { mode = 'digest', range = 'week' } = {}) {
     const embed = new EmbedBuilder()
         .setColor(AI_COLOR)
         .setTitle(summaryTitle(mode, range))
-        .setDescription(truncate(`**${summary.headline || 'Nothing to report.'}**`, DESCRIPTION_LIMIT))
+        .setDescription(truncate(`**${escapeDiscord(summary.headline) || 'Nothing to report.'}**`, DESCRIPTION_LIMIT))
         .setFooter(FOOTER);
     const fields = [
         ['✨ Highlights', summary.highlights],
@@ -61,9 +73,9 @@ function priorityEmbed(result) {
     const lines = ranked.map((r) => {
         const dot = PRIORITY_DOT[r.priority] || PRIORITY_DOT.NONE;
         const suggestion = r.suggestedPriority ? `\n   💡 Consider raising it to **${r.suggestedPriority}**` : '';
-        return `**${r.rank}.** ${dot} **${r.name}**\n   ${r.reason}${suggestion}`;
+        return `**${r.rank}.** ${dot} **${escapeDiscord(r.name, { max: 100 })}**\n   ${escapeDiscord(r.reason)}${suggestion}`;
     });
-    let description = result.focusMessage ? `${result.focusMessage}\n\n` : '';
+    let description = result.focusMessage ? `${defang(result.focusMessage)}\n\n` : '';
     description += lines.join('\n');
     if (result.usedFallback) description += '\n\n-# Ranked by deadlines and priority (the AI ranking was unavailable).';
     return embed.setDescription(truncate(description, DESCRIPTION_LIMIT));
@@ -83,11 +95,11 @@ function toolLines(tools) {
 /** Embed for a collected /v1/chat turn (see @taskquest/shared/ai collectChat). */
 function answerEmbed(turn, question) {
     const parts = [];
-    if (turn.text) parts.push(turn.text.trim());
+    if (turn.text) parts.push(defang(turn.text.trim()));
     parts.push(...toolLines(turn.tools));
     if (turn.error) parts.push(`⚠️ ${turn.error}`);
     // The confirmation is what the user is approving: never cut it, shorten the answer text instead.
-    const confirm = turn.confirms && turn.confirms.length ? `**Confirm to continue:**\n${turn.confirms.map((c) => `• ${c.preview}`).join('\n')}` : '';
+    const confirm = turn.confirms && turn.confirms.length ? `**Confirm to continue:**\n${turn.confirms.map((c) => `• ${escapeDiscord(c.preview)}`).join('\n')}` : '';
     const body = parts.join('\n\n');
     const description = confirm
         ? `${body ? `${truncate(body, Math.max(0, DESCRIPTION_LIMIT - confirm.length - 2))}\n\n` : ''}${truncate(confirm, DESCRIPTION_LIMIT)}`
@@ -98,7 +110,7 @@ function answerEmbed(turn, question) {
         .setFooter(FOOTER);
     if (question) embed.setAuthor({ name: truncate(`💬 ${question}`, 256) });
     if (turn.sources && turn.sources.length) {
-        embed.addFields({ name: '📎 Sources', value: truncate(turn.sources.map((s) => `\`${s.id}\` ${s.title}`).join('\n'), FIELD_LIMIT) });
+        embed.addFields({ name: '📎 Sources', value: truncate(turn.sources.map((s) => `\`${s.id}\` ${escapeDiscord(s.title, { max: 100 })}`).join('\n'), FIELD_LIMIT) });
     }
     return embed;
 }

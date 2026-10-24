@@ -387,3 +387,16 @@ test('/forget wipes this channel and /ai-format saves the style', async () => {
     await aiCommands.aiFormat(f);
     assert.deepEqual(saved, [['42', 'embed']]);
 });
+
+test('AI embeds make task names, links and mentions in model text inert', () => {
+    const evil = '[click](https://evil.example) @everyone';
+    const p = fmt.priorityEmbed({ ranked: [{ rank: 1, name: evil, priority: 'HIGH', reason: evil }], focusMessage: evil }).toJSON();
+    assert.doesNotMatch(p.description, /\]\(https/);
+    assert.doesNotMatch(p.description, /@everyone/);
+    const a = fmt.answerEmbed({ text: evil, tools: [], confirms: [{ preview: evil }], sources: [{ id: 'L1', title: evil }] }).toJSON();
+    assert.doesNotMatch(a.description, /\]\(https/);
+    assert.doesNotMatch(a.description, /@everyone/);
+    assert.doesNotMatch(a.fields[0].value, /\]\(https/);
+    const s = fmt.summaryEmbed({ headline: evil, highlights: [evil] }).toJSON();
+    assert.doesNotMatch(s.description + s.fields[0].value, /\]\(https|@everyone/);
+});

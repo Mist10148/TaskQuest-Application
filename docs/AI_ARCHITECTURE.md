@@ -81,6 +81,7 @@ flowchart TB
 ```
 
 - **Chunks:** one per quest (name, description, category, deadline, priority and its subtasks), one per subtask longer than 300 characters, one per week of completed subtasks with the XP earned that week, and the help docs split by heading.
+- **The help corpus is two documents.** How-to answers come from the global doc chunks, and `app/rag/index_docs.py` (`DOC_FILES`) embeds only [GAMEPLAY.md](GAMEPLAY.md) and [COMMANDS.md](COMMANDS.md). The player guides ([XP_GUIDE](XP_GUIDE.md), [PLAYER_FAQ](PLAYER_FAQ.md), [CLASS_GUIDE](CLASS_GUIDE.md)) are not indexed, so the assistant answers from the exact rules rather than those friendlier summaries. Adding one means a new `DOC_FILES` entry and a re-run of the indexer.
 - **Only changed text is embedded.** Each chunk stores a SHA-256 `content_hash`. Unchanged chunks are only "touched" so the reconcile job stops flagging them.
 - **Staying fresh:** web writes and bot edits trigger a fire-and-forget `/internal/index`. The reconcile loop catches anything missed: changed lists, new completions or XP for history, and users who opted out, whose vectors are deleted. Toggling AI in settings re-indexes or purges straight away.
 - **Shared quests are never AI context.** A quest that anybody else belongs to (`list_members`) is excluded from every read in `apps/ai/app/db/repo.py` (`UNSHARED`), is never indexed or summarised, and its existing vectors are purged by the next reconcile, because its names and task titles can be written by other people and are untrusted.
@@ -119,7 +120,7 @@ stateDiagram-v2
 ```
 
 - `compute_features` computes a deterministic baseline score from overdue days, priority, deadline proximity and progress.
-- `merge_scores` blends the model's rank with that baseline. An overdue HIGH-priority quest can never be ranked below the top 3.
+- `merge_scores` blends the model's rank with that baseline. Every overdue HIGH-priority quest is pinned: the final order puts all pinned quests before any other, so none can be ranked below an unpinned one.
 - `fallback_rank` uses the baseline alone and template reasons, so the feature still works without Gemini.
 - `POST /v1/prioritize` is the one model route that degrades instead of failing on an exhausted daily quota: `require_ai("prioritize", degrade_on_quota=True)` lets it through unreserved, the graph's quota check sends it to `fallback_rank`, and the response carries `usedFallback: true` (nothing is booked). An opted-out user still gets 403 `AI_OPTED_OUT`.
 - More than 15 open quests switches to the reasoning model. Results are cached for 5 minutes per open-task set and limit, in process memory and in `ai_prioritize_cache`, so several AI instances share one answer; fallback results are never cached, and a missing or failing shared table only means a miss. (The pgvector search runs in SQL, so there is no vector cache to share on PostgreSQL; the in-process numpy cache in `EmbeddingStore` exists only for the SQLite tests.)
@@ -181,7 +182,7 @@ The bot answers @mentions, replies to its own messages and DMs, Zephyr-style (`a
   - `ai_checkpoint_writes` holds pending writes, including `__interrupt__`.
   - Both have a foreign key to `ai_chat_threads`, so every thread needs a row there.
 - **Checkpoint ids are time-ordered**, so the latest checkpoint is simply the greatest id.
-- **Special channels** (errors, interrupts, resume) overwrite their slot, as LangGraph expects; ordinary writes are insert-once. Both are `INSERT ... ON CONFLICT`, which Postgres and SQLite share.
+- **Special channels** (errors, interrupts, resume) overwrite their slot, as LangGraph expects; ordinary writes are insert-once. Writes are an UPDATE followed by an INSERT, and the insert-once case a SELECT followed by an INSERT (`app/graphs/checkpointer.py`); the thread lock in the chat service serialises them within one process.
 - **Concurrency:** LangGraph saves checkpoints and writes from concurrent tasks, so every `engine.begin()` must get its own connection. The asyncpg pool does this. The SQLite test database uses a temporary file with `NullPool` for the same reason; a single shared in-memory connection lost interrupt writes.
 
 ## 9. Prompts and the persona
@@ -205,7 +206,7 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 
 | Risk | Guard |
 |---|---|
-| Prompt injection in quest names | Task text is inside `<task id=...>` blocks, and CORE_RULES says that text is data. Red-team strings are in `tests/evals/injection.json`. |
+| Prompt injection in quest names | Task text is inside `<task id=...>` blocks (documents in `<doc>`, summarizer and prioritizer input in `<tasks>`, tool results in `<tool_data>`), angle brackets in the data are replaced (`prompt_safe`) so it cannot close its own block, and CORE_RULES says that text is data. Red-team strings are in `tests/evals/injection.json`. |
 | Model writes without consent | Writes need `interrupt()` and an explicit approval. Converse binds no write tools, and any invented write call is refused. |
 | Cross-user access | `discord_id` comes from a trusted header, is never a tool argument, and every query is scoped by it. |
 | Invented ids or XP | Ids are validated (summarizer and prioritizer retry, then drop unknown ids). XP is mentioned only when a tool result includes it. |
@@ -215,7 +216,7 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 | Double clicks and races | Turns on one thread run under a per-thread `asyncio.Lock` (`app/locks.py`). A resume re-checks "a confirmation is pending" under that lock, so a second Approve never runs the write again. `POST /v1/chat` returns 409 while a confirmation is pending. Thread creation is `INSERT ... ON CONFLICT DO NOTHING`, so simultaneous first Discord messages do not collide. `summary` and `prioritize` use short database connections around the model call instead of holding one pooled connection for the whole LLM round trip. |
 | Confirm previews | The preview of every write tool (`create_list`, `add_item`, `update_item`, `break_down_task`, ...) lists every field that will be written, including each subtask name, due date, priority, tags, repeat and parent, so the user approves exactly what is written. |
 | Per-task fields | `add_item` and `update_item` take `due_date` (a real `YYYY-MM-DD` date), `priority` (`LOW`/`MEDIUM`/`HIGH`), `tags` (at most 5, 20 characters each, letters, digits, `-` and `_`) and `repeat` (`daily`/`weekly`/`monthly`, sent as `recurrence`); `add_item` also takes `parent_id` (a top-level subtask, one level only). The argument models forbid extra fields, and the server validates everything again with the shared rules. |
-| Break down a task | `break_down_task(item_id, subtasks)` takes 2 to 8 names and creates them under that subtask in one transaction (`POST /internal/items/:id/subtasks` → `db.tasks.addSubtasks`): all or none, one level deep, XP and the daily add cap as for any added task. The owner is the `discord_id` from graph state, never a tool argument, so a foreign or invented id is a not-found error. |
+| Break down a task | `break_down_task(item_id, subtasks)` takes 2 to 8 names and creates them under that task in one transaction (`POST /internal/items/:id/subtasks` → `db.tasks.addSubtasks`): all or none, one level deep, XP and the daily add cap as for any added task. The owner is the `discord_id` from graph state, never a tool argument, so a foreign or invented id is a not-found error. |
 | Privacy | Opting out deletes the user's vectors at once and on every reconcile pass. Opted-out users are never sent to Gemini. |
 | SSRF via attachments | Discord CDN host allow-list, https only, no redirects, size and type limits. |
 

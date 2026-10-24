@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Bot, Loader2, MessageSquarePlus, PanelLeft, Send, Square, Trash2 } from "lucide-react";
+import { ArrowDown, Bot, Loader2, MessageSquarePlus, PanelLeft, Send, Square, Trash2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
@@ -14,6 +14,8 @@ import { usePreferences } from "@/contexts/PreferencesContext";
 import { useChatThreads, useDeleteThread } from "@/hooks/useApi";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { cn } from "@/lib/utils";
+
+const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
 
 const SUGGESTIONS = ["What should I do first today?", "What is due this week?", "How do I earn XP?", "Add a task to my newest quest"];
 
@@ -34,8 +36,23 @@ const Chat = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Thread whose history has already been scrolled into view; opening a thread jumps straight to its end once.
   const scrolledFor = useRef<string | null>(null);
-  // Only replies that finish while the page is open are read aloud, not a history that just loaded.
-  const [announced, setAnnounced] = useState<string | null>(null);
+  // Only replies that finish while the page is open are read aloud, not a history that just loaded. `n` changes the text of the live
+  // region even when two replies are identical, so the second one is read too.
+  const [announced, setAnnounced] = useState<{ text: string; n: number } | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const threadsRef = useRef<HTMLElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  // Scrolled up to reread: offer a way back down instead of pulling the reader there on every token.
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
+  const onScroll = () => {
+    const el = scrollerRef.current;
+    if (el) setAwayFromEnd(el.scrollHeight - el.scrollTop - el.clientHeight > 240);
+  };
+  const jumpToLatest = () => {
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
+    setAwayFromEnd(false);
+  };
   const { reduceMotion } = usePreferences();
   const waiting = chat.isStreaming && !chat.messages[chat.messages.length - 1]?.text;
   const slow = useSlow(waiting);
@@ -44,9 +61,20 @@ const Chat = () => {
   const wasStreaming = useRef(false);
 
   useEffect(() => {
-    if (wasStreaming.current && !chat.isStreaming && lastMessage?.role === "assistant") setAnnounced(lastMessage.text);
+    if (wasStreaming.current && !chat.isStreaming && lastMessage?.role === "assistant") setAnnounced((a) => ({ text: lastMessage.text, n: (a?.n ?? 0) + 1 }));
     wasStreaming.current = chat.isStreaming;
   }, [chat.isStreaming, lastMessage]);
+
+  // A reply from the conversation the reader just left is not read out in the next one.
+  useEffect(() => setAnnounced(null), [routeThreadId]);
+
+  // The message box grows with what is typed (up to its max height, then it scrolls), and shrinks back once sent.
+  useEffect(() => {
+    const box = inputRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${box.scrollHeight}px`;
+  }, [input]);
 
   // A brand-new conversation gets its id when the first turn ends; reflect it in the URL, once.
   const { createdThreadId, acknowledgeCreated } = chat;
@@ -61,19 +89,36 @@ const Chat = () => {
     if (chat.historyMissing) navigate("/chat", { replace: true });
   }, [chat.historyMissing, navigate]);
 
-  // Once the confirmation card goes away, put the cursor back in the message box instead of losing it.
+  // Once the confirmation card goes away, put the cursor back in the message box instead of losing it. When one appears, bring it into
+  // view: a card listing several changes is taller than the "near the bottom" margin, so the follow-scroll below would stop short.
   const hadPending = useRef(false);
   useEffect(() => {
     if (hadPending.current && chat.pending.length === 0) inputRef.current?.focus();
+    if (!hadPending.current && chat.pending.length > 0) bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
     hadPending.current = chat.pending.length > 0;
-  }, [chat.pending.length]);
+  }, [chat.pending.length, reduceMotion]);
 
+  // On a phone the conversation list covers the chat: move focus into it, keep the chat behind it out of reach, and give focus back
+  // to the toggle when it closes with Escape. (The delete dialog handles its own Escape.)
   useEffect(() => {
     if (!showThreads) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowThreads(false); };
+    const covered = !window.matchMedia?.("(min-width: 1024px)").matches;
+    const chatPane = sectionRef.current;
+    if (covered) {
+      chatPane?.setAttribute("inert", "");
+      threadsRef.current?.querySelector<HTMLElement>("button")?.focus();
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || pendingDelete) return;
+      setShowThreads(false);
+      toggleRef.current?.focus();
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showThreads]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      chatPane?.removeAttribute("inert");
+    };
+  }, [showThreads, pendingDelete]);
 
   useEffect(() => {
     // Follow the conversation only while the reader is at (or near) the bottom, or just sent something: scrolling up to
@@ -118,12 +163,16 @@ const Chat = () => {
   return (
     <DashboardLayout>
       <div className="relative flex gap-4 h-[calc(100dvh-11rem)] min-h-[480px] lg:h-[calc(100dvh-7rem)]">
-        <aside id="chat-threads" aria-label="Conversations" className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-0 w-auto lg:static" : "hidden lg:flex")}>
-          <Button size="sm" variant="glow" className="gap-1" onClick={() => { navigate("/chat"); setShowThreads(false); }}>
+        <aside ref={threadsRef} id="chat-threads" aria-label="Conversations" className={cn("w-64 shrink-0 flex-col rounded-xl border border-border bg-card p-3 gap-2", showThreads ? "flex absolute z-20 inset-0 w-auto lg:static" : "hidden lg:flex")}>
+          <Button size="sm" variant="glow" className="gap-1" onClick={() => { chat.reset(); setAnnounced(null); navigate("/chat"); setShowThreads(false); inputRef.current?.focus(); }}>
             <MessageSquarePlus className="h-4 w-4" /> New chat
           </Button>
           <div className="flex-1 overflow-y-auto space-y-1">
-            {threadsLoading && <p className="text-xs text-foreground-muted p-2 flex items-center gap-2" aria-busy="true"><Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Loading conversations…</p>}
+            {threadsLoading && (
+              <div role="status" aria-label="Loading conversations" className="space-y-2 p-1" data-testid="threads-skeleton">
+                {[0, 1, 2].map((n) => <div key={n} className="h-7 animate-pulse rounded-lg bg-card/60" />)}
+              </div>
+            )}
             {threadsFailed && <ErrorCard what="your conversations" onRetry={() => void refetchThreads()} retrying={threadsFetching} />}
             {!threadsLoading && !threadsFailed && threads.length === 0 && <p className="text-xs text-foreground-muted p-2">Your conversations will show up here.</p>}
             {threads.map((t) => (
@@ -142,17 +191,17 @@ const Chat = () => {
           </div>
         </aside>
 
-        <section className="flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-background-secondary/30">
+        <section ref={sectionRef} className="relative flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-background-secondary/30">
           <header className="flex items-center gap-2 border-b border-border px-4 py-3">
-            <Button size="icon" variant="ghost" className="lg:hidden" aria-label={showThreads ? "Hide conversations" : "Show conversations"} aria-expanded={showThreads} aria-controls="chat-threads" onClick={() => setShowThreads((v) => !v)}><PanelLeft className="h-4 w-4" /></Button>
+            <Button ref={toggleRef} size="icon" variant="ghost" className="lg:hidden" aria-label={showThreads ? "Hide conversations" : "Show conversations"} aria-expanded={showThreads} aria-controls="chat-threads" onClick={() => setShowThreads((v) => !v)}><PanelLeft className="h-4 w-4" /></Button>
             <Bot className="h-5 w-5 text-primary-text" />
             <h1 className="font-heading font-semibold">Quest Assistant</h1>
             <span className="ml-auto text-[0.6875rem] text-foreground-muted hidden sm:inline">AI-generated. Changes always ask first.</span>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref={scrollerRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
             {/* Screen readers hear a reply once it is complete, not every streamed token. */}
-            <div className="sr-only" role="status" aria-live="polite">{announced ?? ""}</div>
+            <div className="sr-only" role="status" aria-live="polite">{announced ? `${announced.text}${announced.n % 2 ? "" : ZERO_WIDTH_SPACE}` : ""}</div>
             {chat.historyLoading && (
               <p className="h-full flex items-center justify-center gap-2 text-sm text-foreground-muted" aria-busy="true">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading conversation…
@@ -174,11 +223,17 @@ const Chat = () => {
               </div>
             )}
             {chat.messages.map((m) => <ChatMessage key={m.id} message={m} />)}
-            {waiting && slow && <p className="text-xs text-foreground-muted flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Waking up the AI… the first request can take a few seconds.</p>}
+            {waiting && slow && <p className="text-xs text-foreground-muted flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Waking up the AI… the first request can take a few seconds.</p>}
             {chat.notice && <p role="alert" className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-foreground">{chat.notice}</p>}
             {chat.pending.length > 0 && <ConfirmActionCard actions={chat.pending} busy={chat.isStreaming} onRespond={chat.respond} />}
             <div ref={bottomRef} />
           </div>
+
+          {awayFromEnd && chat.messages.length > 0 && (
+            <Button type="button" size="sm" variant="outline" onClick={jumpToLatest} className="absolute bottom-20 left-1/2 -translate-x-1/2 gap-1 rounded-full shadow-md bg-card">
+              <ArrowDown className="h-4 w-4" aria-hidden /> Jump to latest
+            </Button>
+          )}
 
           <form
             className="border-t border-border p-3 flex items-end gap-2"

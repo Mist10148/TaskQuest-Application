@@ -12,6 +12,9 @@ import { isNetworkFailure, OFFLINE_MESSAGE } from './online';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
+/** The full address of an API path, for links the browser follows itself (downloads, the calendar feed). */
+export const apiUrl = (path: string): string => (API_BASE ? `${API_BASE}${path}` : `${window.location.origin}${path}`);
+
 export class ApiError extends Error {
     constructor(message: string, public status: number, public code?: string, public details?: unknown) {
         super(message);
@@ -476,15 +479,15 @@ export const achievementsApi = {
 export type LeaderboardBoard = 'lifetime' | 'weekly' | 'streak' | 'xp';
 
 export const leaderboardApi = {
-    me: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
+    me: (by: LeaderboardBoard = 'lifetime', playerClass?: string, signal?: AbortSignal) => {
         const params = new URLSearchParams({ by });
         if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
-        return apiFetch<{ rank: number | null }>(`/api/leaderboard/me?${params}`);
+        return apiFetch<{ rank: number | null }>(`/api/leaderboard/me?${params}`, { signal });
     },
-    get: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
+    get: (by: LeaderboardBoard = 'lifetime', playerClass?: string, signal?: AbortSignal) => {
         const params = new URLSearchParams({ by });
         if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
-        return apiFetch<LeaderboardEntry[]>(`/api/leaderboard?${params}`);
+        return apiFetch<LeaderboardEntry[]>(`/api/leaderboard?${params}`, { signal });
     },
 };
 
@@ -506,7 +509,7 @@ export const gamesApi = {
 };
 
 export const statsApi = {
-    xpHistory: (days: HistoryRange = 30) => apiFetch<XPHistoryDay[]>(`/api/stats/xp-history?days=${days}`),
+    xpHistory: (days: HistoryRange = 30, signal?: AbortSignal) => apiFetch<XPHistoryDay[]>(`/api/stats/xp-history?days=${days}`, { signal }),
     summary: () => apiFetch<StatsSummary>('/api/stats/summary'),
 };
 
@@ -1137,9 +1140,21 @@ export interface TodayTask {
 export interface TodayData {
     day: string;
     season: { key: string; name: string; blurb: string; doubles: string; enabled: boolean };
-    streak: { count: number; live: number; claimedToday: boolean; daysLeft: number | null; atRisk: boolean };
+    streak: {
+        count: number;
+        live: number;
+        claimedToday: boolean;
+        daysLeft: number | null;
+        atRisk: boolean;
+        /** When the daily reward can be claimed again (ISO), null before the first claim. */
+        claimableAt?: string | null;
+        /** When a live streak lapses unless claimed (ISO), null when it never does or is not alive. */
+        expiresAt?: string | null;
+    };
     counts: { dueToday: number; overdue: number; doneToday: number };
     tasks: TodayTask[];
+    /** Open tasks due in the next 7 days that are not in `tasks` (older servers leave it out). */
+    upcoming?: TodayTask[];
     reflection: ReflectionStatus;
     goal: WeeklyGoal;
     xpEnabled: boolean;

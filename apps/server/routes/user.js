@@ -6,6 +6,7 @@ import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
 import { settingsBody, resetBody, prestigeBody, jsonImportBody } from '../lib/schemas.js';
 import aiClient from '../lib/aiClient.js';
+import { heavyLimiter } from '../lib/security.js';
 
 const router = Router();
 
@@ -71,6 +72,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 router.get(
     '/export',
+    heavyLimiter,
     asyncRoute(async (req, res) => {
         const data = await db.transfer.exportAll(uid(req));
         res.set('Content-Disposition', `attachment; filename="taskquest-export-${today()}.json"`);
@@ -80,6 +82,7 @@ router.get(
 
 router.get(
     '/export.csv',
+    heavyLimiter,
     asyncRoute(async (req, res) => {
         const csv = db.transfer.toCsv(await db.transfer.exportAll(uid(req)));
         res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="taskquest-tasks-${today()}.csv"` });

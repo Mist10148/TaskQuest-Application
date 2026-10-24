@@ -32,6 +32,9 @@ test('the first CLASS_DEADLINE_PER_DAY early or overdue completions count for th
         const over = await completionContext(fakeConn(LIMITS.CLASS_DEADLINE_PER_DAY + 1), overdueItem, user(cls), NOW);
         assert.equal(over.overdueDays, 0, `${cls} past the limit`);
         assert.equal(over.dueDate, null);
+        // The cap is a class rule: the flat overdue_clear and inbox_zero bonuses still see the real date, as for every class.
+        assert.equal(over.bonusOverdueDays, 3, `${cls} keeps the generic bonuses`);
+        assert.equal(over.bonusDueDate, day(-3));
     }
 });
 

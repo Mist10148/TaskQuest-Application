@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Download, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { downloadText, exportFileName, listToCsv, listToMarkdown } from "@/lib/exportList";
 import { motion } from "framer-motion";
 import type { Item, ListWithItems, Priority } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -47,9 +49,11 @@ interface Props {
   onEditItem: (itemId: number) => void;
   /** Set one task's priority (moving a card between the board's columns). */
   onSetPriority: (itemId: number, priority: Priority | null) => void;
+  /** Move an open task's due date to tomorrow. */
+  onSnooze?: (itemId: number) => void;
   /** A shared quest's owner and members, for assigning tasks (absent on a quest nobody shares). */
   assignOptions?: ReadonlyArray<{ memberKey: string; name: string | null; isYou: boolean }>;
-  onAssign?: (itemId: number, memberKey: string | null) => void;
+  onAssign?: (itemId: number, memberKey: string | null) => void | Promise<unknown>;
   /** Other quests tasks can be moved to. */
   moveTargets?: ReadonlyArray<{ id: number; name: string }>;
   /** Move top-level tasks (their subtasks go with them) to another quest. */
@@ -73,7 +77,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
+export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, onSnooze, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -247,6 +251,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         readOnly={!editable}
         focused={view === "list" && cursorId === item.id}
         onAddSubtask={(id) => onAddItem(id)}
+        onSnooze={onSnooze}
         onMove={reorderable ? (id, dir) => move(id, dir, siblings) : undefined}
         canMoveUp={index > 0}
         canMoveDown={index < siblings.length - 1}
@@ -297,6 +302,18 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
             {editable && <Button variant={selectMode ? "default" : "outline"} size="sm" onClick={() => (selectMode ? leaveSelectMode() : setSelectMode(true))} className="gap-1" aria-pressed={selectMode} title="Select tasks (s)">
               <CheckSquare className="h-4 w-4" /><span className="hidden sm:inline">Select</span>
             </Button>}
+            {/* Anyone on the quest can take a copy of what they can already read. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1" aria-label="Export this quest">
+                  <Download className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Export</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => downloadText(exportFileName(list, "csv"), listToCsv(list), "text/csv;charset=utf-8")}>CSV (can be imported again)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => downloadText(exportFileName(list, "md"), listToMarkdown(list), "text/markdown;charset=utf-8")}>Markdown checklist</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {editable && (
               <Button variant="outline" size="sm" onClick={onSaveTemplate} className="gap-1" title="Save this quest's tasks as a template">
                 <FilePlus className="h-4 w-4" /><span className="hidden sm:inline">Template</span>
@@ -489,7 +506,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         confirmLabel={`Delete ${confirmBulk?.length ?? 0} tasks`}
         onConfirm={() => { if (confirmBulk) onBulkDelete(confirmBulk); setConfirmBulk(null); leaveSelectMode(); }}
       />
-      <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
+      <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} aiEnabled={aiEnabled} />
       <TaskDetailSheet
         item={detailItem}
         subtasks={detailItem ? childrenOf.get(detailItem.id) || [] : []}
@@ -502,6 +519,9 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         onAssign={onAssign}
         moveTargets={moveTargets}
         onMove={onMove ? (id, listId) => { setDetailId(null); void onMove([id], listId); } : undefined}
+        onDelete={(id) => { setDetailId(null); onDeleteItem(id); }}
+        onSnooze={onSnooze}
+        onAddSubtask={(id) => { setDetailId(null); onAddItem(id); }}
         showThread
       />
 

@@ -1,10 +1,11 @@
-import { ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Info, ListPlus, MessageSquare, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
+import { AlarmClock, ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Info, ListPlus, MessageSquare, MoreHorizontal, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
-import { formatDeadline, isPastDeadline } from "@/lib/dates";
+import { formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import { swipeAction, swipeOffset } from "@/lib/swipe";
 import { parseTags } from "@/lib/tags";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const DOT: Record<string, string> = { HIGH: "bg-red-500", MEDIUM: "bg-yellow-500", LOW: "bg-blue-500" };
 
@@ -34,6 +35,8 @@ interface Props {
   /** Opens the detail drawer (also for a viewer, who has no other row actions). */
   onOpenDetails?: (id: number) => void;
   onAddSubtask?: (id: number) => void;
+  /** Move an open task's due date to tomorrow. */
+  onSnooze?: (id: number) => void;
   onMove?: (id: number, direction: -1 | 1) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
@@ -47,11 +50,12 @@ interface Props {
 const iconButton = "p-2.5 sm:p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
-export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
+export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onSnooze, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
   const tags = parseTags(item.tags);
   const overdue = !completed && isPastDeadline(item.due_date);
+  const snoozable = Boolean(onSnooze) && !completed;
 
   // Touch: swipe a task to the right to complete it (the checkbox and the keyboard still work as before).
   const swipeable = !readOnly && !completed && !selectMode;
@@ -155,9 +159,9 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         {(item.due_date || item.recurrence || item.estimate_minutes || tags.length > 0 || item.assignee || (item.comment_count ?? 0) > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
+              <span title={formatDeadline(item.due_date)} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
                 <Calendar className="h-3 w-3" aria-hidden /> {overdue && <span className="sr-only">Overdue: </span>}
-                {formatDeadline(item.due_date)}
+                {formatDue(item.due_date)}
               </span>
             )}
             {item.recurrence && (
@@ -193,7 +197,28 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         </button>
       )}
 
-      {!readOnly && <div className="shrink-0 flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      {/* On a phone the row keeps its width for the task name: the actions sit in one menu. From sm up they are inline. */}
+      {!readOnly && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label={`More actions for "${item.name}"`} className={cn(iconButton, "shrink-0 sm:hidden hover:bg-background-secondary hover:text-foreground")}>
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {snoozable && <DropdownMenuItem onSelect={() => onSnooze?.(item.id)}><AlarmClock className="mr-2 h-4 w-4" aria-hidden /> Snooze to tomorrow</DropdownMenuItem>}
+            <DropdownMenuItem onSelect={() => onEdit(item.id)}><Pencil className="mr-2 h-4 w-4" aria-hidden /> Edit</DropdownMenuItem>
+            {onAddSubtask && !isSubtask && <DropdownMenuItem onSelect={() => onAddSubtask(item.id)}><ListPlus className="mr-2 h-4 w-4" aria-hidden /> Add a subtask</DropdownMenuItem>}
+            {onMove && canMoveUp && <DropdownMenuItem onSelect={() => onMove(item.id, -1)}><ArrowUp className="mr-2 h-4 w-4" aria-hidden /> Move up</DropdownMenuItem>}
+            {onMove && canMoveDown && <DropdownMenuItem onSelect={() => onMove(item.id, 1)}><ArrowDown className="mr-2 h-4 w-4" aria-hidden /> Move down</DropdownMenuItem>}
+            {item.can_delete !== false && (
+              <DropdownMenuItem onSelect={() => onDelete(item.id)} className="text-destructive-text focus:text-destructive-text"><Trash2 className="mr-2 h-4 w-4" aria-hidden /> Delete</DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {!readOnly && <div className="shrink-0 hidden sm:flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (
           <>
             <button type="button" aria-label={`Move "${item.name}" up`} disabled={!canMoveUp} onClick={() => onMove(item.id, -1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>
@@ -207,6 +232,11 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         {onAddSubtask && !isSubtask && (
           <button type="button" aria-label={`Add a subtask to "${item.name}"`} onClick={() => onAddSubtask(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
             <ListPlus className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {snoozable && (
+          <button type="button" aria-label={`Snooze "${item.name}" to tomorrow`} title="Snooze to tomorrow" onClick={() => onSnooze?.(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
+            <AlarmClock className="h-3.5 w-3.5" />
           </button>
         )}
         <button type="button" aria-label={`Edit "${item.name}"`} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>

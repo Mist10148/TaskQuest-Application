@@ -11,15 +11,15 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/invites` | — | Ephemeral | 📨 Invitations to shared lists waiting for you, with Accept / Decline buttons (valid 7 days). |
 | `/members` | `list` (autocomplete: shared lists) | Ephemeral | 👥 Who is on a shared list, by display name and role. A manager gets a menu to remove someone (only the owner removes a manager). `/share` and `/party invite` answer "If that person can be invited, they have been sent an invitation." when nothing was sent for a reason the inviter must not learn (unknown person, invitations off, a recent decline, already in a party). Names in invitations and lists are escaped (no links, formatting or pings from someone else's list or display name), and invitation DMs never ping. |
 | `/leave` | `list` (autocomplete: lists you do not own) | Ephemeral | 🚪 Leave a list that was shared with you (asks first). The owner cannot leave: delete the list instead. |
-| `/party` | subcommands `status`, `create name`, `invite user`, `invites`, `kick user`, `leave`, `disband` | Ephemeral | 🎉 A small group (up to 6) with a shared weekly quest: see [GAMEPLAY](GAMEPLAY.md#5i-parties). `status` shows who contributed this week (names and counts) and a **Claim reward** button; `invite` DMs the invitee Join / Decline buttons (`invites` is the closed-DM fallback). The owner invites, removes members (`kick user`) and disbands (asks first); everyone else can leave. The Claim button appears only once you finished at least 6 tasks yourself. |
+| `/party` | subcommands `status`, `create name`, `invite user`, `invites`, `kick user`, `leave`, `disband` | Ephemeral | 🎉 A small group (up to 6) with a shared weekly quest: see [GAMEPLAY](GAMEPLAY.md#5i-parties). `status` shows who contributed this week (names and counts), the **Focus together** quest (shared focus minutes, +XP each) and **Claim reward** / **Claim focus reward** buttons; `invite` DMs the invitee Join / Decline buttons (`invites` is the closed-DM fallback). The owner invites, removes members (`kick user`) and disbands (asks first); everyone else can leave. The Claim button appears only once you finished at least 6 tasks yourself. |
 | `/game` | — | Ephemeral | Game centre (Blackjack, Rock Paper Scissors, Hangman). Resumes an unfinished hand. |
 | `/daily` | — | Ephemeral | Claim the daily reward (24h cooldown, streaks). A streak freeze is used automatically if a missed day would break the streak. The reply also shows the Daily Surprise and any milestone chest. |
 | `/freeze` | — | Ephemeral | 🧊 Buy a streak freeze (150 XP, max 3 held; 120 XP and 5 with the Freeze Cache skill) |
-| `/quests` | — | Ephemeral | 📜 Daily and weekly quests with progress bars and Claim buttons |
+| `/quests` | — | Ephemeral | 📜 Daily and weekly quests, and the monthly boss, with progress bars and Claim buttons |
 | `/review` | — | Ephemeral | 📝 This week's review: tasks finished, XP earned, streak, and a Claim button for the once-a-week bonus (needs at least one finished task; same rules as the web review page). |
 | `/prestige` | — | Ephemeral | ✦ Shows your prestige title, bonus and whether you can start over (level 30+). **Prestige...** opens a warning listing what is lost and kept; only **Yes, reset** on that second screen resets, **Cancel** backs out. |
 | `/shop` | `section` (titles, frames or accents; default titles) | Ephemeral | 🛍️ Spend XP on cosmetics. Tabs for Titles, Frames and Accents list every item with its price and owned or locked state. Pick one from the menu to see the price and your balance after, then **Buy**, **Equip** or **Unequip**. A title you equip shows in `/profile`. |
-| `/profile` | `user` (optional) | Ephemeral | Level (with your prestige title), balance and lifetime XP (all-time, across prestiges), focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet". |
+| `/profile` | `user` (optional) | Ephemeral | Level (with your prestige title), balance and lifetime XP (all-time, across prestiges), focus rate, streak, skills, games, badges. Viewing someone who never used TaskQuest shows "No profile yet"; viewing someone who turned XP off shows "Profile is private", as they are also off the leaderboard. |
 | `/achievements` | — | Ephemeral | Paginated achievement list |
 | `/class` | — | Ephemeral | Class browser: buy, equip, view and unlock skills |
 | `/leaderboard` | `by` (lifetime XP / earned this week / daily streak / current balance) | Public | Top 10. Defaults to lifetime XP, so spending XP doesn't lower your rank. |
@@ -33,7 +33,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/ping` | — | Ephemeral | Bot and API latency |
 | `/summary` | `mode` (briefing / recap / one quest), `quest` (autocomplete), `range` (today / week) | Ephemeral | ✨ AI summary of your quests. Needs AI enabled. |
 | `/prioritize` | `limit` (1–10, default 5) | Ephemeral | 🎯 AI ranking of what to do next, with reasons |
-| `/ask` | `question` (required, ≤ 2000 characters) | Ephemeral | 💬 Ask the AI assistant about your quests or how TaskQuest works. It can also create or complete quests after you approve. |
+| `/ask` | `question` (required, ≤ 2000 characters) | Ephemeral | 💬 Ask the AI assistant about your quests or how TaskQuest works. It can also create, change, complete or break down quests and tasks after you approve. |
 | `/forget` | none | Ephemeral | 🧹 Make the AI forget your conversation with it in this channel |
 | `/ai-format` | `format` (plain messages / embeds) | Ephemeral | 🎨 How the AI replies when you mention it |
 
@@ -68,8 +68,8 @@ Both views show each task's priority dot, due date (⚠️ when an open task is 
 **Rules:**
 
 - List names are unique per user (1–100 characters).
-- Every button and menu acts only on lists owned by **the person clicking**. Because `/list` overviews are public, anyone but the person who ran `/list` who clicks its buttons or menus gets an ephemeral "This isn't your list view" and the shared message is left untouched.
-- Select menus hold at most 25 options. With more lists or tasks, the first and last option become **◀ Previous** / **▶ More** entries and the placeholder shows the range (for example `(1-24 of 60)`); on the overview, paging resets any sort or filter. Search results (which are not paged) show `(showing 25 of N)`; narrow the search to reach the rest.
+- Every button and menu acts only on lists the **person clicking** may use: their own, or a shared list according to their role (a viewer cannot edit). Because `/list` overviews are public, anyone but the person who ran `/list` who clicks its buttons or menus gets an ephemeral "This isn't your list view" and the shared message is left untouched.
+- Select menus hold at most 25 options. With more lists or tasks, the first and last option become **◀ Previous** / **▶ More** entries and the placeholder shows the range (for example `(1-24 of 60)`); on the overview, paging keeps the current sort and filter (they are read back from the embed footer). Search results (which are not paged) show `(showing 25 of N)`; narrow the search to reach the rest.
 
 ## `/game`
 
@@ -120,13 +120,13 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 ## Background behaviour
 
 - **Deadline DMs:** checked hourly. You get one DM per list on its deadline day, at your reminder hour in your time zone (`/timezone`; UTC and 09:00 until you set them), if `/automation` is on. If tasks are still open the day after the deadline you get one overdue notice. Every reminder has **Snooze 1 day** and **Stop reminders** buttons. If the bot was offline that day, the reminder is sent late (up to 3 days), and temporary Discord errors are retried on the next run.
-- **Task DMs:** a task with its own due date gets the same treatment: one DM on its due day (up to 3 days late) at your reminder hour, with **Snooze 1 day** and **Stop reminders**. Completed tasks are skipped, and a task due on the same day as its list's deadline is covered by the list reminder (no double DM). Changing a task's due date re-arms its reminder. `/automation` turns both kinds off.
+- **Task DMs:** a task with its own due date gets the same treatment: one DM on its due day (up to 3 days late) at your reminder hour, with **Snooze 1 day** and **Stop reminders**. Completed tasks are skipped, and a task due on the same day as its list's deadline is covered by the list reminder (no double DM). Changing a task's due date re-arms its reminder (at most 3 times a day per task or list; a fourth change the same day is saved but leaves the reminder state as it was). `/automation` turns both kinds off.
 - **Old-list clean-up:** daily. It deletes lists whose tasks have all been completed for 5+ days, if auto-delete is on (web Settings). Unfinished lists are never deleted, even when overdue, and a list that has members is never deleted automatically.
 - **Shared lists:** the deadline and task reminders go to the owner **and** to every member with `/automation` on, once each; each person's Snooze applies to them alone, in their own time zone and at their own reminder hour.
 - **Fan-out cap:** you get at most 20 reminder DMs per hourly run (list and task reminders together). Anything over that is collapsed into **one** DM, "N more reminders due: see /list", and counted as handled, so a big or hostile shared list cannot flood you. Names in reminders are escaped and a reminder never pings anyone.
 - **Abandoned games:** expired every 5 minutes; an unfinished Blackjack hand is settled as a stand, not refunded.
 - **Weekly digest:** checked hourly; users who opted in with `/weekly` get one DM on Monday at their reminder hour (tasks finished, XP earned, streak, open and overdue lists, plus the AI recap when AI is on and they have not opted out). When web push is set up, the recap's headline is also sent as a web push (best effort, once the digest is final).
-- **Streak warning:** checked hourly; on the evening (from 18:00 your time) of the last day a streak of 3 or more days can still be saved, a player who has not claimed the daily reward gets one DM (and a web push when push is set up). At most one a day, and never for players with reminders (`/automation`) or XP turned off.
+- **Streak warning:** checked hourly; on the evening (from 18:00 your time) of the last day a streak of 3 or more days can still be saved, a player who has not claimed the daily reward, and whose 24 hour cooldown is over, gets one DM (and a web push when push is set up) that says when the streak lapses in their zone. At most one a day, and never for players with reminders (`/automation`) or XP turned off.
 
 ## Interaction IDs (for developers)
 
@@ -138,6 +138,7 @@ With AI enabled, the bot also chats like a person. **@mention it**, **reply to o
 | `shop_tab_<kind>`, `shop_buy_<id>`, `shop_equip_<id>`, `shop_unequip_<kind>`, `shop_pick_<kind>` (menu) | `commands/shop.js` buttons and menu |
 | `remind_snooze_<listId>`, `task_remind_snooze_<itemId>`, `remind_off` | `utils/reminders.js` buttons (on the reminder DM) |
 | `inv_accept_<id>`, `inv_decline_<id>`, `leave_yes_<listId>`, `leave_no`, `mem_rm_<listId>` (menu; the value is the opaque member key) | `commands/sharing.js` |
+| `cx_<CLASS>` | `utils/ui.js` disabled placeholder buttons on the class browser (routed to `commands/gamification.js`, which ignores them) |
 | `party_claim`, `party_claim_focus`, `party_accept_<id>`, `party_decline_<id>`, `party_disband_yes`, `party_disband_no` | `commands/party.js` buttons |
 | `sort_`, `filter_`, `search_`, `refresh_`, `view_`, `edit_`, `item_` (incl. `item_details_`), `list_`, `rename_`, `yes_`, `no_`, `metadone_`, `create`, `back` | `commands/list.js` buttons |
 | `sel_list`, `sel_edit_`, `sel_del_`, `sel_done_`, `sel_desc_`, `sel_details_`, `sel_swap1_<list>`, `sel_swap2_<list>_<first task>`, `cat_`, `pri_`, `filter_category` | `commands/list.js` menus |

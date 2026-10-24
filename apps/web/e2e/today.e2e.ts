@@ -14,7 +14,7 @@ test('Today lists what is due, completes it, takes a reflection and a weekly goa
     await page.getByRole('button', { name: 'Add Task' }).first().click();
     const form = page.getByRole('dialog');
     await form.getByLabel('Task name').fill(task).catch(async () => form.getByRole('textbox').first().fill(task));
-    // The seeded player has no time zone, so the server's "today" is the UTC day (the machine's local day can differ).
+    // The browser runs in UTC (playwright.config.ts), which the web saves as the seeded player's zone: "today" is the UTC day.
     const iso = new Date().toISOString().slice(0, 10);
     await form.getByLabel('Due date').fill(iso);
     await form.getByRole('button', { name: /^(Add|Create|Save)/ }).last().click();

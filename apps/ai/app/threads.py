@@ -7,6 +7,7 @@ endpoints only ever see "web" threads.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -97,3 +98,43 @@ async def delete_thread(conn: AsyncConnection, discord_id: str, thread_id: str, 
         {"id": thread_id, "uid": discord_id, "src": source},
     )
     return result.rowcount > 0
+
+
+KEEP_CHECKPOINTS = 3
+"""Checkpoints kept per thread: the latest (the only one read) and a little history behind it."""
+DISCORD_IDLE_DAYS = 30
+WEB_IDLE_DAYS = 90
+
+
+async def prune_checkpoints(conn: AsyncConnection, thread_id: str, keep: int = KEEP_CHECKPOINTS) -> None:
+    """Drop all but the newest ``keep`` checkpoints of a thread, with their writes.
+
+    Every graph step stores a full copy of the state, and only the latest is ever loaded, so the rest is
+    dead weight that grows with every message. Checkpoint ids are time-ordered, so "newest" is the greatest id.
+    """
+    newest = (
+        "SELECT checkpoint_id FROM ai_checkpoints WHERE thread_id = :t ORDER BY checkpoint_id DESC LIMIT :keep"
+    )
+    for table in ("ai_checkpoint_writes", "ai_checkpoints"):
+        await conn.execute(
+            text(f"DELETE FROM {table} WHERE thread_id = :t AND checkpoint_id NOT IN ({newest})"),  # noqa: S608
+            {"t": str(thread_id), "keep": keep},
+        )
+
+
+async def prune_idle_threads(conn: AsyncConnection, now: datetime | None = None) -> int:
+    """Delete threads nobody has used for a long time (Discord memory: 30 days, web chats: 90), with their checkpoints.
+
+    Returns how many threads went. The checkpoint tables are cleared explicitly as well, since only
+    PostgreSQL cascades.
+    """
+    now = now or datetime.now(UTC)
+    removed = 0
+    for source, days in ((DISCORD, DISCORD_IDLE_DAYS), (WEB, WEB_IDLE_DAYS)):
+        params = {"src": source, "cutoff": now - timedelta(days=days)}
+        stale = "SELECT id FROM ai_chat_threads WHERE source = :src AND updated_at < :cutoff"
+        for table in ("ai_checkpoint_writes", "ai_checkpoints"):
+            await conn.execute(text(f"DELETE FROM {table} WHERE thread_id IN ({stale})"), params)  # noqa: S608
+        result = await conn.execute(text(f"DELETE FROM ai_chat_threads WHERE id IN ({stale})"), params)  # noqa: S608
+        removed += result.rowcount or 0
+    return removed

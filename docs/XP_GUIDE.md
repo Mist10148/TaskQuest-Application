@@ -24,7 +24,7 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `overdue_clear` | +10 for completing an overdue task | Shares 100 XP a day with `early_finish` | No |
 | `subtasks_done` | +10 for finishing the last open subtask of a parent | Once per parent; 10 XP a day | No |
 | `habit_bonus` | +2 per step of a repeating task's habit streak from a streak of 2, max +20 per completion | 60 XP a day | No |
-| `perfect_day` | +30 when every top-level task due today on your own lists is done (at least 3) | Once a day | No |
+| `perfect_day` | +30 when every top-level task due today on your own lists is done (at least 3 with a due date set 24 hours or more before) | Once a day | No |
 | `inbox_zero` | +40 when your completion clears the last overdue task, after 3 overdue tasks cleared that week | Once a week | No |
 | `boss_defeated` | +30 for the last open subtask of a task with at least 4 subtasks | Once per task, 60 XP a day | No |
 | `comeback` | +25 for the first completion after 3 idle days | Once a week | No |
@@ -38,9 +38,11 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `quest_reward` | Daily 15 / 25 / 30, weekly 80 / 120 and the rotating quest 50 to 80, monthly boss 400 ([GAMEPLAY §5b](GAMEPLAY.md#5b-quests)) | Once per quest per period | No |
 | `party_quest` | +60 for the party weekly quest | Once per person per week (UTC week), after 6 tasks of your own | No |
 | `game_reward` | RPS win 10 base; Hangman max(10, 10 × lives left) base; arcade points × rate (Snake 2, Dino 1, Invaders 3 per point, max 100 / 100 / 150 per run; a run under 5 seconds of play pays nothing) | 500 XP a day across all free games, 3 s cooldown | Yes (then trimmed to the remaining allowance) |
-| `blackjack_win`, `blackjack_blackjack` | Winnings: 1:1, or 3:2 for a natural | Bet 10 to min(25% of balance, 1000) | No (flat on purpose) |
+| `blackjack_win`, `blackjack_blackjack` | Winnings: 1:1, or 3:2 for a natural. Balance only: Blackjack never adds lifetime XP, so it cannot raise your level | Bet 10 to min(25% of balance, 1000) | No (flat on purpose) |
 
 Task bonuses (`first_of_day` to `subtasks_done`, `habit_bonus`, `perfect_day`, `inbox_zero`, `boss_defeated`, `comeback`, `party_assist`, `estimate_accuracy`) are paid only on a task's **first, paid completion**: un-checking and re-checking pays nothing, neither does a completion over the 50-a-day cap, and imported tasks and auto-created repeat copies never earn them. An *early* or *overdue* effect needs a due date that was set at least 24 hours before the completion. Imports, templates and exports never pay XP.
+
+**The weekly modifier** doubles one of these flat sources each UTC week, the same week for everybody: `early_finish`, `overdue_clear`, `habit_bonus` or `list_cleared`, in rotation. The doubled amount still counts against that source's daily cap. The Today page names the week's modifier; operators can switch it off (`XP_WEEKLY_MODIFIER=off`). See [GAMEPLAY](GAMEPLAY.md) for the details.
 
 Giving a skill tree back refunds 75% of its cost as a plain balance credit (`skill_refund`, never lifetime XP), once a day.
 
@@ -52,14 +54,14 @@ For a modified reward:
 
 1. **Class mechanic** turns the base into a class result (Hero adds its flat bonus, Wizard a combo or burst, Monk its Rhythm bonus, and so on).
 2. **Multiplier** = 1 + percentage skills (Quick Learner, Inspire, Legendary, Focus, Steady Aim, Momentum, Scholar, Night Shift, Bleed), added together and limited to +75%, + the class-gated bonuses (Execute, Revenge, Crusade), which are not limited, + the prestige bonus (+2% each, not limited). These are added together, not multiplied.
-3. **Final** = ⌊class result × multiplier⌋ + flat skill bonuses (Valor, Fortify, Arcane Study, which only work with their own class; on task completions also Multishot (Archer only), Rally, Anchor and the prestige flat bonus of +1 per prestige).
+3. **Final** = ⌊class result × multiplier⌋ + flat skill bonuses (Valor, Fortify, Arcane Study, which only work with their own class; on task completions also Multishot (Archer only), Rally (HIGH priority tasks), Anchor (repeating tasks), Last Stand (Hero only) and Tidy Mind when the completion clears a list, and the prestige flat bonus of +1 per prestige).
 4. **Champion** (Hero only) adds 35% when your level is a multiple of 5.
 5. **Critical hit** (Assassin skill) adds +50% (+100% with Shadow Step) and arms Bleed.
 6. **Double Down** may double it, then **Jackpot** may multiply it by 10.
 7. For adding a task and creating a list, the whole result is capped at 4 × the base (20 XP and 40 XP), so class bonuses cannot turn the free, repeatable actions into the best source.
 8. For free games, the result is trimmed to what is left of the day's 500 XP allowance.
 
-Flat bonuses are added afterwards by their own source, and each one checks its own cap against the XP it already paid today.
+Flat bonuses are added afterwards by their own source, and each one checks its own cap against the XP it already paid today. The weekly modifier doubles its source here, before that cap.
 
 Example (Hero with Valor 3 and Inspire 2, base 10): the class result is 10 + 25 = 35; the multiplier is 1 + 2 × 0.08 = 1.16; ⌊35 × 1.16⌋ = 40, plus 3 × 10 flat from Valor makes **70 XP** for a plain task.
 

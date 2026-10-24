@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Command, CornerDownLeft, ListPlus, Moon, Plus, Scroll, Search, Settings } from "lucide-react";
+import { AlertTriangle, Command, CornerDownLeft, Gift, ListPlus, Moon, Plus, Scroll, Search, Settings, Timer } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { filterCommands, moveActive, OPEN_PALETTE_EVENT, type PaletteCommand } from "@/lib/commands";
 import { NAV_ITEMS, AI_NAV_ITEM } from "./navItems";
-import { useTaskSearch } from "@/hooks/useApi";
+import { useClaimDaily, useStartFocus, useTaskSearch } from "@/hooks/useApi";
+import { focusApi } from "@/lib/api";
+import { dailyDescription } from "@/lib/classInfo";
+import { formatCountdown } from "@/lib/countdown";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { searchableQuery } from "@/lib/taskSearch";
+import { modKeyLabel } from "@/lib/platform";
 
 /** `hint` is a muted note on the right (a task's quest). */
 type Entry = PaletteCommand & { icon: React.ElementType; run: () => void; hint?: string };
@@ -16,9 +22,18 @@ type Entry = PaletteCommand & { icon: React.ElementType; run: () => void; hint?:
 /** Most task matches shown under the commands. */
 const MAX_TASK_HITS = 8;
 
-/** Ctrl+K / Cmd+K command palette: go to a page, start a quest or task, switch theme. */
-export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
+/** The focus length the palette's quick start uses. */
+const QUICK_FOCUS_MINUTES = 25;
+
+/**
+ * Ctrl+K / Cmd+K command palette: go to a page, start a quest or task, switch theme, and a few one-step actions (claim the
+ * daily reward, start a focus session). `xpEnabled` false hides the XP-only actions.
+ */
+export const CommandPalette = ({ aiEnabled, xpEnabled = true }: { aiEnabled: boolean; xpEnabled?: boolean }) => {
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const claimDaily = useClaimDaily();
+  const startFocus = useStartFocus();
   const { resolvedTheme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -29,7 +44,8 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((v) => !v);
+        // Over another dialog (a form, a confirmation) it would stack a second modal: only close itself, never open there.
+        setOpen((v) => (v ? false : !document.querySelector('[role="dialog"], [role="alertdialog"]')));
       }
     };
     const onOpen = () => setOpen(true);
@@ -58,9 +74,36 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
       { id: "go:/settings", label: "Settings", group: "Go to", icon: Settings, keywords: "preferences account", run: go("/settings") },
       { id: "new-quest", label: "New quest", group: "Actions", icon: Plus, keywords: "create list add", run: go("/tasks?new=quest") },
       { id: "new-task", label: "New task", group: "Actions", icon: ListPlus, keywords: "create item add todo", run: go("/tasks?new=task") },
+      { id: "overdue", label: "Show overdue and due today", group: "Actions", icon: AlertTriangle, keywords: "late today due overdue plan", run: go("/today") },
+      { id: "focus-25", label: `Start a ${QUICK_FOCUS_MINUTES}-minute focus`, group: "Actions", icon: Timer, keywords: "pomodoro timer session concentrate", run: () => void quickFocus() },
+      ...(xpEnabled ? [{ id: "claim-daily", label: "Claim daily reward", group: "Actions", icon: Gift, keywords: "daily bonus streak xp chest", run: () => void claim() } satisfies Entry] : []),
       { id: "theme", label: resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "Actions", icon: Moon, keywords: "toggle theme dark light appearance", run: () => setTheme(resolvedTheme === "dark" ? "light" : "dark") },
     ];
-  }, [aiEnabled, navigate, resolvedTheme, setTheme]);
+    // An unfinished session would be cancelled by starting another: then just show it.
+    async function quickFocus() {
+      try {
+        // Always ask the server: a cached "no session" up to a minute old would start a second one over a session already running.
+        const status = await qc.fetchQuery({ queryKey: ["focus"], queryFn: focusApi.get, staleTime: 0 });
+        if (!status.active) await startFocus.mutateAsync(QUICK_FOCUS_MINUTES);
+      } catch {
+        /* the mutation shows its own error; the Focus page explains a full day */
+      }
+      navigate("/focus");
+    }
+    async function claim() {
+      try {
+        const result = await claimDaily.mutateAsync();
+        if (result.success) {
+          toast.success(`🎁 Daily reward claimed! +${result.totalXP} XP`, { description: dailyDescription(result) || undefined });
+        } else {
+          const wait = result.remaining ?? 0;
+          toast.error("Daily reward not ready yet", { description: wait > 0 ? `Come back in ${formatCountdown(wait)}.` : undefined });
+        }
+      } catch {
+        /* error toast shown by the mutation */
+      }
+    }
+  }, [aiEnabled, xpEnabled, navigate, resolvedTheme, setTheme, qc, claimDaily, startFocus]);
 
   // Tasks whose name or description match (the server does the matching); only asked while the palette is open.
   const debouncedQuery = useDebouncedValue(query);
@@ -141,7 +184,7 @@ export const CommandPalette = ({ aiEnabled }: { aiEnabled: boolean }) => {
           })}
         </ul>
         <p className="flex items-center gap-1.5 border-t border-border px-4 py-2 text-xs text-foreground-muted">
-          <Command className="h-3 w-3" aria-hidden /> Ctrl+K toggles this palette
+          <Command className="h-3 w-3" aria-hidden /> {modKeyLabel()}+K toggles this palette
         </p>
       </DialogContent>
     </Dialog>

@@ -8,6 +8,10 @@ import { clampStep, hasSeenTour, markTourSeen, readTourStep, saveTourStep, START
  * Four-step welcome card shown once to new players and replayable from Settings. It is a small
  * non-modal card (the page stays usable), dismissible with Skip, the close button or Escape.
  */
+/** Whether `el` is a place the player types into. */
+const isTyping = (el: Element | null) =>
+  el instanceof HTMLElement && (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && !["button", "checkbox", "radio", "submit"].includes((el as HTMLInputElement).type)));
+
 export const OnboardingTour = () => {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -35,7 +39,8 @@ export const OnboardingTour = () => {
 
   useEffect(() => {
     if (!open) return;
-    nextRef.current?.focus();
+    // The card is non-modal: it never takes focus from someone typing (chat, quick add, a form) when it appears.
+    if (!isTyping(document.activeElement)) nextRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector('[role="dialog"], [role="alertdialog"]')) {
         // This Escape closes the tour and nothing else (page shortcuts such as "back to all quests" skip handled keys).
@@ -71,7 +76,8 @@ export const OnboardingTour = () => {
     <section
       role="region"
       aria-label="Welcome tour"
-      className="fixed inset-x-3 bottom-3 z-40 rounded-xl border border-primary/40 bg-card p-4 shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-96"
+      // Above the phone and tablet bottom navigation (shown below lg), so it never covers it.
+      className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 rounded-xl border border-primary/40 bg-card p-4 shadow-2xl sm:inset-x-auto sm:right-6 sm:w-96 lg:bottom-6"
     >
       <button type="button" onClick={finish} aria-label="Close tour" className="absolute right-3 top-3 rounded p-1 text-foreground-muted hover:text-foreground">
         <X className="h-4 w-4" aria-hidden />

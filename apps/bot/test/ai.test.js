@@ -21,7 +21,9 @@ let user = { discord_id: '42', ai_enabled: 1 };
 db.users.ensureUser = async () => user;
 db.tasks.getLists = async () => [
     { id: 7, name: 'Math homework' },
-    { id: 8, name: 'Clean garage' }
+    { id: 8, name: 'Clean garage' },
+    { id: 9, name: 'Garage sale', is_owner: true, shared: true, member_count: 2 }, // owned but shared: the AI cannot read it
+    { id: 10, name: 'Garden', is_owner: false, shared: true, member_count: 3 }
 ];
 
 function stubClient(replies = {}) {
@@ -200,7 +202,7 @@ test('/summary defaults to the briefing and resolves a typed quest name', async 
     assert.equal(client.calls.length, 2);
 });
 
-test('/summary autocomplete offers quest ids', async () => {
+test('/summary autocomplete offers quest ids, and only quests the AI can read (not shared ones)', async () => {
     const i = fake({ options: { quest: 'gar' } });
     await aiCommands.autocomplete(i);
     assert.deepEqual(i.sent[0].choices, [{ name: 'Clean garage', value: '8' }]);
@@ -384,4 +386,17 @@ test('/forget wipes this channel and /ai-format saves the style', async () => {
     const f = fake({ options: { format: 'embed' } });
     await aiCommands.aiFormat(f);
     assert.deepEqual(saved, [['42', 'embed']]);
+});
+
+test('AI embeds make task names, links and mentions in model text inert', () => {
+    const evil = '[click](https://evil.example) @everyone';
+    const p = fmt.priorityEmbed({ ranked: [{ rank: 1, name: evil, priority: 'HIGH', reason: evil }], focusMessage: evil }).toJSON();
+    assert.doesNotMatch(p.description, /\]\(https/);
+    assert.doesNotMatch(p.description, /@everyone/);
+    const a = fmt.answerEmbed({ text: evil, tools: [], confirms: [{ preview: evil }], sources: [{ id: 'L1', title: evil }] }).toJSON();
+    assert.doesNotMatch(a.description, /\]\(https/);
+    assert.doesNotMatch(a.description, /@everyone/);
+    assert.doesNotMatch(a.fields[0].value, /\]\(https/);
+    const s = fmt.summaryEmbed({ headline: evil, highlights: [evil] }).toJSON();
+    assert.doesNotMatch(s.description + s.fields[0].value, /\]\(https|@everyone/);
 });

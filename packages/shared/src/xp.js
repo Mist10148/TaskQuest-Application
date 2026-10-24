@@ -650,6 +650,22 @@ function claimGapDays(user, lastMs, nowMs) {
     return daysBetween(todayInZone(user.timezone, new Date(lastMs)), todayInZone(user.timezone, new Date(nowMs)));
 }
 
+/** The rolling window matching streakWindowDays: 48 h, 72 h with Streak Shield or as a Paladin, 96 h with Sanctuary. */
+function streakWindowMs(user, bonuses) {
+    const days = streakWindowDays(user, bonuses);
+    if (days === DAILY.SANCTUARY_STREAK_DAYS) return DAILY.SANCTUARY_STREAK_WINDOW_MS;
+    return days === DAILY.SHIELDED_STREAK_DAYS ? DAILY.SHIELDED_STREAK_WINDOW_MS : DAILY.STREAK_WINDOW_MS;
+}
+
+/**
+ * Does a claim at `nowMs` continue the streak from one at `lastMs`? Within the calendar-day window, or within the rolling
+ * window: the 24 h cooldown means someone who claimed at 23:30 cannot claim again before 23:30 the next day, and must not
+ * lose the streak for claiming just after the following midnight.
+ */
+function streakContinues(user, bonuses, lastMs, nowMs) {
+    return claimGapDays(user, lastMs, nowMs) <= streakWindowDays(user, bonuses) || nowMs - lastMs < streakWindowMs(user, bonuses);
+}
+
 /**
  * The streak as it stands right now: the stored count while the next claim would still continue it (Unstoppable never
  * lapses), 0 once it has lapsed but nobody has claimed to reset it yet. `skills` is a skill list or the map from toSkillMap.
@@ -661,7 +677,7 @@ function liveStreak(user, skills, now = Date.now()) {
     if (!last) return count; // no claim on record to measure a gap from
     const bonuses = getSkillBonuses(skills);
     const at = now === undefined || now === null ? Date.now() : new Date(now).getTime();
-    return bonuses.streakUnstoppable || claimGapDays(user, last, at) <= streakWindowDays(user, bonuses) ? count : 0;
+    return bonuses.streakUnstoppable || streakContinues(user, bonuses, last, at) ? count : 0;
 }
 
 function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
@@ -685,7 +701,7 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
     let freezesUsed = 0;
     // One freeze covers one missed day: every calendar day past the window needs its own.
     const missedDays = lastClaim ? Math.max(1, gapDays - windowDays) : 0;
-    if (lastClaim && gapDays <= windowDays) {
+    if (lastClaim && streakContinues(user, bonuses, lastClaim, now)) {
         newStreak = streak + 1;
     } else if (lastClaim && bonuses.streakUnstoppable) {
         newStreak = streak + 1;
@@ -723,7 +739,9 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
 
 module.exports = {
     streakWindowDays,
+    streakWindowMs,
     claimGapDays,
+    streakContinues,
     activeSkills,
     prestigeMultiplier,
     prestigeFlat,

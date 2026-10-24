@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { CheckCircle2, Hourglass, Loader2, Play, Timer, XCircle } from "lucide-react";
 import type { FocusActive, FocusFinishResult, FocusStatus } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -6,7 +7,7 @@ import { QueryState } from "@/components/feedback/QueryState";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useFinishFocus, useFocus, useStartFocus } from "@/hooks/useApi";
+import { useFinishFocus, useFocus, useParty, useStartFocus } from "@/hooks/useApi";
 import { FOCUS_PRESETS, canFinish, focusTitle, formatClock, minutesUntilPayable, parseMinutes, remainingMs } from "@/lib/focus";
 import { playSound } from "@/lib/sound";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,7 @@ const TodayCard = ({ status }: { status: FocusStatus }) => (
       <Meter label="Focus XP" value={status.today.xp} max={status.config.xpPerDay} />
     </div>
     <p className="mt-3 text-xs text-foreground-muted">
-      Each focused minute pays {status.config.xpPerMinute} XP, up to {status.config.xpPerDay} XP and {status.config.sessionsPerDay} sessions a day (UTC).
+      Each focused minute pays {status.config.xpPerMinute} XP, up to {status.config.xpPerDay} XP and {status.config.sessionsPerDay} sessions a day (your day, in your time zone).
     </p>
   </section>
 );
@@ -187,6 +188,18 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
   );
 };
 
+/** Focus minutes count towards the party's shared quest: say so, and link to it, when the player is in a party that has one. */
+const PartyFocusLink = () => {
+  const quest = useParty().data?.party?.focusQuest;
+  if (!quest) return null;
+  return (
+    <p className="text-center text-sm text-foreground-muted">
+      Your focus minutes count towards your party's quest ({quest.progress}/{quest.target} min this week).{" "}
+      <Link to="/party" className="font-medium text-primary-text underline underline-offset-2">Open the party</Link>
+    </p>
+  );
+};
+
 const FocusBody = ({ status }: { status: FocusStatus }) => {
   const [result, setResult] = useState<FocusFinishResult | null>(null);
   const finish = useFinishFocus();
@@ -195,6 +208,7 @@ const FocusBody = ({ status }: { status: FocusStatus }) => {
       {result && <ResultCard result={result} onDismiss={() => setResult(null)} />}
       {status.active ? <Running key={status.active.sessionId} active={status.active} status={status} finishing={finish.isPending} onFinish={(id) => finish.mutate(id, { onSuccess: setResult })} /> : <Starter status={status} />}
       <TodayCard status={status} />
+      <PartyFocusLink />
     </div>
   );
 };

@@ -14,3 +14,15 @@ export function goalPercent(progress: number, target: number | null): number {
   if (!target || target <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((progress / target) * 100)));
 }
+
+/**
+ * When a streak lapses, for the at-risk alert: "at 11:30 PM today", "at 8:00 AM tomorrow", or "today" when the server did not
+ * say (an older server). Read in the browser's own zone, which is the one the time is shown in.
+ */
+export function streakDeadline(expiresAt: string | null | undefined, now: Date = new Date()): string {
+  if (!expiresAt) return "today";
+  const at = new Date(expiresAt);
+  if (Number.isNaN(at.getTime())) return "today";
+  const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `at ${time} ${at.toDateString() === now.toDateString() ? "today" : "tomorrow"}`;
+}

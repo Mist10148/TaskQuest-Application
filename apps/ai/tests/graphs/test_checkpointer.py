@@ -74,3 +74,52 @@ async def test_threads_are_scoped_to_their_owner(engine):
 
 def test_title_is_truncated():
     assert threads.title_from("x" * 100).endswith("…") and len(threads.title_from("x" * 100)) == 61
+
+
+async def test_pruning_keeps_the_newest_checkpoints_and_the_thread_still_resumes(engine):
+    from sqlalchemy import text
+
+    from app.db import pool
+
+    cfg = {"configurable": {"thread_id": "t-prune"}}
+    async with pool.connection() as conn:
+        await threads.create_thread(conn, UID, "prune me", thread_id="t-prune")
+    graph = build(engine)
+    await graph.ainvoke({"n": 1}, cfg)
+    await graph.ainvoke({"n": 2}, cfg)
+
+    async def count(table):
+        async with pool.connection() as conn:
+            return (await conn.execute(text(f"SELECT COUNT(*) FROM {table} WHERE thread_id = 't-prune'"))).scalar()  # noqa: S608
+
+    before = await count("ai_checkpoints")
+    assert before > 1
+    latest = (await graph.aget_state(cfg)).values
+    async with pool.connection() as conn:
+        await threads.prune_checkpoints(conn, "t-prune", keep=1)
+    assert await count("ai_checkpoints") == 1
+    assert (await graph.aget_state(cfg)).values == latest  # the latest survived
+
+
+async def test_idle_threads_are_removed_by_source_and_age(engine):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import text
+
+    from app.db import pool
+
+    now = datetime.now(UTC)
+    async with pool.connection() as conn:
+        for tid, source, age in (
+            ("old-discord", threads.DISCORD, 31),
+            ("new-discord", threads.DISCORD, 5),
+            ("old-web", threads.WEB, 91),
+            ("mid-web", threads.WEB, 40),
+        ):
+            await threads.create_thread(conn, UID, "x", thread_id=tid, source=source)
+            stamp = (now - timedelta(days=age)).strftime("%Y-%m-%d %H:%M:%S")
+            await conn.execute(text("UPDATE ai_chat_threads SET updated_at = :u WHERE id = :i"), {"u": stamp, "i": tid})
+        removed = await threads.prune_idle_threads(conn, now)
+        left = {r[0] for r in (await conn.execute(text("SELECT id FROM ai_chat_threads"))).all()}
+    assert removed == 2
+    assert left == {"new-discord", "mid-web"}

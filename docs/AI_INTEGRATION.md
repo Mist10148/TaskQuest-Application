@@ -6,6 +6,8 @@ This document records the design for adding three AI features to TaskQuest, all 
 2. **AI Prioritizer**: ranks open quests and explains what to do next.
 3. **AI Chat**: a conversational assistant that knows the user's tasks (via RAG), can answer "how do I…" questions about TaskQuest, and can create or complete tasks after the user confirms.
 
+> **This is a historical design record, not a description of the running system.** Its SQL and storage sections predate the move from MySQL to PostgreSQL; [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) is the source of truth for how the service works today.
+
 > Status: **implemented, phases 0–7**, including the Discord bot commands, plus Discord @mention chat with a persona (see [AI_ARCHITECTURE.md §7](AI_ARCHITECTURE.md#7-discord-conversation-converse)). It has been verified offline only (the live evals have not been run yet); see [As built](#as-built) and [KNOWN_ISSUES](KNOWN_ISSUES.md). The architecture as it stands today is in [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md). The sections below are the original design, written when TaskQuest ran on MySQL (TiDB in production); where the code differs, including the later move to PostgreSQL with pgvector ([MIGRATION_POSTGRES.md](MIGRATION_POSTGRES.md)), *As built* says so.
 
 > **Where to look.** This is the *design record*: goals, decisions and the reasoning behind them, written before and during the build.

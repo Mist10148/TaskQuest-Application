@@ -22,7 +22,7 @@ const db = require('@taskquest/shared/db');
 const { createPushClient } = require('@taskquest/shared/push');
 const { version } = require('./package.json');
 const listCommand = require('./commands/list');
-const { job: runJob } = require('./utils/job');
+const { job: runJob, stopJobs, whenIdle } = require('./utils/job');
 const gamification = require('./commands/gamification');
 const gameCommand = require('./commands/game');
 const aiCommands = require('./commands/ai');
@@ -91,7 +91,7 @@ const cleanupLists = job('AUTO-DELETE', async () => {
 
 const expireGames = job('GAMES', async () => {
     const expired = await db.games.expireStaleSessions();
-    if (expired > 0) log('🧹', 'GAMES', `Expired ${expired} abandoned game sessions (bets refunded)`);
+    if (expired > 0) log('🧹', 'GAMES', `Expired ${expired} abandoned game sessions (open Blackjack hands stand)`);
 });
 
 const timers = [];
@@ -100,10 +100,7 @@ client.once(Events.ClientReady, (c) => {
     log('🎉', 'READY', `${c.user.tag} v${version} in ${c.guilds.cache.size} servers`);
     c.user.setPresence({ activities: [{ name: '/help', type: ActivityType.Playing }], status: 'online' });
 
-    setTimeout(checkDeadlines, 5_000);
-    setTimeout(cleanupLists, 10_000);
-    setTimeout(weeklyDigests, 15_000);
-    setTimeout(streakWarnings, 20_000);
+    timers.push(setTimeout(checkDeadlines, 5_000), setTimeout(cleanupLists, 10_000), setTimeout(weeklyDigests, 15_000), setTimeout(streakWarnings, 20_000));
     expireGames();
     timers.push(setInterval(checkDeadlines, 60 * 60 * 1000));
     timers.push(setInterval(weeklyDigests, 60 * 60 * 1000));
@@ -216,6 +213,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (interaction.isAutocomplete()) return;
         try {
             const msg = { content: '❌ Something went wrong. Please try again.', flags: MessageFlags.Ephemeral };
+            // A public "thinking…" placeholder that never got its answer would hang there for everyone: swap it for the private error.
+            if (interaction.isChatInputCommand() && interaction.deferred && !interaction.replied && !interaction.ephemeral) await interaction.deleteReply().catch(() => {});
             if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
             else await interaction.reply(msg);
         } catch {
@@ -233,8 +232,12 @@ async function shutdown(signal) {
     if (shuttingDown) return;
     shuttingDown = true;
     log('🛑', 'SHUTDOWN', `${signal} received`);
+    // clearInterval also clears a timeout. Then let a run that is in flight finish (a DM just sent must get its "sent" mark) before the
+    // connections go away.
     timers.forEach(clearInterval);
+    stopJobs();
     server.close();
+    if (!(await whenIdle(10_000))) log('⚠️', 'SHUTDOWN', 'a background job was still running after 10 seconds');
     await client.destroy();
     await db.closePool().catch(() => {});
     process.exit(0);

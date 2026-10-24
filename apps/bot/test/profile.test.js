@@ -28,3 +28,26 @@ test('refreshProfile skips bots and users without a username, and a failed write
     assert.equal(await refreshProfile(failing, { id: '4', username: 'eve' }, 5000), false);
     assert.equal(await refreshProfile(db, { id: '4', username: 'eve' }, 5001), true, 'not throttled after a failure');
 });
+
+test('/profile @someone with XP turned off shows nothing of their progress', async () => {
+    const db = require('@taskquest/shared/db');
+    const { profile } = require('../commands/gamification');
+    const real = { getUserStats: db.users.getUserStats, getUserSkills: db.users.getUserSkills, ensureUser: db.users.ensureUser };
+    db.users.getUserStats = async () => ({ user: { discord_id: '9', gamification_enabled: 0, player_xp: 5000, lifetime_xp: 9000, player_class: 'DEFAULT', player_level: 91 }, lists: { total: 3 }, items: { total: 9, completed: 4 }, achievements: 2 });
+    db.users.getUserSkills = async () => [];
+    db.users.ensureUser = async () => {};
+    try {
+        const sent = [];
+        await profile({
+            user: { id: '1' },
+            options: { getUser: () => ({ id: '9', username: 'quiet' }) },
+            deferReply: async () => {},
+            editReply: async (p) => void sent.push(p)
+        });
+        const text = JSON.stringify(sent[0].embeds[0].toJSON());
+        assert.match(text, /Profile is private/);
+        assert.doesNotMatch(text, /5,?000|9,?000|Level 91/);
+    } finally {
+        Object.assign(db.users, real);
+    }
+});

@@ -63,3 +63,33 @@ test('the digest claim is stored and released as the same whole second', () => {
     assert.equal(wholeSecond(wholeSecond(at)).getTime(), wholeSecond(at).getTime());
     assert.equal(wholeSecond(at.toISOString()).getTime(), wholeSecond(at).getTime(), 'a value read back as a string still matches');
 });
+
+test('completing or deleting a task from /list does not put its name into the reply as a live link', async () => {
+    const db = require('@taskquest/shared/db');
+    const { handleSelectMenu } = require('../commands/list');
+    const evil = '[Claim reward](https://evil.example)';
+    const real = { setItemCompleted: db.tasks.setItemCompleted, getItem: db.tasks.getItem, deleteItem: db.tasks.deleteItem };
+    db.tasks.setItemCompleted = async () => ({ completed: true, firstCompletion: true, item: { id: 5, list_id: 1, name: evil }, bonuses: [] });
+    db.tasks.getItem = async () => ({ id: 5, list_id: 1, name: evil });
+    db.tasks.deleteItem = async () => {};
+    try {
+        for (const customId of ['sel_done_1', 'sel_del_1']) {
+            const sent = [];
+            const send = async (p) => void sent.push(p);
+            await handleSelectMenu({
+                customId,
+                values: ['5'],
+                user: { id: '1' },
+                message: { interaction: { user: { id: '1' } } },
+                deferUpdate: async () => {},
+                editReply: send,
+                update: send,
+                followUp: send
+            });
+            const text = sent[0].embeds[0].toJSON().description;
+            assert.ok(!text.includes('](https://'), `${customId}: no live masked link`);
+        }
+    } finally {
+        Object.assign(db.tasks, real);
+    }
+});

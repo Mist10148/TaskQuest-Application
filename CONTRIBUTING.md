@@ -45,6 +45,8 @@ Use a **separate Discord application** for development, register commands to a t
 
 ## Testing
 
+[docs/TESTING.md](docs/TESTING.md) describes every suite, what it needs and what it covers. In short:
+
 ```bash
 npm test               # unit tests in every workspace, incl. the web app's Vitest suite (integration tests are skipped)
 npm run check          # node --check on all Node sources

@@ -217,7 +217,7 @@ TaskQuest addresses this in three ways:
 | **Security** | OWASP-aligned web surface: CSP, frame-ancestors none, CSRF origin and JSON checks, rate limits, zod validation, one access rule for lists, no stack traces in responses. No secrets in the repository. See [SECURITY.md](../SECURITY.md). |
 | **Integrity** | Every purchase or payout runs in one database transaction with row locks. Concurrent clicks can't double-spend or double-pay; integration tests prove this. |
 | **Privacy** | Only the Discord ID, display name, username (for invitations) and avatar hash are stored. Other people see display names, never IDs. Names are escaped in DMs and embeds. |
-| **Performance** | List overview and leaderboard use single aggregate queries, with no N+1. Bot interactions defer within Discord's 3-second window. |
+| **Performance** | List overview and leaderboard use single aggregate queries, with no N+1. Bot interactions that do slow work defer within Discord's 3-second window; a few quick replies (`/list`, `/profile`, the class shop, achievements) answer directly ([KNOWN_ISSUES](KNOWN_ISSUES.md) #52). |
 | **Availability** | Sessions persist in the database, so they survive restarts and redeploys. Graceful SIGTERM handling. Background jobs never crash the process. |
 | **Portability** | PostgreSQL 15+ with pgvector and citext (Supabase in production). TLS with certificate verification for cloud databases. |
 | **Quality** | CI runs lint, typecheck, build, syntax checks, unit tests, a docs consistency test, integration tests on PostgreSQL (pgvector), Playwright browser tests, and a production dependency audit. |
@@ -297,7 +297,7 @@ TaskQuest addresses this in three ways:
 | Done | Web follow-ups: the tour resumes, one toast for bulk completion, the open quest in the URL, no reorder flicker; a task detail drawer, bulk edit of priority and due date, tasks in the command palette, a streak strip on Today, high-contrast and text-size preferences |
 | Done | Collaboration and organisation (monday.com-style): move tasks between quests, assignees on shared quests, comments and an activity history per task, filters and grouping, board drag between priority columns, bulk tag edit, the streak strip on the dashboard |
 | Later | Custom statuses beyond done / not done, start dates with a timeline view, task dependencies, simple automations ("when a task is done, ..."), real-time updates and edit conflicts on shared quests |
-| Later | More component tests for the web app (the shared states, game cards, quests card and Review page are covered; the Games, Skills and Classes pages and the dialogs are not) |
+| Later | More component tests for the web app (the Today, Chat, Review, Settings, Stats, Leaderboard, Shop and Classes pages, the quest view, the dialogs and the shared states are covered; the Games, Skills and Party pages are not) |
 | Later | Internationalisation: extract the remaining strings into the catalog (`apps/web/src/i18n/messages.ts`) and add a language picker once there is a second catalog; the bot and the AI service are untouched |
 | Later | Screenshots in the README (the capture spec exists, the images do not) and push delivery tested against real push services (needs a live deployment) |
 | Done | Per-task due dates, priorities, tags, subtasks, recurrence; leaderboard boards; reminder time zone and hour; weekly digest; quests; streak freeze; export/import/calendar; light theme; route-level code splitting |

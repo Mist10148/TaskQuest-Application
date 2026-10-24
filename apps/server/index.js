@@ -20,6 +20,11 @@ async function main() {
         console.log(`   Public URL: ${config.publicUrl}`);
     });
 
+    // Proxies and load balancers keep idle connections for a minute or more; Node's 5 s default would close them first and give
+    // intermittent resets on a reused connection. headersTimeout must stay above keepAliveTimeout.
+    server.keepAliveTimeout = 65_000;
+    server.headersTimeout = 66_000;
+
     // Abandoned game sessions are settled here (an unfinished blackjack hand auto-stands, a bet is never refunded) as well as in the bot, so the web
     // app is correct on its own. The job is idempotent (row locks), so running in both is safe.
     let expiring = false;

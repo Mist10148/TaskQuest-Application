@@ -188,7 +188,7 @@ const Profile = () => {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
           {[
             { icon: Flame, label: 'Day Streak', value: streak, color: 'orange', sub: streak > 0 ? 'Keep it going!' : 'Start today!' },
-            { icon: Target, label: 'Focus Rate', value: `${focusRate}%`, color: 'green', sub: `${completedTasks}/${totalTasks} tasks` },
+            { icon: Target, label: 'Completion Rate', value: `${focusRate}%`, color: 'green', sub: `${completedTasks}/${totalTasks} tasks` },
             { icon: ListTodo, label: 'Total Lists', value: stats.lists?.total || 0, color: 'blue', sub: 'Quest logs created' },
             { icon: Gamepad2, label: 'Games Played', value: gamesPlayed, color: 'purple', sub: `${winRate}% win rate` },
             { icon: Trophy, label: 'Achievements', value: stats.achievements || 0, color: 'yellow', sub: 'Badges earned' },

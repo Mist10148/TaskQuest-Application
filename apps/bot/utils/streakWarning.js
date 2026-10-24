@@ -1,18 +1,32 @@
 /**
  * Streak-at-risk warning: a DM (and a web push, when that is set up) on the evening of the last day a streak of 3 or more days can
- * still be saved by claiming the daily reward. At most one a day per person; players with reminders or XP off never get it.
+ * still be saved by claiming the daily reward, once the claim cooldown is over, with the time it lapses. At most one a day per
+ * person; players with reminders or XP off never get it.
  */
 
 'use strict';
 
 const { EmbedBuilder } = require('discord.js');
+const { todayInZone, tz } = require('@taskquest/shared');
 const { PERMANENT_DM_ERRORS } = require('./reminders');
 
-function warningEmbed(streak) {
+/**
+ * "11:30 PM today" or "8:00 AM tomorrow": when the streak lapses, in the player's zone. A streak lasts until the later of its
+ * calendar window and its rolling window, so this is often not midnight. Null when the expiry is unknown.
+ */
+function deadlineText(expiresAt, timezone, now = new Date()) {
+    if (!expiresAt) return null;
+    const at = new Date(expiresAt);
+    const zone = tz.resolveZone(timezone);
+    const time = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', minute: '2-digit' }).format(at);
+    return `${time} ${todayInZone(zone, at) === todayInZone(zone, now) ? 'today' : 'tomorrow'}`;
+}
+
+function warningEmbed(streak, deadline = null) {
     return new EmbedBuilder()
         .setColor(0xe67e22)
-        .setTitle(`🔥 Your ${streak}-day streak ends today`)
-        .setDescription('You have not claimed today\'s daily reward yet. Use **/daily** (or the dashboard) before midnight to keep it going.')
+        .setTitle(`🔥 Your ${streak}-day streak is about to end`)
+        .setDescription(`You have not claimed your daily reward yet. Use **/daily** (or the dashboard) ${deadline ? `before ${deadline}` : 'soon'} to keep it going.`)
         .setFooter({ text: 'TaskQuest • /automation turns reminders off' });
 }
 
@@ -27,7 +41,7 @@ async function sendStreakWarnings({ db, client, log, push, now = new Date() }) {
         if (!(await db.today.claimStreakWarning(w.discord_id, w.day))) continue;
         try {
             const user = await client.users.fetch(w.discord_id);
-            await user.send({ embeds: [warningEmbed(w.streak)] });
+            await user.send({ embeds: [warningEmbed(w.streak, deadlineText(w.expiresAt, w.timezone, now))] });
             result.sent++;
             log('🔥', 'STREAK', `Warned ${w.discord_id} about a ${w.streak}-day streak`);
         } catch (err) {
@@ -42,7 +56,12 @@ async function sendStreakWarnings({ db, client, log, push, now = new Date() }) {
         }
         if (push?.enabled) {
             try {
-                await push.notify(w.discord_id, { title: `Your ${w.streak}-day streak ends today`, body: 'Claim your daily reward before midnight to keep it.', url: '/today' });
+                const deadline = deadlineText(w.expiresAt, w.timezone, now);
+                await push.notify(w.discord_id, {
+                    title: `Your ${w.streak}-day streak is about to end`,
+                    body: `Claim your daily reward ${deadline ? `before ${deadline}` : 'soon'} to keep it.`,
+                    url: '/today'
+                });
             } catch {
                 /* best effort: the DM is the warning */
             }
@@ -51,4 +70,4 @@ async function sendStreakWarnings({ db, client, log, push, now = new Date() }) {
     return result;
 }
 
-module.exports = { sendStreakWarnings, warningEmbed };
+module.exports = { sendStreakWarnings, warningEmbed, deadlineText };

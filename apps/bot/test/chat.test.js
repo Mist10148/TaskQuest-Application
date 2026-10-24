@@ -191,3 +191,14 @@ test('guild messages are sent as public so the AI keeps private quests out of th
     await chat.handleMessage(fakeMessage({ guildId: null }));
     assert.deepEqual(ai.calls.map((c) => c.public), [true, false]);
 });
+
+test('groupEmbedParts keeps the embeds of one message under Discord\'s 6000 character total', () => {
+    const { groupEmbedParts } = require('../chat');
+    const four = ['a'.repeat(4000), 'b'.repeat(4000), 'c'.repeat(100)];
+    const groups = groupEmbedParts(four);
+    assert.deepEqual(groups.map((g) => g.length), [1, 2]);
+    for (const g of groups) assert.ok(g.join('').length <= 5800);
+    assert.deepEqual(groupEmbedParts(['x', 'y']), [['x', 'y']]);
+    assert.deepEqual(groupEmbedParts([]), []);
+    assert.equal(groupEmbedParts(Array(23).fill('z')).length, 3, 'ten embeds at most per message');
+});

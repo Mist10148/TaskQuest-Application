@@ -34,6 +34,12 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Recent XP on the Stats page** (the last transactions, earned and spent, with their sources), using the history endpoint the web app never showed. The Stats chart says "nothing to chart" instead of drawing a flat line, the Focus page links to the party's focus quest when there is one, the leaderboard has a **My class** shortcut, and Games history can show all of its rows.
+- **Keyboard play:** type a letter to guess in Hangman; H, S and D hit, stand and double in Blackjack.
+- **Migration runner checksums.** `schema_migrations` gets a `checksum` column (added by the runner itself, no new migration); a shipped migration that was edited, or a database that holds migrations this version does not know (an older deploy against a newer schema), is reported as a warning at start.
+- **AI service housekeeping** (KNOWN_ISSUES #51, in part): old checkpoints are pruned after each turn (the latest three are kept), idle chat threads are removed by the reconcile loop (Discord memory after 30 days, web chats after 90), cached summaries older than 7 days are dropped, and re-index calls for one list within `EMBED_DEBOUNCE_SECONDS` (default 3) share one embedding run. `DB_URL` with `?sslmode=require` now turns TLS on for the AI service as it does for the Node apps.
+- Component tests for the Stats, Settings, Leaderboard, Shop and Classes pages.
+
 - **Move tasks between quests.** "Move to another quest" in the task drawer and a bulk **Move to…** in select mode move a task with its subtasks to the end of another quest you can edit (`POST /api/items/:id/move`).
 - **Assignees on shared quests.** A task on a shared quest can be assigned to its owner or a member (task drawer), shows who has it on its row, can be filtered by "Assigned to me" or "Unassigned", and a task assigned to you on someone else's quest shows on your Today page.
 - **Comments and activity on a task.** The task drawer has a **Comments** tab (anyone who can edit the quest can comment; the author or a manager can delete) and an **Activity** tab with every change: created, renamed, done or reopened, priority, due date, assignee and moves. Rows show a comment count.
@@ -43,7 +49,6 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **A streak strip on the dashboard.** The Today page's seven-day strip also shows under the dashboard stats.
 - **Calendar keyboard navigation.** The calendar is one tab stop; arrows, Home/End and PageUp/PageDown move between days and months.
 - **Repository templates.** GitHub issue and pull request templates, and Dependabot for npm, pip and GitHub Actions.
-
 - **A task detail drawer.** An info button on each task (and `i` on the highlighted one) opens a side drawer with the full description, priority, due date, repeat, estimate, tags and subtasks, with Mark done / Reopen and Edit for anyone who can edit. A viewer of a shared quest can read it too.
 - **Bulk edit.** In select mode an **Edit** button changes the priority, due date and (see above) tags of the selected tasks together (keep, set or clear each), through the existing update endpoint with one summary toast.
 - **The command palette finds tasks.** Ctrl+K lists tasks whose name or description match (two or more characters, the same search as the quest log) with their quest, and opens that quest.
@@ -53,7 +58,6 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **An offline banner and a plain network error.** A notice shows while the browser is offline, and a request that fails before reaching the server says "You appear to be offline" instead of "Failed to fetch". Nothing is queued offline, so rewards stay server-authoritative.
 - **A keyboard cursor over tasks.** Inside a quest, `j` and `k` move a highlighted row, `x` completes or reopens it, `e` edits it and `d` deletes it (with Undo). Listed in the `?` dialog.
 - **A route error boundary.** A page that fails to render or load (typically a code chunk replaced by a deploy while the tab was open) shows a Reload card instead of a white screen, and a `vite:preloadError` reloads once.
-
 - **A README screenshot capture spec.** `apps/web/e2e/screenshots.e2e.ts` (skipped unless `CAPTURE_SCREENSHOTS=1`) signs in as the seeded player and saves twelve pages to `docs/images`; the images themselves are not captured yet (known issue #26).
 - **Live-Gemini preparation.** `python -m app.preflight [--check-models] [--url ...]` checks the key, token, model ids, `EMBED_DIM` against the pgvector column and the AI tables, optionally asks Google which configured model ids exist and can do the job (a header, never the URL, carries the key), and exits 1 on any failure; `python -m tests.evals.compare report.json [--baseline earlier.json]` judges a saved eval report against the live targets and flags regressions. The golden sets grew to 70 retrieval queries (incl. a cross-user bait query), 10 summary and 10 prioritizer cases, with four new seeded users, and the red-team set grew too; they still pass offline. Nothing here calls Gemini: the default model ids are unchanged, and known issues #17 and #18 stay open until a real run.
 - **Push for AI results, where it helps.** The Monday digest's AI recap headline is also sent as a web push when push is set up (only when a recap was written, once the digest is final, best effort), and a summary or "what should I do next?" that finishes while the player is on another tab shows a local notification through the service worker (`announceResult`: only when the page is hidden, notifications are already allowed and push was turned on; it never asks for permission). A server push per AI reply is deliberately not built: the answer already reaches the open page.
@@ -147,11 +151,26 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - The summarizer's model call is now a LangChain LCEL chain.
 - Explicit Gemini safety settings, and a friendly reply when a response is blocked.
 - Evals: p95 summarizer latency, an optional LLM-as-judge (`--judge`), and 50 retrieval queries.
-- CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-mysql` job).
+- CI: the AI service's SQL runs against PostgreSQL with the migrations applied (`ai-postgres` job).
 - [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) explains how the LangChain/LangGraph service is built.
 - Quick due-date picks (Today, Tomorrow, Next week, No date) in the task form.
 - Search inside a quest, `?task=` links that open a task's drawer (from search results and the command palette), keys `1` `2` `3` for the views and `Shift A` to select all, a confirmation before deleting more than five tasks, and a quick-add hint in an empty quest.
 - Docs: `docs/ROADMAP.md`, `docs/TESTING.md`, `CODE_OF_CONDUCT.md`, a longer web README, and corrections to migration numbers, costs, quotas and several contradictions.
+- Today lists what is coming up this week (`upcoming` in `/api/today`: up to six open tasks due in the next seven days).
+- Relative due dates ("Today", "Tomorrow", "in 3 days") on task rows, board cards, Today and the task drawer.
+- Snooze to tomorrow on an open task; on phones the row actions sit in one More actions menu.
+- Command palette actions: claim the daily reward, start a 25-minute focus session, show overdue and due today.
+- The quest log remembers its tab, filters and sort; `/games?play=<game>` links, so Back returns to the games menu.
+- Each page has its own tab title, and moving to another page focuses its content.
+- Docs: the AI service's HTTP API, `/internal/index` and `/internal/forget` request shapes, a README troubleshooting table, and known issues #63-#66.
+- Today: the streak warning has its own **Claim now** button and says when the streak ends; each task opens in its quest, and a task due today or late can be snoozed to tomorrow. The Dashboard shows the same warning.
+- The task drawer can **Delete** (with Undo), **Snooze** and **Add subtask**.
+- **Undo** on a bulk completion, like on a single task.
+- **Export one quest** as CSV (the full export's columns, so it imports again) or a Markdown checklist, from the quest header.
+- Keyboard: `?` lists the shortcuts on every page, and `g` then a key goes to a page (`g t` Today, `g q` quest log, `g d` Dashboard, `g f` Focus, `g s` Stats, `g p` Profile, `g l` Leaderboard, `g c` AI Chat).
+- Chat: the message box grows as you type, **Jump to latest** when scrolled up, **Copy** on each answer, and placeholder rows while the conversation list loads.
+- `/api/today` returns `streak.claimableAt` and `streak.expiresAt`.
+- Docs: the web app's page addresses and URL parameters, an index of the package READMEs, the AI help corpus, and roadmap rows for #59 to #63.
 
 ### Changed
 
@@ -195,9 +214,27 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Dark-theme colours that failed contrast (the Assassin badge was 1.5:1, destructive button text 3.8:1) were fixed.
 - Node 22 is now required. Node 20 is end-of-life, and its test runner could not expand the test globs, which had broken CI since 8 October.
 - LangChain, LangGraph and `langgraph-checkpoint` are pinned to their tested major versions.
+- **A daily claim within the rolling 48/72/96-hour window continues the streak.** With the 24-hour cooldown, someone who claimed at 23:30 could only keep the streak by claiming in the last half hour of the next day.
+- **Perfect day counts only tasks whose due date was set at least 24 hours before,** like the early and overdue bonuses; three tasks given today's date and ticked off at once no longer pay it.
+- The web reads "today" in the account's time zone, and saves the browser's zone once for an account that has none, so overdue and due today match the server.
+- **The streak warning waits for the cooldown and gives the real deadline.** A streak is at risk only once `/daily` would succeed again, and the DM, the push and the Today page say when it lapses (the later of its calendar day and its 48/72/96-hour window), not "before midnight".
+- `/profile user:@someone` shows "Profile is private" for a player with XP off, as they are off the leaderboard too.
+- `/list`, `/profile`, `/class` and `/achievements` defer their reply before reading the database (the second half of #52).
+- Accepting a suggested priority in "What should I do next?" no longer re-runs the AI ranking (it spends quota); Refresh still does.
+- Calendar feed **New address** and **Turn off** ask first, since both stop subscribed calendars.
+- `npm run archive` leaves the `subtasks_done` and `boss_defeated` rows in `xp_transactions`, since their once-per-parent rule reads that log.
 
 ### Fixed
 
+- **Party progress** refreshes after tasks and focus sessions (it showed the old count for a minute), and a malformed reset time no longer shows "NaN".
+- **Imports and exports are rate limited** (20 a minute per account, like the CSV import) before a large body is parsed; `POST /api/user/import` and the exports had no limit beyond the general one.
+- **The calendar feed token no longer reaches the error log**: a 500 logs the path with any 32-character token masked. A stream that fails after its headers were sent no longer throws a second time.
+- **Login-start sessions live 10 minutes** (an anonymous hit on `/api/auth/discord` used to leave a seven-day session row); `keepAliveTimeout` is 65 s so a proxy that reuses connections does not meet resets; `Cache-Control: no-store` on `/api` responses (the calendar feed and avatars keep their own headers).
+- **Resetting progress also removes archived XP and game rows** (`npm run archive` moves them out of the tables the reset cleared). Pending invitation lists are capped at 100.
+- **A CSV subtask whose parent name is repeated** is now an import error instead of silently joining the first parent.
+- **Bot:** task names, links and mentions in AI embeds are escaped; a chat reply in embed mode no longer exceeds Discord's 6000-character message total; a command that fails after a public `deferReply` replaces the placeholder with a private error; `/list` handles a list that vanished mid-click; the leaderboard no longer cuts ranks mid-line; `/automation` and `/toggle` acknowledge first; shutdown stops new background runs and waits up to 10 seconds for the ones in flight; the weekly digest handles five users at a time within a 45-minute budget.
+- **AI service:** a tool id past 32 bits is a refusal, not a driver error; a failed preview in the confirm step no longer ends the turn with an unanswered tool call, and any such dangling call in an old thread is answered before the model sees it (that thread used to fail on every later message); user data cannot close its own prompt block (angle brackets are replaced) and tool results reach the model fenced as data; one list's database error no longer aborts the whole reconcile transaction; a failed usage booking no longer replaces the turn's result.
+- **Web:** no "0 XP" while the shop, classes and skills load; class names (not keys) in purchase toasts; "Focus Rate" is "Completion Rate"; the Settings reset dialog's field is labelled, outside the description and in a form (Enter confirms); screen-reader state for locked and unlocked achievements and skills; the leaderboard is a list (the podium is hidden from it); Games controls have names, states and `type="button"`, and leaving an arcade run asks first; leaderboard and stats requests are cancelled when the board or range changes.
 - Ids above 2147483647 now fail validation (400) instead of reaching Postgres and returning a 500, in the shared validator, the route schemas and the AI service.
 - The AI chat assistant was told today's UTC date and retrieved with it; it now uses the user's own day.
 - Keyboard shortcuts `x`, `e` and `d` no longer act on a hidden row after switching to the board or calendar view, or while selecting tasks; the `j`/`k` cursor is announced to screen readers.
@@ -222,7 +259,6 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **Limits from one place:** the API's tag limit (it allowed 10 tags of 30 characters) now matches the service (5 of 20), the import body is validated, and copied names use the real list name limit.
 - **Reorder is one statement per 1000 tasks** instead of one per task.
 - **Web:** bulk complete never reopens a task finished elsewhere; the bulk edit dialog starts blank every time; the heatmap ends on your own today (not UTC); the command palette opens blank and says when it is still searching; Escape that closes the tour no longer also leaves the quest; Undo toasts disappear once leaving a page made the delete final; tags are trimmed and de-duplicated; a second deploy in the same tab reloads too; several icon-only buttons have proper screen reader names.
-
 - **Web rough edges from the October review** (known issue #53): the welcome tour resumes at its step on the next page instead of restarting; finishing several tasks at once shows one summary toast instead of one per task; the open quest is in the URL (`/tasks?list=42`), so refresh keeps it and the browser's Back button returns to the quest log; and two quick reorders no longer flicker (only the last one to settle refetches).
 - **Shared and server fixes from the October review.**
   - Repeating tasks respect the task quota and keep `estimate_minutes` on the next copy.
@@ -296,6 +332,23 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - `/summary` read a quest whose name is only digits (e.g. "2026") as a list id, and a failed autocomplete lookup was unhandled.
 - A shared in-memory SQLite connection made the chat confirmation tests fail on Python 3.12.
 - The AI reconcile job now notices edits to a quest itself (name, deadline, priority), not only to its subtasks. New migration `004_lists_updated_at` adds `lists.updated_at`.
+- Quests and the weekly review showed Claim after a time zone change although claiming answered 409; they now match claims by time as well as by period key.
+- The owner adding to one list and a member adding to another at the same moment could both take the last free task slot; adds, subtasks and moves now lock the list owner.
+- An expired invitation was meant to be marked revoked, but the update was rolled back by the error; it now sticks (lists and parties).
+- The Stats page showed a lapsed streak; it now reads 0 like Today.
+- A failure saving the user during the Discord callback sent JSON 500 to the browser instead of the login page; the session store no longer turns an error thrown by its callback into an unhandled rejection.
+- Focus limits honoured the given time only in part, and Today's done-today count left out older completions with no recorded actor.
+- Web: a failed game history load said "No games played yet"; Dashboard quest cards showed no deadline; the suggested weekly goal could exceed 60; deleting a task already gone showed an error.
+- Web accessibility: radio groups take arrow keys, the sort menu marks the chosen order, the filter button includes its count, labels point at their controls, login errors and quick-add previews are announced, calendar days are read in full, delete confirmations are alert dialogs, shortcut hints show ⌘ on Apple devices, and invalid link-in-button nesting is gone.
+- Web on phones: long quest names are shortened instead of pushing the priority badge out, and calendar badges fit their cells.
+- Focus and Stats no longer say their days are UTC.
+- Bot: `/list` judged overdue and expired by UTC, not the user's time zone; task and quest names written by other members were not escaped in `/list` and `/quick` confirmations; `/summary` offered shared quests the AI always refuses.
+- Necromancer and Ranger lost `early_finish`, `overdue_clear` and Inbox Zero past their daily class deadline cap; the cap is the class's only.
+- The server mapped the AI service's 403 to 503 "unavailable" instead of `AI_OPTED_OUT`.
+- Comment ids past 2³¹ could not be deleted (closes #64).
+- Web chat: **New chat** on `/chat` cleared nothing and kept a reply streaming; a 401 left a retry that could not work instead of signing out; a pending approval fetched after a 409 could appear in another thread; an approval arriving mid-reply left focus on the page body; messages did not say who was speaking; the mobile conversation list did not take or return focus; identical replies were announced once.
+- Web: Today's ranked quests did nothing when clicked; a half-written comment carried over to a subtask opened from the drawer; the assignee menu snapped back until the refresh; "New task" from the palette skipped the view-only check while a quest loaded; the same CSV could not be chosen again after fixing it; exports and the calendar feed ignored `VITE_API_URL`; the Dashboard offered the daily reward with XP off; the leaderboard blamed gamification for a class filter and gave ranks 1 to 3 no text; the welcome tour took focus from typing and covered the phone navigation; Ctrl+K stacked over another dialog; quick focus trusted a minute-old status; the arcade loop restarted on background refreshes; the party board did not roll over at its reset.
+- Docs: Blackjack winnings count no lifetime XP (DATABASE); XP_GUIDE gains the weekly modifier, Last Stand and Tidy Mind; SECURITY's body limits, intents and residual risks; the bot's invite permissions for AI chat; the first streak day adds nothing (PLAYER_FAQ).
 
 ### Removed
 
@@ -307,6 +360,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - Invitations cannot be used to probe who uses TaskQuest: every outcome the inviter must not learn gets one neutral answer, the lookup is rate limited per account and per address, and the web app asks the inviter to confirm the person it resolved. Discord IDs never leave the server (members use an opaque key).
 - Arcade scores are verified by replaying the recorded inputs instead of trusting the client.
 - Dev-only advisories in the Tailwind 3 toolchain are gone with the Tailwind 4 migration.
+- The skill and class previews and the CSV import share a 20-a-minute limit per account: each runs synchronous CPU work, and the general limit let one account block the server for minutes.
 
 ## [4.0.0] - 2026-10-08
 

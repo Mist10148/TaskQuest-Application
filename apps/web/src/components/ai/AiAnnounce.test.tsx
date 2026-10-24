@@ -64,4 +64,20 @@ describe("announcing a finished AI result", () => {
     await userEvent.click(screen.getByRole("button", { name: /prioritize my quests/i }));
     expect(announceResult).not.toHaveBeenCalled();
   });
+
+  it("accepting a suggested priority changes the quest without running the paid ranking again", async () => {
+    const ranked = [{ id: "L1", listId: 1, name: "Math homework", rank: 1, reason: "due soon", suggestedPriority: "HIGH" }];
+    const refetch = vi.fn();
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    hooks.useUpdateList.mockReturnValue({ mutateAsync, isPending: false });
+    hooks.usePrioritize.mockReturnValue({ data: { ranked, focusMessage: "", usedFallback: false }, refetch, isFetching: false, error: null });
+    const onOpen = vi.fn();
+    render(<PriorityPanel onOpen={onOpen} />);
+    await userEvent.click(screen.getByRole("button", { name: /accept/i }));
+    expect(mutateAsync).toHaveBeenCalledWith({ listId: 1, data: { priority: "HIGH" } });
+    expect(refetch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /accept/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Math homework" }));
+    expect(onOpen).toHaveBeenCalledWith(1);
+  });
 });

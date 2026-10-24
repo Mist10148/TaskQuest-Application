@@ -291,7 +291,7 @@ There are 96 skills in 17 trees (Default plus the sixteen classes).
 
 - **Cooldown:** 24 hours from your last claim.
 - **Streak:**
-  - The streak counts **your calendar days** (your time zone): claiming on the day after your last claim continues it. Claiming at least 24 hours after the last claim is still required.
+  - The streak counts **your calendar days** (your time zone): claiming on the day after your last claim continues it. Claiming at least 24 hours after the last claim is still required, so a claim within 48 hours of the last one (72 with protection, 96 with Sanctuary) also continues it: a late-evening claim never forces you to catch a few minutes before the next midnight.
   - With Streak Shield (or as a Paladin), one missed day is forgiven (a claim up to 2 days after the last one continues the streak). Paladin with Sanctuary: two missed days (3 days).
   - With Unstoppable, the streak always continues.
   - Otherwise the streak resets to 1.
@@ -336,7 +336,7 @@ What counts: a task counts toward the completion quests once, at the moment it i
 
 Every source below is **flat XP** (no class or skill modifiers, except the prestige multiplier on class-modified XP), is paid in its own `xp_transactions` source, counts for the weekly board, and has a cap. Task bonuses are paid only on a task's **first, paid completion** (so un-checking and re-checking pays nothing, and neither does a completion that hit the 50-a-day cap) and never for imported tasks or auto-created repeat copies. They are listed in the completion result as `bonuses: [{key, label, xp}]`.
 
-**Overdue and early effects need an aged due date.** A due date counts as early or overdue (for `early_finish`, `overdue_clear`, the Ranger and Necromancer bonuses, and the *Early Riser* and *Spring Cleaning* quest facts) only if it was set at least 24 hours before the completion. A task created or re-dated within the last day completes normally, with no overdue or early extras, so a made-up past or far-future date cannot be farmed on the same day. Because a standing routine can still create dated tasks every day, the Ranger and Necromancer also count only your first 8 early or overdue completions of a day (`LIMITS.CLASS_DEADLINE_PER_DAY`); after that the date counts as none for the class. Editing a due date to a different day restarts the clock; a repeating copy is stamped when it spawns.
+**Overdue and early effects need an aged due date.** A due date counts as early or overdue (for `early_finish`, `overdue_clear`, the Ranger and Necromancer bonuses, and the *Early Riser* and *Spring Cleaning* quest facts) only if it was set at least 24 hours before the completion. A task created or re-dated within the last day completes normally, with no overdue or early extras, so a made-up past or far-future date cannot be farmed on the same day. Because a standing routine can still create dated tasks every day, the Ranger and Necromancer also count only your first 8 early or overdue completions of a day (`LIMITS.CLASS_DEADLINE_PER_DAY`); after that the date counts as none for the class. That cap is the class's only: `early_finish`, `overdue_clear` and *Inbox Zero* still see the date, within their own daily caps, as they do for every class. Editing a due date to a different day restarts the clock; a repeating copy is stamped when it spawns.
 
 | Source (`xp_transactions.source`) | Amount | Cap |
 |---|---|---|
@@ -348,7 +348,7 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | `streak_chest` | +100 / +250 / +600 at a 7 / 14 / 30 day streak ([daily reward](#5-daily-reward)) | Once per streak run |
 | `achievement_reward` | +25 for each newly unlocked achievement | Each achievement unlocks once |
 | `habit_bonus` | +2 per step of a repeating task's habit streak, from a streak of 2 (max +20 per completion) | 60 XP a day |
-| `perfect_day` | +30 when every top-level task due today on your own lists is done (at least 3 of them) | Once a day |
+| `perfect_day` | +30 when every top-level task due today on your own lists is done (at least 3 of them whose due date was set 24 hours or more before) | Once a day |
 | `inbox_zero` | +40 when your completion clears the last overdue task, after at least 3 overdue tasks cleared that week | Once a week |
 | `boss_defeated` | +30 when you finish the last open subtask of a task that has at least 4 subtasks | Once per task, 60 XP a day |
 | `comeback` | +25 for the first completion after 3 idle days (the previous paid completion is 3 or more days old) | Once a week |

@@ -2,24 +2,30 @@ import type { User as UserRecord } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { Sword, Sparkles, Settings, LogOut, Menu, Flame, Search } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { ClassBadge, PlayerClass } from "@/components/game/ClassBadge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useAuth, getAvatarUrl } from "@/contexts/AuthContext";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
+import { GlobalShortcuts } from "./GlobalShortcuts";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { AI_NAV_ITEM, NAV_ITEMS } from "@/components/layout/navItems";
 import { openCommandPalette } from "@/lib/commands";
 import { PrestigeTag } from "@/components/game/PrestigeTag";
 import { AvatarFrame, EquippedTitle } from "@/components/game/AvatarFrame";
+import { pageTitle } from "@/lib/pageTitle";
+import { modKeyLabel } from "@/lib/platform";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 const XP_PER_LEVEL = 100; // mirrors packages/shared XP_PER_LEVEL
+
+/** The page the layout last showed. Each page renders its own layout, so this outlives a single mount. */
+let lastPath: string | null = null;
 
 /** Thin XP progress toward the next level. */
 const LevelBar = ({ lifetimeXP, level, className }: { lifetimeXP: number; level: number; className?: string }) => {
@@ -104,7 +110,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
         >
           <Search className="h-4 w-4" aria-hidden />
           <span className="flex-1 text-left">Search…</span>
-          <kbd className="hidden rounded border border-border px-1.5 text-[0.625rem] font-mono lg:inline">Ctrl K</kbd>
+          <kbd className="hidden rounded border border-border px-1.5 text-[0.625rem] font-mono lg:inline">{modKeyLabel()} K</kbd>
         </button>
       </div>
 
@@ -155,6 +161,15 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
 export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuth();
+  const { pathname } = useLocation();
+
+  // A layout effect runs before the page's own effects, so a page that decorates the title (Focus's countdown) builds on this one.
+  useLayoutEffect(() => {
+    document.title = pageTitle(pathname);
+    // After moving to another page, start keyboard and screen reader users at its content, not wherever focus was left.
+    if (lastPath !== null && lastPath !== pathname) document.getElementById("main")?.focus({ preventScroll: true });
+    lastPath = pathname;
+  }, [pathname]);
   const dbUser: Partial<UserRecord> = user?.user ?? {};
   const level = dbUser.player_level || 1;
 
@@ -193,8 +208,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <SidebarContent />
       </aside>
 
-      <CommandPalette aiEnabled={Boolean(user?.features?.ai)} />
+      <CommandPalette aiEnabled={Boolean(user?.features?.ai)} xpEnabled={dbUser.gamification_enabled !== 0 && dbUser.gamification_enabled !== false} />
       <OnboardingTour />
+      <GlobalShortcuts aiEnabled={Boolean(user?.features?.ai)} />
 
       <main id="main" tabIndex={-1} className="flex-1 min-h-screen w-full min-w-0 focus:outline-hidden">
         <div className="pt-18 lg:pt-4 pb-20 lg:pb-4 px-4 lg:px-8">{children}</div>

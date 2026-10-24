@@ -6,16 +6,21 @@
 'use strict';
 
 const { getPool } = require('./pool');
-const { STREAK_WARNING } = require('../constants');
+const { STREAK_WARNING, DAILY } = require('../constants');
 const { getUserSkills } = require('./users');
+const { actorSql } = require('./access');
 const { dayWindow } = require('./progression');
 const { getReflection, getGoal } = require('./goals');
 const { SEASONS } = require('../constants');
 const { currentSeason } = require('../quests');
 const { todayInZone, daysBetween, hourInZone } = require('../dates');
-const { liveStreak, getSkillBonuses, streakWindowDays, claimGapDays } = require('../xp');
+const { liveStreak, getSkillBonuses, streakWindowDays, streakWindowMs, claimGapDays } = require('../xp');
+const tz = require('../tz');
 
 const TASK_LIMIT = 6;
+/** The Upcoming list: open top-level tasks due in the next week (not already in the main list). */
+const UPCOMING_DAYS = 7;
+const UPCOMING_LIMIT = 6;
 
 /**
  * The tasks that are "mine" for Today: every task on a list I own, plus the tasks assigned to me on a list shared with me (the
@@ -24,16 +29,57 @@ const TASK_LIMIT = 6;
  */
 const MINE = `(l.discord_id = ? OR (i.assignee_id = ? AND EXISTS (SELECT 1 FROM list_members tm WHERE tm.list_id = l.id AND tm.discord_id = ?)))`;
 
-/** The streak as the Today card needs it: is it alive, was today's reward claimed, is today the last day to keep it. */
+/**
+ * When a streak last claimed at `last` lapses: the later of the end of its calendar window and the end of its rolling window,
+ * since a claim within either continues it (streakContinues).
+ */
+function streakExpiry(user, bonuses, last) {
+    let calendarEnd = last;
+    for (let i = 0; i <= streakWindowDays(user, bonuses); i++) calendarEnd = tz.nextDayStart(user.timezone, calendarEnd).getTime();
+    return Math.max(calendarEnd, last + streakWindowMs(user, bonuses));
+}
+
+/**
+ * The streak as the Today card needs it: is it alive, was today's reward claimed, is today the last day to keep it, and when
+ * can it be claimed and when does it lapse. It is at risk only once the daily reward can actually be claimed again (the
+ * 24 hour cooldown), so a warning never asks for a claim the cooldown would refuse.
+ */
 function streakState(user, skills, now) {
     const count = Number(user.streak_count) || 0;
     const last = user.last_daily_claim ? new Date(user.last_daily_claim).getTime() : 0;
     const live = liveStreak(user, skills, now.getTime());
     const bonuses = getSkillBonuses(skills);
     const claimedToday = Boolean(last) && claimGapDays(user, last, now.getTime()) === 0;
-    // Unstoppable never lapses; otherwise the claim has `windowDays - gap` days left, today included at zero.
-    const daysLeft = bonuses.streakUnstoppable || !last ? null : streakWindowDays(user, bonuses) - claimGapDays(user, last, now.getTime());
-    return { count, live, claimedToday, daysLeft, atRisk: live >= 2 && !claimedToday && daysLeft === 0 };
+    // Unstoppable never lapses; otherwise the claim has `windowDays - gap` days left, today included at zero. Below zero the
+    // streak is only alive through the rolling grace window (a late claim), which is just as much at risk.
+    const lapses = !bonuses.streakUnstoppable && Boolean(last);
+    const daysLeft = lapses ? Math.max(0, streakWindowDays(user, bonuses) - claimGapDays(user, last, now.getTime())) : null;
+    const claimableAt = last ? last + DAILY.COOLDOWN_MS : null;
+    const expiresAt = lapses ? streakExpiry(user, bonuses, last) : null;
+    const claimable = !claimableAt || now.getTime() >= claimableAt;
+    return {
+        count,
+        live,
+        claimedToday,
+        daysLeft,
+        claimableAt: claimableAt ? new Date(claimableAt).toISOString() : null,
+        expiresAt: live && expiresAt ? new Date(expiresAt).toISOString() : null,
+        atRisk: live >= 2 && !claimedToday && daysLeft === 0 && claimable
+    };
+}
+
+function shapeTask(r, today) {
+    const due = r.due_date ? String(r.due_date).slice(0, 10) : null;
+    return {
+        id: r.id,
+        name: r.name,
+        listId: r.list_id,
+        listName: r.list_name,
+        dueDate: due,
+        priority: r.priority || null,
+        estimateMinutes: r.estimate_minutes === null || r.estimate_minutes === undefined ? null : Number(r.estimate_minutes),
+        overdueDays: due && due < today ? daysBetween(due, today) : 0
+    };
 }
 
 async function getToday(discordId, now = new Date()) {
@@ -64,7 +110,16 @@ async function getToday(discordId, now = new Date()) {
           WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL`,
         [today, today, id, id, id]
     );
-    const [[done]] = await pool.query('SELECT COUNT(*) AS n FROM items WHERE first_completed_by = ? AND first_completed_at >= ? AND first_completed_at < ?', [id, from, to]);
+    // Counted like Stats, the review and quests: older rows with no recorded actor count for the list owner.
+    const [upcomingRows] = await pool.query(
+        `SELECT i.id, i.name, i.list_id, l.name AS list_name, i.due_date, COALESCE(i.priority, l.priority) AS priority, i.estimate_minutes
+           FROM items i JOIN lists l ON l.id = i.list_id
+          WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL AND i.due_date > ?::date AND i.due_date <= ?::date + ${UPCOMING_DAYS}
+          ORDER BY i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 0 END, i.id
+          LIMIT ${TASK_LIMIT + UPCOMING_LIMIT}`,
+        [id, id, id, today, today]
+    );
+    const [[done]] = await pool.query(`SELECT COUNT(*) AS n FROM items i WHERE ${actorSql('first_completed_by')} AND i.first_completed_at >= ? AND i.first_completed_at < ?`, [id, id, from, to]);
 
     const season = currentSeason(SEASONS, now);
     return {
@@ -72,19 +127,12 @@ async function getToday(discordId, now = new Date()) {
         season: { key: season.key, name: season.name, blurb: season.blurb, doubles: season.doubles, enabled: process.env.XP_WEEKLY_MODIFIER !== 'off' },
         streak: streakState(u, skills, now),
         counts: { dueToday: Number(counts.dueToday), overdue: Number(counts.overdue), doneToday: Number(done.n) },
-        tasks: rows.map((r) => {
-            const due = r.due_date ? String(r.due_date).slice(0, 10) : null;
-            return {
-                id: r.id,
-                name: r.name,
-                listId: r.list_id,
-                listName: r.list_name,
-                dueDate: due,
-                priority: r.priority || null,
-                estimateMinutes: r.estimate_minutes === null || r.estimate_minutes === undefined ? null : Number(r.estimate_minutes),
-                overdueDays: due && due < today ? daysBetween(due, today) : 0
-            };
-        }),
+        tasks: rows.map((r) => shapeTask(r, today)),
+        // A HIGH task due this week is already in `tasks`; it is not listed twice.
+        upcoming: upcomingRows
+            .filter((r) => !rows.some((t) => t.id === r.id))
+            .slice(0, UPCOMING_LIMIT)
+            .map((r) => shapeTask(r, today)),
         reflection: await getReflection(id, now),
         goal: await getGoal(id, now),
         xpEnabled: Boolean(u.gamification_enabled)
@@ -94,7 +142,7 @@ async function getToday(discordId, now = new Date()) {
 /**
  * Players to warn right now: a streak of at least 3 days that is alive and unclaimed today, today is its last day, and it is
  * evening where they live. Only people with XP and reminders on, and not already warned today.
- * @returns {Promise<Array<{ discord_id: string, streak: number, day: string, timezone: string|null }>>}
+ * @returns {Promise<Array<{ discord_id: string, streak: number, day: string, timezone: string|null, expiresAt: string|null }>>}
  */
 async function getStreakWarnings(now = new Date()) {
     const pool = getPool();
@@ -109,7 +157,7 @@ async function getStreakWarnings(now = new Date()) {
         if (hourInZone(u.timezone, now) < STREAK_WARNING.FROM_HOUR) continue;
         if (u.streak_warned_day && String(u.streak_warned_day).slice(0, 10) >= day) continue;
         const state = streakState(u, await getUserSkills(u.discord_id), now);
-        if (state.atRisk && state.live >= STREAK_WARNING.MIN_STREAK) out.push({ discord_id: String(u.discord_id), streak: state.live, day, timezone: u.timezone });
+        if (state.atRisk && state.live >= STREAK_WARNING.MIN_STREAK) out.push({ discord_id: String(u.discord_id), streak: state.live, day, timezone: u.timezone, expiresAt: state.expiresAt });
     }
     return out;
 }

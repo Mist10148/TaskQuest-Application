@@ -24,6 +24,9 @@ function safeEqual(a, b) {
 router.get('/discord', (req, res, next) => {
     const state = crypto.randomBytes(32).toString('base64url');
     req.session.oauthState = state;
+    // A visitor who is not logged in only needs this session until the round trip to Discord is done (the callback starts a fresh one),
+    // so an anonymous request cannot leave a seven day row behind. originalMaxAge too, or the rolling cookie would restore the long life.
+    if (!req.session.user) req.session.cookie.originalMaxAge = req.session.cookie.maxAge = 10 * 60 * 1000;
     req.session.save((err) => {
         if (err) return next(err);
         const params = new URLSearchParams({
@@ -85,7 +88,13 @@ router.get(
         }
         if (!/^\d{5,25}$/.test(String(me?.id))) return loginError(res, 'profile_failed');
 
-        await db.users.ensureUser(me.id, { username: me.global_name || me.username, handle: me.username, avatar: me.avatar });
+        try {
+            await db.users.ensureUser(me.id, { username: me.global_name || me.username, handle: me.username, avatar: me.avatar });
+        } catch (err) {
+            // A browser navigation: send the person back to the login page, not to a JSON error.
+            console.error(`Could not save the user on login: ${err.message}`);
+            return loginError(res, 'session_failed');
+        }
 
         // New session ID on login prevents session fixation.
         req.session.regenerate((err) => {

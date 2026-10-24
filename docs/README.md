@@ -1,6 +1,6 @@
 # Documentation index
 
-Last verified against code: 19 October 2026 (2026-10-19), branch `improvements/oct-2026`, after the review pass listed in the [CHANGELOG](../CHANGELOG.md#unreleased).
+Last verified against code: 25 October 2026 (2026-10-25), after the review passes listed in the [CHANGELOG](../CHANGELOG.md#unreleased).
 
 `packages/shared/test/docs.test.js` (run by `npm test`) checks the tables in GAMEPLAY.md against `packages/shared/src/constants.js`, the numbers in the class and skill descriptions against the rules, and the build tables in CLASS_GUIDE.md against the balance simulator. The other documents are checked by hand: when you change behaviour, update the matching document in the same commit and add a line to the [CHANGELOG](../CHANGELOG.md).
 
@@ -27,6 +27,20 @@ Last verified against code: 19 October 2026 (2026-10-19), branch `improvements/o
 | [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) | How the optional AI service is built: graphs, retrieval, tools, guardrails |
 | [AI_INTEGRATION.md](AI_INTEGRATION.md) | The AI design record: goals, decisions and how the build differs from the plan |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Local setup, where code belongs, tests (unit, integration, browser, AI), style |
+
+## Package READMEs
+
+Each part of the repository has its own README with its commands and a map of its modules.
+
+| Document | What it is |
+|---|---|
+| [apps/web/README.md](../apps/web/README.md) | The web app: commands, how it is organised, its pages and address (URL) parameters, tests |
+| [apps/server/README.md](../apps/server/README.md) | The Express API: routes, middleware, configuration |
+| [apps/bot/README.md](../apps/bot/README.md) | The Discord bot: commands, background jobs, modules |
+| [apps/ai/README.md](../apps/ai/README.md) | The optional AI service: its HTTP API, graphs, tests |
+| [packages/shared/README.md](../packages/shared/README.md) | `@taskquest/shared`: every rules and database module |
+| [db/legacy/README.md](../db/legacy/README.md) | The MySQL-era SQL scripts kept for history (do not run) |
+| [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | How contributors are expected to behave |
 
 ## For operators
 

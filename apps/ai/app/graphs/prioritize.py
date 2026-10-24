@@ -32,7 +32,7 @@ from app.db.dialect import is_postgres
 from app.llm import AIUnavailable
 from app.llm_call import structured_call
 from app.prompts import load_prompt
-from app.rag.chunking import list_label
+from app.rag.chunking import list_label, prompt_safe
 
 log = logging.getLogger("taskquest.ai.prioritize")
 
@@ -248,7 +248,7 @@ def build_graph(llm_factory: Callable[..., Any], *, reserved: bool = False):
             extra = f"\n\nYour previous answer was invalid: {'; '.join(state['errors'])}. Rank every id exactly once."
         messages = [
             SystemMessage(system),
-            HumanMessage(f"Today: {state['today'].isoformat()}\n<tasks>\n{_feature_table(tasks)}\n</tasks>{extra}"),
+            HumanMessage(f"Today: {state['today'].isoformat()}\n<tasks>\n{prompt_safe(_feature_table(tasks))}\n</tasks>{extra}"),
         ]
         try:
             ranking, (i, o) = await structured_call(llm, RankingOut, messages)

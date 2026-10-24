@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { itemsApi, type Item, type ListWithItems } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { dateOnly } from "@/lib/dates";
+import { addDays, dateOnly, localToday } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import {
@@ -112,6 +112,8 @@ const Tasks = () => {
     if (!wantsNew) return;
     if (wantsNew === "quest") setListDialog("create");
     else if (wantsNew === "task") {
+      // Until the open quest has loaded its role is unknown: wait for it, or a viewer gets a form the server then refuses.
+      if (selectedListId && !selectedList) return;
       if (selectedListId && selectedList && !canEditTasks(roleOf(selectedList))) toast("You only have view access to this quest.");
       else if (selectedListId) setItemDialog({ mode: "create" });
       else toast("Open a quest first, then press N or use Add Task.");
@@ -221,20 +223,29 @@ const Tasks = () => {
   // Complete one after another so each task pays its own XP and achievements.
   // The reward toasts are folded into one summary for the batch.
   const completeItems = async (ids: number[]) => {
-    let done = 0;
+    const finished: number[] = [];
     let xp = 0;
     for (const id of ids) {
       try {
         const result = await toggleItem.mutateAsync({ itemId: id, completed: true, quiet: true });
         if (result.completed) {
-          done += 1;
+          finished.push(id);
           xp += result.xpResult?.finalXP ?? 0;
         }
       } catch {
         break; // error toast shown by the mutation hook
       }
     }
-    if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`);
+    const done = finished.length;
+    // Undo un-checks the batch again, like Undo on one task: the XP stays paid (once per task), and a repeating task's next copy
+    // stays too.
+    const undo = async () => {
+      let failed = false;
+      for (const id of finished) await itemsApi.toggle(id, false).catch(() => (failed = true));
+      if (failed) toast.error("Some tasks could not be reopened.");
+      refetchList();
+    };
+    if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`, { action: { label: "Undo", onClick: () => void undo() }, duration: 6000 });
     refetchList();
   };
 
@@ -327,8 +338,11 @@ const Tasks = () => {
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
           onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
+          onSnooze={(itemId) =>
+            updateItem.mutate({ itemId, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success("Snoozed to tomorrow") })
+          }
           assignOptions={assignOptions}
-          onAssign={(itemId, memberKey) => updateItem.mutate({ itemId, data: { assignee: memberKey } })}
+          onAssign={(itemId, memberKey) => updateItem.mutateAsync({ itemId, data: { assignee: memberKey } })}
           moveTargets={moveTargets}
           onMove={moveItems}
           onEditItem={openItemEditor}

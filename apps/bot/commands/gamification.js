@@ -138,14 +138,15 @@ const automationData = new SlashCommandBuilder()
     .setDescription('🔔 Toggle deadline reminder notifications');
 
 async function automation(interaction) {
+    // Acknowledge first: a cold database could otherwise miss Discord's 3 second window after the setting was already flipped.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const newStatus = await users.toggleSetting(interaction.user.id, 'automation_enabled');
 
-    await interaction.reply({
+    await interaction.editReply({
         embeds: [newStatus
             ? ui.success('Reminders Enabled', '🔔 I\'ll DM you when a list is due today.')
             : ui.info('Reminders Disabled', '🔕 You won\'t receive deadline reminders.')
-        ],
-        flags: MessageFlags.Ephemeral
+        ]
     });
 }
 
@@ -195,14 +196,20 @@ const CLASS_INFO = Object.fromEntries(
 async function profile(interaction) {
     const targetUser = interaction.options.getUser('user') || interaction.user;
     const userId = targetUser.id;
+    // Several database reads follow: acknowledge first so a slow one cannot miss Discord's 3 second window.
+    await interaction.deferReply(EPHEMERAL);
 
     // Viewing someone else never creates a record for them.
     if (userId === interaction.user.id) await users.ensureUser(userId);
     const stats = await users.getUserStats(userId);
     if (!stats) {
-        return interaction.reply({ embeds: [ui.info('No profile yet', `${escapeDiscord(targetUser.username, { max: 60 })} hasn't used TaskQuest yet.`)], ...EPHEMERAL });
+        return interaction.editReply({ embeds: [ui.info('No profile yet', `${escapeDiscord(targetUser.username, { max: 60 })} hasn't used TaskQuest yet.`)] });
     }
     const user = stats.user;
+    // Turning XP off takes a player off the leaderboard; their XP, tasks and games are not anyone else's to read either.
+    if (userId !== interaction.user.id && !Number(user.gamification_enabled)) {
+        return interaction.editReply({ embeds: [ui.info('Profile is private', `${escapeDiscord(targetUser.username, { max: 60 })} has XP and progress turned off.`)] });
+    }
     const userSkills = await users.getUserSkills(userId);
 
     // Get Discord member info
@@ -343,8 +350,8 @@ async function profile(interaction) {
     const statusText = user.gamification_enabled ? '✅ XP Active' : '💤 XP Disabled';
     embed.setFooter({ text: `${statusText} · /class to change class · /achievements for badges` });
 
-    // XP details are personal, so profiles are always ephemeral.
-    await interaction.reply({ embeds: [embed], ...EPHEMERAL });
+    // XP details are personal, so profiles are always ephemeral (the deferred reply above).
+    await interaction.editReply({ embeds: [embed] });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -357,14 +364,14 @@ const achievementsData = new SlashCommandBuilder()
 
 async function achievements(interaction) {
     const userId = interaction.user.id;
+    await interaction.deferReply(EPHEMERAL);
     const userAchs = await users.getAchievements(userId);
     const page = 0;
     const total = Math.ceil(Object.keys(ACHIEVEMENTS).length / 8) || 1;
 
-    await interaction.reply({
+    await interaction.editReply({
         embeds: [ui.achievementsEmbed(userAchs, ACHIEVEMENTS, page)],
-        components: [ui.achButtons(page, total)],
-        flags: MessageFlags.Ephemeral
+        components: [ui.achButtons(page, total)]
     });
 }
 
@@ -438,13 +445,11 @@ function respecPreview(userSkills, classKey) {
 
 async function classShop(interaction) {
     const userId = interaction.user.id;
+    await interaction.deferReply(EPHEMERAL);
     const user = await users.ensureUser(userId);
 
     // Start in browse mode with the current class selected
-    await interaction.reply({
-        ...(await classView(userId, user, user.player_class)),
-        flags: MessageFlags.Ephemeral
-    });
+    await interaction.editReply(await classView(userId, user, user.player_class));
 }
 
 async function handleClassButton(interaction) {
@@ -719,7 +724,10 @@ async function leaderboard(interaction) {
         })
         .join('\n\n');
 
-    embed.addFields({ name: '​', value: boardText.slice(0, 1024), inline: false });
+    // The description holds 4096 characters (a field only 1024, which cut the last ranks), and a rank is never cut in half.
+    const lines = boardText.split('\n\n');
+    while (lines.join('\n\n').length > 4000 - label.title.length) lines.pop();
+    embed.setDescription(`${label.title}\n\n${lines.join('\n\n')}`);
     embed.setFooter({ text: `${entries.length} players · /profile for your stats` });
     await interaction.editReply({ embeds: [embed] });
 }
@@ -733,11 +741,11 @@ const toggleData = new SlashCommandBuilder()
     .setDescription('⚙️ Toggle XP system on/off');
 
 async function toggle(interaction) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const newStatus = await users.toggleSetting(interaction.user.id, 'gamification_enabled');
 
-    await interaction.reply({
-        embeds: [newStatus ? ui.success('XP Enabled', '⚡ You will earn XP!') : ui.info('XP Disabled', '💤 XP off')],
-        flags: MessageFlags.Ephemeral
+    await interaction.editReply({
+        embeds: [newStatus ? ui.success('XP Enabled', '⚡ You will earn XP!') : ui.info('XP Disabled', '💤 XP off')]
     });
 }
 

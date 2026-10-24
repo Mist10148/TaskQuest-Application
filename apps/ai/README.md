@@ -8,7 +8,7 @@ The browser never calls this service. Express authenticates the user and forward
 
 ```bash
 python -m venv .venv
-.venv/Scripts/activate            # Linux/macOS: source .venv/bin/activate
+. .venv/bin/activate              # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 ```
@@ -82,8 +82,22 @@ app/
 ├── usage.py              daily quota (the user's own day) and token accounting
 ├── preflight.py          pre-flight checks for the first live run (python -m app.preflight)
 ├── prompts/*.md          versioned prompts (the version is logged)
-└── routers/              /v1/* (summary, prioritize, chat, threads) and /internal/* (index, forget)
+└── routers/              /v1/* (summary, prioritize, chat, threads, converse) and /internal/* (index, forget)
 ```
+
+## HTTP API
+
+Only the web server and the bot call this service, never a browser. Every route except `/health` needs the shared `X-AI-Token` header; the `/v1` routes also take the acting user in `X-Discord-Id`.
+
+| Method | Path | What it does |
+|---|---|---|
+| GET | `/health` | Liveness and database check (never raises) |
+| GET | `/v1/ping` | Token and user check |
+| POST | `/v1/summary`, `/v1/prioritize` | A quest summary; a priority order for the user's open tasks |
+| POST | `/v1/chat`, `/v1/chat/{thread_id}/resume` | The web chat (streamed), and resuming it after Approve or Cancel |
+| GET, DELETE | `/v1/threads`, `/v1/threads/{thread_id}` | List, read and delete chat threads |
+| POST, DELETE | `/v1/converse`, `/v1/converse/{channel_id}` | The bot's mention and DM conversations; forget one channel's conversation |
+| POST | `/internal/index`, `/internal/forget` | Re-embed or forget a list or a user (see [docs/API.md](../../docs/API.md#internal-api-service-to-service)) |
 
 ## Safety rules the code enforces
 

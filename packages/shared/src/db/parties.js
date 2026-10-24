@@ -119,7 +119,7 @@ async function listInvites(userId) {
     const [rows] = await getPool().query(
         `SELECT i.id, i.created_at, i.expires_at, p.name AS party_name, ou.discord_username AS owner_name
          FROM party_invites i JOIN parties p ON p.id = i.party_id JOIN users ou ON ou.discord_id = p.owner_id
-         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP ORDER BY i.id DESC`,
+         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP ORDER BY i.id DESC LIMIT 100`,
         [String(userId)]
     );
     return rows.map((r) => ({ id: r.id, partyName: r.party_name, ownerName: r.owner_name, createdAt: r.created_at, expiresAt: r.expires_at }));
@@ -129,7 +129,9 @@ async function listInvites(userId) {
 async function respond(userId, inviteId, accept) {
     const id = unwrap(v.id(inviteId));
     const result = await respondIn(userId, id, accept);
-    if (result.voided) throw errors.conflict('This invitation is no longer open.'); // thrown after the transaction, so the revocation sticks
+    // Thrown after the transaction, so the revocation sticks.
+    if (result.expired) throw errors.conflict('This invitation has expired. Ask for a new one.');
+    if (result.voided) throw errors.conflict('This invitation is no longer open.');
     return result;
 }
 
@@ -144,7 +146,7 @@ async function respondIn(userId, id, accept) {
         if (inv.status !== 'pending') throw errors.conflict('This invitation is no longer open.');
         if (new Date(inv.expires_at).getTime() <= Date.now()) {
             await conn.query("UPDATE party_invites SET status = 'revoked' WHERE id = ?", [id]);
-            throw errors.conflict('This invitation has expired. Ask for a new one.');
+            return { expired: true };
         }
         if (!accept) {
             await conn.query("UPDATE party_invites SET status = 'declined', responded_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);

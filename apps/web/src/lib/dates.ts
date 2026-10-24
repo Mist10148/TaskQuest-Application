@@ -7,19 +7,42 @@
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** Today's date in the browser's own time zone, as YYYY-MM-DD. */
-export function localToday(now: Date = new Date()): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
+/** The user's time zone setting (set by AuthProvider), or null to use the browser's own zone. */
+let userZone: string | null = null;
+
+/**
+ * Read "today" in `zone`: the user's time zone setting, which is the day the server uses for overdue, due today and the
+ * date bonuses. Null (no account loaded, or no zone saved yet) falls back to the browser's zone.
+ */
+export function setUserZone(zone: string | null | undefined): void {
+  userZone = zone || null;
+}
+
+/** YYYY-MM-DD from a Date's browser-local parts. */
+function browserDay(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/** Today's date as YYYY-MM-DD in the user's time zone (see setUserZone), else the browser's. */
+export function localToday(now: Date = new Date(), zone: string | null = userZone): string {
+  if (zone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    } catch {
+      // an unknown zone name: use the browser's day
+    }
+  }
+  return browserDay(now);
 }
 
 /** `day` ("YYYY-MM-DD") moved by `days` calendar days, without going through UTC. */
 export function addDays(day: string, days: number): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(day));
   if (!m) return "";
-  return localToday(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
+  return browserDay(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
 }
 
 /** The quick picks next to a due-date field. "" clears the date. */
@@ -59,4 +82,36 @@ export function compareDeadlines(a: string | null | undefined, b: string | null 
   if (!x) return 1;
   if (!y) return -1;
   return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** A calendar day read out in full, e.g. "Tuesday, January 15, 2030" (for labels; the string is never shifted by a time zone). */
+export function formatDayLabel(day: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(day));
+  if (!m) return "";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(
+    Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  );
+}
+
+/** Calendar days from `from` to `to` (both "YYYY-MM-DD"), negative when `to` is earlier; NaN when either is missing. */
+export function daysBetween(from: string, to: string): number {
+  const a = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(from));
+  const b = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(to));
+  if (!a || !b) return Number.NaN;
+  return Math.round((Date.UTC(+b[1], +b[2] - 1, +b[3]) - Date.UTC(+a[1], +a[2] - 1, +a[3])) / 86_400_000);
+}
+
+/**
+ * A task's due date as people say it near today: "Today", "Tomorrow", "Yesterday", "in 3 days", "4 days ago", and the plain
+ * date (formatDeadline) from a week away on. Pair it with the plain date as a tooltip.
+ */
+export function formatDue(due: string | null | undefined, today: string = localToday()): string {
+  const days = daysBetween(today, dateOnly(due));
+  if (Number.isNaN(days)) return "";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  if (days > 1 && days < 7) return `in ${days} days`;
+  if (days < -1 && days > -7) return `${-days} days ago`;
+  return formatDeadline(due, today);
 }

@@ -89,3 +89,11 @@ test('commentBody: text of 1 to TEXT_LIMITS.COMMENT characters, nothing else', (
     assert.equal(shared.validation.comment('  hi  ').value, 'hi', 'the service trims and strips control characters');
     assert.equal(shared.validation.comment('   ').ok, false);
 });
+
+test('bigIdParam: a comment id past 2^31 is valid, junk is not', async () => {
+    const { bigIdParam, idParam } = await import('../lib/schemas.js');
+    assert.equal(bigIdParam.parse({ id: '3000000000' }).id, 3000000000);
+    assert.throws(() => idParam.parse({ id: '3000000000' }), 'INTEGER ids keep their limit');
+    assert.throws(() => bigIdParam.parse({ id: '0' }));
+    assert.throws(() => bigIdParam.parse({ id: '1.5' }));
+});

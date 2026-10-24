@@ -195,3 +195,25 @@ async def test_chain_passes_braces_in_task_text_through_untouched():
     system, human = llm.calls[0]
     assert system.type == "system" and human.type == "human"
     assert "- {weird} quest {L1}" in human.content and "Today: 2026-01-02" in human.content
+
+
+async def test_put_cache_drops_this_users_old_rows_only(seeded):
+    from app.db import pool
+
+    async with pool.connection() as conn:
+        for uid, key, stamp in (
+            (UID, "digest:2020-01-01", "2020-01-01 00:00:00"),
+            (OTHER, "digest:2020-01-01", "2020-01-01 00:00:00"),
+        ):
+            await conn.execute(
+                text(
+                    "INSERT INTO ai_summary_cache (discord_id, scope_key, input_hash, summary_json, created_at)"
+                    " VALUES (:u, :k, 'h', '{}', :c)"
+                ),
+                {"u": uid, "k": key, "c": stamp},
+            )
+        await S.put_cache(conn, UID, f"digest:{TODAY.isoformat()}", "h2", good())
+        rows = (await conn.execute(text("SELECT discord_id, scope_key FROM ai_summary_cache"))).all()
+    assert (UID, "digest:2020-01-01") not in rows
+    assert (OTHER, "digest:2020-01-01") in rows  # another user's rows are not this call's business
+    assert (UID, f"digest:{TODAY.isoformat()}") in rows

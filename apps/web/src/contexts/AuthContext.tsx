@@ -4,9 +4,10 @@
  * an error instead of a fake player.
  */
 
-import React, { createContext, useContext, useCallback } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { authApi, ApiError, type UserData, type DiscordUser } from '@/lib/api';
+import { authApi, userApi, ApiError, type UserData, type DiscordUser } from '@/lib/api';
+import { setUserZone } from '@/lib/dates';
 import { disablePush } from '@/lib/push';
 import { isSessionExpired } from '@/lib/session';
 import { toast } from 'sonner';
@@ -67,6 +68,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [qc]);
 
     const user = query.data ?? null;
+    const zone = user?.user?.timezone ?? null;
+    // "Today" everywhere in the app is the user's day, the one the server counts overdue and due-today by.
+    setUserZone(zone);
+
+    // An account with no time zone is on UTC days on the server. Save the browser's zone once (the first change is never
+    // locked), so the server's day and the one shown here agree; Settings can still change it.
+    const zoneSaved = useRef(false);
+    useEffect(() => {
+        if (!user || zone || zoneSaved.current) return;
+        const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!detected) return;
+        zoneSaved.current = true;
+        userApi
+            .updateSettings({ timezone: detected })
+            .then(() => qc.invalidateQueries({ queryKey: ['auth', 'me'] }))
+            .catch(() => {});
+    }, [user, zone, qc]);
+
     const value: AuthContextType = {
         user,
         discord: user?.discord ?? null,

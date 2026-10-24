@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, Response
@@ -15,6 +16,22 @@ from app.rag import indexer, runtime
 log = logging.getLogger("taskquest.ai.internal")
 
 router = APIRouter(prefix="/internal", dependencies=[Depends(verify_internal_token)])
+
+# (user, list) -> the re-index waiting for its delay. A burst of edits (a bulk completion, a quick run of renames) would
+# otherwise cost one embedding call each; the waiting run reads the list when it fires, so it sees all of them.
+_waiting: dict[tuple[str, int], asyncio.Task] = {}
+_tasks: set[asyncio.Task] = set()  # strong references: a task nobody holds can be collected mid-run
+
+
+async def _reindex_later(key: tuple[str, int], delay: float) -> None:
+    try:
+        await asyncio.sleep(delay)
+    finally:
+        _waiting.pop(key, None)  # an edit during the run below schedules a fresh one
+    try:
+        await indexer.reindex_list(*key)
+    except Exception:  # noqa: BLE001 - nobody is waiting on this call; the reconcile loop catches what was missed
+        log.exception("delayed re-index failed for list %s", key[1])
 
 
 class IndexBody(BaseModel):
@@ -39,7 +56,16 @@ async def index(body: IndexBody):
             await indexer.index_user(conn, runtime.get_store(), runtime.get_embedder(), body.discordId)
         runtime.get_store().invalidate(body.discordId)  # after the commit
     else:
-        await indexer.reindex_list(body.discordId, body.listId)
+        delay = get_settings().embed_debounce_seconds
+        if delay <= 0:
+            await indexer.reindex_list(body.discordId, body.listId)
+        else:
+            key = (body.discordId, body.listId)
+            if key not in _waiting:
+                task = asyncio.create_task(_reindex_later(key, delay))
+                _waiting[key] = task
+                _tasks.add(task)
+                task.add_done_callback(_tasks.discard)
     return Response(status_code=204)
 
 

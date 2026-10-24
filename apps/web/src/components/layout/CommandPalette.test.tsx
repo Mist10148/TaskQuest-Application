@@ -7,19 +7,25 @@ import { OPEN_PALETTE_EVENT } from "@/lib/commands";
 import { CommandPalette } from "./CommandPalette";
 
 const searchTasks = vi.fn();
+const focusGet = vi.fn();
+const focusStart = vi.fn();
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, listsApi: { ...actual.listsApi, searchTasks: (q: string) => searchTasks(q) } };
+  return {
+    ...actual,
+    listsApi: { ...actual.listsApi, searchTasks: (q: string) => searchTasks(q) },
+    focusApi: { ...actual.focusApi, get: () => focusGet(), start: (m: number) => focusStart(m) },
+  };
 });
 
 const Where = () => <p data-testid="where">{useLocation().pathname + useLocation().search}</p>;
 
-const open = async () => {
+const open = async (xpEnabled = true) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <CommandPalette aiEnabled={false} />
+        <CommandPalette aiEnabled={false} xpEnabled={xpEnabled} />
         <Where />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -68,5 +74,65 @@ describe("CommandPalette task search", () => {
     act(() => { window.dispatchEvent(new Event(OPEN_PALETTE_EVENT)); });
     expect(await screen.findByRole("combobox", { name: "Search commands" })).toHaveValue("");
   });
-});
+  it("starts a 25-minute focus session and shows it", async () => {
+    focusGet.mockResolvedValue({ active: null });
+    focusStart.mockResolvedValue({ sessionId: 1 });
+    const input = await open();
+    await userEvent.type(input, "25-minute");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/focus"));
+    expect(focusStart).toHaveBeenCalledWith(25);
+  });
 
+  it("does not cancel a session that is already running", async () => {
+    focusStart.mockReset();
+    focusGet.mockResolvedValue({ active: { id: 3 } });
+    const input = await open();
+    await userEvent.type(input, "25-minute");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/focus"));
+    expect(focusStart).not.toHaveBeenCalled();
+  });
+
+  it("offers the daily reward only with XP on", async () => {
+    searchTasks.mockResolvedValue({ lists: [], tasks: [] });
+    const input = await open(false);
+    await userEvent.type(input, "daily reward");
+    expect(screen.queryByRole("option", { name: /Claim daily reward/ })).toBeNull();
+  });
+
+  it("asks the server before starting, even with a fresh 'no session' in the cache", async () => {
+    focusStart.mockReset();
+    focusGet.mockResolvedValue({ active: { id: 9 } });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
+    client.setQueryData(["focus"], { active: null });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CommandPalette aiEnabled={false} />
+          <Where />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    act(() => { window.dispatchEvent(new Event(OPEN_PALETTE_EVENT)); });
+    await userEvent.type(await screen.findByRole("combobox", { name: "Search commands" }), "25-minute");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/focus"));
+    expect(focusGet).toHaveBeenCalled();
+    expect(focusStart).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+K does not open on top of another dialog", async () => {
+    const client = new QueryClient();
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <div role="dialog" aria-label="Edit task" />
+          <CommandPalette aiEnabled={false} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await userEvent.keyboard("{Control>}k{/Control}");
+    expect(screen.queryByRole("combobox", { name: "Search commands" })).toBeNull();
+  });
+});

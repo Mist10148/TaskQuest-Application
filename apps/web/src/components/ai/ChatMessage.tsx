@@ -1,6 +1,7 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { Bot, User as UserIcon, Wrench } from "lucide-react";
+import { Bot, Check, Copy, User as UserIcon, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage as Message } from "@/hooks/useChat";
 import { SourceChips } from "./SourceChips";
@@ -63,6 +64,26 @@ function renderBody(text: string, knownIds: Map<string, string>): ReactNode {
   return <div className="space-y-2">{blocks}</div>;
 }
 
+/** Copy an answer as plain text (the way it was written, bullets and all). */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Couldn't copy. Select the text and copy it by hand.");
+    }
+  };
+  return (
+    <button type="button" onClick={() => void copy()} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.6875rem] text-foreground-muted hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
+      {copied ? <Check className="h-3 w-3" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 export function ChatMessage({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const known = new Map(message.sources.map((s) => [s.id, s.title]));
@@ -70,24 +91,27 @@ export function ChatMessage({ message }: { message: Message }) {
 
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
-      <div className={cn("h-8 w-8 shrink-0 rounded-full flex items-center justify-center", isUser ? "bg-primary/20" : "bg-card border border-border")}>
+      <div aria-hidden className={cn("h-8 w-8 shrink-0 rounded-full flex items-center justify-center", isUser ? "bg-primary/20" : "bg-card border border-border")}>
         {isUser ? <UserIcon className="h-4 w-4 text-primary-text" /> : <Bot className="h-4 w-4 text-primary-text" />}
       </div>
       <div className={cn("max-w-[85%] space-y-2", isUser && "items-end")}>
         <div className={cn("rounded-2xl px-4 py-2.5 text-sm leading-relaxed", isUser ? "bg-primary text-primary-foreground" : "bg-card border border-border")}>
+          {/* The avatar is decorative, so say who is speaking in words. */}
+          <span className="sr-only">{isUser ? "You said:" : "Assistant said:"}</span>
           {isUser ? <p className="whitespace-pre-wrap">{message.text}</p> : message.text ? renderBody(message.text, known) : message.streaming ? <span className="inline-block h-4 w-2 bg-primary/60 animate-pulse rounded-sm" role="img" aria-label="Thinking" /> : null}
-          {!isUser && message.streaming && message.text && <span className="inline-block h-4 w-1.5 ml-0.5 align-middle bg-primary/60 animate-pulse rounded-sm" />}
+          {!isUser && message.streaming && message.text && <span aria-hidden className="inline-block h-4 w-1.5 ml-0.5 align-middle bg-primary/60 animate-pulse rounded-sm" />}
         </div>
         {!isUser && doneTools.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {doneTools.map((t, i) => (
               <span key={i} className={cn("inline-flex items-center gap-1 text-[0.6875rem] px-2 py-0.5 rounded-full border", t.status === "declined" ? "border-border text-foreground-muted" : "border-primary/20 text-primary-text bg-primary/5")}>
-                <Wrench className="h-3 w-3" /> {t.status === "declined" ? "Declined" : TOOL_LABELS[t.name] ?? t.name}
+                <Wrench className="h-3 w-3" aria-hidden /> {t.status === "declined" ? "Declined" : TOOL_LABELS[t.name] ?? t.name}
               </span>
             ))}
           </div>
         )}
         {!isUser && message.sources.length > 0 && <SourceChips sources={message.sources} />}
+        {!isUser && !message.streaming && message.text && <CopyButton text={message.text} />}
       </div>
     </div>
   );

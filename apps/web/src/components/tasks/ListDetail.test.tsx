@@ -217,7 +217,7 @@ describe("ListDetail bulk delete", () => {
     await userEvent.keyboard("sA");
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(onBulkDelete).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toHaveTextContent("Delete 6 tasks?");
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Delete 6 tasks?");
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onBulkDelete).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));

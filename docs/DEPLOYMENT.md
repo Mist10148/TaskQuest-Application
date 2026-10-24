@@ -1,11 +1,13 @@
 # Deployment and operations
 
-TaskQuest runs as two processes sharing one PostgreSQL database:
+TaskQuest runs as two required processes sharing one PostgreSQL database, plus two optional ones:
 
 | Process | Start command | Needs |
 |---|---|---|
 | **Web** (API + built SPA) | `npm run build && npm run start:server` | Public HTTPS URL, Discord OAuth credentials, session secret, DB |
 | **Bot** | `npm run start:bot` | Discord bot token, DB. It must stay running (gateway connection). |
+| **AI service** (optional, private) | `uvicorn app.main:app` in `apps/ai` | Gemini API key, shared `AI_INTERNAL_TOKEN`, DB. Only when `AI_ENABLED=true` (see [AI service](#ai-service-appsai-optional)). |
+| **Archive job** (optional, weekly) | `npm run archive -- --days 365` | DB. A scheduled task, not a long-running process (see §4). |
 
 ## Contents
 
@@ -26,11 +28,11 @@ Use one Discord application for both the bot and web login.
 1. Go to the [Developer Portal](https://discord.com/developers/applications) and create an application. The **Application ID** is your `CLIENT_ID` / `DISCORD_CLIENT_ID`.
 2. **Bot** tab:
    - Reset the token. This is your `DISCORD_TOKEN`; keep it secret.
-   - No privileged gateway intents are required, so leave them off.
+   - No privileged gateway intents are required, so leave them off. The one exception: AI chat's reply mode (`AI_CHAT_MESSAGE_CONTENT=true`, see [§3](#3-environment-variables)) needs **Message Content**.
 3. **OAuth2** tab:
    - Copy the **Client Secret**. This is `DISCORD_CLIENT_SECRET`.
    - Add a redirect: `https://<your-web-domain>/api/auth/callback`. For local development, add `http://localhost:8080/api/auth/callback`.
-4. **Invite the bot.** In OAuth2 → URL Generator, select the scopes `bot` and `applications.commands`. Under bot permissions, select *Send Messages* and *Embed Links*. Open the URL to add the bot to a server.
+4. **Invite the bot.** In OAuth2 → URL Generator, select the scopes `bot` and `applications.commands`. Under bot permissions, select *Send Messages* and *Embed Links*; with AI chat on (`AI_ENABLED`), also *Read Message History* (the bot replies to the message that asked) and *Attach Files* (a long answer comes as `response.txt`). Open the URL to add the bot to a server.
 5. **Register commands.** Do this once, and again whenever command definitions change:
    ```bash
    DISCORD_TOKEN=... CLIENT_ID=... npm run deploy:commands                 # global (≤1h to appear)
@@ -50,7 +52,7 @@ DB_SSL=true
 
 - Use the **session** pooler on port **5432**. It is reachable over IPv4 (Render has no IPv6), and it is session-level, so the migration advisory lock and the AI service's prepared statements work. The transaction pooler (port 6543) breaks both, and the direct host `db.<project-ref>.supabase.co` is IPv6-only.
 - Supabase certificates chain to a public root, so `DB_SSL_CA` can stay empty; to pin it, paste the CA from Database → Settings → SSL Configuration.
-- The free tier limits pooler clients. The web server, bot, AI service and archive job each open a pool, so keep `DB_POOL_SIZE` small (5 or lower per Node service).
+- The free tier limits pooler clients. The web server, bot, AI service and archive job each open a pool, so keep `DB_POOL_SIZE` small (5 or lower per Node service; the default is 10, so set it). `DB_POOL_SIZE` is one variable shared by the Node apps and the AI service: setting it in a shared environment overrides the AI service's own default of 5, and the blueprint does not set it.
 
 **Self-hosted Postgres.**
 
@@ -73,7 +75,7 @@ GRANT USAGE, CREATE ON SCHEMA public TO taskquest;
 For local development, everything lives in one git-ignored file at the repository root: `cp .env.example .env`. Settings are read in this order, and the first one found wins:
 
 1. Real environment variables (Render, CI, your shell).
-2. `apps/bot/.env` or `apps/server/.env` (optional per-app overrides).
+2. `apps/bot/.env`, `apps/server/.env` or `apps/ai/.env` (optional per-app overrides).
 3. The root `.env`.
 
 In production, set the variables in your host's dashboard instead. Because the bot and server can share a file, they use `BOT_PORT` and `SERVER_PORT`. Each falls back to `PORT`, which hosting platforms set per service.
@@ -150,8 +152,9 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [A
 | `GEMINI_CHAT_MODEL`, `GEMINI_REASONING_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM` | ai | Model ids and embedding size (defaults: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-embedding-001`, `768`). **Check them against Google's current model list.** Changing the embedding model re-embeds everything automatically (vectors are stored with the model name). |
 | `AI_DAILY_REQUEST_LIMIT` | ai | Requests per user per day across all features (default `100`). A user's day is their own calendar day (`users.timezone`, UTC until they set one), so the quota refills at their local midnight |
 | `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate Postgres role for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables (plus `USAGE` on the `ai_embeddings` id sequence). It never writes tasks directly. |
-| `LANGSMITH_API_KEY` | ai | Optional tracing |
+| `LANGSMITH_API_KEY` | ai | Optional tracing; when set, the service also defaults `LANGSMITH_TRACING=true` and `LANGSMITH_PROJECT=taskquest-ai` (override either in the environment) |
 | `AI_RECONCILE_MINUTES` | ai | How often missed re-index calls are caught up (default `15`) |
+| `EMBED_DEBOUNCE_SECONDS` | ai | Edits to one list within this many seconds share one re-embedding (default `3`; `0` indexes at once). The reconcile loop also prunes chat threads idle for 30 days (Discord memory) or 90 days (web chats) |
 | `SUMMARY_MAP_REDUCE_CHARS` | ai | Summaries are made in parts above this input size (default `40000`) |
 | `MAX_TOOL_ITERATIONS` | ai | Tool rounds per chat turn (default `6`) |
 | `DB_POOL_SIZE` | ai | The AI service's own Postgres pool (SQLAlchemy + asyncpg; default `5`; the Node apps default to `10`) |
@@ -162,9 +165,9 @@ The AI service reads the same root `.env` as the other apps, plus the database v
 **Local run**
 
 ```bash
-npm run dev                                   # web + server
+npm run dev:server                            # API (another terminal: npm run dev:web)
 cd apps/ai
-python -m venv .venv && .venv/Scripts/activate   # Linux/macOS: source .venv/bin/activate
+python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 python -m app.rag.index_docs                  # once: embed the help docs
@@ -207,6 +210,7 @@ The repository includes [`render.yaml`](../render.yaml).
    - In the `taskquest-database` group: `DB_URL` (the Supabase session-pooler URL, see §2), plus `DB_SSL_CA` if you pin the CA.
    - On `taskquest-web`: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `PUBLIC_URL`.
    - On `taskquest-bot`: `DISCORD_TOKEN`, `CLIENT_ID` and `WEB_APP_URL`.
+   - For the optional AI service: `AI_SERVICE_URL` on `taskquest-web` and `taskquest-bot`, and `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`. Leave them empty if you keep AI off.
    - `SESSION_SECRET` is generated for you.
 3. After the first deploy, set `PUBLIC_URL` to the web service URL (or your custom domain). Add `<PUBLIC_URL>/api/auth/callback` to Discord's OAuth2 redirects.
 4. Register slash commands from your machine (see §1).
@@ -216,7 +220,7 @@ The repository includes [`render.yaml`](../render.yaml).
 - The web service builds with `npm ci --include=dev && npm run build`, because dev dependencies are needed to build the SPA.
 - Render background workers need a paid plan. The bot also exposes a health endpoint on `$PORT`, so it can run as a free **web** service, but free services sleep when idle, which disconnects the bot. Use a paid worker for reliability.
 - **Archive job.** `render.yaml` also defines a weekly cron job `taskquest-archive` (a paid plan) that runs `npm run archive -- --days 365` against the same database. It only moves old `xp_transactions` rows to the archive table and deletes task history (`item_activity`) older than the window; take the usual backup first and remove the job from the blueprint if you do not want it.
-- **AI service.** `render.yaml` also defines a private service `taskquest-ai` (a paid plan) and a `taskquest-ai` env group holding a generated `AI_INTERNAL_TOKEN`, shared with the web service and the bot. To enable AI: set `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`, set `AI_SERVICE_URL` (its internal host) on `taskquest-web` and `taskquest-bot`, then flip `AI_ENABLED` to `true` on both. Re-register slash commands (`npm run deploy:commands`) so `/summary`, `/prioritize` and `/ask` appear. Its build command embeds the help docs; that step is skipped, not failed, if the database or key is unavailable at build time.
+- **AI service.** `render.yaml` also defines a private service `taskquest-ai` (a paid plan) and a `taskquest-ai` env group holding a generated `AI_INTERNAL_TOKEN`, shared with the web service and the bot. To enable AI: set `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`, set `AI_SERVICE_URL` (its internal host) on `taskquest-web` and `taskquest-bot`, then flip `AI_ENABLED` to `true` on both. The AI commands (`/summary`, `/prioritize`, `/ask`, `/forget`, `/ai-format`) are always registered, whether or not AI is on; until `AI_ENABLED` is `true` they answer that AI is off, so no re-registration is needed. Its build command embeds the help docs; that step is skipped, not failed, if the database or key is unavailable at build time.
 - The first AI request after a free web instance wakes can take 10 to 30 seconds. The UI shows a "waking up" message after 5 seconds.
 - Health checks: the web service uses `GET /api/health`. The bot's `GET /` returns 200 once it is connected to Discord.
 

@@ -99,7 +99,7 @@ const Achievements = () => {
               <span className="text-foreground-muted text-sm">/{totalCount}</span>
             </div>
           </div>
-          <div className="h-3 sm:h-4 rounded-full bg-background-secondary overflow-hidden">
+          <div className="h-3 sm:h-4 rounded-full bg-background-secondary overflow-hidden" role="progressbar" aria-label="Achievements unlocked" aria-valuemin={0} aria-valuemax={totalCount} aria-valuenow={unlockedCount}>
             <motion.div 
               initial={{ width: 0 }} 
               animate={{ width: `${progressPercent}%` }} 
@@ -185,10 +185,10 @@ const Achievements = () => {
                           "h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl shrink-0 transition-transform",
                           ach.unlocked ? "bg-xp/20 group-hover:scale-110" : "bg-background-secondary opacity-70"
                         )}>
-                          {ach.unlocked ? ach.emoji : <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-foreground-muted" />}
+                          {ach.unlocked ? <span aria-hidden="true">{ach.emoji}</span> : <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-foreground-muted" aria-hidden="true" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className={cn("font-heading font-semibold text-sm sm:text-base truncate", !ach.unlocked && "text-foreground-muted")}>{ach.name}</h3>
+                          <h3 className={cn("font-heading font-semibold text-sm sm:text-base truncate", !ach.unlocked && "text-foreground-muted")}>{ach.name}<span className="sr-only">{ach.unlocked ? " (unlocked)" : " (locked)"}</span></h3>
                           <p className="text-xs sm:text-sm text-foreground-muted line-clamp-2">{ach.description}</p>
                           {!ach.unlocked && (() => {
                             const p = achievementProgress(ach.key, stats);
@@ -219,7 +219,7 @@ const Achievements = () => {
                             transition={{ type: "spring", stiffness: 200 }}
                             className="h-6 w-6 sm:h-7 sm:w-7 rounded-full bg-linear-to-br from-xp to-yellow-400 flex items-center justify-center shadow-lg shadow-xp/30"
                           >
-                            <Trophy className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                            <Trophy className="h-3 w-3 sm:h-4 sm:w-4 text-white" aria-hidden="true" />
                           </motion.div>
                         </div>
                       )}

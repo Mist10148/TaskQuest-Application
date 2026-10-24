@@ -7,6 +7,7 @@ import os
 os.environ.setdefault("AI_INTERNAL_TOKEN", "t" * 40)
 os.environ.setdefault("DB_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("GEMINI_API_KEY", "")
+os.environ.setdefault("EMBED_DEBOUNCE_SECONDS", "0")
 
 from datetime import UTC, datetime, timedelta  # noqa: E402
 

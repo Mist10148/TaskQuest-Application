@@ -69,7 +69,7 @@ const Settings = () => {
   const toggle = (key: SwitchKey, value: boolean) => save({ [SWITCH_FIELDS[key]]: value });
 
   const handleReset = async () => {
-    if (confirmText !== "RESET") return void toast.error("Please type RESET to confirm");
+    if (confirmText !== "RESET") return; // the button is disabled until it matches
     try {
       await resetProgress.mutateAsync();
       toast.success("All progress has been reset!");
@@ -207,31 +207,44 @@ const Settings = () => {
                         <li>All game history</li>
                         <li>All AI chats, summaries and search data</li>
                       </ul>
-                      <p className="font-semibold pt-2">Type <span className="text-destructive-text">RESET</span> to confirm:</p>
-                      <input
-                        type="text"
-                        value={confirmText}
-                        onChange={(e) => setConfirmText(e.target.value)}
-                        aria-label="Type RESET to confirm"
-                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm"
-                        placeholder="Type RESET"
-                      />
                     </div>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-                  <AlertDialogCancel className="w-full sm:w-auto" disabled={resetProgress.isPending}>Cancel</AlertDialogCancel>
-                  <Button
-                    type="button"
-                    onClick={() => void handleReset()}
-                    disabled={confirmText !== "RESET" || resetProgress.isPending}
-                    variant="destructive"
-                    className="w-full sm:w-auto"
-                  >
-                    {resetProgress.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Reset Everything
-                  </Button>
-                </AlertDialogFooter>
+                {/* The field is outside the description (screen readers read the description as text) and in a form, so Enter confirms once RESET is typed. */}
+                <form
+                  className="space-y-4"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleReset();
+                  }}
+                >
+                  <div className="space-y-2">
+                    <label htmlFor="reset-confirm" className="block text-sm font-semibold">
+                      Type <span className="text-destructive-text">RESET</span> to confirm:
+                    </label>
+                    <input
+                      id="reset-confirm"
+                      type="text"
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      autoComplete="off"
+                      className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm"
+                      placeholder="Type RESET"
+                    />
+                  </div>
+                  <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                    <AlertDialogCancel className="w-full sm:w-auto" disabled={resetProgress.isPending}>Cancel</AlertDialogCancel>
+                    <Button
+                      type="submit"
+                      disabled={confirmText !== "RESET" || resetProgress.isPending}
+                      variant="destructive"
+                      className="w-full sm:w-auto"
+                    >
+                      {resetProgress.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Reset Everything
+                    </Button>
+                  </AlertDialogFooter>
+                </form>
               </AlertDialogContent>
             </AlertDialog>
           </SettingRow>

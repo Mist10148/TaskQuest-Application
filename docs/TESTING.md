@@ -16,7 +16,7 @@ With no `TEST_DB_NAME`, the database-backed suites are **skipped**, so a green `
 
 ## Database tests
 
-The service, API and bot-flow suites need a PostgreSQL 15+ with the `vector` and `citext` extensions. They run only when `TEST_DB_NAME` is set, and they **wipe that database** (`DROP SCHEMA public CASCADE`). The suites refuse to run unless the database name contains `test` and the host is local.
+The service, API and bot-flow suites need a PostgreSQL 15+ with the `vector` and `citext` extensions. They run only when `TEST_DB_NAME` is set, and they **wipe that database** (`DROP SCHEMA public CASCADE`). The suites refuse to run unless the database name contains `test` or `e2e` and the host is local.
 
 ```bash
 npm run db:up     # Docker: pgvector/pgvector:pg16 with taskquest_test and taskquest_e2e created

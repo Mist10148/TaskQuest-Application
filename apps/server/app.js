@@ -27,7 +27,7 @@ import statsRouter from './routes/stats.js';
 import calendarRouter from './routes/calendar.js';
 import aiRouter from './routes/ai.js';
 import internalRouter, { requireInternalToken } from './routes/internal.js';
-import { securityHeaders, sessionMiddleware, csrfProtection, apiLimiter, authLimiter, authCallbackLimiter, gameLimiter, aiLimiter } from './lib/security.js';
+import { securityHeaders, sessionMiddleware, csrfProtection, apiLimiter, authLimiter, authCallbackLimiter, gameLimiter, aiLimiter, heavyLimiter } from './lib/security.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.resolve(__dirname, '../web/dist');
@@ -36,12 +36,13 @@ const SESSION_COOKIE = 'tq.sid';
 /**
  * Routes that carry more than the default 16 KB of JSON, and how much. Their bigger parser is mounted per route, after the
  * session, the rate limiter and requireAuth, so a stranger or a flood is refused before a large body is read or parsed.
+ * The imports also get the per-account heavyLimiter first, so one account cannot make the server parse megabyte bodies all day.
  * Imports carry whole lists (the shared service caps their size); a CSV of up to 1 MB of text grows a little once its line
  * breaks and quotes are escaped as JSON; an arcade run carries its recorded input timeline (up to ~12k small integers).
  */
 const LARGE_BODIES = [
-    { prefix: '/api/user/import', limit: '1mb' },
-    { prefix: '/api/import', limit: '2mb' },
+    { prefix: '/api/user/import', limit: '1mb', heavy: true },
+    { prefix: '/api/import', limit: '2mb', heavy: true },
     { prefix: '/api/games/arcade', limit: '128kb' }
 ];
 
@@ -65,11 +66,16 @@ export function createApp() {
     const smallJson = express.json({ limit: '16kb' });
     app.use((req, res, next) => (hasLargeBody(req) ? next() : smallJson(req, res, next)));
     app.use(sessionMiddleware(SESSION_COOKIE));
+    // Account data and secrets must not sit in a shared or browser cache; the calendar feed and avatar routes set their own headers.
+    app.use('/api', (req, res, next) => {
+        res.set('Cache-Control', 'no-store');
+        next();
+    });
     app.use('/api', apiLimiter, csrfProtection);
     app.use('/api/auth/discord', authLimiter);
     app.use('/api/auth/callback', authCallbackLimiter);
     app.use('/api/games', gameLimiter);
-    for (const { prefix, limit } of LARGE_BODIES) app.use(prefix, requireAuth, express.json({ limit }));
+    for (const { prefix, limit, heavy } of LARGE_BODIES) app.use(prefix, requireAuth, ...(heavy ? [heavyLimiter] : []), express.json({ limit }));
 
     // ── Public endpoints ─────────────────────────────────────────────────────
     app.get('/api/health', async (req, res) => {

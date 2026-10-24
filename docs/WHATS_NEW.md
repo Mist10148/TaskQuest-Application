@@ -39,6 +39,27 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **Safer on a phone:** dialogs scroll, the bulk bar no longer hides behind the bottom bar, and buttons are easier to hit.
 - **Clearer problems:** an "offline" banner, a Reload card instead of a blank page after an update, and a time zone you now confirm with Save (it locks for 24 hours).
 
+## Easier days (late October 2026)
+
+- **Due dates read like you say them:** "Today", "Tomorrow", "in 3 days", "2 days ago"; hover for the date. They follow your time zone, and the web saves your browser's zone the first time if you never set one, so the app and the server agree on what "today" is.
+- **Coming up this week** on the Today page lists what is due in the next seven days.
+- **Snooze to tomorrow** on any open task. On a phone the task actions sit in one **More actions** menu, so long names stay readable.
+- **The command palette** (Ctrl+K, ⌘K on a Mac) can claim your daily reward, start a 25-minute focus session and jump to what is overdue.
+- **The quest log remembers** its tab, filters and sort, and a game has its own link (`/games?play=snake`), so Back returns to the games menu.
+- **A late-evening daily claim keeps your streak.** A claim within 48 hours of the last one continues it (72 with protection, 96 with Sanctuary), even when it lands just after the following midnight.
+- **Perfect day needs a plan:** only tasks whose due date was set at least a day ahead count towards the three.
+- Every page has its own tab title, and screen readers hear calendar days, login errors and quick-add previews.
+
+## Fewer clicks (end of October 2026)
+
+- **Save your streak from Today:** the warning has a Claim now button and tells you when the streak actually ends (often not midnight), and it only appears once the reward can be claimed. The Dashboard shows it too.
+- **Act on Today's tasks:** open one in its quest, or snooze it to tomorrow.
+- **More in a task's details:** delete it (with Undo), snooze it or add a subtask without closing the drawer.
+- **Undo a bulk completion,** and **export one quest** as a spreadsheet or a Markdown checklist.
+- **Keyboard everywhere:** press `?` on any page for the shortcuts, and `g` then a letter to jump: `g t` Today, `g q` your quests, `g d` Dashboard.
+- **Chat:** the box grows as you type, a Jump to latest button, Copy on every answer, and New chat really starts over.
+- **In Discord,** `/list` says overdue by your own date, and someone else's `/profile` stays private when they turned XP off.
+
 ## The balance pass (October 2026)
 
 The rules were checked with a simulator against every class, and a few numbers were wrong.
@@ -58,4 +79,4 @@ If you bought one of the four skills above for a class you do not play, it stays
 
 ## Still to come
 
-See the roadmap in the [PRD](PRD.md#11-roadmap) and the [known issues](KNOWN_ISSUES.md).
+See the [ROADMAP](ROADMAP.md) and the [known issues](KNOWN_ISSUES.md).

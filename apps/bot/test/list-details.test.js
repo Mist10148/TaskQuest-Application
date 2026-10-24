@@ -102,6 +102,8 @@ test('paging the list select keeps the sort, filter and category row of the mess
 
     const asked = [];
     const realGetLists = db.tasks.getLists;
+    const realGetUser = db.users.getUser;
+    db.users.getUser = async () => ({ timezone: 'UTC' });
     db.tasks.getLists = async (userId, opts) => {
         asked.push(opts);
         return Array.from({ length: 30 }, (_, n) => ({ id: n + 1, name: `L${n}`, category: null, items_total: 0, items_completed: 0 }));
@@ -120,7 +122,24 @@ test('paging the list select keeps the sort, filter and category row of the mess
         assert.equal(sent[0].components[0].toJSON().components[0].custom_id, 'filter_category');
     } finally {
         db.tasks.getLists = realGetLists;
+        db.users.getUser = realGetUser;
     }
+});
+
+test("overdue follows the viewer's own date: due Oct 21 is not overdue on the evening of Oct 21 in Los Angeles", () => {
+    // 01:00 UTC on Oct 22 is 18:00 on Oct 21 in America/Los_Angeles.
+    const { todayInZone } = require('@taskquest/shared');
+    const today = todayInZone('America/Los_Angeles', new Date('2026-10-22T01:00:00Z'));
+    assert.equal(today, '2026-10-21');
+    const dueList = { ...list, deadline: '2026-10-21' };
+    const task = item(1, { due_date: '2026-10-21' });
+    assert.doesNotMatch(ui.itemMeta(task, today), /⚠️/);
+    assert.match(ui.itemMeta(task, '2026-10-22'), /⚠️/, 'and it is overdue once that day is over');
+    const view = ui.listViewEmbed(dueList, [task], 'view', null, today).toJSON();
+    assert.doesNotMatch(view.description, /⚠️/);
+    assert.doesNotMatch(view.footer.text, /Overdue/);
+    assert.doesNotMatch(ui.listsOverviewEmbed([dueList], '', '', today).toJSON().description, /⚠️/);
+    assert.match(ui.listsOverviewEmbed([dueList], '', '', '2026-10-22').toJSON().description, /⚠️/);
 });
 
 test('the lists overview stays under the embed limit for a user with hundreds of lists', () => {
@@ -153,4 +172,31 @@ test('sharing autocomplete offers a shared list that shares a name with your own
     ]);
     const share = autocompleteChoices(lists, () => true, 'wor');
     assert.deepEqual(share.map((c) => c.value), ['#1', '#2']);
+});
+
+test('/list acknowledges before reading the database, and a missing list is told privately', async () => {
+    const db = require('@taskquest/shared/db');
+    const { execute } = require('../commands/list');
+    const real = { ensureUser: db.users.ensureUser, getUser: db.users.getUser, getLists: db.tasks.getLists, getListByName: db.tasks.getListByName };
+    const calls = [];
+    db.users.ensureUser = async () => void calls.push('db');
+    db.users.getUser = async () => ({ timezone: 'UTC' });
+    db.tasks.getLists = async () => [];
+    db.tasks.getListByName = async () => null;
+    const fake = (name) => {
+        const rec = (type) => async (p) => void calls.push([type, p]);
+        return { user: { id: '1' }, options: { getString: () => name }, deferReply: rec('deferReply'), editReply: rec('editReply'), deleteReply: rec('deleteReply'), followUp: rec('followUp') };
+    };
+    try {
+        await execute(fake(null));
+        assert.equal(calls[0][0], 'deferReply', 'deferred first');
+        assert.equal(calls.at(-1)[0], 'editReply');
+        calls.length = 0;
+        await execute(fake('nope'));
+        assert.deepEqual(calls.filter(Array.isArray).map(([t]) => t), ['deferReply', 'deleteReply', 'followUp']);
+        assert.ok(calls.at(-1)[1].flags, 'the not-found note is ephemeral');
+    } finally {
+        Object.assign(db.users, { ensureUser: real.ensureUser, getUser: real.getUser });
+        Object.assign(db.tasks, { getLists: real.getLists, getListByName: real.getListByName });
+    }
 });

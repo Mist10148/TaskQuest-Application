@@ -113,12 +113,18 @@ class ItemFields(Args):
         return lines
 
 
+MAX_ID = 2_147_483_647
+
+
 def _parse_id(value: str, prefix: str) -> int:
     """Accept 42, "42" or "L42"/"I42" (the ids the model sees in context)."""
     m = re.fullmatch(rf"(?:{prefix})?(\d+)", str(value).strip(), re.IGNORECASE)
     if not m:
         raise ToolError(f"Invalid id: {value!r}")
-    return int(m.group(1))
+    number = int(m.group(1))
+    if number > MAX_ID:  # the database column is a 32-bit integer; a longer number would be a driver error, not a refusal
+        raise ToolError(f"Invalid id: {value!r}")
+    return number
 
 
 def _list_view(lst: dict[str, Any], today: date) -> dict[str, Any]:

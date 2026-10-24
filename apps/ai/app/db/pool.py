@@ -19,7 +19,7 @@ _PG_EPOCH = datetime(2000, 1, 1)
 
 def ssl_context(settings: Settings) -> ssl.SSLContext | None:
     """TLS settings matching packages/shared/src/db/pool.js (DB_SSL, DB_SSL_CA, DB_SSL_REJECT_UNAUTHORIZED)."""
-    if not settings.db_ssl:
+    if not settings.ssl_enabled:
         return None
     # DB_SSL_CA holds PEM contents, not a path; hosts often store newlines escaped.
     cadata = settings.db_ssl_ca.replace("\\n", "\n") if settings.db_ssl_ca else None

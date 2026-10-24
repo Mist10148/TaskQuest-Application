@@ -30,6 +30,7 @@ import {
     gamesApi,
     questsApi,
     statsApi,
+    xpApi,
     focusApi,
     reviewApi,
     todayApi,
@@ -85,6 +86,7 @@ function invalidateTaskViews(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['items'] }); // a task's history and comments in the detail drawer
     qc.invalidateQueries({ queryKey: ['today'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
+    qc.invalidateQueries({ queryKey: ['parties'] }); // the party's weekly task count
 }
 
 /** Refresh everything that depends on the player's XP balance. */
@@ -101,6 +103,8 @@ export function invalidateProgress(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['stats'] });
     qc.invalidateQueries({ queryKey: ['prestige'] });
     qc.invalidateQueries({ queryKey: ['today'] });
+    qc.invalidateQueries({ queryKey: ['parties'] }); // party progress counts tasks and focus minutes
+    qc.invalidateQueries({ queryKey: ['xp-history'] });
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -469,7 +473,15 @@ export function useDeleteComment() {
 export function useDeleteItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (itemId: number) => itemsApi.delete(itemId),
+        // A task that is already gone (its quest was deleted inside the Undo window, or someone else removed it) is what a
+        // delete wants, so a 404 counts as done rather than an error toast.
+        mutationFn: async (itemId: number) => {
+            try {
+                await itemsApi.delete(itemId);
+            } catch (err) {
+                if (!(typeof err === 'object' && err !== null && (err as { status?: number }).status === 404)) throw err;
+            }
+        },
         onSuccess: () => {
             invalidateTaskViews(qc);
             qc.invalidateQueries({ queryKey: ['auth'] });
@@ -662,7 +674,12 @@ export function useClaimQuest() {
 // ─── Stats & weekly review ───────────────────────────────────────────────────
 
 export function useXpHistory(days: HistoryRange) {
-    return useQuery({ queryKey: ['stats', 'xp-history', days], queryFn: () => statsApi.xpHistory(days) });
+    return useQuery({ queryKey: ['stats', 'xp-history', days], queryFn: ({ signal }) => statsApi.xpHistory(days, signal) });
+}
+
+/** The player's last 50 XP transactions (earned and spent). Refreshed with the rest of the progress data. */
+export function useXpLedger() {
+    return useQuery({ queryKey: ['xp-history'], queryFn: xpApi.getHistory });
 }
 
 export function useStatsSummary() {
@@ -907,7 +924,7 @@ export function useAchievements() {
 }
 
 export function useLeaderboard(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
-    return useQuery({ queryKey: ['leaderboard', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.get(by, playerClass) });
+    return useQuery({ queryKey: ['leaderboard', by, playerClass ?? 'ALL'], queryFn: ({ signal }) => leaderboardApi.get(by, playerClass, signal) });
 }
 
 export function useGameAllowance() {
@@ -916,7 +933,7 @@ export function useGameAllowance() {
 
 /** The signed-in player's own rank on a board (null when they have no score there yet). */
 export function useMyRank(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
-    return useQuery({ queryKey: ['leaderboard', 'me', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.me(by, playerClass) });
+    return useQuery({ queryKey: ['leaderboard', 'me', by, playerClass ?? 'ALL'], queryFn: ({ signal }) => leaderboardApi.me(by, playerClass, signal) });
 }
 
 export function useGameHistory() {
@@ -945,16 +962,6 @@ export function usePrioritize(limit = 5) {
 
 export function useChatThreads(enabled = true) {
     return useQuery({ queryKey: ['ai', 'threads'], queryFn: aiApi.threads, enabled, retry: false });
-}
-
-export function useThread(threadId: string | null) {
-    return useQuery({
-        queryKey: ['ai', 'threads', threadId],
-        queryFn: () => aiApi.thread(threadId as string),
-        enabled: Boolean(threadId),
-        staleTime: 0,
-        retry: false,
-    });
 }
 
 export function useDeleteThread() {

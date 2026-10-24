@@ -4,10 +4,10 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ useChat: vi.fn(), send: vi.fn(), acknowledgeCreated: vi.fn() }));
+const mocks = vi.hoisted(() => ({ useChat: vi.fn(), send: vi.fn(), acknowledgeCreated: vi.fn(), threadsLoading: false }));
 vi.mock("@/hooks/useChat", () => ({ useChat: mocks.useChat }));
 vi.mock("@/hooks/useApi", () => ({
-  useChatThreads: () => ({ data: { threads: [{ id: "t1", title: "Plans" }] }, isLoading: false, isError: false, refetch: vi.fn(), isFetching: false }),
+  useChatThreads: () => ({ data: mocks.threadsLoading ? undefined : { threads: [{ id: "t1", title: "Plans" }] }, isLoading: mocks.threadsLoading, isError: false, refetch: vi.fn(), isFetching: false }),
   useDeleteThread: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { features: { ai: true } } }) }));
@@ -31,6 +31,7 @@ const chatState = (over: Record<string, unknown> = {}) => ({
   send: mocks.send,
   respond: vi.fn(),
   stop: vi.fn(),
+  reset: vi.fn(),
   ...over,
 });
 
@@ -110,5 +111,63 @@ describe("Chat page", () => {
     renderAt("/chat/t1");
     expect(screen.getByRole("button", { name: "Plans" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: /show conversations/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("says who is speaking in each message", () => {
+    mocks.useChat.mockReturnValue(chatState({
+      messages: [
+        { id: "u", role: "user", text: "Hello", sources: [], tools: [] },
+        { id: "a", role: "assistant", text: "Hi there", sources: [], tools: [] },
+      ],
+    }));
+    renderAt("/chat/t1");
+    expect(screen.getByText("You said:")).toBeInTheDocument();
+    expect(screen.getByText("Assistant said:")).toBeInTheDocument();
+  });
+
+  it("on a phone, the conversation list takes focus, hides the chat behind it, and Escape returns to the toggle", async () => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false }) as unknown as typeof window.matchMedia;
+    mocks.useChat.mockReturnValue(chatState());
+    renderAt("/chat/t1");
+    const toggle = screen.getByRole("button", { name: /show conversations/i });
+    await userEvent.click(toggle);
+    expect(screen.getByRole("button", { name: /new chat/i })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Message", hidden: true }).closest("section")).toHaveAttribute("inert");
+    await userEvent.keyboard("{Escape}");
+    expect(toggle).toHaveFocus();
+    expect(toggle.closest("section")).not.toHaveAttribute("inert");
+  });
+
+  it("New chat starts over even on /chat, where the address does not change", async () => {
+    const reset = vi.fn();
+    mocks.useChat.mockReturnValue(chatState({ reset }));
+    renderAt("/chat");
+    await userEvent.click(screen.getByRole("button", { name: /new chat/i }));
+    expect(reset).toHaveBeenCalled();
+  });
+
+  it("shows placeholder rows while the conversations load", () => {
+    mocks.threadsLoading = true;
+    mocks.useChat.mockReturnValue(chatState());
+    renderAt("/chat");
+    expect(screen.getByRole("status", { name: "Loading conversations" })).toBeInTheDocument();
+    mocks.threadsLoading = false;
+  });
+
+  it("copies a finished answer, but not one still being written", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    mocks.useChat.mockReturnValue(chatState({
+      messages: [
+        { id: "a", role: "assistant", text: "Start with math", sources: [], tools: [] },
+        { id: "b", role: "assistant", text: "Then", sources: [], tools: [], streaming: true },
+      ],
+    }));
+    renderAt("/chat/t1");
+    const buttons = screen.getAllByRole("button", { name: "Copy" });
+    expect(buttons).toHaveLength(1);
+    await userEvent.click(buttons[0]);
+    expect(writeText).toHaveBeenCalledWith("Start with math");
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
   });
 });

@@ -26,9 +26,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
 from app.db import pool, repo
+from app.db.dialect import is_postgres
 from app.llm_call import structured_call
 from app.prompts import load_prompt
-from app.rag.chunking import item_details, item_label, list_label, sha256
+from app.rag.chunking import item_details, item_label, list_label, prompt_safe, sha256
 
 log = logging.getLogger("taskquest.ai.summarize")
 
@@ -183,7 +184,7 @@ class Summarizer:
 
     async def _ask(self, mode: str, today: date, body: str, extra: str = "") -> Summary:
         return await self.chain.ainvoke(
-            {"system": self.system, "mode": mode, "today": today.isoformat(), "body": body, "extra": extra}
+            {"system": self.system, "mode": mode, "today": today.isoformat(), "body": prompt_safe(body), "extra": extra}
         )
 
     async def summarize_text(self, mode: str, today: date, rendered: RenderedInput) -> tuple[Summary, int]:
@@ -223,7 +224,16 @@ async def get_cached(conn: AsyncConnection, discord_id: str, scope_key: str, inp
     return None
 
 
+CACHE_KEEP_DAYS = 7
+"""Cached summaries older than this are dropped: the daily and weekly scope keys carry the date, so each day adds a row."""
+
+
 async def put_cache(conn: AsyncConnection, discord_id: str, scope_key: str, input_hash: str, summary: Summary) -> None:
+    cutoff = datetime.now(UTC) - timedelta(days=CACHE_KEEP_DAYS)
+    await conn.execute(
+        text("DELETE FROM ai_summary_cache WHERE discord_id = :uid AND created_at <= :cutoff"),
+        {"uid": discord_id, "cutoff": cutoff if is_postgres(conn) else cutoff.strftime("%Y-%m-%d %H:%M:%S")},
+    )
     params = {"uid": discord_id, "k": scope_key, "h": input_hash, "j": summary.model_dump_json()}
     update = text(
         "UPDATE ai_summary_cache SET input_hash = :h, summary_json = :j, created_at = CURRENT_TIMESTAMP "

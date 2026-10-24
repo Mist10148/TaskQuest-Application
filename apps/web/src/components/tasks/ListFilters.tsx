@@ -2,12 +2,16 @@ import { Check, CheckCircle2, Clock, Filter, ListTodo, Scroll, Search, SortAsc, 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { radioKeyDown } from "@/lib/radioGroup";
 import { CATEGORIES, PRIORITIES, SORT_OPTIONS, type ListTab } from "./constants";
 import type { useListFilters } from "./useListFilters";
+
+const SEARCH_SCOPES = ["quests", "tasks"] as const;
 
 const TABS: Array<{ value: ListTab; label: string; icon: typeof Scroll }> = [
   { value: "all", label: "All", icon: Scroll },
@@ -53,13 +57,15 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
       </div>
       <div className="flex gap-2 flex-wrap">
         <div className="flex p-1 bg-background-secondary rounded-lg" role="radiogroup" aria-label="Search in">
-          {(["quests", "tasks"] as const).map((scope) => (
+          {SEARCH_SCOPES.map((scope, index) => (
             <button
               key={scope}
               type="button"
               role="radio"
               aria-checked={filters.searchScope === scope}
+              tabIndex={filters.searchScope === scope ? 0 : -1}
               onClick={() => filters.setSearchScope(scope)}
+              onKeyDown={(e) => radioKeyDown(e, index, SEARCH_SCOPES, filters.setSearchScope)}
               className={cn(
                 "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
                 filters.searchScope === scope ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground"
@@ -71,7 +77,7 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="relative" aria-label="Filter quests">
+            <Button variant="outline" size="icon" className="relative" aria-label={filters.activeFilters > 0 ? `Filter quests (${filters.activeFilters} active)` : "Filter quests"}>
               <Filter className="h-4 w-4" />
               {filters.activeFilters > 0 && (
                 <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[0.625rem] flex items-center justify-center font-bold">
@@ -84,23 +90,23 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
             <DropdownMenuLabel>Filter By</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <div className="p-2">
-              <label className="text-xs text-foreground-muted block mb-1">Category</label>
+              <label htmlFor="quest-filter-category" className="text-xs text-foreground-muted block mb-1">Category</label>
               <Select value={filters.categoryFilter} onValueChange={filters.setCategoryFilter}>
-                <SelectTrigger className="h-8" aria-label="Category"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="quest-filter-category" className="h-8" aria-label="Category"><SelectValue /></SelectTrigger>
                 <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.emoji} {c.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="p-2">
-              <label className="text-xs text-foreground-muted block mb-1">Priority</label>
+              <label htmlFor="quest-filter-priority" className="text-xs text-foreground-muted block mb-1">Priority</label>
               <Select value={filters.priorityFilter} onValueChange={filters.setPriorityFilter}>
-                <SelectTrigger className="h-8" aria-label="Priority"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="quest-filter-priority" className="h-8" aria-label="Priority"><SelectValue /></SelectTrigger>
                 <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.emoji} {p.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="p-2">
-              <label className="text-xs text-foreground-muted block mb-1">Status</label>
+              <label htmlFor="quest-filter-status" className="text-xs text-foreground-muted block mb-1">Status</label>
               <Select value={filters.statusFilter} onValueChange={filters.setStatusFilter}>
-                <SelectTrigger className="h-8" aria-label="Status"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="quest-filter-status" className="h-8" aria-label="Status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
@@ -122,11 +128,12 @@ export const ListFilters = ({ filters }: { filters: Filters }) => (
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Sort By</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {SORT_OPTIONS.map((o) => (
-              <DropdownMenuItem key={o.value} onClick={() => filters.setSortBy(o.value)}>
-                {filters.sortBy === o.value && <Check className="h-4 w-4 mr-2" />}{o.label}
-              </DropdownMenuItem>
-            ))}
+            {/* Radio items tell assistive technology which order is the current one, not just a check icon. */}
+            <DropdownMenuRadioGroup value={filters.sortBy} onValueChange={(v) => filters.setSortBy(v as typeof filters.sortBy)}>
+              {SORT_OPTIONS.map((o) => (
+                <DropdownMenuRadioItem key={o.value} value={o.value}>{o.label}</DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

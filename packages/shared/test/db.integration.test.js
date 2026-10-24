@@ -747,10 +747,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await db.tasks.getList(BOB, list.id), null);
         assert.ok(await db.tasks.getList(BOB, unfinished.id), 'unfinished lists survive, even when overdue');
 
+        await db.getPool().query("INSERT INTO xp_transactions_archive (id, discord_id, amount, source) VALUES (2000000001, ?, 5, 'task')", [BOB]);
         await db.users.resetProgress(BOB);
         const bob = await db.users.getUser(BOB);
         assert.equal(Number(bob.player_xp), 0);
         assert.equal(Number(bob.lifetime_xp), 0);
+        const [left] = await db.getPool().query('SELECT id FROM xp_transactions_archive WHERE discord_id = ?', [BOB]);
+        assert.equal(left.length, 0, 'a reset also removes the rows `npm run archive` moved out');
     });
 
     await t.test('quests cannot be farmed by re-checking, importing, priority edits or recurring copies', async () => {
@@ -777,6 +780,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { item: c } = await db.tasks.addItem(QID, list.id, { name: 'c', priority: 'high' });
         await db.tasks.setItemCompleted(QID, c.id, true);
         assert.equal(await progress('DAILY_HIGH_1'), 1);
+        // a claim made under another time zone key still reads as claimed, since claiming again would be refused
+        await db.quests.claimQuest(QID, 'DAILY_HIGH_1');
+        await db.getPool().query("UPDATE quest_claims SET period_start = period_start - 1 WHERE discord_id = ? AND quest_key = 'DAILY_HIGH_1'", [QID]);
+        const high = (await db.quests.getQuests(QID)).find((q) => q.key === 'DAILY_HIGH_1');
+        assert.deepEqual([high.claimed, high.claimable], [true, false]);
+        await assert.rejects(db.quests.claimQuest(QID, 'DAILY_HIGH_1'), { code: 'CONFLICT' });
 
         // imported tasks (even completed ones) satisfy no quest
         const before = { done: await progress('DAILY_COMPLETE_3'), adds: await progress('DAILY_ADD_3') };
@@ -1004,6 +1013,12 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { list: plan } = await db.tasks.createList(E, { name: 'Plan' });
         const due = [];
         for (let n = 0; n < 3; n++) due.push(await add(E, plan.id, { due_date: day(0) }));
+        for (const id of due) await ageDue(id); // planned a day ahead
+        // dates given just now are not planned ahead: three fresh tasks due today, all finished, pay nothing
+        const E2 = '100000000000000599';
+        await db.users.ensureUser(E2);
+        const { list: rushed } = await db.tasks.createList(E2, { name: 'Rushed' });
+        for (let n = 0; n < 3; n++) assert.ok(!keys(await db.tasks.setItemCompleted(E2, await add(E2, rushed.id, { due_date: day(0) }))).includes('perfect_day'));
         assert.ok(!keys(await db.tasks.setItemCompleted(E, due[0])).includes('perfect_day'));
         assert.ok(!keys(await db.tasks.setItemCompleted(E, due[1])).includes('perfect_day'));
         const perfect = await db.tasks.setItemCompleted(E, due[2]);
@@ -1210,6 +1225,15 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual([r.counts.dueToday, r.counts.overdue, r.counts.doneToday], [1, 1, 1], 'subtasks and finished tasks are not counted');
         assert.equal(r.tasks[0].id, late);
         assert.equal(r.tasks[2].id, urgent);
+        // upcoming: open tasks due in the next week, soonest first; nothing past a week, and nothing already listed above
+        assert.deepEqual(r.upcoming.map((x) => x.name), ['later']);
+        await add({ name: 'far', due_date: day(8) });
+        await add({ name: 'soon', due_date: day(1) });
+        await add({ name: 'big', due_date: day(3), priority: 'high' });
+        const next = await db.today.getToday(Y);
+        assert.deepEqual(next.upcoming.map((x) => x.name), ['soon', 'later']);
+        assert.ok(next.tasks.some((x) => x.name === 'big'), 'a HIGH task due this week is in the main list');
+        assert.equal(next.upcoming[0].dueDate, day(1));
 
         // the streak: claimed today is safe; a streak last claimed yesterday has until the end of today
         await db.query('UPDATE users SET streak_count = 5, last_daily_claim = CURRENT_TIMESTAMP WHERE discord_id = ?', [Y]);
@@ -1334,7 +1358,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
     await t.test('streak warnings: only a live streak whose last day it is, in the evening, once a day', async () => {
         const W = '100000000000000931';
         await db.users.ensureUser(W);
-        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 1), automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?", [W]);
+        // Claimed at noon UTC yesterday, so the cooldown is over by this evening whatever time the suite runs.
+        const yesterdayNoon = new Date(Date.parse(`${require('../src').todayInZone()}T12:00:00Z`) - 86400e3);
+        await db.query('UPDATE users SET streak_count = 6, last_daily_claim = ?, automation_enabled = 1, gamification_enabled = 1, timezone = NULL WHERE discord_id = ?', [yesterdayNoon, W]);
         const at = (hour) => new Date(`${require('../src').todayInZone()}T${String(hour).padStart(2, '0')}:30:00Z`);
         const ids = async (hour) => (await db.today.getStreakWarnings(at(hour))).map((w) => w.discord_id);
 
@@ -1380,7 +1406,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
 
         // archive: old rows move, recent ones stay, a dry run changes nothing, and the move can be repeated
         await db.query("UPDATE xp_transactions SET created_at = (created_at - make_interval(days => 400)) WHERE discord_id = ? AND source = 'item_add'", [A]);
-        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < (CURRENT_TIMESTAMP - make_interval(days => 365))", [A]))[0].n);
+        // A once-per-parent bonus row stays however old it is, so archiving cannot let it pay twice.
+        await db.query("INSERT INTO xp_transactions (discord_id, amount, source, balance_before, balance_after, reference_id, created_at) VALUES (?, 15, 'subtasks_done', 0, 15, 424242, (CURRENT_TIMESTAMP - make_interval(days => 400)))", [A]);
+        const old = Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND created_at < (CURRENT_TIMESTAMP - make_interval(days => 365)) AND source <> 'subtasks_done'", [A]))[0].n);
         assert.ok(old >= 3);
         const dry = await db.maintenance.archiveOld({ days: 365, dryRun: true });
         assert.ok(dry.dryRun && dry.xpTransactions >= old && dry.gameSessions === null);
@@ -1391,6 +1419,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_add'", [A]))[0].n), 0);
         assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'item_complete'", [A]))[0].n), 3, 'recent rows stay');
         assert.equal((await db.maintenance.archiveOld({ days: 365 })).xpTransactions, 0, 'nothing is left to move');
+        assert.equal(Number((await db.query("SELECT COUNT(*) AS n FROM xp_transactions WHERE discord_id = ? AND source = 'subtasks_done'", [A]))[0].n), 1, 'the once-only bonus stays in the log');
         assert.equal((await db.query("SELECT player_class FROM xp_transactions_archive WHERE discord_id = ? LIMIT 1", [A]))[0].player_class, 'HERO');
         await assert.rejects(db.maintenance.archiveOld({ days: 0 }), /days/);
         await assert.rejects(db.maintenance.archiveOld({ batch: 0 }), /batch/);
@@ -2055,6 +2084,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(db.review.claimReview(U), { code: 'CONFLICT' });
         const [[row]] = await db.getPool().query("SELECT COUNT(*) AS n FROM quest_claims WHERE discord_id = ? AND quest_key = 'WEEKLY_REVIEW'", [U]);
         assert.equal(Number(row.n), 1);
+        // a time zone change re-keys the week: the review must not read as claimable when claiming it would be refused
+        await db.query("UPDATE quest_claims SET period_start = period_start - 1 WHERE discord_id = ? AND quest_key = 'WEEKLY_REVIEW'", [U]);
+        const rekeyed = await db.review.getReview(U);
+        assert.deepEqual([rekeyed.claimed, rekeyed.claimable], [true, false]);
 
         // Next week it opens again, but only for work done in that week.
         const nextWeek = new Date(Date.now() + 7 * 86400e3);
@@ -2312,6 +2345,11 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].includes(summary.busiestWeekday.name));
         const none = await db.stats.getStatsSummary('100000000000000199');
         assert.deepEqual([none.streak, none.tasksCompleted7d, none.xpBySource30d.length, none.busiestWeekday], [0, 0, 0, null]);
+        // a lapsed streak reads 0, as on Today, before any claim resets the stored count
+        await db.query("UPDATE users SET streak_count = 6, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 5) WHERE discord_id = ?", [U]);
+        assert.equal((await db.stats.getStatsSummary(U)).streak, 0);
+        await db.query("UPDATE users SET last_daily_claim = CURRENT_TIMESTAMP - make_interval(hours => 2) WHERE discord_id = ?", [U]);
+        assert.equal((await db.stats.getStatsSummary(U)).streak, 6);
     });
 
     await t.test('CSV export round-trips through csvToImport and importAll without rewards', async () => {
@@ -2780,6 +2818,33 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal((await db.access.forItem(conn, SL.viewer, f.a.id)).item.list_name, 'Household');
         assert.equal(await db.access.roleOn(conn, SL.stranger, f.list.id), null);
         assert.equal(await db.access.roleOn(conn, SL.editor, f.list.id), 'editor');
+        assert.equal(await db.access.canUseList(conn, SL.viewer, f.list.id), true);
+        assert.equal(await db.access.canUseList(conn, SL.owner, f.list.id), true);
+        assert.equal(await db.access.canUseList(conn, SL.stranger, f.list.id), false);
+        assert.equal(await db.access.canUseList(conn, SL.owner, 99999999), false);
+
+        // A stranger asking for a locked task is refused at once, without queuing behind the list's lock.
+        let locked;
+        let release;
+        const lockTaken = new Promise((r) => (locked = r));
+        const held = new Promise((r) => (release = r));
+        const holder = db.withTransaction(async (c) => {
+            await c.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [f.list.id]);
+            locked();
+            await held;
+        });
+        await lockTaken;
+        try {
+            const started = Date.now();
+            await assert.rejects(
+                db.withTransaction((c) => db.access.forItem(c, SL.stranger, f.a.id, 'viewer', { lock: true })),
+                { code: 'NOT_FOUND' }
+            );
+            assert.ok(Date.now() - started < 1000, 'the stranger did not wait for the lock');
+        } finally {
+            release();
+            await holder;
+        }
     });
 
     await t.test('shared lists: role matrix over every task and list operation', async () => {
@@ -3152,6 +3217,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.query('UPDATE list_invites SET expires_at = CURRENT_TIMESTAMP - make_interval(hours => 1) WHERE id = ?', [first.id]);
         assert.deepEqual(await S.listInvites(a), []);
         await assert.rejects(S.respond(a, first.id, true), { code: 'CONFLICT', message: /expired/ });
+        assert.equal((await db.query('SELECT status FROM list_invites WHERE id = ?', [first.id]))[0].status, 'revoked', 'the revocation is kept');
         const second = await S.invite(O, list.id, { discordId: a, role: 'viewer' });
         assert.deepEqual((await S.listInvites(a)).map((i) => i.id), [second.id]);
         assert.deepEqual(await S.respond(a, second.id, true), { accepted: true, list: { id: list.id, name: 'Service list' }, role: 'viewer' });
@@ -3702,6 +3768,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.query('UPDATE party_invites SET expires_at = CURRENT_TIMESTAMP - make_interval(hours => 1) WHERE id = ?', [again.id]);
         assert.deepEqual(await PA.listInvites(more.at(-1)), []);
         await assert.rejects(PA.respond(more.at(-1), again.id, true), { code: 'CONFLICT', message: /expired/ });
+        assert.equal((await db.query('SELECT status FROM party_invites WHERE id = ?', [again.id]))[0].status, 'revoked', 'the revocation is kept');
         const declined = await PA.invite(u.own, { discordId: more.at(-1) });
         assert.equal((await PA.respond(more.at(-1), declined.id, false)).accepted, false);
         // Disbanding removes everyone; a member who was in it is free to join elsewhere.
@@ -4030,6 +4097,11 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await db.tasks.deleteItem(Q, recurring.id);
         await db.tasks.deleteItem(Q, parent.id);
         await db.tasks.addItem(Q, base.id, { name: 'fits now' });
+        // One slot left: the owner adding to one list and a member adding to another at the same moment take it once.
+        const other = (await db.query("SELECT id FROM lists WHERE discord_id = ? AND name = 'Room again'", [Q]))[0].id;
+        const race = await Promise.allSettled([db.tasks.addItem(Q, other, { name: 'owner last' }), db.tasks.addItem(M, base.id, { name: 'member last' })]);
+        assert.equal(race.filter((r) => r.status === 'fulfilled').length, 1, 'the quota is counted one add at a time');
+        assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [Q]))[0].n), L.MAX_ITEMS_PER_USER);
     });
 
     await t.test('a re-opened list does not pay the Artisan clear bonus or list_cleared a second time', async () => {

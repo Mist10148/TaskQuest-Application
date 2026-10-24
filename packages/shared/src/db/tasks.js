@@ -433,8 +433,10 @@ async function addSubtasks(discordId, parentId, names, scope = {}) {
     if (!Array.isArray(names) || !names.length || names.length > 20) throw errors.validation('Give between 1 and 20 subtask names.');
     const parsed = names.map((name) => parseItemInput(0, { name }));
     return withTransaction(async (conn) => {
-        // Lock order is the user row first, then list and item rows (as addItemIn and setItemCompleted do), or two requests deadlock.
-        await lockUser(conn, discordId);
+        // Lock order is the user rows first (yours and the list owner's, for the quota), then list and item rows (as addItemIn and
+        // setItemCompleted do), or two requests deadlock.
+        const [[peek]] = await conn.query('SELECT list_id FROM items WHERE id = ?', [pid]);
+        await lockQuotaOwners(conn, discordId, peek ? [peek.list_id] : []);
         const { item: parent, isOwner } = await writableItem(conn, discordId, pid, 'editor', scope);
         if (parent.parent_id !== null) throw errors.validation('Subtasks can only be one level deep.');
         const items = [];
@@ -460,9 +462,32 @@ async function addItems(discordId, listId, inputs) {
     });
 }
 
+/**
+ * Lock the actor's user row and the owners of the given lists (in id order, all before any list: see access.js), so two
+ * people adding to one owner's lists at once count that owner's task quota one after the other. Owners of lists the actor
+ * cannot use are skipped: the write is refused later without queuing on a stranger's row. Returns the actor's row and the
+ * owner seen for each list, which the caller re-checks under the list lock.
+ */
+async function lockQuotaOwners(conn, discordId, listIds) {
+    const me = String(discordId);
+    const owners = new Map();
+    for (const lid of new Set(listIds)) {
+        if (!(await access.canUseList(conn, me, lid))) continue;
+        const [[row]] = await conn.query('SELECT discord_id FROM lists WHERE id = ?', [lid]);
+        if (row) owners.set(lid, String(row.discord_id));
+    }
+    let user = null;
+    for (const id of [...new Set([me, ...owners.values()])].sort()) {
+        const row = await lockUser(conn, id);
+        if (id === me) user = row;
+    }
+    return { user, owners };
+}
+
 async function addItemIn(conn, discordId, { lid, name, description, extras, parentId }, scope = {}) {
-    const user = await lockUser(conn, discordId);
+    const { user, owners } = await lockQuotaOwners(conn, discordId, [lid]);
     const { list, isOwner } = await writableList(conn, user.discord_id, lid, 'editor', scope);
+    if (owners.has(lid) && owners.get(lid) !== String(list.discord_id)) throw errors.conflict('This quest just changed owner. Try again.');
     // The quota is the list OWNER's: a member adding to a shared list grows the owner's data. (Repeat copies from
     // spawnNextOccurrence stops at the same limit: the completed task stays, so a copy is a new row.)
     const [[owned]] = await conn.query('SELECT COUNT(*) AS n FROM items i JOIN lists l ON l.id = i.list_id WHERE l.discord_id = ?', [list.discord_id]);
@@ -658,6 +683,8 @@ async function moveItemToList(discordId, itemId, targetListId) {
         // Only queue for the locks of lists the caller can use: a stranger is refused below without delaying anyone.
         const lockable = [];
         for (const lid of new Set([peek.list_id, targetId])) if (await access.canUseList(conn, me, lid)) lockable.push(lid);
+        // The target owner's quota is counted below: lock their user row (before any list) so a concurrent add cannot slip past it.
+        const { owners } = await lockQuotaOwners(conn, me, [targetId]);
         for (const lid of lockable.sort((a, b) => a - b)) {
             await conn.query('SELECT id FROM lists WHERE id = ? FOR UPDATE', [lid]);
         }
@@ -667,6 +694,7 @@ async function moveItemToList(discordId, itemId, targetListId) {
         if (item.list_id === targetId) throw errors.validation('The task is already on that quest.');
         if (!mayDelete(role, item, me)) throw errors.forbidden('Editors can only move tasks they added themselves and that nobody else finished. Ask a manager of this list.');
         const { list: target } = await access.forList(conn, me, targetId, 'editor', { lock: true });
+        if (owners.has(targetId) && owners.get(targetId) !== String(target.discord_id)) throw errors.conflict('That quest just changed owner. Try again.');
 
         const [rows] = await conn.query('SELECT id, created_by FROM items WHERE id = ? OR parent_id = ? ORDER BY position, id FOR UPDATE', [id, id]);
         if (!access.atLeast(role, 'manager') && rows.some((r) => r.id !== id && (r.created_by === null || String(r.created_by) !== me))) {
@@ -778,7 +806,10 @@ function trustedDueDate(item, now) {
  */
 async function completionContext(conn, item, user, now = new Date()) {
     const today = todayInZone(user.timezone);
-    let dueDate = trustedDueDate(item, now);
+    // The trusted date for the flat deadline bonuses, which have their own daily XP cap; `dueDate` below may be cleared for
+    // the class rules only.
+    const trustedDue = trustedDueDate(item, now);
+    let dueDate = trustedDue;
     const [[counts]] = await conn.query(
         'SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE completed = 0) AS open FROM items WHERE list_id = ? AND parent_id IS NULL',
         [item.list_id]
@@ -831,6 +862,9 @@ async function completionContext(conn, item, user, now = new Date()) {
         // The stored date whatever its age: habit streaks follow the schedule, not the bonuses.
         scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null,
         overdueDays: dueDate ? Math.max(0, daysBetween(dueDate, today)) : 0,
+        // The same two without the class cap: early_finish, overdue_clear and inbox_zero are not class rules.
+        bonusDueDate: trustedDue,
+        bonusOverdueDays: trustedDue ? Math.max(0, daysBetween(trustedDue, today)) : 0,
         firstOfDay: (await countToday(conn, user, 'item_complete', now)) === 0,
         // Imported tasks and auto-spawned copies (counts_for_quests = 0) never mark a list as cleared, so they must not pay the clear bonus either.
         listCleared: Number(item.counts_for_quests) !== 0 && !item.recurrence && !item.parent_id && Number(counts.total) >= 3 && Number(counts.open) === 0 && !(marked && marked.cleared_at)
@@ -864,10 +898,10 @@ async function completionBonuses(conn, user, item, ctx) {
     }
 
     const deadlineCap = { dailyCap: LIMITS.DEADLINE_BONUS_XP_PER_DAY, capSources: ['early_finish', 'overdue_clear'], referenceId: item.id };
-    if (ctx.dueDate && ctx.dueDate > ctx.today) {
-        const early = Math.min(LIMITS.EARLY_FINISH_MAX, REWARDS.EARLY_FINISH_PER_DAY * daysBetween(ctx.today, ctx.dueDate));
+    if (ctx.bonusDueDate && ctx.bonusDueDate > ctx.today) {
+        const early = Math.min(LIMITS.EARLY_FINISH_MAX, REWARDS.EARLY_FINISH_PER_DAY * daysBetween(ctx.today, ctx.bonusDueDate));
         await pay('early_finish', early, deadlineCap);
-    } else if (ctx.overdueDays > 0) {
+    } else if (ctx.bonusOverdueDays > 0) {
         await pay('overdue_clear', REWARDS.OVERDUE_CLEAR, deadlineCap);
     }
 

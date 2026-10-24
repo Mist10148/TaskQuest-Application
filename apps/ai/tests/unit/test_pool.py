@@ -65,3 +65,12 @@ def test_url_is_postgres_with_ai_credentials():
         db_url="postgresql://app:pw@db.example:6543/tq", ai_db_user="ai", ai_db_password="s3cret"
     ).sqlalchemy_url
     assert url == "postgresql+asyncpg://ai:s3cret@db.example:6543/tq"
+
+
+def test_sslmode_in_the_database_url_turns_tls_on():
+    base = "postgresql://u:p@db.example.com:5432/postgres"
+    assert ssl_context(Settings(db_url=base)) is None
+    assert ssl_context(Settings(db_url=base + "?sslmode=disable")) is None
+    for mode in ("require", "verify-ca", "verify-full"):
+        assert ssl_context(Settings(db_url=f"{base}?sslmode={mode}")) is not None
+    assert ssl_context(Settings(db_url="sqlite+aiosqlite://")) is None

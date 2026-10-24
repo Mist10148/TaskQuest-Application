@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Check, Circle } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { calendarKeyTarget, monthGrid, shiftMonth, tasksByDate } from "@/lib/taskViews";
-import { localToday } from "@/lib/dates";
+import { formatDayLabel, localToday } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -75,7 +75,7 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
                   data-date={cell.date}
                   tabIndex={cell.date === tabStop ? 0 : -1}
                   onKeyDown={(e) => onGridKey(e, cell.date)}
-                  aria-label={`${cell.date}${tasks.length ? `, ${open} open of ${tasks.length}${overdue ? ", overdue" : ""}` : ""}`}
+                  aria-label={`${formatDayLabel(cell.date)}${cell.date === today ? ", today" : ""}${tasks.length ? `, ${open} open of ${tasks.length}${overdue ? ", overdue" : ""}` : ""}`}
                   onClick={() => setPicked(cell.date)}
                   className={cn(
                     "flex min-h-14 flex-col items-start rounded-md border p-1 text-left text-xs transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20",
@@ -86,8 +86,16 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
                 >
                   <span className="font-medium">{Number(cell.date.slice(8, 10))}</span>
                   {tasks.length > 0 && (
-                    <span className={cn("mt-auto rounded-full px-1.5 py-0.5 text-[0.625rem] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
-                      {overdue ? `${open} overdue` : open > 0 ? `${open} open` : "done"}
+                    // On a phone a cell is about 40px wide: show just the count there, the words from sm up (the label says it all).
+                    <span aria-hidden className={cn("mt-auto max-w-full truncate rounded-full px-1.5 py-0.5 text-[0.625rem] font-semibold", overdue ? "bg-destructive/15 text-destructive-text" : open > 0 ? "bg-primary/15 text-primary-text" : "bg-success/15 text-success")}>
+                      {overdue ? (
+                        <>{open}<span className="hidden sm:inline"> overdue</span></>
+                      ) : open > 0 ? (
+                        <>{open}<span className="hidden sm:inline"> open</span></>
+                      ) : (
+                        <Check className="inline h-3 w-3 sm:hidden" />
+                      )}
+                      {!overdue && open === 0 && <span className="hidden sm:inline">done</span>}
                     </span>
                   )}
                 </button>
@@ -97,7 +105,7 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
         ))}
       </div>
 
-      <section className="mt-4 rounded-xl border border-border bg-card/60 p-3" aria-label={`Tasks due ${picked}`}>
+      <section className="mt-4 rounded-xl border border-border bg-card/60 p-3" aria-label={`Tasks due ${formatDayLabel(picked)}`}>
         <h4 className="mb-2 text-sm font-heading font-semibold">{picked === today ? "Today" : picked}</h4>
         {dayItems.length === 0 ? (
           <p className="text-sm text-foreground-muted">No tasks are due this day.</p>

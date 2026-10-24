@@ -12,6 +12,8 @@ const { TEXT_LIMITS, TAG_LIMITS, IMPORT_LIMITS, PRIORITIES, GAME_TYPES } = share
 const MAX_ID = shared.validation.MAX_ID;
 
 export const idParam = z.object({ id: z.coerce.number().int().positive().max(MAX_ID) });
+/** Comment ids are BIGSERIAL: they may pass 2^31 long before any INTEGER id does. */
+export const bigIdParam = z.object({ id: z.coerce.number().int().positive().max(shared.validation.MAX_BIG_ID) });
 export const listIdParam = z.object({ listId: z.coerce.number().int().positive().max(MAX_ID) });
 export const keyParam = z.object({ key: z.string().regex(/^[A-Za-z]{1,20}$/) });
 export const leaderboardQuery = z

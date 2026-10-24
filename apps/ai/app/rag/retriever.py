@@ -17,7 +17,7 @@ from langchain_core.retrievers import BaseRetriever
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.db import repo
-from app.rag.chunking import item_label, list_label, render_list
+from app.rag.chunking import item_label, list_label, prompt_safe, render_list
 from app.rag.embed import Embedder, embed_query
 from app.rag.store import EmbeddingStore, Hit, SearchFilters
 
@@ -131,7 +131,7 @@ def format_context(results: list[Retrieved]) -> str:
     for r in results:
         tag = "doc" if r.kind == "doc" else "task"
         attr = f'section="{r.id}"' if r.kind == "doc" else f'id="{r.id}"'
-        blocks.append(f"<{tag} {attr}>\n{r.text}\n</{tag}>")
+        blocks.append(f"<{tag} {attr}>\n{prompt_safe(r.text)}\n</{tag}>")
     return "\n".join(blocks)
 
 

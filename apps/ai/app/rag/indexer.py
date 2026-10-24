@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from app import threads
 from app.config import get_settings
 from app.db import pool, repo
 from app.rag import runtime
@@ -273,6 +274,10 @@ async def reconcile_loop() -> None:
             runtime.get_store().invalidate(None)  # committed now
             if fixed:
                 log.info("reconcile re-indexed %d lists", fixed)
+            async with pool.connection() as conn:
+                gone = await threads.prune_idle_threads(conn)
+            if gone:
+                log.info("removed %d idle chat threads", gone)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - a failed pass must not kill the loop

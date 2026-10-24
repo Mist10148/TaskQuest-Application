@@ -50,11 +50,20 @@ async def pending_actions(graph, config) -> list[dict[str, Any]]:
 
 async def _book_turn(deps: ChatDeps, discord_id: str, thread_id: str, feature: str = "chat") -> None:
     """Record the turn's tokens (its request was reserved up front) and bump the thread."""
-    async with pool.connection() as conn:
-        await usage.record(
-            conn, discord_id, feature, input_tokens=deps.tokens[0], output_tokens=deps.tokens[1], requests=0
-        )
-        await threads.touch_thread(conn, discord_id, thread_id)
+    try:
+        async with pool.connection() as conn:
+            await usage.record(
+                conn, discord_id, feature, input_tokens=deps.tokens[0], output_tokens=deps.tokens[1], requests=0
+            )
+            await threads.touch_thread(conn, discord_id, thread_id)
+    except Exception:  # noqa: BLE001 - runs in a finally: a booking error must not replace the turn's own result
+        log.exception("could not book the turn")
+        return
+    try:
+        async with pool.connection() as conn:
+            await threads.prune_checkpoints(conn, thread_id)
+    except Exception:  # noqa: BLE001 - pruning is housekeeping; the next turn tries again
+        log.warning("could not prune old checkpoints", exc_info=True)
 
 
 async def stream_turn(

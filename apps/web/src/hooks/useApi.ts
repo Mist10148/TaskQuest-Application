@@ -673,7 +673,7 @@ export function useClaimQuest() {
 // ─── Stats & weekly review ───────────────────────────────────────────────────
 
 export function useXpHistory(days: HistoryRange) {
-    return useQuery({ queryKey: ['stats', 'xp-history', days], queryFn: () => statsApi.xpHistory(days) });
+    return useQuery({ queryKey: ['stats', 'xp-history', days], queryFn: ({ signal }) => statsApi.xpHistory(days, signal) });
 }
 
 export function useStatsSummary() {
@@ -918,7 +918,7 @@ export function useAchievements() {
 }
 
 export function useLeaderboard(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
-    return useQuery({ queryKey: ['leaderboard', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.get(by, playerClass) });
+    return useQuery({ queryKey: ['leaderboard', by, playerClass ?? 'ALL'], queryFn: ({ signal }) => leaderboardApi.get(by, playerClass, signal) });
 }
 
 export function useGameAllowance() {
@@ -927,7 +927,7 @@ export function useGameAllowance() {
 
 /** The signed-in player's own rank on a board (null when they have no score there yet). */
 export function useMyRank(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
-    return useQuery({ queryKey: ['leaderboard', 'me', by, playerClass ?? 'ALL'], queryFn: () => leaderboardApi.me(by, playerClass) });
+    return useQuery({ queryKey: ['leaderboard', 'me', by, playerClass ?? 'ALL'], queryFn: ({ signal }) => leaderboardApi.me(by, playerClass, signal) });
 }
 
 export function useGameHistory() {

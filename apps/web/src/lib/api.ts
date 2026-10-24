@@ -479,15 +479,15 @@ export const achievementsApi = {
 export type LeaderboardBoard = 'lifetime' | 'weekly' | 'streak' | 'xp';
 
 export const leaderboardApi = {
-    me: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
+    me: (by: LeaderboardBoard = 'lifetime', playerClass?: string, signal?: AbortSignal) => {
         const params = new URLSearchParams({ by });
         if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
-        return apiFetch<{ rank: number | null }>(`/api/leaderboard/me?${params}`);
+        return apiFetch<{ rank: number | null }>(`/api/leaderboard/me?${params}`, { signal });
     },
-    get: (by: LeaderboardBoard = 'lifetime', playerClass?: string) => {
+    get: (by: LeaderboardBoard = 'lifetime', playerClass?: string, signal?: AbortSignal) => {
         const params = new URLSearchParams({ by });
         if (playerClass && playerClass !== 'ALL') params.set('class', playerClass);
-        return apiFetch<LeaderboardEntry[]>(`/api/leaderboard?${params}`);
+        return apiFetch<LeaderboardEntry[]>(`/api/leaderboard?${params}`, { signal });
     },
 };
 
@@ -509,7 +509,7 @@ export const gamesApi = {
 };
 
 export const statsApi = {
-    xpHistory: (days: HistoryRange = 30) => apiFetch<XPHistoryDay[]>(`/api/stats/xp-history?days=${days}`),
+    xpHistory: (days: HistoryRange = 30, signal?: AbortSignal) => apiFetch<XPHistoryDay[]>(`/api/stats/xp-history?days=${days}`, { signal }),
     summary: () => apiFetch<StatsSummary>('/api/stats/summary'),
 };
 

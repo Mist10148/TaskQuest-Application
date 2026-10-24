@@ -154,7 +154,8 @@ async function listInvites(userId) {
          JOIN users ou ON ou.discord_id = l.discord_id
          LEFT JOIN users iu ON iu.discord_id = i.invited_by
          WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP
-         ORDER BY i.id DESC`,
+         ORDER BY i.id DESC
+         LIMIT 100`,
         [String(userId)]
     );
     return rows.map((r) => ({

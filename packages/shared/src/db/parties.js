@@ -119,7 +119,7 @@ async function listInvites(userId) {
     const [rows] = await getPool().query(
         `SELECT i.id, i.created_at, i.expires_at, p.name AS party_name, ou.discord_username AS owner_name
          FROM party_invites i JOIN parties p ON p.id = i.party_id JOIN users ou ON ou.discord_id = p.owner_id
-         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP ORDER BY i.id DESC`,
+         WHERE i.invitee_discord_id = ? AND i.status = 'pending' AND i.expires_at > CURRENT_TIMESTAMP ORDER BY i.id DESC LIMIT 100`,
         [String(userId)]
     );
     return rows.map((r) => ({ id: r.id, partyName: r.party_name, ownerName: r.owner_name, createdAt: r.created_at, expiresAt: r.expires_at }));

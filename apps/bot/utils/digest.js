@@ -11,10 +11,14 @@
 'use strict';
 
 const { EmbedBuilder } = require('discord.js');
-const { hourInZone, weekdayInZone } = require('@taskquest/shared');
+const { hourInZone, weekdayInZone, escapeDiscord } = require('@taskquest/shared');
 const { PERMANENT_DM_ERRORS, pushReminder } = require('./reminders');
 
 const AI_TIMEOUT_MS = 30000;
+/** Users handled at the same time: each waits up to AI_TIMEOUT_MS for a recap, so one at a time would take hours on a busy Monday. */
+const CONCURRENCY = 5;
+/** Past this a run stops taking new users; the rest are picked up by the next hourly run (they are not claimed yet). */
+const TIME_BUDGET_MS = 45 * 60 * 1000;
 
 /** True on Monday, at or after the user's reminder hour, in their own time zone. */
 function isDigestTime(user, now = new Date()) {
@@ -38,8 +42,8 @@ function digestEmbed(stats, recap) {
         )
         .setFooter({ text: 'TaskQuest • /weekly turns this off' });
     if (recap && recap.headline) {
-        const lines = Array.isArray(recap.highlights) ? recap.highlights.slice(0, 3).map((l) => `• ${l}`).join('\n') : '';
-        embed.addFields({ name: '✨ AI recap', value: `**${recap.headline}**${lines ? `\n${lines}` : ''}`.slice(0, 1024) });
+        const lines = Array.isArray(recap.highlights) ? recap.highlights.slice(0, 3).map((l) => `• ${escapeDiscord(l)}`).join('\n') : '';
+        embed.addFields({ name: '✨ AI recap', value: `**${escapeDiscord(recap.headline)}**${lines ? `\n${lines}` : ''}`.slice(0, 1024) });
     }
     return embed;
 }
@@ -67,10 +71,11 @@ function pushForRecap(recap) {
 async function sendWeeklyDigests({ db, client, log, ai, push, now = new Date() }) {
     const result = { sent: 0, skipped: 0, retry: 0 };
     const aiClient = ai === undefined ? defaultAi() : ai;
-    for (const user of await db.users.getDigestCandidates(now)) {
-        if (!isDigestTime(user, now)) continue;
+    const candidates = (await db.users.getDigestCandidates(now)).filter((user) => isDigestTime(user, now));
+    const startedAt = Date.now();
+    const handleUser = async (user) => {
         // Claim the week first (atomic UPDATE) so overlapping runs cannot both send it.
-        if (!(await db.users.claimDigest(user.discord_id, now))) continue;
+        if (!(await db.users.claimDigest(user.discord_id, now))) return;
         let recap = null;
         try {
             const [stats, found] = await Promise.all([db.users.getWeeklyStats(user.discord_id, now), tryRecap(aiClient, user)]);
@@ -87,12 +92,20 @@ async function sendWeeklyDigests({ db, client, log, ai, push, now = new Date() }
                 log('⚠️', 'DIGEST', `${user.discord_id}: ${err.message} (will retry)`);
                 // Give the claim back so the next hourly run tries again (and the push waits for that run, so it is sent once).
                 await db.users.releaseDigest(user.discord_id, now, user.last_digest_at ?? null).catch(() => {});
-                continue;
+                return;
             }
         }
         const message = pushForRecap(recap);
         if (message) await pushReminder(push, user.discord_id, message);
-    }
+    };
+    let next = 0;
+    const worker = async () => {
+        while (next < candidates.length) {
+            if (Date.now() - startedAt > TIME_BUDGET_MS) return;
+            await handleUser(candidates[next++]);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker));
     return result;
 }
 

@@ -113,17 +113,44 @@ async function readTextAttachment(url) {
     return (await response.text()).slice(0, MAX_INPUT);
 }
 
-/** Reply as embeds (the /ai-format "embed" style), 4000 characters each. */
+/** Discord counts every embed's text in one message toward a 6000 character limit; the footer needs some room. */
+const EMBED_MESSAGE_BUDGET = 5800;
+
+/** Group embed parts into messages whose embeds together stay under the limit (a message holds at most 10 embeds). */
+function groupEmbedParts(parts) {
+    const groups = [];
+    let current = [];
+    let size = 0;
+    for (const part of parts) {
+        if (current.length && (size + part.length > EMBED_MESSAGE_BUDGET || current.length >= 10)) {
+            groups.push(current);
+            current = [];
+            size = 0;
+        }
+        current.push(part);
+        size += part.length;
+    }
+    if (current.length) groups.push(current);
+    return groups;
+}
+
+/** Reply as embeds (the /ai-format "embed" style), 4000 characters each, in as few messages as Discord's 6000 character total allows. */
 async function sendEmbeds(message, text) {
     const parts = splitMessage(text, MAX_EMBED);
-    const embeds = parts.map((part, i) => {
-        const embed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(part);
-        if (i === parts.length - 1) {
-            embed.setFooter({ text: `Requested by ${message.author.username || 'you'}`, iconURL: message.author.displayAvatarURL?.() });
-        }
-        return embed;
-    });
-    await message.reply({ embeds: embeds.slice(0, 10), allowedMentions: NO_PINGS });
+    const groups = groupEmbedParts(parts);
+    let index = 0;
+    for (const [g, group] of groups.entries()) {
+        const embeds = group.map((part) => {
+            index += 1;
+            const embed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(part);
+            if (index === parts.length) {
+                embed.setFooter({ text: `Requested by ${message.author.username || 'you'}`, iconURL: message.author.displayAvatarURL?.() });
+            }
+            return embed;
+        });
+        if (g === 0) await message.reply({ embeds, allowedMentions: NO_PINGS });
+        else await message.channel.send({ embeds, allowedMentions: NO_PINGS });
+    }
 }
 
 async function sendReply(message, text, format = 'text') {
@@ -188,6 +215,7 @@ async function handleMessage(message, { log = console.warn, now = Date.now } = {
 
 module.exports = {
     handleMessage,
+    groupEmbedParts,
     shouldReply,
     stripMentions,
     splitMessage,

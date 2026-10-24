@@ -1498,6 +1498,7 @@ const Games = () => {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: history, isLoading, isError: historyFailed, refetch: refetchHistory } = useGameHistory();
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const { data: allowance } = useGameAllowance();
   const { sound, setSound } = usePreferences();
   useEffect(() => setSoundEnabled(sound), [sound]);
@@ -1700,7 +1701,7 @@ const Games = () => {
             ) : !history?.length ? (
               <div className="p-8 text-center text-foreground-muted">No games played yet. Try your luck!</div>
             ) : (
-              history.slice(0, 10).map((e: GameSession) => {
+              history.slice(0, showAllHistory ? history.length : 10).map((e: GameSession) => {
                 const gameInfo = gamesList.find(g => g.id === e.game_type);
                 const stateLabel: Record<string, string> = { blackjack: 'Blackjack!', won: 'Won', lost: 'Lost', push: 'Push', expired: 'Expired (refunded)', cancelled: 'Quit' };
                 return (
@@ -1723,6 +1724,11 @@ const Games = () => {
               })
             )}
           </div>
+          {history && history.length > 10 && (
+            <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={() => setShowAllHistory((v) => !v)}>
+              {showAllHistory ? "Show fewer" : `Show all ${history.length}`}
+            </Button>
+          )}
         </div>
       </div>
     </DashboardLayout>

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # Limits
     ai_daily_request_limit: int = 100
     ai_reconcile_minutes: int = 15
+    embed_debounce_seconds: float = 3.0  # edits to one list within this window share one re-embedding; 0 = index at once
     summary_map_reduce_chars: int = 40_000
     max_tool_iterations: int = 6
 
@@ -50,6 +51,16 @@ class Settings(BaseSettings):
     langsmith_api_key: str = ""
 
     log_level: str = Field(default="INFO")
+
+    @property
+    def ssl_enabled(self) -> bool:
+        """TLS is on with DB_SSL=true, or when DB_URL itself asks for it (``?sslmode=require``, as a Postgres URL can)."""
+        if self.db_ssl:
+            return True
+        if self.db_url and not self.db_url.startswith("sqlite"):
+            mode = parse_qs(urlparse(self.db_url).query).get("sslmode", [""])[0]
+            return mode in {"require", "verify-ca", "verify-full"}
+        return False
 
     @property
     def sqlalchemy_url(self) -> str:

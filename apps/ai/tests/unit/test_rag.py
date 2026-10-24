@@ -518,3 +518,38 @@ def test_subtask_due_date_priority_and_tags_are_part_of_the_quest_text():
     text_ = render_list(lst, items)
     assert "- [ ] Book flights (due 2026-10-20, HIGH, #travel #money)" in text_
     assert "- [x] Pack\n" in text_ + "\n"
+
+
+async def test_index_calls_for_one_list_are_coalesced_when_a_delay_is_set(seeded, monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from app.config import get_settings
+    from app.main import create_app
+    from app.rag import runtime
+    from app.routers import internal
+
+    store, emb = make_store(), FakeEmbedder()
+    runtime.set_runtime(store, emb)
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+    monkeypatch.setattr(get_settings(), "embed_debounce_seconds", 0.05)
+    calls: list[tuple[str, int]] = []
+
+    async def fake_reindex(discord_id, list_id):
+        calls.append((discord_id, list_id))
+
+    monkeypatch.setattr(internal.indexer, "reindex_list", fake_reindex)
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://ai") as c:
+            for _ in range(5):
+                r = await c.post("/internal/index", json={"discordId": UID, "listId": 1}, headers={"X-AI-Token": "t" * 40})
+                assert r.status_code == 204
+            assert calls == []  # answered at once, nothing embedded yet
+            await asyncio.sleep(0.2)
+            assert calls == [(UID, 1)]  # five edits, one re-index
+            await c.post("/internal/index", json={"discordId": UID, "listId": 1}, headers={"X-AI-Token": "t" * 40})
+            await asyncio.sleep(0.2)
+            assert len(calls) == 2  # a later edit schedules a fresh one
+    finally:
+        runtime.set_runtime(None, None)

@@ -154,6 +154,7 @@ Off by default. See [AI_INTEGRATION.md](AI_INTEGRATION.md) for the design and [A
 | `AI_DB_USER` / `AI_DB_PASSWORD` | ai | Optional separate Postgres role for the AI service. Give it `SELECT` on the task tables and write access only to the `ai_*` tables (plus `USAGE` on the `ai_embeddings` id sequence). It never writes tasks directly. |
 | `LANGSMITH_API_KEY` | ai | Optional tracing; when set, the service also defaults `LANGSMITH_TRACING=true` and `LANGSMITH_PROJECT=taskquest-ai` (override either in the environment) |
 | `AI_RECONCILE_MINUTES` | ai | How often missed re-index calls are caught up (default `15`) |
+| `EMBED_DEBOUNCE_SECONDS` | ai | Edits to one list within this many seconds share one re-embedding (default `3`; `0` indexes at once). The reconcile loop also prunes chat threads idle for 30 days (Discord memory) or 90 days (web chats) |
 | `SUMMARY_MAP_REDUCE_CHARS` | ai | Summaries are made in parts above this input size (default `40000`) |
 | `MAX_TOOL_ITERATIONS` | ai | Tool rounds per chat turn (default `6`) |
 | `DB_POOL_SIZE` | ai | The AI service's own Postgres pool (SQLAlchemy + asyncpg; default `5`; the Node apps default to `10`) |

@@ -45,6 +45,8 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 | GET | `/api/data/skills` | — | `SKILL_TREES` map |
 | GET | `/api/data/achievements` | — | `ACHIEVEMENTS` map |
 
+The optional AI service has its own private `GET /health` (see [apps/ai/README.md](../apps/ai/README.md)); it is not part of this API.
+
 ## Authentication
 
 | Method | Path | Auth | Description |

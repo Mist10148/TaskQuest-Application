@@ -120,7 +120,7 @@ stateDiagram-v2
 ```
 
 - `compute_features` computes a deterministic baseline score from overdue days, priority, deadline proximity and progress.
-- `merge_scores` blends the model's rank with that baseline. An overdue HIGH-priority quest can never be ranked below the top 3.
+- `merge_scores` blends the model's rank with that baseline. Every overdue HIGH-priority quest is pinned: the final order puts all pinned quests before any other, so none can be ranked below an unpinned one.
 - `fallback_rank` uses the baseline alone and template reasons, so the feature still works without Gemini.
 - `POST /v1/prioritize` is the one model route that degrades instead of failing on an exhausted daily quota: `require_ai("prioritize", degrade_on_quota=True)` lets it through unreserved, the graph's quota check sends it to `fallback_rank`, and the response carries `usedFallback: true` (nothing is booked). An opted-out user still gets 403 `AI_OPTED_OUT`.
 - More than 15 open quests switches to the reasoning model. Results are cached for 5 minutes per open-task set and limit, in process memory and in `ai_prioritize_cache`, so several AI instances share one answer; fallback results are never cached, and a missing or failing shared table only means a miss. (The pgvector search runs in SQL, so there is no vector cache to share on PostgreSQL; the in-process numpy cache in `EmbeddingStore` exists only for the SQLite tests.)
@@ -182,7 +182,7 @@ The bot answers @mentions, replies to its own messages and DMs, Zephyr-style (`a
   - `ai_checkpoint_writes` holds pending writes, including `__interrupt__`.
   - Both have a foreign key to `ai_chat_threads`, so every thread needs a row there.
 - **Checkpoint ids are time-ordered**, so the latest checkpoint is simply the greatest id.
-- **Special channels** (errors, interrupts, resume) overwrite their slot, as LangGraph expects; ordinary writes are insert-once. Both are `INSERT ... ON CONFLICT`, which Postgres and SQLite share.
+- **Special channels** (errors, interrupts, resume) overwrite their slot, as LangGraph expects; ordinary writes are insert-once. Writes are an UPDATE followed by an INSERT, and the insert-once case a SELECT followed by an INSERT (`app/graphs/checkpointer.py`); the thread lock in the chat service serialises them within one process.
 - **Concurrency:** LangGraph saves checkpoints and writes from concurrent tasks, so every `engine.begin()` must get its own connection. The asyncpg pool does this. The SQLite test database uses a temporary file with `NullPool` for the same reason; a single shared in-memory connection lost interrupt writes.
 
 ## 9. Prompts and the persona
@@ -206,7 +206,7 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 
 | Risk | Guard |
 |---|---|
-| Prompt injection in quest names | Task text is inside `<task id=...>` blocks, and CORE_RULES says that text is data. Red-team strings are in `tests/evals/injection.json`. |
+| Prompt injection in quest names | Task text is inside `<task id=...>` blocks (and retrieved text in `<doc>` blocks), and CORE_RULES says that text is data. Tool results are returned as plain JSON, so they are not yet fenced the same way. Red-team strings are in `tests/evals/injection.json`. |
 | Model writes without consent | Writes need `interrupt()` and an explicit approval. Converse binds no write tools, and any invented write call is refused. |
 | Cross-user access | `discord_id` comes from a trusted header, is never a tool argument, and every query is scoped by it. |
 | Invented ids or XP | Ids are validated (summarizer and prioritizer retry, then drop unknown ids). XP is mentioned only when a tool result includes it. |

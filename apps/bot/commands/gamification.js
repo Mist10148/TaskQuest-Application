@@ -138,14 +138,15 @@ const automationData = new SlashCommandBuilder()
     .setDescription('🔔 Toggle deadline reminder notifications');
 
 async function automation(interaction) {
+    // Acknowledge first: a cold database could otherwise miss Discord's 3 second window after the setting was already flipped.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const newStatus = await users.toggleSetting(interaction.user.id, 'automation_enabled');
 
-    await interaction.reply({
+    await interaction.editReply({
         embeds: [newStatus
             ? ui.success('Reminders Enabled', '🔔 I\'ll DM you when a list is due today.')
             : ui.info('Reminders Disabled', '🔕 You won\'t receive deadline reminders.')
-        ],
-        flags: MessageFlags.Ephemeral
+        ]
     });
 }
 
@@ -740,11 +741,11 @@ const toggleData = new SlashCommandBuilder()
     .setDescription('⚙️ Toggle XP system on/off');
 
 async function toggle(interaction) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const newStatus = await users.toggleSetting(interaction.user.id, 'gamification_enabled');
 
-    await interaction.reply({
-        embeds: [newStatus ? ui.success('XP Enabled', '⚡ You will earn XP!') : ui.info('XP Disabled', '💤 XP off')],
-        flags: MessageFlags.Ephemeral
+    await interaction.editReply({
+        embeds: [newStatus ? ui.success('XP Enabled', '⚡ You will earn XP!') : ui.info('XP Disabled', '💤 XP off')]
     });
 }
 

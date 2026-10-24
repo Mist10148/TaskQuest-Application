@@ -26,7 +26,7 @@ export class DbSessionStore extends session.Store {
         super();
         this.pool = pool;
         this.ttlMs = ttlMs;
-        this.cleanupTimer = setInterval(() => this.clearExpired().catch(() => {}), cleanupIntervalMs);
+        this.cleanupTimer = setInterval(() => this.clearExpired().catch((err) => console.warn('Could not clear expired web sessions:', err?.message || err)), cleanupIntervalMs);
         this.cleanupTimer.unref();
     }
 

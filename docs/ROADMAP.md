@@ -10,13 +10,14 @@ Work that is understood and waits only for time, a key or a decision.
 |---|---|
 | Run the AI evals against real Gemini and grow the golden sets from real data (#17, #18). Runbook: [OPERATIONS](OPERATIONS.md#first-live-gemini-run) | A staging Gemini key; model ids may need updating |
 | An offline write queue for plain edits (#53) | A conflict rule when the server copy changed |
-| AI service retention: thread and checkpoint pruning, an embed debounce, a multi-instance lock for confirmations (#51) | Nothing; a good first task |
+| A multi-instance lock for AI confirmations, and a fix for the one-thread-per-`/ask` growth (#51; pruning and the embed debounce are done) | A choice between a database lock and a thread-row claim |
 | Auto-delete versus quest progress (#49) | A product decision |
 | Persist the rate limiters and split the internal token (see KNOWN_ISSUES) | A choice of store (Postgres or Redis) and a change to deployed env vars |
 | Limit and cursor parameters for large quests and the calendar feed (#60) | An API design |
 | Shared leaderboard caches and a cheaper weekly and streak board (#59) | A shared store, as for the rate limiters |
 | Hash the calendar feed token (#61) | Settings shows the address again today, so it would need a "shown once" flow |
-| Migration checksums, and a baseline that does not need `vector` with AI off (#62) | Nothing; a checksum column and a warning on mismatch |
+| A baseline that does not need `vector` with AI off (#62; checksums are done) | Nothing; split the vector parts into a later migration, which would be a new migration for databases that already ran 001 |
+| Import limits that match the account quota, so an export can always be restored (#67) | A look at how long a 5,000 task import takes |
 | Undo of a repeating task's completion also removes the copy it created (#63) | A rule for a copy that was already edited |
 | Index the player guides for the AI's how-to answers | A choice of which guides; see [AI_ARCHITECTURE](AI_ARCHITECTURE.md#3-rag-pipeline) |
 
@@ -25,7 +26,7 @@ Work that is understood and waits only for time, a key or a decision.
 | Item | Notes |
 |---|---|
 | Custom statuses, start dates with a timeline, task dependencies, simple automations, real-time updates on shared quests | Needs a data model; each is its own design note |
-| More component tests for the web app (#24) | The Games, Skills, Classes, Settings, Shop, Party, Stats and Leaderboard pages are the gaps; the dialogs are covered |
+| More component tests for the web app (#24) | The Games, Skills and Party pages are the gaps; the dialogs and the Settings, Stats, Leaderboard, Shop and Classes pages are covered |
 | Full internationalisation | Extract strings into `apps/web/src/i18n/messages.ts`, add a language picker once there is a second catalog |
 | README screenshots (#26) and push delivery tested against real push services (#30) | The capture spec exists; see [CONTRIBUTING](../CONTRIBUTING.md#readme-screenshots) |
 

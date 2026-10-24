@@ -34,6 +34,12 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Recent XP on the Stats page** (the last transactions, earned and spent, with their sources), using the history endpoint the web app never showed. The Stats chart says "nothing to chart" instead of drawing a flat line, the Focus page links to the party's focus quest when there is one, the leaderboard has a **My class** shortcut, and Games history can show all of its rows.
+- **Keyboard play:** type a letter to guess in Hangman; H, S and D hit, stand and double in Blackjack.
+- **Migration runner checksums.** `schema_migrations` gets a `checksum` column (added by the runner itself, no new migration); a shipped migration that was edited, or a database that holds migrations this version does not know (an older deploy against a newer schema), is reported as a warning at start.
+- **AI service housekeeping** (KNOWN_ISSUES #51, in part): old checkpoints are pruned after each turn (the latest three are kept), idle chat threads are removed by the reconcile loop (Discord memory after 30 days, web chats after 90), cached summaries older than 7 days are dropped, and re-index calls for one list within `EMBED_DEBOUNCE_SECONDS` (default 3) share one embedding run. `DB_URL` with `?sslmode=require` now turns TLS on for the AI service as it does for the Node apps.
+- Component tests for the Stats, Settings, Leaderboard, Shop and Classes pages.
+
 - **Move tasks between quests.** "Move to another quest" in the task drawer and a bulk **Move to…** in select mode move a task with its subtasks to the end of another quest you can edit (`POST /api/items/:id/move`).
 - **Assignees on shared quests.** A task on a shared quest can be assigned to its owner or a member (task drawer), shows who has it on its row, can be filtered by "Assigned to me" or "Unassigned", and a task assigned to you on someone else's quest shows on your Today page.
 - **Comments and activity on a task.** The task drawer has a **Comments** tab (anyone who can edit the quest can comment; the author or a manager can delete) and an **Activity** tab with every change: created, renamed, done or reopened, priority, due date, assignee and moves. Rows show a comment count.
@@ -220,6 +226,15 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Party progress** refreshes after tasks and focus sessions (it showed the old count for a minute), and a malformed reset time no longer shows "NaN".
+- **Imports and exports are rate limited** (20 a minute per account, like the CSV import) before a large body is parsed; `POST /api/user/import` and the exports had no limit beyond the general one.
+- **The calendar feed token no longer reaches the error log**: a 500 logs the path with any 32-character token masked. A stream that fails after its headers were sent no longer throws a second time.
+- **Login-start sessions live 10 minutes** (an anonymous hit on `/api/auth/discord` used to leave a seven-day session row); `keepAliveTimeout` is 65 s so a proxy that reuses connections does not meet resets; `Cache-Control: no-store` on `/api` responses (the calendar feed and avatars keep their own headers).
+- **Resetting progress also removes archived XP and game rows** (`npm run archive` moves them out of the tables the reset cleared). Pending invitation lists are capped at 100.
+- **A CSV subtask whose parent name is repeated** is now an import error instead of silently joining the first parent.
+- **Bot:** task names, links and mentions in AI embeds are escaped; a chat reply in embed mode no longer exceeds Discord's 6000-character message total; a command that fails after a public `deferReply` replaces the placeholder with a private error; `/list` handles a list that vanished mid-click; the leaderboard no longer cuts ranks mid-line; `/automation` and `/toggle` acknowledge first; shutdown stops new background runs and waits up to 10 seconds for the ones in flight; the weekly digest handles five users at a time within a 45-minute budget.
+- **AI service:** a tool id past 32 bits is a refusal, not a driver error; a failed preview in the confirm step no longer ends the turn with an unanswered tool call, and any such dangling call in an old thread is answered before the model sees it (that thread used to fail on every later message); user data cannot close its own prompt block (angle brackets are replaced) and tool results reach the model fenced as data; one list's database error no longer aborts the whole reconcile transaction; a failed usage booking no longer replaces the turn's result.
+- **Web:** no "0 XP" while the shop, classes and skills load; class names (not keys) in purchase toasts; "Focus Rate" is "Completion Rate"; the Settings reset dialog's field is labelled, outside the description and in a form (Enter confirms); screen-reader state for locked and unlocked achievements and skills; the leaderboard is a list (the podium is hidden from it); Games controls have names, states and `type="button"`, and leaving an arcade run asks first; leaderboard and stats requests are cancelled when the board or range changes.
 - Ids above 2147483647 now fail validation (400) instead of reaching Postgres and returning a 500, in the shared validator, the route schemas and the AI service.
 - The AI chat assistant was told today's UTC date and retrieved with it; it now uses the user's own day.
 - Keyboard shortcuts `x`, `e` and `d` no longer act on a hidden row after switching to the board or calendar view, or while selecting tasks; the `j`/`k` cursor is announced to screen readers.

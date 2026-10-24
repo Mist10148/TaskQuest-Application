@@ -22,7 +22,7 @@ npm run db:migrate          # reads DB_* from the environment / the root .env
 
 Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`, in which case they refuse to start if the schema is behind.
 
-- Applied migrations are recorded in `schema_migrations (id, applied_at)`.
+- Applied migrations are recorded in `schema_migrations (id, applied_at, checksum)`.
 - A session-level advisory lock (`pg_try_advisory_lock(hashtext('taskquest_migrations'))`) stops two processes migrating at the same time. This is why `DB_URL` must use a session pooler, not a transaction pooler ([DEPLOYMENT](DEPLOYMENT.md#2-database)).
 - Each migration runs in its own transaction. Postgres DDL is transactional, so a failed migration leaves nothing half-applied.
 - Migrations are JavaScript, not raw SQL, so they can use idempotent helpers that check `information_schema` / `pg_indexes` in the current schema first.
@@ -199,7 +199,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 |---|---|
 | `ai_embeddings` | RAG vectors, one row per chunk: `discord_id` (NULL = global docs), `source_type` (`list`/`item`/`history`/`doc`), `source_id`, `list_id`, `content`, `content_hash` (SHA-256, skips unchanged text), `embedding` (`vector(768)`, pgvector), `model`, `updated_at`. Unique on `(source_type, source_id, model)`. No approximate (HNSW) index: search is an exact top-k over the user's rows plus the global docs, `ORDER BY embedding <=> query` in SQL. |
 | `ai_chat_threads` | Chat conversations: `id` (UUID, also the LangGraph `thread_id`), `discord_id`, `title`, `source` (`web` for web chat threads, `discord` for per-user, per-channel Discord memory). |
-| `ai_checkpoints`, `ai_checkpoint_writes` | LangGraph state snapshots per thread (`BYTEA`), cascading with the thread. |
+| `ai_checkpoints`, `ai_checkpoint_writes` | LangGraph state snapshots per thread (`BYTEA`), cascading with the thread. Only the latest three checkpoints of a thread are kept (pruned after each turn); threads idle for 30 days (`discord`) or 90 days (`web`) are deleted by the AI service's reconcile loop. |
 | `ai_usage` | Daily per-user, per-feature request and token counts, used for quotas. |
 | `ai_summary_cache` | Cached summaries (`JSONB`) keyed by `(discord_id, scope_key)` with an input hash. |
 | `ai_prioritize_cache` | Cached "what should I do next?" rankings (`JSONB`) keyed by `(discord_id, cache_key)`, where `cache_key` is a hash of the open-task features and the limit. Valid for 5 minutes (`created_at`); the AI service deletes a user's expired rows when it writes, and a best-effort read treats a missing table as a miss. Shared by every AI instance. |
@@ -208,7 +208,7 @@ Used only by the AI service (see [AI_INTEGRATION.md](AI_INTEGRATION.md)). All us
 
 ### `schema_migrations`
 
-`id` VARCHAR(100) PK · `applied_at` TIMESTAMPTZ(3). Created by the migration runner itself.
+`id` VARCHAR(100) PK · `applied_at` TIMESTAMPTZ(3) · `checksum` VARCHAR(64), a fingerprint of the migration's code stored when it is applied (added to an existing table by the runner itself; rows from before checksums are stamped at the next start). A changed checksum, or an applied id this version does not know, is logged as a warning and does not stop the app. Created by the migration runner itself.
 
 ## XP transaction sources
 

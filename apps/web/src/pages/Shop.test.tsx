@@ -31,7 +31,7 @@ const item = (over: Partial<CosmeticItem>): CosmeticItem => ({
   affordable: true,
   ...over,
 });
-const shop = (items: CosmeticItem[], over: Partial<CosmeticsData> = {}): CosmeticsData => ({ balance: 500, items, equipped: {}, gamificationEnabled: true, ...over });
+const shop = (items: CosmeticItem[], over: Partial<CosmeticsData> = {}): CosmeticsData => ({ balance: 500, items, equipped: { title: null, frame: null, accent: null }, gamificationEnabled: true, ...over });
 const load = (data: CosmeticsData) => hooks.useCosmetics.mockReturnValue({ data, isLoading: false, isError: false, error: null, refetch: vi.fn(), isFetching: false });
 
 describe("Shop page", () => {

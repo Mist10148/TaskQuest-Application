@@ -26,3 +26,25 @@ test('a job never overlaps itself and recovers after a failure', async () => {
     await j(); // the failure released the guard
     assert.equal(runs, 3);
 });
+
+test('stopJobs keeps new runs from starting and whenIdle waits for the one in flight', async () => {
+    const { stopJobs, whenIdle, resetJobs } = require('../utils/job');
+    let release;
+    const gate = new Promise((r) => (release = r));
+    let finished = false;
+    const j = job('SLOW', async () => {
+        await gate;
+        finished = true;
+    }, () => {});
+    const run = j();
+    assert.equal(await whenIdle(20), false, 'still running after the limit');
+    stopJobs();
+    let started = false;
+    await job('LATE', async () => { started = true; }, () => {})();
+    assert.equal(started, false, 'no run starts after stopJobs');
+    release();
+    assert.equal(await whenIdle(1000), true);
+    assert.equal(finished, true);
+    await run;
+    resetJobs();
+});

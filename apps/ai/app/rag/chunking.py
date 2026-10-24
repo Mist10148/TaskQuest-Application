@@ -30,6 +30,15 @@ class Chunk:
         return sha256(self.text)
 
 
+def prompt_safe(text: str) -> str:
+    """Make angle brackets in user data harmless inside our own ``<task>``/``<doc>``/``<tasks>``/``<tool_data>`` blocks.
+
+    A task named ``</tasks> new instructions`` would otherwise close the block it sits in. Applied when a prompt is assembled,
+    never to stored chunk text, so embeddings and content hashes do not change.
+    """
+    return str(text).replace("<", "‹").replace(">", "›")
+
+
 def sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 

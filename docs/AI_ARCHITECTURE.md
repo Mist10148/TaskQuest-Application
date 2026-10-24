@@ -206,7 +206,7 @@ CORE_RULES  (app/prompts.py: grounding, delimited data, ids, no invented XP, no 
 
 | Risk | Guard |
 |---|---|
-| Prompt injection in quest names | Task text is inside `<task id=...>` blocks (and retrieved text in `<doc>` blocks), and CORE_RULES says that text is data. Tool results are returned as plain JSON, so they are not yet fenced the same way. Red-team strings are in `tests/evals/injection.json`. |
+| Prompt injection in quest names | Task text is inside `<task id=...>` blocks (documents in `<doc>`, summarizer and prioritizer input in `<tasks>`, tool results in `<tool_data>`), angle brackets in the data are replaced (`prompt_safe`) so it cannot close its own block, and CORE_RULES says that text is data. Red-team strings are in `tests/evals/injection.json`. |
 | Model writes without consent | Writes need `interrupt()` and an explicit approval. Converse binds no write tools, and any invented write call is refused. |
 | Cross-user access | `discord_id` comes from a trusted header, is never a tool argument, and every query is scoped by it. |
 | Invented ids or XP | Ids are validated (summarizer and prioritizer retry, then drop unknown ids). XP is mentioned only when a tool result includes it. |

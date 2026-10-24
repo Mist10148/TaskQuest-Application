@@ -37,6 +37,7 @@ from app.config import get_settings
 from app.llm import BLOCKED_REPLY, is_blocked
 from app.llm_call import structured_call
 from app.prompts import load_prompt
+from app.rag.chunking import prompt_safe
 from app.rag.retriever import Retrieved, TaskRetriever, format_context
 from app.tools.specs import TOOLS, ToolContext, langchain_tools
 from app.tools.web_client import ToolError, WebClient
@@ -135,6 +136,20 @@ def repair_tool_calls(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
             if call["id"] and call["id"] not in answered:
                 out.append(ToolMessage(content="Cancelled: this action did not run.", tool_call_id=call["id"]))
     return out
+
+
+def fence_tool_results(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
+    """Wrap tool results in ``<tool_data>`` for the model call (the stored messages are left as they are).
+
+    A tool result carries task names and descriptions that someone else may have written (a shared quest), so the
+    model is told, like for ``<task>`` blocks, that it is data and not instructions.
+    """
+    return [
+        m.model_copy(update={"content": f"<tool_data>\n{prompt_safe(text_of(m.content))}\n</tool_data>"})
+        if isinstance(m, ToolMessage)
+        else m
+        for m in messages
+    ]
 
 
 def tool_rounds_this_turn(messages: Sequence[BaseMessage]) -> int:
@@ -319,7 +334,7 @@ def build_chat_graph(
             system += "\n\nTool budget for this turn is used up. Answer now with what you have."
         # An attached image travels in the run config, so it is never saved in the checkpoint.
         image = (config.get("configurable") or {}).get("image")
-        reply = await model.ainvoke([SystemMessage(system), *with_image(repair_tool_calls(window(state["messages"])), image)])
+        reply = await model.ainvoke([SystemMessage(system), *with_image(fence_tool_results(repair_tool_calls(window(state["messages"]))), image)])
         deps.add_tokens(reply)
         if is_blocked(reply) or (not reply.tool_calls and not text_of(reply.content).strip()):
             log.warning("chat agent reply blocked or empty: %s", reply.response_metadata.get("finish_reason"))

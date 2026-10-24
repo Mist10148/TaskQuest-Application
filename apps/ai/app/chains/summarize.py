@@ -29,7 +29,7 @@ from app.db import pool, repo
 from app.db.dialect import is_postgres
 from app.llm_call import structured_call
 from app.prompts import load_prompt
-from app.rag.chunking import item_details, item_label, list_label, sha256
+from app.rag.chunking import item_details, item_label, list_label, prompt_safe, sha256
 
 log = logging.getLogger("taskquest.ai.summarize")
 
@@ -184,7 +184,7 @@ class Summarizer:
 
     async def _ask(self, mode: str, today: date, body: str, extra: str = "") -> Summary:
         return await self.chain.ainvoke(
-            {"system": self.system, "mode": mode, "today": today.isoformat(), "body": body, "extra": extra}
+            {"system": self.system, "mode": mode, "today": today.isoformat(), "body": prompt_safe(body), "extra": extra}
         )
 
     async def summarize_text(self, mode: str, today: date, rendered: RenderedInput) -> tuple[Summary, int]:

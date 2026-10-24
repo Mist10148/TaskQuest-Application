@@ -235,7 +235,9 @@ async def reconcile(conn: AsyncConnection, store: EmbeddingStore, embedder: Embe
     fixed = 0
     for discord_id, list_id in await stale_lists(conn, store):
         try:
-            await index_list(conn, store, embedder, discord_id, list_id)
+            # A savepoint per list: a database error in one list must not abort the transaction that holds the others' vectors.
+            async with conn.begin_nested():
+                await index_list(conn, store, embedder, discord_id, list_id)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - one bad list (an embedding error, a provider 429) must not stop the others
@@ -244,7 +246,8 @@ async def reconcile(conn: AsyncConnection, store: EmbeddingStore, embedder: Embe
         fixed += 1
     for discord_id in await stale_history_users(conn, store):
         try:
-            await index_history(conn, store, embedder, discord_id)
+            async with conn.begin_nested():
+                await index_history(conn, store, embedder, discord_id)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001

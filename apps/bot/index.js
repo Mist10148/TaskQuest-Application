@@ -216,6 +216,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (interaction.isAutocomplete()) return;
         try {
             const msg = { content: '❌ Something went wrong. Please try again.', flags: MessageFlags.Ephemeral };
+            // A public "thinking…" placeholder that never got its answer would hang there for everyone: swap it for the private error.
+            if (interaction.isChatInputCommand() && interaction.deferred && !interaction.replied && !interaction.ephemeral) await interaction.deleteReply().catch(() => {});
             if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
             else await interaction.reply(msg);
         } catch {

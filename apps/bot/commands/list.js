@@ -99,7 +99,12 @@ async function execute(interaction) {
             await interaction.deleteReply().catch(() => {});
             return interaction.followUp({ embeds: [ui.error('Not Found', 'List not found.')], ...EPHEMERAL });
         }
-        return interaction.editReply(await renderList(userId, list.id, 'view'));
+        const view = await renderList(userId, list.id, 'view');
+        if (!view) {
+            await interaction.deleteReply().catch(() => {});
+            return interaction.followUp({ embeds: [ui.error('Not Found', 'List not found.')], ...EPHEMERAL });
+        }
+        return interaction.editReply(view);
     }
 
     const lists = await tasks.getLists(userId);
@@ -203,7 +208,9 @@ async function routeButton(interaction) {
             const listId = idFrom(id, prefix);
             const items = listId ? await tasks.getItems(userId, listId) : null;
             if (!items) return denied(interaction);
-            if (!canEdit(await tasks.getList(userId, listId))) return viewOnly(interaction);
+            const pickedList = await tasks.getList(userId, listId);
+            if (!pickedList) return denied(interaction); // deleted, or access removed, between the two reads
+            if (!canEdit(pickedList)) return viewOnly(interaction);
             if (items.length < min) {
                 return interaction.reply({ embeds: [ui.info('Not enough tasks', min > 1 ? 'You need at least 2 tasks.' : 'This list has no tasks.')], ...EPHEMERAL });
             }

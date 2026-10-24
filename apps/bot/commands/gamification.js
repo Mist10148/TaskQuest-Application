@@ -723,7 +723,10 @@ async function leaderboard(interaction) {
         })
         .join('\n\n');
 
-    embed.addFields({ name: '​', value: boardText.slice(0, 1024), inline: false });
+    // The description holds 4096 characters (a field only 1024, which cut the last ranks), and a rank is never cut in half.
+    const lines = boardText.split('\n\n');
+    while (lines.join('\n\n').length > 4000 - label.title.length) lines.pop();
+    embed.setDescription(`${label.title}\n\n${lines.join('\n\n')}`);
     embed.setFooter({ text: `${entries.length} players · /profile for your stats` });
     await interaction.editReply({ embeds: [embed] });
 }

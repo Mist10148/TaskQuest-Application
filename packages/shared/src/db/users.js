@@ -423,14 +423,16 @@ async function progressFloor(conn, discordId, from) {
     return at && at.getTime() > from.getTime() ? at : from;
 }
 
-/** Delete all of a user's progress and content (lists, items, games, XP, reflections, goals, reminders, push subscriptions). */
+/** Delete all of a user's progress and content (lists, items, games, XP and the archived XP and game rows, reflections, goals, reminders, push subscriptions). */
 async function resetProgress(discordId) {
     const id = String(discordId);
     return withTransaction(async (conn) => {
         await lockUser(conn, id);
         for (const table of [
             'lists', 'achievements', 'user_skills', 'game_sessions', 'xp_transactions', 'quest_claims', 'focus_sessions', 'task_templates', 'user_cosmetics', 'list_members',
-            'list_reminders', 'item_reminders', 'reflections', 'weekly_goals', 'push_subscriptions'
+            'list_reminders', 'item_reminders', 'reflections', 'weekly_goals', 'push_subscriptions',
+            // Rows moved out by `npm run archive` have no foreign key, so they would otherwise outlive a reset.
+            'xp_transactions_archive', 'game_sessions_archive'
         ]) {
             await conn.query(`DELETE FROM ${table} WHERE discord_id = ?`, [id]);
         }

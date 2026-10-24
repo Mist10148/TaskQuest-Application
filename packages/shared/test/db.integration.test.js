@@ -747,10 +747,13 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(await db.tasks.getList(BOB, list.id), null);
         assert.ok(await db.tasks.getList(BOB, unfinished.id), 'unfinished lists survive, even when overdue');
 
+        await db.getPool().query("INSERT INTO xp_transactions_archive (id, discord_id, amount, source) VALUES (2000000001, ?, 5, 'task')", [BOB]);
         await db.users.resetProgress(BOB);
         const bob = await db.users.getUser(BOB);
         assert.equal(Number(bob.player_xp), 0);
         assert.equal(Number(bob.lifetime_xp), 0);
+        const [left] = await db.getPool().query('SELECT id FROM xp_transactions_archive WHERE discord_id = ?', [BOB]);
+        assert.equal(left.length, 0, 'a reset also removes the rows `npm run archive` moved out');
     });
 
     await t.test('quests cannot be farmed by re-checking, importing, priority edits or recurring copies', async () => {

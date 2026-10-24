@@ -218,11 +218,19 @@ function csvToImport(text) {
     // Resolve subtask_of by name among the same list's top-level tasks.
     for (const list of lists.values()) {
         const tops = new Map();
-        for (const it of list.items) if (!it.subtaskOf && !tops.has(it.name.toLowerCase())) tops.set(it.name.toLowerCase(), it);
+        const repeated = new Set();
+        for (const it of list.items) {
+            if (it.subtaskOf) continue;
+            const name = it.name.toLowerCase();
+            if (tops.has(name)) repeated.add(name);
+            else tops.set(name, it);
+        }
         for (const it of list.items) {
             if (!it.subtaskOf) continue;
             const parent = tops.get(it.subtaskOf.toLowerCase());
             if (!parent) fail(it.row, `Subtask of "${it.subtaskOf}": no such top-level task in the list "${list.name}".`);
+            // Two top-level tasks with one name: the file cannot say which one is meant, and guessing would hang the subtask on the wrong parent.
+            else if (repeated.has(it.subtaskOf.toLowerCase())) fail(it.row, `Subtask of "${it.subtaskOf}": the list "${list.name}" has more than one top-level task with that name. Rename one of them.`);
             else it.parentRef = parent.ref;
         }
     }

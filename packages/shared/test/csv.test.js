@@ -88,6 +88,9 @@ test('csvToImport: structural problems', () => {
     assert.match(orphan.errors[0].message, /no such top-level task/);
     const deep = csvToImport('task,subtask_of\na,\nb,a\nc,b\n');
     assert.equal(deep.errors[0].row, 4, 'subtasks of subtasks are rejected');
+    const twin = csvToImport('task,subtask_of\nCall mom,\nCall mom,\nask,Call mom\n');
+    assert.match(twin.errors[0].message, /more than one top-level task/);
+    assert.equal(twin.errors[0].row, 4);
     const noTask = csvToImport('list,task,due\n,,2030-01-01\n');
     assert.equal(noTask.errors[0].row, 2);
 });

@@ -23,10 +23,12 @@ const Classes = () => {
   const buyingKey = buyClass.isPending ? buyClass.variables : undefined;
   const equippingKey = equipClass.isPending ? equipClass.variables : undefined;
 
+  const className = (classKey: string) => data?.classes.find((c) => c.key === classKey)?.name ?? classKey;
+
   const handleBuy = async (classKey: string) => {
     try {
       await buyClass.mutateAsync(classKey);
-      toast.success(`🎉 Purchased ${classKey}!`);
+      toast.success(`🎉 Purchased ${className(classKey)}!`);
       refresh();
     } catch {
       /* error toast shown by the mutation hook */
@@ -36,7 +38,7 @@ const Classes = () => {
   const handleEquip = async (classKey: string) => {
     try {
       await equipClass.mutateAsync(classKey);
-      toast.success(`⚔️ Equipped ${classKey}!`);
+      toast.success(`⚔️ Equipped ${className(classKey)}!`);
       refresh();
     } catch {
       /* error toast shown by the mutation hook */
@@ -60,7 +62,7 @@ const Classes = () => {
         className="mb-6 sm:mb-8 p-3 sm:p-4 rounded-xl bg-card border border-border inline-flex items-center gap-2 sm:gap-3">
         <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-xp" />
         <span className="text-foreground-muted text-sm">Available XP:</span>
-        <span className="font-heading font-bold text-lg sm:text-xl text-xp">{playerXP.toLocaleString()}</span>
+        <span className="font-heading font-bold text-lg sm:text-xl text-xp">{isLoading ? "…" : playerXP.toLocaleString()}</span>
       </motion.div>
 
       <div>

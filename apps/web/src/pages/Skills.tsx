@@ -108,7 +108,7 @@ const Skills = () => {
         className="mb-6 sm:mb-8 p-3 sm:p-4 rounded-xl bg-card border border-border inline-flex items-center gap-2 sm:gap-3">
         <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-xp" />
         <span className="text-foreground-muted text-sm">Available XP:</span>
-        <span className="font-heading font-bold text-lg sm:text-xl text-xp">{userXP.toLocaleString()}</span>
+        <span className="font-heading font-bold text-lg sm:text-xl text-xp">{isLoading ? "…" : userXP.toLocaleString()}</span>
       </motion.div>
 
       {/* Class Tabs - Scrollable on mobile */}

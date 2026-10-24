@@ -98,7 +98,7 @@ const Shop = () => {
       <div className="mb-6 inline-flex items-center gap-2 rounded-xl border border-border bg-card p-3 sm:gap-3 sm:p-4">
         <Sparkles className="h-4 w-4 text-xp sm:h-5 sm:w-5" aria-hidden />
         <span className="text-sm text-foreground-muted">Available XP:</span>
-        <span className="text-lg font-heading font-bold text-xp sm:text-xl">{balance.toLocaleString()}</span>
+        <span className="text-lg font-heading font-bold text-xp sm:text-xl">{isLoading ? "…" : balance.toLocaleString()}</span>
       </div>
 
       {isError ? (

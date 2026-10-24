@@ -112,7 +112,7 @@ const Dashboard = () => {
             <StatCard label="Day Streak" value={streak} icon={<Flame className="h-4 w-4 sm:h-5 sm:w-5" />} colorScheme="destructive" subValue={streak > 0 ? "Keep it going!" : "Start your streak!"} />
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <StatCard label="Focus Rate" value={`${focusRate}%`} icon={<Target className="h-4 w-4 sm:h-5 sm:w-5" />} colorScheme="success" subValue={`${completedTasks}/${totalTasks} tasks`} />
+            <StatCard label="Completion Rate" value={`${focusRate}%`} icon={<Target className="h-4 w-4 sm:h-5 sm:w-5" />} colorScheme="success" subValue={`${completedTasks}/${totalTasks} tasks`} />
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
             <StatCard label="Games Played" value={gamesPlayed} icon={<Gamepad2 className="h-4 w-4 sm:h-5 sm:w-5" />} colorScheme="primary" subValue="Try your luck!" />

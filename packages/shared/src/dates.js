@@ -68,9 +68,18 @@ function formatDeadline(deadline, today = todayInZone()) {
 }
 
 /** The hour (0-23) it is right now in `tz` (UTC when omitted or unknown). */
+/** One formatter per zone: building an Intl.DateTimeFormat is far slower than using one. */
+const hourFormats = new Map();
+
 function hourInZone(tz, now = new Date()) {
     if (!isValidTimeZone(tz)) return now.getUTCHours();
-    const h = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).formatToParts(now).find((p) => p.type === 'hour');
+    let fmt = hourFormats.get(tz);
+    if (!fmt) {
+        fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' });
+        if (hourFormats.size >= 200) hourFormats.clear(); // bounded: zone names come from users' settings
+        hourFormats.set(tz, fmt);
+    }
+    const h = fmt.formatToParts(now).find((p) => p.type === 'hour');
     return Number(h.value) % 24;
 }
 

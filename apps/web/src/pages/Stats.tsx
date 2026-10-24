@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { BarChart3, CalendarDays, Flame, ListChecks, Sparkles } from "lucide-react";
+import { BarChart3, CalendarDays, Flame, History, ListChecks, Sparkles } from "lucide-react";
 import type { HistoryRange } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
 import { XPChart } from "@/components/stats/XPChart";
 import { Heatmap } from "@/components/stats/Heatmap";
-import { useStatsSummary, useXpHistory } from "@/hooks/useApi";
+import { useStatsSummary, useXpHistory, useXpLedger } from "@/hooks/useApi";
 import { sumBy } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,37 @@ const Card = ({ title, icon, children, className }: { title: string; icon: React
 );
 
 const Skeleton = ({ className }: { className: string }) => <div className={cn("animate-pulse rounded-xl bg-card/50", className)} aria-busy="true" />;
+
+/** "task_complete" -> "Task complete", for a source the summary has no label for. */
+const humanize = (source: string) => source.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+const RecentXp = ({ labels }: { labels: Map<string, string> }) => {
+  const ledger = useXpLedger();
+  return (
+    <QueryState query={ledger} what="your XP history" skeleton={<Skeleton className="h-40" />}>
+      {(rows) =>
+        rows.length === 0 ? (
+          <p className="text-sm text-foreground-muted">No XP transactions yet.</p>
+        ) : (
+          <ul className="divide-y divide-border" aria-label="Recent XP transactions">
+            {rows.slice(0, 15).map((r) => (
+              <li key={r.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0 truncate">
+                  {labels.get(r.source) ?? humanize(r.source)}
+                  <span className="ml-2 text-xs text-foreground-muted">{new Date(r.created_at).toLocaleDateString()}</span>
+                </span>
+                <span className={cn("shrink-0 font-semibold", r.amount < 0 ? "text-destructive-text" : "text-success")}>
+                  {r.amount > 0 ? "+" : ""}
+                  {r.amount.toLocaleString()} XP
+                </span>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </QueryState>
+  );
+};
 
 const Stats = () => {
   const [range, setRange] = useState<HistoryRange>(30);
@@ -85,7 +116,13 @@ const Stats = () => {
                   <span className="font-semibold text-foreground">{sumBy(days, "xp").toLocaleString()} XP</span> and{" "}
                   <span className="font-semibold text-foreground">{sumBy(days, "tasksCompleted")} tasks</span> in the last {range} days
                 </p>
-                <XPChart days={days} />
+                {sumBy(days, "xp") === 0 && sumBy(days, "tasksCompleted") === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-foreground-muted">
+                    Nothing to chart in the last {range} days. Finish a task and it will show up here.
+                  </p>
+                ) : (
+                  <XPChart days={days} />
+                )}
               </>
             )}
           </QueryState>
@@ -125,6 +162,10 @@ const Stats = () => {
             </QueryState>
           </Card>
         </div>
+
+        <Card title="Recent XP" icon={<History className="h-4 w-4 text-primary-text" aria-hidden />}>
+          <RecentXp labels={new Map((summary.data?.xpBySource30d ?? []).map((r) => [r.source, r.label]))} />
+        </Card>
       </div>
     </DashboardLayout>
   );

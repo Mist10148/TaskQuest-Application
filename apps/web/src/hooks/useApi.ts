@@ -30,6 +30,7 @@ import {
     gamesApi,
     questsApi,
     statsApi,
+    xpApi,
     focusApi,
     reviewApi,
     todayApi,
@@ -674,6 +675,11 @@ export function useClaimQuest() {
 
 export function useXpHistory(days: HistoryRange) {
     return useQuery({ queryKey: ['stats', 'xp-history', days], queryFn: ({ signal }) => statsApi.xpHistory(days, signal) });
+}
+
+/** The player's last 50 XP transactions (earned and spent). Refreshed with the rest of the progress data. */
+export function useXpLedger() {
+    return useQuery({ queryKey: ['xp-history'], queryFn: xpApi.getHistory });
 }
 
 export function useStatsSummary() {

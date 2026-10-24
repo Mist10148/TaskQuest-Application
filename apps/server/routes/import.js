@@ -6,7 +6,6 @@ import shared from '@taskquest/shared';
 import { asyncRoute, parse, uid } from '../lib/http.js';
 import { csvImportBody } from '../lib/schemas.js';
 import aiClient from '../lib/aiClient.js';
-import { heavyLimiter } from '../lib/security.js';
 
 const { TaskQuestError } = shared;
 const router = Router();
@@ -14,7 +13,6 @@ const router = Router();
 // Body {csv, dryRun?}. A dry run only reports what would be imported (and any row errors) and writes nothing.
 router.post(
     '/csv',
-    heavyLimiter,
     asyncRoute(async (req, res) => {
         const { csv, dryRun } = parse(csvImportBody, req.body);
         const parsed = shared.csvToImport(csv);

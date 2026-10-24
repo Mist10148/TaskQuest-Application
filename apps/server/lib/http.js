@@ -23,7 +23,12 @@ export function notFound(req, res) {
     res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
 }
 
+/** The path for an error log line: no query string and no 32-hex token, since the calendar feed address is a bearer secret. */
+export const logPath = (req) => req.originalUrl.split('?')[0].replace(/[a-f0-9]{32}/gi, '<token>');
+
 export function errorHandler(err, req, res, next) {
+    // Headers already sent (a stream that failed half way): the default handler closes the connection; a second response would throw.
+    if (res.headersSent) return next(err);
     if (err instanceof TaskQuestError) {
         if (err.code === 'COOLDOWN' && err.details?.retryAfterMs) {
             res.set('Retry-After', String(Math.ceil(err.details.retryAfterMs / 1000)));
@@ -45,7 +50,7 @@ export function errorHandler(err, req, res, next) {
     if (Number.isInteger(err?.status) && err.status >= 400 && err.status < 500 && err.expose) {
         return res.status(err.status).json({ error: err.status === 415 ? 'Unsupported content encoding or charset' : 'Bad request', code: 'VALIDATION' });
     }
-    console.error(`[${req.method} ${req.originalUrl}]`, err);
+    console.error(`[${req.method} ${logPath(req)}]`, err);
     res.status(500).json({ error: 'Internal server error', code: 'INTERNAL' });
 }
 

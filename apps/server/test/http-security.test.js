@@ -160,3 +160,17 @@ test('heavyLimiter: the 21st simulation or CSV request in a minute from one acco
     assert.equal(refused.res.body.code, 'RATE_LIMITED');
     assert.equal((await call('heavy-b')).passed, true, 'another account has its own budget');
 });
+
+test('logPath drops the query string and hides a calendar feed token', async () => {
+    const { logPath } = await import('../lib/http.js');
+    const token = 'a'.repeat(32);
+    assert.equal(logPath({ originalUrl: `/api/calendar/${token}.ics?x=1` }), '/api/calendar/<token>.ics');
+    assert.equal(logPath({ originalUrl: '/api/lists/12?include=items' }), '/api/lists/12');
+});
+
+test('errorHandler hands the error on when the response has already started', async () => {
+    let passed = null;
+    const res = { headersSent: true, status() { throw new Error('must not respond twice'); } };
+    errorHandler(new Error('late'), { method: 'GET', originalUrl: '/api/x' }, res, (err) => { passed = err; });
+    assert.equal(passed.message, 'late');
+});

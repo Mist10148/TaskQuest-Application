@@ -1035,8 +1035,9 @@ async function getReminderCandidates(now = new Date()) {
         const d = new Date(now.getTime() + offset * 86400e3);
         return d.toISOString().slice(0, 10);
     };
-    const counts = `(SELECT COUNT(*) FROM items i WHERE i.list_id = l.id) AS items_total,
-                (SELECT COALESCE(SUM(i.completed), 0) FROM items i WHERE i.list_id = l.id) AS items_done`;
+    // Top-level tasks only, as in getLists: an open subtask of a finished task does not keep a quest open.
+    const counts = `(SELECT COUNT(*) FROM items i WHERE i.list_id = l.id AND i.parent_id IS NULL) AS items_total,
+                (SELECT COALESCE(SUM(i.completed), 0) FROM items i WHERE i.list_id = l.id AND i.parent_id IS NULL) AS items_done`;
     const owners = await run(
         `SELECT l.*, l.discord_id AS owner_id, u.timezone, u.reminder_hour, ${counts}
          FROM lists l JOIN users u ON u.discord_id = l.discord_id

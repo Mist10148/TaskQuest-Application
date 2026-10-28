@@ -283,7 +283,7 @@ async function getCalendarData(discordId) {
     const acc = access.accessSql('l', discordId);
     const [lists] = await getPool().query(
         `SELECT l.id, l.name, l.description, l.category, l.deadline,
-                (SELECT CASE WHEN COUNT(*) > 0 AND SUM(i.completed) = COUNT(*) THEN 1 ELSE 0 END FROM items i WHERE i.list_id = l.id) AS completed
+                (SELECT CASE WHEN COUNT(*) > 0 AND SUM(i.completed) = COUNT(*) THEN 1 ELSE 0 END FROM items i WHERE i.list_id = l.id AND i.parent_id IS NULL) AS completed
          FROM lists l WHERE ${acc.sql} AND l.deadline IS NOT NULL`,
         acc.params
     );

@@ -96,15 +96,24 @@ async function withCommentCounts(conn, rows) {
     return rows.map((r) => (r ? { ...r, comment_count: counts.get(r.id) || 0 } : r));
 }
 
-/** The comments `discordId` wrote, on any quest, for their export: where (quest and task name), what and when. */
+/**
+ * The comments `discordId` wrote, on any quest, for their export: where (quest and task name), what and when. The quest and
+ * task names are left out (null) for a quest the author is no longer on, since they are someone else's and may have been
+ * renamed since; the comment itself is the author's.
+ */
 async function ownComments(discordId) {
+    const me = String(discordId);
+    const acc = access.accessSql('l', me);
     const [rows] = await getPool().query(
-        `SELECT l.name AS list, i.name AS task, c.body, c.created_at
+        `SELECT l.name AS list, i.name AS task, c.body, c.created_at, CASE WHEN ${acc.sql} THEN 1 ELSE 0 END AS visible
            FROM item_comments c JOIN items i ON i.id = c.item_id JOIN lists l ON l.id = i.list_id
           WHERE c.author_id = ? ORDER BY c.created_at, c.id`,
-        [String(discordId)]
+        [...acc.params, me]
     );
-    return rows.map((r) => ({ list: r.list, task: r.task, body: r.body, createdAt: r.created_at }));
+    return rows.map((r) => {
+        const visible = Number(r.visible) === 1;
+        return { list: visible ? r.list : null, task: visible ? r.task : null, body: r.body, createdAt: r.created_at };
+    });
 }
 
 module.exports = { listComments, addComment, deleteComment, withCommentCounts, ownComments, READ_LIMIT };

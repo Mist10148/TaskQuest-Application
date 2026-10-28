@@ -4932,6 +4932,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(owners.lists.some((l) => l.name === 'Talked about'));
         await db.transfer.importAll(CM.stranger, JSON.parse(JSON.stringify({ ...mine, lists: [{ name: 'Re-imported', items: [{ name: 'x' }] }] })));
         assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM item_comments WHERE author_id = ?', [CM.stranger]))[0].n), 1, 'an import writes no comments');
+        // Off the quest, the comment stays in the export but the (owner's, maybe renamed) quest and task names do not.
+        await db.query('DELETE FROM list_members WHERE list_id = ? AND discord_id = ?', [list.id, CM.stranger]);
+        const after = await db.transfer.exportAll(CM.stranger);
+        assert.deepEqual(after.comments.map((c) => [c.list, c.task, c.body]), [[null, null, 'from a member']]);
 
         // At most 200, the newest, oldest first.
         const busy = (await db.tasks.addItem(CM.owner, list.id, { name: 'Busy thread' })).item;

@@ -291,11 +291,11 @@ function listsOverviewEmbed(lists, sort = '', filter = '', today = todayInZone()
         // Line 2: Metadata (category + deadline) in muted text
         const metaParts = [];
         
-        // Category with emoji
+        // Category with emoji (free text, and on a shared list someone else wrote it, so escaped like the name)
         if (l.category && CATEGORY_EMOJI[l.category]) {
-            metaParts.push(`${CATEGORY_EMOJI[l.category]} ${l.category}`);
+            metaParts.push(`${CATEGORY_EMOJI[l.category]} ${escapeDiscord(l.category, { max: 50 })}`);
         } else if (l.category) {
-            metaParts.push(`📁 ${l.category}`);
+            metaParts.push(`📁 ${escapeDiscord(l.category, { max: 50 })}`);
         }
         
         // Deadline - properly formatted
@@ -728,11 +728,12 @@ function detailsModal(item) {
         if (value) t.setValue(String(value).slice(0, max));
         return new ActionRowBuilder().addComponents(t);
     };
-    const tags = String(item.tags || '').split(',').filter(Boolean).join(', ');
+    // Joined without spaces: five tags of 20 characters then need 104 characters, which the input allows.
+    const tags = String(item.tags || '').split(',').filter(Boolean).join(',');
     return new ModalBuilder().setCustomId(`m_details_${item.id}`).setTitle(`Details: ${item.name.substring(0, 30)}`).addComponents(
         input('due', 'Due date YYYY-MM-DD (empty clears)', '2030-12-31', 10, validation.formatDate(item.due_date)),
         input('priority', 'Priority: low, med or high (empty clears)', 'med', 6, item.priority && (item.priority === 'MEDIUM' ? 'med' : item.priority.toLowerCase())),
-        input('tags', 'Tags, comma separated, max 5', 'home, bills', 100, tags),
+        input('tags', 'Tags, comma separated, max 5', 'home, bills', 120, tags),
         input('repeat', 'Repeat: none, daily, weekly or monthly', 'none', 7, item.recurrence)
     );
 }

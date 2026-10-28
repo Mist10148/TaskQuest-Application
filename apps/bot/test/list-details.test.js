@@ -56,7 +56,7 @@ test('the Details modal has four inputs and is pre-filled from the task', () => 
     assert.equal(modal.custom_id, 'm_details_9');
     const inputs = modal.components.map((r) => r.components[0]);
     assert.deepEqual(inputs.map((i) => i.custom_id), ['due', 'priority', 'tags', 'repeat']);
-    assert.deepEqual(inputs.map((i) => i.value), ['2031-03-10', 'med', 'a, b', 'daily']);
+    assert.deepEqual(inputs.map((i) => i.value), ['2031-03-10', 'med', 'a,b', 'daily']);
     assert.ok(inputs.every((i) => i.required === false));
     assert.ok(modal.title.length <= 45);
     assert.equal(ui.detailsModal(item(1, { name: 'z'.repeat(200) })).toJSON().title.length <= 45, true);
@@ -156,6 +156,20 @@ test('the lists overview stays under the embed limit for a user with hundreds of
     assert.match(text, /…and \d+ more/);
     const few = ui.listsOverviewEmbed(lists.slice(0, 3)).toJSON().description;
     assert.doesNotMatch(few, /more\./);
+});
+
+test('the Details modal keeps five tags of twenty characters whole', () => {
+    const long = ['a', 'b', 'c', 'd', 'e'].map((c) => c.repeat(20));
+    const modal = ui.detailsModal(item(1, { tags: long.join(',') })).toJSON();
+    const input = modal.components.map((row) => row.components[0]).find((c) => c.custom_id === 'tags');
+    assert.equal(input.value, long.join(','));
+    assert.ok(input.max_length >= input.value.length);
+});
+
+test('a list category in the overview cannot add a link or a mention', () => {
+    const text = ui.listsOverviewEmbed([{ id: 1, name: 'Work', category: '[Free](https://evil.example) @everyone', priority: null, deadline: null, shared: true }]).toJSON().description;
+    assert.doesNotMatch(text, /\[Free\]\(https/);
+    assert.doesNotMatch(text, /@everyone/); // escapeDiscord puts a zero-width space after the @
 });
 
 test('list autocomplete offers a shared list that shares a name with your own by id', () => {

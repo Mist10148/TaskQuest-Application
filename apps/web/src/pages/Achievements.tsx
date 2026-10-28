@@ -52,6 +52,9 @@ const Achievements = () => {
   const totalCount = data?.totalCount || achievements.length;
 
   const shown = achievements.filter((a: Achievement) => filter === "all" || (filter === "unlocked" ? a.unlocked : !a.unlocked));
+  // How many each filter would show, once the list is loaded.
+  const unlockedHere = achievements.filter((a: Achievement) => a.unlocked).length;
+  const filterCount: Record<Filter, number> = { all: achievements.length, unlocked: unlockedHere, locked: achievements.length - unlockedHere };
   const grouped = shown.reduce((acc: Record<string, Achievement[]>, ach: Achievement) => {
     const cat = ach.category || 'other';
     if (!acc[cat]) acc[cat] = [];
@@ -127,6 +130,7 @@ const Achievements = () => {
             className={cn("rounded-md px-3 py-1.5 text-sm font-medium transition-colors", filter === f.value ? "bg-card text-foreground shadow-xs" : "text-foreground-muted hover:text-foreground")}
           >
             {f.label}
+            {achievements.length > 0 && <span className="ml-1 tabular-nums text-foreground-muted">({filterCount[f.value]})</span>}
           </button>
         ))}
       </div>

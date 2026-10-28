@@ -15,6 +15,7 @@ import { describeChest } from '@/lib/classInfo';
 import { achievementDescription } from '@/lib/bonuses';
 import { RewardBreakdown } from '@/components/feedback/RewardBreakdown';
 import {
+    ApiError,
     userApi,
     importApi,
     templatesApi,
@@ -977,6 +978,23 @@ export function usePrioritize(limit = 5) {
         staleTime: 5 * 60_000,
         retry: false,
     });
+}
+
+/**
+ * Whether the AI service answers (GET /api/ai/ping). Only a 503 (the service is down or not configured) counts as unavailable;
+ * while it is, the check runs again every 30 seconds so the page recovers on its own.
+ */
+export function useAiStatus(enabled = true) {
+    const query = useQuery({
+        queryKey: ['ai', 'ping'],
+        queryFn: aiApi.ping,
+        enabled,
+        retry: false,
+        staleTime: 60_000,
+        refetchInterval: (q) => (q.state.error ? 30_000 : false),
+    });
+    const unavailable = query.error instanceof ApiError && query.error.status === 503;
+    return { unavailable, recheck: query.refetch, checking: query.isFetching };
 }
 
 export function useChatThreads(enabled = true) {

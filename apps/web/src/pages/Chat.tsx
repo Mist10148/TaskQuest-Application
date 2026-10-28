@@ -11,7 +11,7 @@ import { useSlow } from "@/components/ai/useSlow";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/hooks/useChat";
 import { usePreferences } from "@/contexts/PreferencesContext";
-import { useChatThreads, useDeleteThread } from "@/hooks/useApi";
+import { useAiStatus, useChatThreads, useDeleteThread } from "@/hooks/useApi";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,7 @@ const Chat = () => {
   const enabled = Boolean(user?.features?.ai);
   const { data: threadData, isLoading: threadsLoading, isError: threadsFailed, refetch: refetchThreads, isFetching: threadsFetching } = useChatThreads(enabled);
   const deleteThread = useDeleteThread();
+  const aiStatus = useAiStatus(enabled);
   const chat = useChat(routeThreadId ?? null);
   // /chat?q=... pre-fills the box (used by the quick-add "Ask AI" button); it is never sent automatically.
   const [searchParams] = useSearchParams();
@@ -235,6 +236,14 @@ const Chat = () => {
             </Button>
           )}
 
+          {aiStatus.unavailable && (
+            <div role="status" className="mx-3 mb-0 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background-secondary px-3 py-2 text-sm">
+              <span>The assistant is not reachable right now. Your quests are fine; try again in a moment.</span>
+              <Button type="button" size="sm" variant="outline" disabled={aiStatus.checking} onClick={() => void aiStatus.recheck()}>
+                {aiStatus.checking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null} Check again
+              </Button>
+            </div>
+          )}
           <form
             className="border-t border-border p-3 flex items-end gap-2"
             onSubmit={(e) => { e.preventDefault(); submit(); }}
@@ -244,17 +253,17 @@ const Chat = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
-              placeholder={chat.pending.length ? "Approve or cancel the change above first" : "Ask anything about your quests…"}
+              placeholder={chat.pending.length ? "Approve or cancel the change above first" : aiStatus.unavailable ? "The assistant is unavailable" : "Ask anything about your quests…"}
               rows={1}
               maxLength={2000}
-              disabled={chat.pending.length > 0 || chat.historyLoading}
+              disabled={chat.pending.length > 0 || chat.historyLoading || aiStatus.unavailable}
               className="resize-none min-h-[40px] max-h-32"
               aria-label="Message"
             />
             {chat.isStreaming ? (
               <Button type="button" variant="outline" size="icon" onClick={chat.stop} aria-label="Stop"><Square className="h-4 w-4" /></Button>
             ) : (
-              <Button type="submit" size="icon" disabled={!input.trim() || chat.pending.length > 0} aria-label="Send"><Send className="h-4 w-4" /></Button>
+              <Button type="submit" size="icon" disabled={!input.trim() || chat.pending.length > 0 || aiStatus.unavailable} aria-label="Send"><Send className="h-4 w-4" /></Button>
             )}
           </form>
         </section>

@@ -370,6 +370,7 @@ export function parseSseFrame(frame: string): ChatEvent | null {
 }
 
 export const aiApi = {
+    ping: () => apiFetch<{ pong: boolean }>('/api/ai/ping'),
     summary: (body: { mode: 'list'; listId: number } | { mode: 'digest' } | { mode: 'recap'; range?: 'day' | 'week' }) =>
         post<AiSummary>('/api/ai/summary', body),
     prioritize: (limit?: number) => post<AiPriorityResult>('/api/ai/prioritize', limit ? { limit } : {}),

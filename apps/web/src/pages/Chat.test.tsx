@@ -4,11 +4,18 @@ import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ useChat: vi.fn(), send: vi.fn(), acknowledgeCreated: vi.fn(), threadsLoading: false }));
+const mocks = vi.hoisted(() => ({
+  useChat: vi.fn(),
+  send: vi.fn(),
+  acknowledgeCreated: vi.fn(),
+  threadsLoading: false,
+  aiStatus: { unavailable: false, recheck: vi.fn(), checking: false },
+}));
 vi.mock("@/hooks/useChat", () => ({ useChat: mocks.useChat }));
 vi.mock("@/hooks/useApi", () => ({
   useChatThreads: () => ({ data: mocks.threadsLoading ? undefined : { threads: [{ id: "t1", title: "Plans" }] }, isLoading: mocks.threadsLoading, isError: false, refetch: vi.fn(), isFetching: false }),
   useDeleteThread: () => ({ mutateAsync: vi.fn() }),
+  useAiStatus: () => mocks.aiStatus,
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { features: { ai: true } } }) }));
 vi.mock("@/contexts/PreferencesContext", () => ({ usePreferences: () => ({ reduceMotion: true }) }));
@@ -52,6 +59,7 @@ beforeAll(() => {
 
 describe("Chat page", () => {
   beforeEach(() => {
+    mocks.aiStatus = { unavailable: false, recheck: vi.fn(), checking: false };
     mocks.send.mockReset().mockResolvedValue("ok");
     mocks.acknowledgeCreated.mockReset();
   });
@@ -169,5 +177,15 @@ describe("Chat page", () => {
     await userEvent.click(buttons[0]);
     expect(writeText).toHaveBeenCalledWith("Start with math");
     expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("says when the assistant is unreachable, keeps the box closed, and checks again on request", async () => {
+    mocks.aiStatus = { unavailable: true, recheck: vi.fn(), checking: false };
+    mocks.useChat.mockReturnValue(chatState());
+    renderAt("/chat");
+    expect(screen.getByText(/The assistant is not reachable right now/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(mocks.aiStatus.recheck).toHaveBeenCalled();
   });
 });

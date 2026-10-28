@@ -90,3 +90,6 @@ export const sumBy = (days: readonly XPHistoryDay[], key: "xp" | "tasksCompleted
 
 /** Today's UTC date as YYYY-MM-DD. */
 export const utcToday = (now: Date = new Date()): string => now.toISOString().slice(0, 10);
+
+/** "task_complete" -> "Task complete", for an XP source with no label of its own. */
+export const humanizeSource = (source: string): string => source.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());

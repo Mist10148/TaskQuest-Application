@@ -10,7 +10,8 @@ import { classColor } from "@/lib/classColors";
 import { StreakFreezeCard } from "@/components/game/StreakFreezeCard";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { Button } from "@/components/ui/button";
-import { useClasses } from "@/hooks/useApi";
+import { useClasses, useXpLedger } from "@/hooks/useApi";
+import { humanizeSource } from "@/lib/stats";
 import { classCounter, freezeLimits } from "@/lib/classInfo";
 import { PrestigeCard } from "@/components/game/PrestigeCard";
 import { PrestigeTag } from "@/components/game/PrestigeTag";
@@ -46,6 +47,34 @@ const STAT_TONES: Record<string, { bg: string; icon: string }> = {
   purple: { bg: "bg-purple-500/20", icon: "text-purple-700 dark:text-purple-400" },
   yellow: { bg: "bg-yellow-500/20", icon: "text-yellow-700 dark:text-yellow-400" },
   cyan: { bg: "bg-cyan-500/20", icon: "text-cyan-700 dark:text-cyan-400" },
+};
+
+/** The last few XP entries (earned and spent), with a link to the full list on Stats. Quiet while loading or when it fails. */
+const RecentXpCard = () => {
+  const { data: rows } = useXpLedger();
+  if (!rows?.length) return null;
+  return (
+    <section className="mb-6 rounded-xl border border-border bg-card p-4 sm:mb-8 sm:p-5" aria-labelledby="recent-xp-heading">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 id="recent-xp-heading" className="font-heading font-semibold">Recent XP</h2>
+        <Link to="/stats" className="text-sm text-primary-text underline-offset-2 hover:underline">All on Stats</Link>
+      </div>
+      <ul className="divide-y divide-border">
+        {rows.slice(0, 5).map((r) => (
+          <li key={r.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+            <span className="min-w-0 truncate">
+              {humanizeSource(r.source)}
+              <span className="ml-2 text-xs text-foreground-muted">{new Date(r.created_at).toLocaleDateString()}</span>
+            </span>
+            <span className={cn("shrink-0 font-semibold", r.amount < 0 ? "text-destructive-text" : "text-success")}>
+              {r.amount > 0 ? "+" : ""}
+              {r.amount.toLocaleString()} XP
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 };
 
 const Profile = () => {
@@ -183,6 +212,8 @@ const Profile = () => {
         <PrestigeCard gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
 
         <StreakFreezeCard freezes={Number(dbUser.streak_freezes) || 0} cost={freeze.cost} max={freeze.max} balance={totalXP} gamificationOn={Boolean(dbUser.gamification_enabled ?? true)} />
+
+        <RecentXpCard />
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">

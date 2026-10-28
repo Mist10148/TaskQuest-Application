@@ -6,7 +6,7 @@ import { QueryState } from "@/components/feedback/QueryState";
 import { XPChart } from "@/components/stats/XPChart";
 import { Heatmap } from "@/components/stats/Heatmap";
 import { useStatsSummary, useXpHistory, useXpLedger } from "@/hooks/useApi";
-import { sumBy } from "@/lib/stats";
+import { humanizeSource, sumBy } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
 const RANGES: HistoryRange[] = [7, 30, 90];
@@ -20,8 +20,6 @@ const Card = ({ title, icon, children, className }: { title: string; icon: React
 
 const Skeleton = ({ className }: { className: string }) => <div className={cn("animate-pulse rounded-xl bg-card/50", className)} aria-busy="true" />;
 
-/** "task_complete" -> "Task complete", for a source the summary has no label for. */
-const humanize = (source: string) => source.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
 const RecentXp = ({ labels }: { labels: Map<string, string> }) => {
   const ledger = useXpLedger();
@@ -35,7 +33,7 @@ const RecentXp = ({ labels }: { labels: Map<string, string> }) => {
             {rows.slice(0, 15).map((r) => (
               <li key={r.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
                 <span className="min-w-0 truncate">
-                  {labels.get(r.source) ?? humanize(r.source)}
+                  {labels.get(r.source) ?? humanizeSource(r.source)}
                   <span className="ml-2 text-xs text-foreground-muted">{new Date(r.created_at).toLocaleDateString()}</span>
                 </span>
                 <span className={cn("shrink-0 font-semibold", r.amount < 0 ? "text-destructive-text" : "text-success")}>

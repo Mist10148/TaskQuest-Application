@@ -206,7 +206,7 @@ Achievement unlocks happen in the same transaction (`ON CONFLICT DO NOTHING` on 
 | Login CSRF | OAuth `state` bound to the session and compared in constant time. |
 | IDOR | Access is decided in one place (`access.js`: ownership or a membership row with a sufficient role) and a stranger gets 404. Discord IDs of other people are never sent to a client (members are addressed by an opaque key, tasks expose display names). |
 | XSS / clickjacking | helmet CSP (`script-src 'self'`, `frame-ancestors 'none'`, `img-src 'self' cdn.discordapp.com`). React escapes output. |
-| Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games), 20 per minute (AI), 30 comments per minute; invitations 30 per 15 min and 100 a day per account, 60 per 15 min and 300 a day per address. |
+| Brute force / abuse | `express-rate-limit`: 900 requests per 15 min (general), 30 per 15 min (login), 90 per minute (games), 20 per minute (AI), 30 comments per minute, 20 per minute for the previews, imports and exports; invitations 30 per 15 min and 100 a day per account, 60 per 15 min and 300 a day per address. |
 | Mass assignment / bad input | `.strict()` zod schemas, then service-level validation. 16 KB body limit. |
 | Information leaks | Generic 500s. The health check reveals no error text. The leaderboard has no Discord IDs. |
 | Weak secrets | The server refuses to start in production without a SESSION_SECRET of 32+ characters. No fallback secret. |

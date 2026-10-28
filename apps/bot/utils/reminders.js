@@ -376,7 +376,8 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
         console.error('Snooze failed:', err);
         return interaction.reply({ content: 'Could not snooze that right now. Try the button again in a moment.', flags: MessageFlags.Ephemeral });
     }
-    return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.', flags: MessageFlags.SuppressNotifications });
+    // No flags: an edit may only change SUPPRESS_EMBEDS, and Discord refuses the whole edit for any other.
+    return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.' });
 }
 
 module.exports = { createBudget, flushOverflow, markWithRetry, pushReminder, MAX_DMS_PER_USER_PER_RUN, sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };

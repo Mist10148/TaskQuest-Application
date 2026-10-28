@@ -82,7 +82,8 @@ const Starter = ({ status }: { status: FocusStatus }) => {
       </p>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Session length">
         {FOCUS_PRESETS.map((m) => (
-          <Button key={m} variant="outline" disabled={full || start.isPending} onClick={() => start.mutate(m)}>
+          <Button key={m} variant="outline" className="gap-2" disabled={full || start.isPending} onClick={() => start.mutate(m)}>
+            {start.isPending && start.variables === m && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
             {m} min
           </Button>
         ))}
@@ -144,11 +145,14 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
     document.title = left > 0 ? focusTitle(left, base) : `Time's up · ${base}`;
   }, [left]);
 
-  // A soft chime when the time runs out (it follows the "Game sounds" setting).
+  // When the time runs out: a soft chime (it follows the "Game sounds" setting), and keyboard focus moves to "Finish session",
+  // whose new state a screen reader then reads out with the "Time's up" line below it.
+  const finishRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (left === 0 && wasRunning.current) {
       wasRunning.current = false;
       playSound("win");
+      finishRef.current?.focus();
     }
   }, [left]);
 
@@ -163,11 +167,11 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
       <p className="font-heading text-6xl font-bold tabular-nums sm:text-7xl" role="timer" aria-label="Time left" data-testid="focus-timer">
         {formatClock(left)}
       </p>
-      <p className="mt-2 text-sm text-foreground-muted">
+      <p className="mt-2 text-sm text-foreground-muted" role="status">
         {left === 0 ? "Time's up! Finish the session to collect your XP." : "Stay with it. The timer cannot be paused: leave early and the session ends without XP."}
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <Button className="gap-2" disabled={!payable || finishing} onClick={run}>
+        <Button ref={finishRef} className="gap-2" disabled={!payable || finishing} onClick={run}>
           {finishing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
           Finish session
         </Button>

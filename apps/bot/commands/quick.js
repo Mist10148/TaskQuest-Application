@@ -11,6 +11,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const { tasks, users } = require('@taskquest/shared/db');
 const { parseQuickAdd, todayInZone, formatDeadline, escapeDiscord } = require('@taskquest/shared');
 const ui = require('../utils/ui');
+const { autocompleteChoices, findList } = require('../utils/listChoice');
 const aiSync = require('../utils/aiSync');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -27,7 +28,7 @@ async function execute(interaction) {
     try {
         const userId = interaction.user.id;
         const user = await users.ensureUser(userId);
-        const list = await tasks.getListByName(userId, interaction.options.getString('list'));
+        const list = await findList(userId, interaction.options.getString('list'));
         if (!list) return interaction.editReply({ embeds: [ui.error('List not found', 'Pick one of your lists from the suggestions.')] });
 
         const today = todayInZone(user.timezone);
@@ -62,13 +63,8 @@ async function autocomplete(interaction) {
         if (focused.name !== 'list') return await interaction.respond([]);
         const q = String(focused.value || '').toLowerCase();
         const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
-        return await interaction.respond(
-            lists
-                .filter((l) => l.role !== 'viewer') // a view-only list cannot take a new task
-                .filter((l) => l.name.toLowerCase().includes(q))
-                .slice(0, 25)
-                .map((l) => ({ name: l.name.slice(0, 100), value: l.name.slice(0, 100) }))
-        );
+        // A view-only list cannot take a new task.
+        return await interaction.respond(autocompleteChoices(lists, (l) => l.role !== 'viewer', q));
     } catch {
         return interaction.respond([]).catch(() => {});
     }

@@ -14,6 +14,7 @@ const { createAiClient } = require('@taskquest/shared/ai');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 const fmt = require('../utils/aiFormat');
 const ui = require('../utils/ui');
+const { ID_VALUE } = require('../utils/listChoice');
 
 const SLOW_CALL_MS = 45000; // summaries and rankings can take a while on a cold start
 
@@ -83,15 +84,19 @@ async function assertAllowed(discordId) {
 
 const aiReadable = (l) => l.is_owner !== false && !l.shared;
 
-/** The quest option is a list id (picked from autocomplete) or a typed name. */
+/** The quest option is `#<id>` (picked from autocomplete) or a typed name; a bare number is an id only when no quest has that name. */
 async function resolveListId(discordId, value) {
     if (!value) throw new TaskQuestError('VALIDATION', 'Pick a quest with the `quest` option.', 400);
     // The AI only ever sees the user's own unshared quests (repo.py UNSHARED): a list shared with them, or one they own and
     // share, is not offered, since the AI service would answer "not found" for it.
     const lists = (await tasks.getLists(discordId)).filter(aiReadable);
-    const name = value.trim().toLowerCase();
-    // Autocomplete sends the id; a typed value is a name (which may itself be all digits, e.g. "2026").
-    const match = lists.find((l) => l.name.toLowerCase() === name) || lists.find((l) => String(l.id) === value.trim());
+    const text = value.trim();
+    const byId = ID_VALUE.exec(text);
+    // Autocomplete sends `#<id>`; a typed value is a name (which may itself be all digits, e.g. "2026"). A bare id is what
+    // older autocomplete menus sent, so it still works when no quest is called that.
+    const match = byId
+        ? lists.find((l) => String(l.id) === byId[1])
+        : lists.find((l) => l.name.toLowerCase() === text.toLowerCase()) || lists.find((l) => String(l.id) === text);
     if (!match) throw new TaskQuestError('NOT_FOUND', `No quest named "${value}".`, 404);
     return match.id;
 }
@@ -223,7 +228,7 @@ async function autocomplete(interaction) {
             lists
                 .filter((l) => aiReadable(l) && l.name.toLowerCase().includes(q))
                 .slice(0, 25)
-                .map((l) => ({ name: l.name.slice(0, 100), value: String(l.id) }))
+                .map((l) => ({ name: l.name.slice(0, 100), value: `#${l.id}` }))
         );
     } catch (err) {
         // A failed lookup (or an expired interaction) must not become an unhandled rejection.
@@ -246,6 +251,7 @@ module.exports = {
     handleButton,
     autocomplete,
     // exported for tests
+    _resolveListId: resolveListId,
     _setClient: (c) => {
         client = c;
     }

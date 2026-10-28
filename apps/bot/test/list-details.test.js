@@ -158,8 +158,8 @@ test('the lists overview stays under the embed limit for a user with hundreds of
     assert.doesNotMatch(few, /more\./);
 });
 
-test('sharing autocomplete offers a shared list that shares a name with your own by id', () => {
-    const { autocompleteChoices } = require('../commands/sharing');
+test('list autocomplete offers a shared list that shares a name with your own by id', () => {
+    const { autocompleteChoices } = require('../utils/listChoice');
     const lists = [
         { id: 1, name: 'Work', is_owner: true, shared: false },
         { id: 2, name: 'Work', is_owner: false, shared: true, owner_name: 'bob' },
@@ -172,6 +172,40 @@ test('sharing autocomplete offers a shared list that shares a name with your own
     ]);
     const share = autocompleteChoices(lists, () => true, 'wor');
     assert.deepEqual(share.map((c) => c.value), ['#1', '#2']);
+});
+
+test('a #id value picks that list, a typed name falls back to the name lookup', async () => {
+    const db = require('@taskquest/shared/db');
+    const { findList } = require('../utils/listChoice');
+    const real = { getList: db.tasks.getList, getListByName: db.tasks.getListByName };
+    const calls = [];
+    db.tasks.getList = async (uid, id) => (calls.push(['id', id]), { id: Number(id) });
+    db.tasks.getListByName = async (uid, name) => (calls.push(['name', name]), { id: 1 });
+    try {
+        assert.deepEqual(await findList('9', '#42'), { id: 42 });
+        await findList('9', 'Work');
+        await findList('9', '#nope');
+        assert.deepEqual(calls, [['id', '42'], ['name', 'Work'], ['name', '#nope']]);
+    } finally {
+        Object.assign(db.tasks, real);
+    }
+});
+
+test('/summary reads #id as an id, and a quest named with digits by its name', async () => {
+    const db = require('@taskquest/shared/db');
+    const ai = require('../commands/ai');
+    const real = db.tasks.getLists;
+    db.tasks.getLists = async () => [
+        { id: 7, name: '2026', is_owner: true, shared: false },
+        { id: 2026, name: 'Work', is_owner: true, shared: false }
+    ];
+    try {
+        assert.equal(await ai._resolveListId('1', '#2026'), 2026);
+        assert.equal(await ai._resolveListId('1', '2026'), 7);
+        assert.equal(await ai._resolveListId('1', 'work'), 2026);
+    } finally {
+        db.tasks.getLists = real;
+    }
 });
 
 test('/list acknowledges before reading the database, and a missing list is told privately', async () => {

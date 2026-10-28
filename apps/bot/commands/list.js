@@ -19,6 +19,7 @@ const { tasks, users } = require('@taskquest/shared/db');
 const { isPastDeadline, todayInZone, escapeDiscord } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const aiSync = require('../utils/aiSync');
+const { autocompleteChoices, findList } = require('../utils/listChoice');
 const { EPHEMERAL, handleError, sendRewards, idFrom } = require('../utils/respond');
 
 const data = new SlashCommandBuilder()
@@ -93,7 +94,7 @@ async function execute(interaction) {
     const name = interaction.options.getString('name');
 
     if (name) {
-        const list = await tasks.getListByName(userId, name);
+        const list = await findList(userId, name);
         if (!list) {
             // Only the person who asked needs to see this: swap the public placeholder for a private note.
             await interaction.deleteReply().catch(() => {});
@@ -116,12 +117,7 @@ async function autocomplete(interaction) {
     if (focused.name !== 'name') return interaction.respond([]);
     const q = String(focused.value || '').toLowerCase();
     const lists = await tasks.getLists(interaction.user.id, { sortBy: 'name', order: 'ASC' });
-    return interaction.respond(
-        lists
-            .filter((l) => l.name.toLowerCase().includes(q))
-            .slice(0, 25)
-            .map((l) => ({ name: l.name.slice(0, 100), value: l.name.slice(0, 100) }))
-    );
+    return interaction.respond(autocompleteChoices(lists, () => true, q));
 }
 
 // ─── Buttons ─────────────────────────────────────────────────────────────────

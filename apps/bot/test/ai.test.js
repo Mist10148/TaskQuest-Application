@@ -205,7 +205,7 @@ test('/summary defaults to the briefing and resolves a typed quest name', async 
 test('/summary autocomplete offers quest ids, and only quests the AI can read (not shared ones)', async () => {
     const i = fake({ options: { quest: 'gar' } });
     await aiCommands.autocomplete(i);
-    assert.deepEqual(i.sent[0].choices, [{ name: 'Clean garage', value: '8' }]);
+    assert.deepEqual(i.sent[0].choices, [{ name: 'Clean garage', value: '#8' }]);
 });
 
 test('opted-out users and disabled AI never reach the service', async () => {

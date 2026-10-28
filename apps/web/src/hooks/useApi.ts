@@ -931,6 +931,11 @@ export function useGameAllowance() {
     return useQuery({ queryKey: ['games', 'allowance'], queryFn: gamesApi.getAllowance });
 }
 
+/** The server's game rules. They change only with a deploy, so they are fetched once (and not refreshed after every round). */
+export function useGameConfig() {
+    return useQuery({ queryKey: ['gameConfig'], queryFn: gamesApi.config, staleTime: Infinity });
+}
+
 /** The signed-in player's own rank on a board (null when they have no score there yet). */
 export function useMyRank(by: LeaderboardBoard = 'lifetime', playerClass?: string) {
     return useQuery({ queryKey: ['leaderboard', 'me', by, playerClass ?? 'ALL'], queryFn: ({ signal }) => leaderboardApi.me(by, playerClass, signal) });

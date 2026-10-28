@@ -31,3 +31,29 @@ export function clampBet(raw: string, min: number, max: number, fallback: number
     const n = parseBetInput(raw) ?? fallback;
     return Math.min(max, Math.max(min, n));
 }
+
+export interface GameTally {
+    game: string;
+    played: number;
+    won: number;
+    lost: number;
+    /** XP won minus XP bet and lost, over these rounds. */
+    net: number;
+}
+
+/**
+ * Wins, losses and net XP per game over a list of finished rounds (the recent history), in the order the games first appear.
+ * A blackjack counts as a win; a push, an expired or a quit round counts as played only.
+ */
+export function tallyGames(rounds: ReadonlyArray<{ game_type: string; state: string; net: number }>): GameTally[] {
+    const byGame = new Map<string, GameTally>();
+    for (const r of rounds) {
+        const t = byGame.get(r.game_type) ?? { game: r.game_type, played: 0, won: 0, lost: 0, net: 0 };
+        t.played += 1;
+        if (r.state === 'won' || r.state === 'blackjack') t.won += 1;
+        else if (r.state === 'lost') t.lost += 1;
+        t.net += Number(r.net) || 0;
+        byGame.set(r.game_type, t);
+    }
+    return [...byGame.values()];
+}

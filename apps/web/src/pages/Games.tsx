@@ -1,14 +1,16 @@
-import { clampBet, parseBetInput } from "@/lib/gameHelpers";
+import { clampBet, parseBetInput, tallyGames } from "@/lib/gameHelpers";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Spade, Hand, Type, Sparkles, ArrowLeft, RotateCcw, Loader2, Gamepad2, Trophy, Zap, Minus, Plus, HelpCircle, Bug, Rocket, Skull, Target, Volume2, VolumeX } from "lucide-react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { Spade, Hand, Type, Sparkles, ArrowLeft, RotateCcw, Loader2, Gamepad2, Trophy, Zap, Minus, Plus, HelpCircle, Bug, Rocket, Skull, Target, Volume2, VolumeX, Heart } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGameHistory, useGameAllowance, invalidateProgress, showAchievementNotifications, showError } from "@/hooks/useApi";
+import { useGameHistory, useGameAllowance, useGameConfig, invalidateProgress, showAchievementNotifications, showError } from "@/hooks/useApi";
+import { useCountdown } from "@/hooks/useCountdown";
+import { formatLongCountdown } from "@/lib/countdown";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { startFixedLoop } from "@/lib/gameLoop";
 import { createRecorder, type ArcadeTelemetry } from "@/lib/arcade";
@@ -23,6 +25,7 @@ import {
   type ArcadeType,
   type BlackjackResult,
   type Card,
+  type GameConfig,
   type GameSession,
   type HangmanActive,
   type HangmanResult,
@@ -31,8 +34,8 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 
-/** Mirrors @taskquest/shared BLACKJACK_CONFIG; the server enforces it. */
-const BLACKJACK_CONFIG = { MIN_BET: 10, MAX_BET_PERCENT: 0.25, HARD_CAP: 1000 };
+/** Used until GET /api/games/config answers (the same values as @taskquest/shared); the server enforces its own. */
+const BLACKJACK_DEFAULTS = { MIN_BET: 10, MAX_BET_PERCENT: 0.25, HARD_CAP: 1000, BLACKJACK_MULTIPLIER: 1.5, WIN_MULTIPLIER: 1 };
 const FREE_GAME_DAILY_CAP = 500;
 /** The shortest arcade run that earns XP (TELEMETRY_LIMITS.minPayingRunMs on the server). */
 const ARCADE_MIN_PAYING_SECONDS = 5;
@@ -109,56 +112,81 @@ const PlayingCard = ({ card }: { card: Card | null }) => {
 };
 
 // Game Instructions Component
+/** Used until GET /api/games/config answers. */
+const ARCADE_DEFAULTS: GameConfig["arcade"] = {
+  snake: { name: "Snake", xpPerPoint: 2, maxXP: 100, maxPointsPerSecond: 2 },
+  dino: { name: "Dino Runner", xpPerPoint: 1, maxXP: 100, maxPointsPerSecond: 2 },
+  invaders: { name: "Space Invaders", xpPerPoint: 3, maxXP: 150, maxPointsPerSecond: 3 },
+};
+const REWARD_DEFAULTS: GameConfig["rewards"] = { rpsWin: 10, hangmanPerLife: 10, hangmanMin: 10 };
+
+/** How an arcade score turns into XP, e.g. "Pellets × 2 (max 100 per run)". */
+const arcadeXpRule = (arcade: GameConfig["arcade"], game: ArcadeType, unit: string) => {
+  const { xpPerPoint, maxXP } = arcade[game];
+  return `${unit}${xpPerPoint === 1 ? "" : ` × ${xpPerPoint}`} (max ${maxXP} per run)`;
+};
+
+const ArcadeXpRule = ({ game, unit }: { game: ArcadeType; unit: string }) => {
+  const { data: config } = useGameConfig();
+  return <p className="text-sm text-xp mb-4">🎁 XP = {arcadeXpRule(config?.arcade ?? ARCADE_DEFAULTS, game, unit)}</p>;
+};
+
 const GameInstructions = ({ game }: { game: 'blackjack' | 'rps' | 'hangman' | 'snake' | 'dino' | 'invaders' }) => {
   const [expanded, setExpanded] = useState(false);
-  
+  const { data: config } = useGameConfig();
+  const bj = config?.blackjack ?? BLACKJACK_DEFAULTS;
+  const rewards = config?.rewards ?? REWARD_DEFAULTS;
+  const arcade = config?.arcade ?? ARCADE_DEFAULTS;
+  const panelId = `rules-${game}`;
+
   const instructions: Record<string, string[]> = {
     blackjack: [
       "🎯 Goal: Get as close to 21 without going over",
       "🃏 Number cards = face value, Face cards = 10, Ace = 11 or 1",
-      "👆 Hit = draw card, ✋ Stand = keep hand",
-      "💰 Blackjack pays 1.5x, Win pays 1x, Push returns bet. Double down on your first two cards."
+      "👆 Hit = draw card, ✋ Stand = keep hand (keys: H, S and D to double)",
+      `💰 Blackjack pays ${bj.BLACKJACK_MULTIPLIER}x, Win pays ${bj.WIN_MULTIPLIER}x, Push returns bet. Double down on your first two cards.`,
+      `🎲 Bet ${bj.MIN_BET} to ${bj.HARD_CAP} XP, at most ${Math.round(bj.MAX_BET_PERCENT * 100)}% of your balance`
     ],
     rps: [
       "🪨 Rock beats ✂️ Scissors",
-      "📄 Paper beats 🪨 Rock", 
+      "📄 Paper beats 🪨 Rock",
       "✂️ Scissors beats 📄 Paper",
-      "🛡️ 100% Risk-free! Win = +10 XP (plus class bonuses), lose = nothing"
+      `🛡️ 100% Risk-free! Win = +${rewards.rpsWin} XP (plus class bonuses), lose = nothing`
     ],
     hangman: [
-      "🔤 Guess the hidden word letter by letter",
+      "🔤 Guess the hidden word letter by letter (or type the letter)",
       "❤️ You have 6 lives (wrong guesses)",
-      "🎁 Win: +10 XP per remaining life (min 10)",
+      `🎁 Win: +${rewards.hangmanPerLife} XP per remaining life (min ${rewards.hangmanMin})`,
       "🆓 Free to play - losing costs nothing"
     ],
     snake: [
       "🐍 Swipe to move (or use arrow keys/WASD)",
       "🍎 Eat pellets to grow and earn XP",
       "💀 Don't hit walls or yourself!",
-      "🎁 XP = Pellets eaten × 2 (max 100 per run)"
+      `🎁 XP = ${arcadeXpRule(arcade, "snake", "Pellets eaten")}`
     ],
     dino: [
       "🦖 Tap screen or press SPACE to jump",
       "🌵 Avoid cacti and birds!",
       "🏆 Score +1 for each obstacle passed",
-      "🎁 XP = Obstacles passed (max 100 per run)"
+      `🎁 XP = ${arcadeXpRule(arcade, "dino", "Obstacles passed")}`
     ],
     invaders: [
       "🚀 Tap left/right to move & shoot",
       "👾 Destroy all aliens before they reach you!",
       "🏆 Desktop: Arrow keys/WASD + SPACE",
-      "🎁 XP = Aliens destroyed × 3 (max 150 per run)"
+      `🎁 XP = ${arcadeXpRule(arcade, "invaders", "Aliens destroyed")}`
     ]
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4">
-      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-xs text-foreground-muted hover:text-primary-text transition-colors mx-auto">
-        <HelpCircle className="h-3.5 w-3.5" />
+      <button type="button" aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 text-xs text-foreground-muted hover:text-primary-text transition-colors mx-auto">
+        <HelpCircle className="h-3.5 w-3.5" aria-hidden />
         {expanded ? 'Hide' : 'Show'} Rules
       </button>
       {expanded && (
-        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="mt-3 p-3 rounded-lg bg-background-secondary/50 border border-border/50">
+        <motion.div id={panelId} initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="mt-3 p-3 rounded-lg bg-background-secondary/50 border border-border/50">
           {instructions[game]?.map((line, i) => (
             <p key={i} className="text-xs text-foreground-muted py-0.5">{line}</p>
           ))}
@@ -172,7 +200,18 @@ const GameInstructions = ({ game }: { game: 'blackjack' | 'rps' | 'hangman' | 's
 //  BLACKJACK (server-dealt: the browser never sees the deck or hole card)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Key presses for a game screen (not while typing in a field, and never with Ctrl, Alt or Cmd held, so shortcuts keep working). */
+/**
+ * True when a key belongs to something else: typing in a field, a key another shortcut already handled (the letter after "g"
+ * goes to a page, "?" opens the shortcuts), an open dialog, or (unless `allowRepeat`) a held key repeating.
+ */
+function notForGame(e: KeyboardEvent, allowRepeat = false): boolean {
+  if (e.defaultPrevented || (e.repeat && !allowRepeat) || e.ctrlKey || e.metaKey || e.altKey) return true;
+  const target = e.target as HTMLElement | null;
+  if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return true;
+  return Boolean(document.querySelector('[role="dialog"], [role="alertdialog"]'));
+}
+
+/** Key presses for a game screen (see notForGame for the keys it leaves alone). */
 function useGameKeys(onKey: (key: string) => void) {
   const handler = useRef(onKey);
   useEffect(() => {
@@ -180,9 +219,7 @@ function useGameKeys(onKey: (key: string) => void) {
   });
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
+      if (notForGame(e)) return;
       handler.current(e.key);
     };
     window.addEventListener("keydown", listener);
@@ -282,11 +319,16 @@ const BlackjackGame = ({ onBack, bet, onSettled }: { onBack: () => void; bet: nu
               <p className="text-lg font-bold">{view.playerValue.value}{view.playerValue.soft ? ' (soft)' : ''}</p>
             </div>
             {playing ? (
+              <>
               <div className="flex justify-center gap-3">
                 <Button onClick={() => act('hit')} aria-keyshortcuts="H" disabled={busy} variant="outline" className="border-violet-500/50 hover:bg-violet-500/10">👆 Hit</Button>
                 <Button onClick={() => act('stand')} aria-keyshortcuts="S" disabled={busy} className="bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500">✋ Stand</Button>
                 {view.canDouble && <Button onClick={() => act('double')} aria-keyshortcuts="D" disabled={busy} variant="outline" className="border-amber-500/50 text-amber-400 hover:bg-amber-500/10">💰 Double</Button>}
               </div>
+              <p className="mt-3 text-center text-xs text-foreground-muted" aria-hidden>
+                Keys: <kbd className="font-mono">H</kbd> hit · <kbd className="font-mono">S</kbd> stand{view.canDouble && <> · <kbd className="font-mono">D</kbd> double</>}
+              </p>
+              </>
             ) : ended ? (
               <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
                 <p className={cn("text-2xl font-heading font-bold mb-2", view.outcome === "won" || view.outcome === "blackjack" ? "text-success" : view.outcome === "lost" ? "text-destructive-text" : "text-xp")}>
@@ -533,10 +575,15 @@ const HangmanGame = ({ onBack, onSettled }: { onBack: () => void; onSettled: () 
             <Sparkles className="h-4 w-4 text-cyan-400" />
             <span className="font-heading font-bold text-cyan-400">Free play</span>
           </div>
-          <div className="flex gap-1 px-3 py-2 rounded-lg bg-background-secondary/50 border border-border">
+          <div className="flex items-center gap-1 px-3 py-2 rounded-lg bg-background-secondary/50 border border-border">
             {Array(maxLives).fill(0).map((_, i) => (
-              <span key={i} className={cn("text-lg transition-all", i < lives ? "text-destructive-text" : "text-foreground-muted/30 scale-75")}>❤️</span>
+              <Heart
+                key={i}
+                aria-hidden
+                className={cn("h-4 w-4 transition-all", i < lives ? "fill-current text-destructive-text" : "text-foreground-muted/40 scale-75")}
+              />
             ))}
+            <span className="sr-only">{lives} of {maxLives} lives left</span>
           </div>
         </div>
       </div>
@@ -640,7 +687,64 @@ const leaveRun = (playing: boolean, leave: () => void) => {
   leave();
 };
 
-type ArcadeGameProps = { onBack: () => void; onStart: () => Promise<number | null>; onResult: (run: ArcadeTelemetry) => void };
+/** `onResult` resolves the XP the server paid for the run (after its caps and the 5 second minimum), or null when it was not recorded. */
+type ArcadeGameProps = { onBack: () => void; onStart: () => Promise<number | null>; onResult: (run: ArcadeTelemetry) => Promise<number | null> };
+
+const bestKey = (game: ArcadeType) => `taskquest.arcade.best.${game}`;
+
+/** This browser's best score in an arcade game, kept across visits (a per-device convenience: storage may be unavailable). */
+function useBestScore(game: ArcadeType): [number, (score: number) => void] {
+  const [best, setBest] = useState(() => {
+    try {
+      return Math.max(0, Number(window.localStorage.getItem(bestKey(game))) || 0);
+    } catch {
+      return 0;
+    }
+  });
+  const record = useCallback((score: number) => {
+    setBest((cur) => {
+      if (score <= cur) return cur;
+      try {
+        window.localStorage.setItem(bestKey(game), String(score));
+      } catch {
+        /* private mode or storage turned off: the best score lasts for this visit */
+      }
+      return score;
+    });
+  }, [game]);
+  return [best, record];
+}
+
+/**
+ * While a run is in progress: closing or reloading the tab asks first, and leaving the game any other way (a link, a "g"
+ * shortcut, the browser's Back button) closes the server's session, since a run that did not end in a game over cannot be paid.
+ */
+function useRunInProgress(game: ArcadeType, playing: boolean) {
+  const playingRef = useRef(playing);
+  useEffect(() => {
+    playingRef.current = playing;
+  });
+  useEffect(() => {
+    if (!playing) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [playing]);
+  useEffect(() => () => {
+    if (playingRef.current) gamesApi.quit(game).catch(() => {});
+  }, [game]);
+}
+
+/** What the end screen says about XP: the server's figure once it answers. */
+const PaidXp = ({ paid }: { paid: number | null | undefined }) =>
+  paid === undefined ? (
+    <p className="text-sm text-foreground-muted mb-4" role="status">Checking your run…</p>
+  ) : paid === null ? null : (
+    <p className="text-lg font-bold text-success mb-4" role="status">+{paid} XP</p>
+  );
 
 const GRID_SIZE = snakeSim.GRID_SIZE;
 const CELL_SIZE = 15;
@@ -654,8 +758,10 @@ const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
+  const [highScore, recordScore] = useBestScore("snake");
+  const [paid, setPaid] = useState<number | null | undefined>(undefined);
   const [starting, setStarting] = useState(false);
+  useRunInProgress("snake", gameState === "playing");
 
   // The simulation is shared with the server, which replays the recorded inputs to derive the score.
   const simRef = useRef<snakeSim.SnakeState>(snakeSim.create(1));
@@ -679,11 +785,12 @@ const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
     setScore(run.score);
-    if (run.score > highScore) setHighScore(run.score);
+    recordScore(run.score);
     // Report the recorded inputs; the server replays them, derives the pellets eaten, converts them to XP and caps it.
     playSound("lose");
-    onResultRef.current(run);
-  }, [highScore]);
+    setPaid(undefined);
+    void onResultRef.current(run).then(setPaid);
+  }, [recordScore]);
 
   useEffect(() => {
     if (gameState !== "playing") return;
@@ -695,8 +802,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
 
     // Inputs are queued here and handed to the simulation (and the recorder) on the next step.
     const handleKeyDown = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // typing elsewhere on the page
+      if (notForGame(e, true)) return; // typing elsewhere, a "g" shortcut or a dialog
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) e.preventDefault();
       if (e.repeat) return;
       if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") pendingRef.current.push(snakeSim.INPUT.UP);
@@ -832,7 +938,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
               <Bug className="h-16 w-16 mx-auto text-green-400 mb-4 drop-shadow-[0_0_20px_rgba(34,197,94,0.5)]" />
               <h2 className="text-2xl font-heading font-bold mb-2 bg-linear-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">Snake</h2>
               <p className="text-foreground-muted mb-4">Eat pellets, grow longer, don't crash!</p>
-              <p className="text-sm text-xp mb-4">🎁 XP = Pellets × 2</p>
+              <ArcadeXpRule game="snake" unit="Pellets" />
               <Button onClick={startGame} disabled={starting} className="gap-2 bg-linear-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
@@ -853,7 +959,7 @@ const SnakeGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
               <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 Game Over!</p>
               <p className="text-foreground-muted mb-2">Pellets eaten: {score}</p>
-              <p className="text-lg font-bold text-success mb-4">+{score * 2} XP</p>
+              <PaidXp paid={paid} />
               <div className="flex justify-center gap-3">
                 <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-green-500/50 hover:bg-green-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
@@ -886,8 +992,10 @@ const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
+  const [highScore, recordScore] = useBestScore("dino");
+  const [paid, setPaid] = useState<number | null | undefined>(undefined);
   const [starting, setStarting] = useState(false);
+  useRunInProgress("dino", gameState === "playing");
 
   // The simulation is shared with the server, which replays the recorded inputs to derive the score.
   const simRef = useRef<dinoSim.DinoState>(dinoSim.create(1));
@@ -914,10 +1022,11 @@ const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const endGame = useCallback((run: ArcadeTelemetry) => {
     setGameState("ended");
     setScore(run.score);
-    if (run.score > highScore) setHighScore(run.score);
+    recordScore(run.score);
     playSound("lose");
-    onResultRef.current(run);
-  }, [highScore]);
+    setPaid(undefined);
+    void onResultRef.current(run).then(setPaid);
+  }, [recordScore]);
 
   const jump = useCallback(() => {
     const g = simRef.current;
@@ -1056,6 +1165,7 @@ const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
     if (!ctx) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (notForGame(e, true)) return;
       if (e.code === "Space" || e.key === "ArrowUp") {
         e.preventDefault();
         jump();
@@ -1173,7 +1283,7 @@ const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
               <div className="text-6xl mb-4">🦖</div>
               <h2 className="text-2xl font-heading font-bold mb-2 bg-linear-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Dino Runner</h2>
               <p className="text-foreground-muted mb-4">Jump over obstacles - endless runner!</p>
-              <p className="text-sm text-xp mb-4">🎁 XP = Obstacles Passed</p>
+              <ArcadeXpRule game="dino" unit="Obstacles passed" />
               <Button onClick={startGame} disabled={starting} className="gap-2 bg-linear-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
@@ -1198,7 +1308,7 @@ const DinoGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center py-8">
               <p className="text-2xl font-heading font-bold text-destructive-text mb-2">💀 Game Over!</p>
               <p className="text-foreground-muted mb-2">Obstacles passed: {score}</p>
-              <p className="text-lg font-bold text-success mb-4">+{score} XP</p>
+              <PaidXp paid={paid} />
               <div className="flex justify-center gap-3">
                 <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-amber-500/50 hover:bg-amber-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
@@ -1226,9 +1336,11 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<"ready"|"playing"|"ended">("ready");
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
+  const [highScore, recordScore] = useBestScore("invaders");
+  const [paid, setPaid] = useState<number | null | undefined>(undefined);
   const [starting, setStarting] = useState(false);
   const [aliensKilled, setAliensKilled] = useState(0);
+  useRunInProgress("invaders", gameState === "playing");
 
   // The simulation is shared with the server, which replays the recorded inputs to derive the score.
   const simRef = useRef<invadersSim.InvadersState>(invadersSim.create(1));
@@ -1258,11 +1370,12 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
     setAliensKilled(run.score);
     const finalScore = run.score * 3;
     setScore(finalScore);
-    if (finalScore > highScore) setHighScore(finalScore);
+    recordScore(finalScore);
     // Report the recorded inputs; the server replays them, derives the aliens destroyed, converts them to XP and caps it.
     playSound("lose");
-    onResultRef.current(run);
-  }, [highScore]);
+    setPaid(undefined);
+    void onResultRef.current(run).then(setPaid);
+  }, [recordScore]);
 
   useEffect(() => {
     if (gameState !== "playing") return;
@@ -1288,6 +1401,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (notForGame(e, true)) return;
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") setHeld("left", true);
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") setHeld("right", true);
       if (e.code === "Space") {
@@ -1432,7 +1546,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
               <Rocket className="h-16 w-16 mx-auto text-purple-400 mb-4 drop-shadow-[0_0_20px_rgba(168,85,247,0.5)]" />
               <h2 className="text-2xl font-heading font-bold mb-2 bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Space Invaders</h2>
               <p className="text-foreground-muted mb-4">Destroy all the aliens!</p>
-              <p className="text-sm text-xp mb-4">🎁 XP = Aliens × 3</p>
+              <ArcadeXpRule game="invaders" unit="Aliens" />
               <Button onClick={startGame} disabled={starting} className="gap-2 bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500">
                 <Gamepad2 className="h-4 w-4" /> Start Game
               </Button>
@@ -1458,7 +1572,7 @@ const SpaceInvadersGame = ({ onBack, onStart, onResult }: ArcadeGameProps) => {
                 {simRef.current.won ? "🎉 Victory!" : "💀 Game Over!"}
               </p>
               <p className="text-foreground-muted mb-2">Aliens destroyed: {aliensKilled}</p>
-              <p className="text-lg font-bold text-success mb-4">+{aliensKilled * 3} XP</p>
+              <PaidXp paid={paid} />
               <div className="flex justify-center gap-3">
                 <Button onClick={startGame} disabled={starting} variant="outline" className="gap-2 border-purple-500/50 hover:bg-purple-500/10">
                   <RotateCcw className="h-4 w-4" /> Play Again
@@ -1499,24 +1613,55 @@ const Games = () => {
   const qc = useQueryClient();
   const { data: history, isLoading, isError: historyFailed, refetch: refetchHistory } = useGameHistory();
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const { data: allowance } = useGameAllowance();
+  const { data: allowance, isError: allowanceFailed, refetch: refetchAllowance } = useGameAllowance();
+  const { data: gameConfig } = useGameConfig();
+  const bj = gameConfig?.blackjack ?? BLACKJACK_DEFAULTS;
   const { sound, setSound } = usePreferences();
   useEffect(() => setSoundEnabled(sound), [sound]);
   // The open game lives in the URL (/games?play=snake), so the browser's Back button returns to the menu.
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const [bet, setBet] = useState(BLACKJACK_CONFIG.MIN_BET);
+  const [bet, setBet] = useState(BLACKJACK_DEFAULTS.MIN_BET);
   const arcadeRun = useRef<number | null>(null);
   const arcadeStarting = useRef<Promise<{ sessionId: number; seed: number }> | null>(null);
   const notifyAchievements = useNotifyAchievements();
 
   const xp = Number(user?.user?.player_xp) || 0;
-  const maxBet = Math.min(Math.floor(xp * BLACKJACK_CONFIG.MAX_BET_PERCENT), BLACKJACK_CONFIG.HARD_CAP);
-  const canBet = maxBet >= BLACKJACK_CONFIG.MIN_BET;
+  const maxBet = Math.min(Math.floor(xp * bj.MAX_BET_PERCENT), bj.HARD_CAP);
+  const canBet = maxBet >= bj.MIN_BET;
+  const minBalance = Math.ceil(bj.MIN_BET / bj.MAX_BET_PERCENT);
   const asked = gamesList.find((g) => g.id === searchParams.get("play"));
-  // A betting game opened from a link without enough XP to bet shows the menu instead (once the balance is known).
-  const game: GameType = asked && !(asked.requiresBet && user && !canBet) ? (asked.id as GameType) : "menu";
+  // A betting game opened from a link without enough XP to bet shows the menu instead (once the balance is known). Once it is
+  // open it stays open while the balance changes: a lost hand can drop it under the minimum, and its result must still show.
+  const [admitted, setAdmitted] = useState<string | null>(null);
+  const blocked = Boolean(asked?.requiresBet && user && !canBet && admitted !== asked.id);
+  const game: GameType = asked && !blocked ? (asked.id as GameType) : "menu";
+  useEffect(() => {
+    if (game === "menu") setAdmitted(null);
+    else if (user) setAdmitted(game);
+  }, [game, user]);
+
+  // The tab says which game is open ("Snake · Games · TaskQuest"). A layout effect, so leaving restores the title before the
+  // next page sets its own.
+  useLayoutEffect(() => {
+    if (game === "menu") return;
+    const base = document.title;
+    document.title = `${GAME_NAMES[game]} · ${base}`;
+    return () => {
+      document.title = base;
+    };
+  }, [game]);
+
+  // When the free-game day ends, fetch the new allowance instead of showing yesterday's.
+  const resetsAtMs = allowance ? Date.parse(allowance.resetsAt) : NaN;
+  const hasReset = Number.isFinite(resetsAtMs);
+  const untilReset = useCountdown(hasReset ? resetsAtMs : null, 60_000);
+  const resetPassed = hasReset && untilReset === 0;
+  useEffect(() => {
+    if (resetPassed) void qc.invalidateQueries({ queryKey: ["games", "allowance"] });
+  }, [resetPassed, qc]);
+  const resetText = hasReset && untilReset > 0 ? `Resets in ${formatLongCountdown(untilReset)} (midnight in your time zone).` : "Resets at midnight in your time zone.";
 
   /** Refresh balance, history and leaderboard after any settled round. */
   const onSettled = useCallback(() => {
@@ -1535,12 +1680,12 @@ const Games = () => {
     );
   }, []);
 
-  const arcadeFinish = useCallback(async (type: ArcadeType, run: ArcadeTelemetry) => {
+  const arcadeFinish = useCallback(async (type: ArcadeType, run: ArcadeTelemetry): Promise<number | null> => {
     // Wait for the start request if it is somehow still in flight.
     const sessionId = arcadeRun.current ?? (await arcadeStarting.current?.catch(() => null))?.sessionId ?? null;
     arcadeRun.current = null;
     arcadeStarting.current = null;
-    if (!sessionId) return;
+    if (!sessionId) return null;
     const points = run.score;
     try {
       const r = await gamesApi.arcadeFinish(type, sessionId, run);
@@ -1549,25 +1694,27 @@ const Games = () => {
       else toast.info(points > 0 ? 'Daily free-game XP cap reached.' : `${GAME_NAMES[type]} - Game over! Try again.`);
       notifyAchievements(r.achievements);
       onSettled();
+      return r.xpGained;
     } catch (err) {
       showError(err);
+      return null;
     }
   }, [onSettled, notifyAchievements]);
 
   const start = (id: string) => {
-    const gameConfig = gamesList.find(g => g.id === id);
-    if (gameConfig?.requiresBet && !canBet) {
-      toast.error("Insufficient XP!", { description: `You need at least ${BLACKJACK_CONFIG.MIN_BET * 4} XP to bet (max bet is 25% of your balance).` });
+    const entry = gamesList.find(g => g.id === id);
+    if (entry?.requiresBet && !canBet) {
+      toast.error("Insufficient XP!", { description: `You need at least ${minBalance} XP to bet (max bet is ${Math.round(bj.MAX_BET_PERCENT * 100)}% of your balance).` });
       return;
     }
-    if (gameConfig?.requiresBet && bet > maxBet) setBet(Math.max(BLACKJACK_CONFIG.MIN_BET, maxBet));
+    if (entry?.requiresBet && bet > maxBet) setBet(Math.max(bj.MIN_BET, maxBet));
     setSearchParams({ play: id }, { state: { fromMenu: true } });
   };
 
   // Opened from the menu: step back in history. Opened from a link: replace it with the menu.
   const back = () => ((location.state as { fromMenu?: boolean } | null)?.fromMenu ? navigate(-1) : setSearchParams({}, { replace: true }));
 
-  if (game === "blackjack") return <DashboardLayout><BlackjackGame onBack={back} bet={Math.min(bet, Math.max(maxBet, BLACKJACK_CONFIG.MIN_BET))} onSettled={onSettled} /></DashboardLayout>;
+  if (game === "blackjack") return <DashboardLayout><BlackjackGame onBack={back} bet={Math.min(bet, Math.max(maxBet, bj.MIN_BET))} onSettled={onSettled} /></DashboardLayout>;
   if (game === "rps") return <DashboardLayout><RPSGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
   if (game === "hangman") return <DashboardLayout><HangmanGame onBack={back} onSettled={onSettled} /></DashboardLayout>;
   if (game === "snake") return <DashboardLayout><SnakeGame onBack={back} onStart={() => arcadeStart("snake")} onResult={(run) => arcadeFinish("snake", run)} /></DashboardLayout>;
@@ -1595,7 +1742,7 @@ const Games = () => {
             <div className="mb-2 flex items-center justify-between text-sm">
               <span className="font-medium">Free-game XP today</span>
               <span className="font-heading font-bold text-xp">
-                {allowance ? `${allowance.usedXP} / ${allowance.cap}` : "…"}
+                {allowance ? `${allowance.usedXP} / ${allowance.cap}` : allowanceFailed ? "?" : "…"}
               </span>
             </div>
             <div
@@ -1608,13 +1755,20 @@ const Games = () => {
             >
               <div className="h-full rounded-full bg-xp transition-all" style={{ width: `${allowance ? Math.min(100, (allowance.usedXP / allowance.cap) * 100) : 0}%` }} />
             </div>
-            <p className="mt-2 text-xs text-foreground-muted">
-              {allowance && allowance.remainingXP === 0
-                ? "You've reached today's cap: wins pay nothing until midnight in your time zone."
-                : allowance
-                  ? `${allowance.remainingXP} XP left to earn. Resets at midnight in your time zone.`
-                  : "Resets at midnight in your time zone."}
-            </p>
+            {allowanceFailed && !allowance ? (
+              <p className="mt-2 text-xs text-foreground-muted" role="alert">
+                Could not load today's allowance.{" "}
+                <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => void refetchAllowance()}>Try again</button>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-foreground-muted">
+                {allowance && allowance.remainingXP === 0
+                  ? `You've reached today's cap: wins pay nothing until it resets. ${resetText}`
+                  : allowance
+                    ? `${allowance.remainingXP} XP left to earn. ${resetText}`
+                    : resetText}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -1642,21 +1796,21 @@ const Games = () => {
               <Target className="h-3 w-3" /> Blackjack Bet
             </p>
             <div className="flex items-center gap-3">
-              <NeonNumberInput value={bet} onChange={setBet} min={BLACKJACK_CONFIG.MIN_BET} max={Math.max(BLACKJACK_CONFIG.MIN_BET, maxBet)} step={5} />
+              <NeonNumberInput value={bet} onChange={setBet} min={bj.MIN_BET} max={Math.max(bj.MIN_BET, maxBet)} step={5} />
               <div className="flex gap-1">
                 {[10, 25, 50, 100].map(v => (
                   <button key={v} type="button" aria-pressed={bet === v} onClick={() => setBet(Math.min(v, maxBet))} disabled={v > maxBet} className={cn("px-2 py-1 text-xs rounded-md border transition-all", bet === v ? "bg-primary/20 border-primary/50 text-primary-text" : "bg-background-secondary border-border hover:border-primary/30 disabled:opacity-30")}>{v}</button>
                 ))}
               </div>
             </div>
-            <p className="text-xs text-foreground-muted mt-2">Min: {BLACKJACK_CONFIG.MIN_BET} • Max: {Math.max(0, maxBet)} (25% of balance)</p>
+            <p className="text-xs text-foreground-muted mt-2">Min: {bj.MIN_BET} • Max: {Math.max(0, maxBet)} ({Math.round(bj.MAX_BET_PERCENT * 100)}% of balance)</p>
           </div>
         </div>
 
         {!canBet && (
           <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30">
             <p className="text-sm text-destructive-text font-medium">⚠️ Not enough XP to bet</p>
-            <p className="text-xs text-foreground-muted">Blackjack needs at least {BLACKJACK_CONFIG.MIN_BET * 4} XP. Try the free games below!</p>
+            <p className="text-xs text-foreground-muted">Blackjack needs at least {minBalance} XP. Try the free games below!</p>
           </div>
         )}
 
@@ -1690,6 +1844,19 @@ const Games = () => {
             <Trophy className="h-5 w-5 text-xp" />
             Recent Games
           </h2>
+          {history && history.length > 0 && (
+            <ul className="mb-3 flex flex-wrap gap-2" aria-label={`Results over your last ${history.length} games`}>
+              {tallyGames(history).map((t) => (
+                <li key={t.game} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs">
+                  <span className="font-medium">{GAME_NAMES[t.game] || t.game}</span>
+                  <span className="text-foreground-muted"> · {t.won} won, {t.lost} lost · </span>
+                  <span className={cn("font-bold", t.net > 0 ? "text-success" : t.net < 0 ? "text-destructive-text" : "text-foreground-muted")}>
+                    {t.net > 0 ? "+" : ""}{t.net} XP
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="rounded-xl bg-card border border-border overflow-hidden">
             {isLoading ? (
               <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary-text" /></div>
@@ -1712,7 +1879,7 @@ const Games = () => {
                       </div>
                       <div>
                         <p className="font-medium text-sm sm:text-base">{GAME_NAMES[e.game_type] || e.game_type}</p>
-                        <p className="text-xs text-foreground-muted">{new Date(e.ended_at || e.created_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-foreground-muted">{new Date(e.ended_at || e.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>
                       </div>
                     </div>
                     <div className="text-right">

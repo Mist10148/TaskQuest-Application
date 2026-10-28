@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampBet, parseBetInput, pickFreeCell } from './gameHelpers';
+import { clampBet, parseBetInput, pickFreeCell, tallyGames } from './gameHelpers';
 
 describe('pickFreeCell', () => {
     it('never returns an occupied cell', () => {
@@ -32,5 +32,24 @@ describe('bet parsing', () => {
         expect(clampBet('50', 5, 100, 5)).toBe(50);
         expect(clampBet('', 5, 100, 30)).toBe(30);
         expect(clampBet('', 5, 100, 500)).toBe(100);
+    });
+});
+
+describe('tallyGames', () => {
+    it('counts wins (a blackjack is one), losses and net XP per game, in first-seen order', () => {
+        const rounds = [
+            { game_type: 'blackjack', state: 'blackjack', net: 15 },
+            { game_type: 'rps', state: 'won', net: 10 },
+            { game_type: 'blackjack', state: 'lost', net: -20 },
+            { game_type: 'blackjack', state: 'push', net: 0 },
+            { game_type: 'rps', state: 'cancelled', net: 0 },
+        ];
+        expect(tallyGames(rounds)).toEqual([
+            { game: 'blackjack', played: 3, won: 1, lost: 1, net: -5 },
+            { game: 'rps', played: 2, won: 1, lost: 0, net: 10 },
+        ]);
+    });
+    it('is empty for no rounds', () => {
+        expect(tallyGames([])).toEqual([]);
     });
 });

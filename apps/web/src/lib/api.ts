@@ -494,6 +494,7 @@ export const leaderboardApi = {
 // ─── Games (server-authoritative) ────────────────────────────────────────────
 
 export const gamesApi = {
+    config: () => apiFetch<GameConfig>('/api/games/config'),
     getHistory: () => apiFetch<GameSession[]>('/api/games/history'),
     getAllowance: () => apiFetch<GameAllowance>('/api/games/allowance'),
     getActive: () => apiFetch<{ blackjack: BlackjackActive | null; hangman: HangmanActive | null }>('/api/games/active'),
@@ -863,6 +864,14 @@ export interface LeaderboardEntry {
     gamesPlayed: number;
     tasksCompleted: number;
     isYou: boolean;
+}
+
+/** The server's game rules (GET /api/games/config), so the page never shows numbers the server does not use. */
+export interface GameConfig {
+    blackjack: { MIN_BET: number; MAX_BET_PERCENT: number; HARD_CAP: number; BLACKJACK_MULTIPLIER: number; WIN_MULTIPLIER: number };
+    rewards: { rpsWin: number; hangmanPerLife: number; hangmanMin: number };
+    arcade: Record<ArcadeType, { name: string; xpPerPoint: number; maxXP: number; maxPointsPerSecond: number }>;
+    limits: { freeGameXPPerDay: number; cooldownMs: number };
 }
 
 export interface GameAllowance {

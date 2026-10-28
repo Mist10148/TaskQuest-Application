@@ -22,19 +22,27 @@ function headers(discordId, extra = {}) {
     };
 }
 
+/** A string the browser may see, or undefined: FastAPI's validation `detail` is a list of objects, not a message. */
+const text = (value) => (typeof value === 'string' && value.trim() ? value.slice(0, 500) : undefined);
+
+/** An error code shaped like ours (AI_QUOTA, NOT_FOUND), or undefined. */
+const codeOf = (value) => (typeof value === 'string' && /^[A-Z][A-Z_]{1,39}$/.test(value) ? value : undefined);
+
 /** Turn a non-2xx response from the AI service into a TaskQuestError. */
 async function toError(response) {
     const body = await response.json().catch(() => ({}));
-    const message = body.error || body.detail;
+    const message = text(body?.error) || text(body?.detail);
+    const code = codeOf(body?.code);
     if (response.status === 429) {
         return new TaskQuestError('AI_QUOTA', message || 'Daily AI energy used up. It resets at your midnight.', 429);
     }
     // The user switched AI off (perhaps on another device) after Express checked: say so, not "unavailable".
     if (response.status === 403) return new TaskQuestError('AI_OPTED_OUT', message || 'AI features are turned off for your account.', 403);
-    if (response.status === 404) return new TaskQuestError(body.code || 'NOT_FOUND', message || 'Not found.', 404);
+    if (response.status === 404) return new TaskQuestError(code || 'NOT_FOUND', message || 'Not found.', 404);
     if (response.status === 409) return new TaskQuestError('CONFLICT', message || 'Nothing is waiting for confirmation.', 409);
-    if (response.status === 400) {
-        return new TaskQuestError(body.code || 'VALIDATION', message || 'Request rejected by the AI service.', 400);
+    // 422 is FastAPI's answer to a body it could not validate: the request was wrong, the service is fine.
+    if (response.status === 400 || response.status === 422) {
+        return new TaskQuestError(code || 'VALIDATION', message || 'Request rejected by the AI service.', 400);
     }
     return new TaskQuestError('AI_UNAVAILABLE', UNAVAILABLE, 503);
 }

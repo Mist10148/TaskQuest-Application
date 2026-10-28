@@ -81,6 +81,23 @@ test('aiClient: upstream errors map to TaskQuest error codes', async () => {
         await assert.rejects(aiClient.post('/v1/summary', '1', {}), { code: 'VALIDATION', status: 400 });
         status = 403;
         await assert.rejects(aiClient.post('/v1/summary', '1', {}), { code: 'AI_OPTED_OUT', status: 403 });
+        status = 422;
+        await assert.rejects(aiClient.post('/v1/summary', '1', {}), { code: 'VALIDATION', status: 400 });
+    } finally {
+        await ai.close();
+    }
+});
+
+test('aiClient: a FastAPI validation detail (a list) or an odd code is not passed to the browser', async () => {
+    const ai = await listen((req, res) => json(res, 422, { detail: [{ loc: ['body', 'mode'], msg: 'field required' }], code: '<b>x</b>' }));
+    configure({ serviceUrl: ai.url });
+    try {
+        await assert.rejects(aiClient.post('/v1/summary', '1', {}), (err) => {
+            assert.equal(err.code, 'VALIDATION');
+            assert.equal(err.status, 400);
+            assert.equal(err.message, 'Request rejected by the AI service.');
+            return true;
+        });
     } finally {
         await ai.close();
     }

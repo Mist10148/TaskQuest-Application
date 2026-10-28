@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Hourglass, Loader2, Play, Timer, XCircle } from "lucide-react";
 import type { FocusActive, FocusFinishResult, FocusStatus } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { pageTitle } from "@/lib/pageTitle";
 import { QueryState } from "@/components/feedback/QueryState";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { Button } from "@/components/ui/button";
@@ -130,13 +131,14 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
     return () => window.clearInterval(id);
   }, []);
 
-  // The tab title keeps the countdown visible from other tabs.
-  useEffect(() => {
-    const base = document.title;
-    return () => {
-      document.title = base;
-    };
-  }, []);
+  // The tab title keeps the countdown visible from other tabs. Restored in a layout effect: when you leave Focus, a plain
+  // effect's clean-up would run after the next page set its title and put "Focus" back on it.
+  useLayoutEffect(
+    () => () => {
+      document.title = pageTitle(window.location.pathname);
+    },
+    []
+  );
   useEffect(() => {
     const base = document.title.replace(/^[\d:]+ · Focus(?: – )?/, "");
     document.title = left > 0 ? focusTitle(left, base) : `Time's up · ${base}`;

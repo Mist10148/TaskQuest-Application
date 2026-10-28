@@ -1,6 +1,7 @@
 import { clampBet, parseBetInput, tallyGames } from "@/lib/gameHelpers";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { pageTitle } from "@/lib/pageTitle";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
@@ -1642,14 +1643,15 @@ const Games = () => {
     else if (user) setAdmitted(game);
   }, [game, user]);
 
-  // The tab says which game is open ("Snake · Games · TaskQuest"). A layout effect, so leaving restores the title before the
-  // next page sets its own.
+  // The tab says which game is open ("Snake · Games · TaskQuest"): set after the layout's own title, and restored in a layout
+  // effect so that leaving for another page cannot put the game's name back after that page set its title.
+  useEffect(() => {
+    if (game !== "menu") document.title = `${GAME_NAMES[game]} · ${pageTitle(location.pathname)}`;
+  }, [game, location.pathname]);
   useLayoutEffect(() => {
     if (game === "menu") return;
-    const base = document.title;
-    document.title = `${GAME_NAMES[game]} · ${base}`;
     return () => {
-      document.title = base;
+      document.title = pageTitle(window.location.pathname);
     };
   }, [game]);
 

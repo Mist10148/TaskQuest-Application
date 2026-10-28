@@ -4,7 +4,7 @@ import type { EquippedCosmetics, LeaderboardEntry } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Trophy, Sparkles, Flame, Target, Crown, Medal, Zap } from "lucide-react";
+import { Trophy, Sparkles, Flame, Target, Crown, Medal, Zap, Gamepad2 } from "lucide-react";
 import { useClasses, useLeaderboard, useMyRank } from "@/hooks/useApi";
 import { nextTabIndex } from "@/lib/tabs";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
@@ -275,7 +275,7 @@ const Leaderboard = () => {
           <div className="col-span-2 text-center">Level</div>
           <div className={cn("text-center", showStreakColumn ? "col-span-2" : "col-span-3")}>{board.unit}</div>
           {showStreakColumn && <div className="col-span-1 text-center">Streak</div>}
-          <div className="col-span-2 text-center">Tasks</div>
+          <div className="col-span-2 text-center">Tasks · Games</div>
         </div>
 
         {isError ? (
@@ -324,8 +324,9 @@ const Leaderboard = () => {
                     <div className="text-right">
                       <span className="text-xp font-bold text-sm flex items-center gap-1"><Sparkles className="h-3 w-3" />{scoreText(entry)}</span>
                       <div className="flex items-center gap-2 text-xs text-foreground-muted mt-1">
-                        {showStreakColumn && <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400"><Flame className="h-3 w-3" />{entry.streak}</span>}
-                        <span className="flex items-center gap-1"><Target className="h-3 w-3" />{entry.tasksCompleted}</span>
+                        {showStreakColumn && <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400" title="Day streak"><Flame className="h-3 w-3" aria-hidden />{entry.streak}<span className="sr-only"> day streak</span></span>}
+                        <span className="flex items-center gap-1" title="Tasks finished"><Target className="h-3 w-3" aria-hidden />{entry.tasksCompleted}<span className="sr-only"> tasks</span></span>
+                        <span className="flex items-center gap-1" title="Games played"><Gamepad2 className="h-3 w-3" aria-hidden />{entry.gamesPlayed ?? 0}<span className="sr-only"> games</span></span>
                       </div>
                     </div>
                   </div>
@@ -360,14 +361,15 @@ const Leaderboard = () => {
                   </div>
                   {showStreakColumn && (
                     <div className="col-span-1 text-center">
-                      <span className="flex items-center justify-center gap-1 text-orange-700 dark:text-orange-400">
-                        <Flame className="h-4 w-4" />{entry.streak}
+                      <span className="flex items-center justify-center gap-1 text-orange-700 dark:text-orange-400" title="Day streak">
+                        <Flame className="h-4 w-4" aria-hidden />{entry.streak}<span className="sr-only"> day streak</span>
                       </span>
                     </div>
                   )}
                   <div className="col-span-2 text-center">
-                    <span className="flex items-center justify-center gap-1 text-foreground-muted">
-                      <Target className="h-4 w-4" />{entry.tasksCompleted}
+                    <span className="flex items-center justify-center gap-3 text-foreground-muted">
+                      <span className="flex items-center gap-1" title="Tasks finished"><Target className="h-4 w-4" aria-hidden />{entry.tasksCompleted}<span className="sr-only"> tasks</span></span>
+                      <span className="flex items-center gap-1" title="Games played"><Gamepad2 className="h-4 w-4" aria-hidden />{entry.gamesPlayed ?? 0}<span className="sr-only"> games</span></span>
                     </span>
                   </div>
                 </div>

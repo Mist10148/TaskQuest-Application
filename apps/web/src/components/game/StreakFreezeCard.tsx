@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Loader2, Snowflake } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { useBuyStreakFreeze } from "@/hooks/useApi";
 
 interface Props {
@@ -14,6 +16,8 @@ interface Props {
 /** Buy streak freezes: each one saves the daily streak once if you miss a day. */
 export const StreakFreezeCard = ({ freezes, cost: COST, max: MAX, balance, gamificationOn }: Props) => {
   const buy = useBuyStreakFreeze();
+  // Spending XP asks first, as buying a class, a skill or a cosmetic does.
+  const [confirming, setConfirming] = useState(false);
   const full = freezes >= MAX;
   const poor = balance < COST;
   const disabled = !gamificationOn || full || poor || buy.isPending;
@@ -33,11 +37,24 @@ export const StreakFreezeCard = ({ freezes, cost: COST, max: MAX, balance, gamif
             </p>
           </div>
         </div>
-        <Button variant="outline" className="gap-2" disabled={disabled} onClick={() => buy.mutate()}>
-          {buy.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Snowflake className="h-4 w-4" aria-hidden />}
+        <Button variant="outline" className="gap-2" disabled={disabled} onClick={() => setConfirming(true)}>
+          {buy.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Snowflake className="h-4 w-4" aria-hidden />}
           Buy one ({COST} XP)
         </Button>
       </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Buy a streak freeze?"
+        description={(
+          <p className="text-sm">
+            It costs <span className="font-semibold text-xp">{COST} XP</span> ({balance.toLocaleString()} XP now) and saves your streak once
+            if you miss a day. You will hold {Math.min(MAX, freezes + 1)} of {MAX}.
+          </p>
+        )}
+        confirmLabel={`Buy for ${COST} XP`}
+        onConfirm={() => buy.mutate()}
+      />
     </section>
   );
 };

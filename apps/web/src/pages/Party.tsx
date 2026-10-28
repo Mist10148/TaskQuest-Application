@@ -309,11 +309,19 @@ const PartyCard = ({ status }: { status: PartyStatus }) => {
           {status.members.map((m) => (
             <li key={m.memberKey} className="flex flex-wrap items-center gap-2 p-3" data-testid="party-member">
               <span className="min-w-0 flex-1 truncate font-medium">
-                {m.isOwner && <Crown className="mr-1.5 inline h-4 w-4 text-xp" aria-label="Owner" />}
+                {m.isOwner && (
+                  <>
+                    <Crown className="mr-1.5 inline h-4 w-4 text-xp" aria-hidden />
+                    <span className="sr-only">Owner: </span>
+                  </>
+                )}
                 {m.name ?? "Unknown adventurer"}
                 {m.isYou && <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary-text">You</span>}
               </span>
-              <span className="text-sm text-foreground-muted" aria-label={`${m.count} of ${status.perMember} tasks`}>{m.count} / {status.perMember}</span>
+              <span className="text-sm text-foreground-muted">
+                <span aria-hidden>{m.count} / {status.perMember}</span>
+                <span className="sr-only">{m.count} of {status.perMember} tasks</span>
+              </span>
               {canKick(isOwner, m) && (
                 <Button variant="ghost" size="sm" className="text-destructive-text hover:bg-destructive/10" aria-label={`Remove ${m.name ?? "member"} from the party`} onClick={() => setToKick(m)}>
                   <UserMinus className="h-4 w-4" aria-hidden />

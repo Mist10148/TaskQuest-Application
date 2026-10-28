@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Lock, Check, Sparkles, Loader2, ShieldX, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSkills, useSkillPreview, useUnlockSkill, useRespecSkills } from "@/hooks/useApi";
 import { MIX_LABELS } from "@/lib/classInfo";
@@ -122,7 +123,7 @@ const Skills = () => {
               type="button"
               role="tab"
               aria-selected={selectedTreeKey === tree.classKey}
-              aria-controls="skill-tabpanel"
+              aria-controls={selectedTree && !isLoading && !isError ? "skill-tabpanel" : undefined}
               tabIndex={selectedTreeKey === tree.classKey ? 0 : -1}
               onClick={() => setPickedTreeKey(tree.classKey)}
               className={cn(
@@ -131,9 +132,10 @@ const Skills = () => {
                 !owned && "opacity-60"
               )}
             >
-              <span className="text-base sm:text-lg">{tree.emoji}</span>
+              <span className="text-base sm:text-lg" aria-hidden>{tree.emoji}</span>
               <span>{tree.name}</span>
-              {!owned && <Lock className="h-3 w-3 ml-1 opacity-70" />}
+              {!owned && <Lock className="h-3 w-3 ml-1 opacity-70" aria-hidden />}
+              {!owned && <span className="sr-only"> (class not owned)</span>}
             </button>
           );
         })}
@@ -146,13 +148,16 @@ const Skills = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center gap-3"
         >
-          <ShieldX className="h-5 w-5 text-destructive-text shrink-0" />
-          <div>
+          <ShieldX className="h-5 w-5 text-destructive-text shrink-0" aria-hidden />
+          <div className="flex-1">
             <p className="font-medium text-destructive-text">Class Not Owned</p>
             <p className="text-sm text-foreground-muted">
               Purchase the <span className="font-semibold">{selectedTree.name}</span> class from the Classes page to unlock these skills.
             </p>
           </div>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link to="/classes">Go to Classes</Link>
+          </Button>
         </motion.div>
       )}
 
@@ -161,6 +166,10 @@ const Skills = () => {
         <ErrorCard what="the skill trees" error={error} onRetry={() => void refetch()} retrying={isFetching} />
       ) : isLoading ? (
         <div className="h-[400px] sm:h-[500px] rounded-2xl bg-card/50 animate-pulse" />
+      ) : skillTrees.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border p-8 text-center text-foreground-muted">
+          No skill trees to show yet. They come with the classes: see the <Link to="/classes" className="text-primary-text underline underline-offset-2">Classes page</Link>.
+        </div>
       ) : selectedTree && (
         <motion.div key={selectedTreeKey} id="skill-tabpanel" role="tabpanel" aria-labelledby={`skill-tab-${selectedTreeKey}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl bg-card border border-border p-4 sm:p-8">
           <div className="text-center mb-6 sm:mb-8">

@@ -34,6 +34,11 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Games use the server's rules.** The Games page reads its bet limits, rewards and arcade XP rules from `GET /api/games/config` instead of a copy, the free-game allowance counts down to its reset (and refreshes when it passes), each arcade game keeps your best score in this browser, Blackjack shows its H / S / D keys, the tab title names the open game, and Recent Games has a won / lost / net XP tally per game and the time of each round.
+- **Chat knows when the assistant is down.** `GET /api/ai/ping` is checked when the page opens; on a 503 the page says so, keeps the message box closed, offers **Check again** and checks by itself every 30 seconds.
+- **Small additions:** a Focus link on each Today task, games played on the leaderboard (with words for its icons), Recent XP (last five) on the profile, counts on the achievement filters, a spinner on the Focus length being started, and a link from a skill tree you do not own to the Classes page.
+- Component tests for the Games, Skills and Party pages.
+
 - **Recent XP on the Stats page** (the last transactions, earned and spent, with their sources), using the history endpoint the web app never showed. The Stats chart says "nothing to chart" instead of drawing a flat line, the Focus page links to the party's focus quest when there is one, the leaderboard has a **My class** shortcut, and Games history can show all of its rows.
 - **Keyboard play:** type a letter to guess in Hangman; H, S and D hit, stand and double in Blackjack.
 - **Migration runner checksums.** `schema_migrations` gets a `checksum` column (added by the runner itself, no new migration); a shipped migration that was edited, or a database that holds migrations this version does not know (an older deploy against a newer schema), is reported as a warning at start.
@@ -226,6 +231,14 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Bot: the list you picked.** `/quick`, `/list name:` and `/summary quest:` act on the list chosen from the suggestions when two of your lists share a name (your own "Work" and a shared one), as `/share`, `/members` and `/leave` already did; `/summary` can no longer mistake a quest id for a quest named with digits.
+- **Bot:** a list's category in the public `/list` overview is escaped (it could carry a masked link or a mention from a shared list's owner), the Details modal keeps five 20-character tags whole, and **Snooze** edits the reminder without flags Discord refuses on an edit.
+- **Export:** comments you wrote on a quest you were later removed from are exported without that quest's (and task's) current names.
+- **Reminders and the calendar feed** count top-level tasks, as quest progress does, so an open subtask under a finished task no longer sends "3/4 tasks" or an overdue DM for a quest the app shows as cleared.
+- **AI errors:** a request the AI service rejects (FastAPI's 422) is a 400 `VALIDATION`, not "the AI service is unavailable", and only string messages and our own error codes reach the browser.
+- **Games:** game keys ignore a key another shortcut took (the letter after `g`, `?`), an open dialog and auto-repeat; a losing Blackjack hand no longer throws you back to the menu before its result shows; the arcade end screens show the XP the server paid, not a local guess; leaving a run by a link, a shortcut or the browser's Back button closes its server session (and closing the tab asks first); the allowance shows an error with a retry; the rules toggle is a labelled disclosure button; Hangman's lost lives look lost and are read as "4 of 6 lives left".
+- **Web:** undoing a completion (one task or a batch) or deleting a task refreshes quests and the weekly review, so a Claim button no longer stays for progress that dropped; leaving Focus or a game no longer leaves its name in the next page's tab title; the weekly goal is checked for range before it is sent; a task listed twice on Today cannot be finished from both lines at once; buying a streak freeze asks first; the Skills tabs and the Party member list say in words what they showed only by look.
+- **Docs:** the Tank cap (`5 + level ÷ 3`) and Assassin decay (48 h, 72 h with Night Owl) in balance.md and an older entry here, the 20-a-minute limit on imports and exports in API.md and ARCHITECTURE.md, and the party invitation limits in API.md.
 - **Party progress** refreshes after tasks and focus sessions (it showed the old count for a minute), and a malformed reset time no longer shows "NaN".
 - **Imports and exports are rate limited** (20 a minute per account, like the CSV import) before a large body is parsed; `POST /api/user/import` and the exports had no limit beyond the general one.
 - **The calendar feed token no longer reaches the error log**: a 500 logs the path with any 32-character token masked. A stream that fails after its headers were sent no longer throws a second time.

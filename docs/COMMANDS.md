@@ -6,7 +6,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 
 | Command | Options | Visibility | Description |
 |---|---|---|---|
-| `/list` | `name` (autocomplete, optional) | Public overview / view | Your lists. With `name`, opens that list directly. |
+| `/list` | `name` (autocomplete, optional) | Public overview / view | Your lists. With `name`, opens that list directly. A name two of your lists share (your own and a shared one) is offered once for each, with its owner, and opens the one you pick. |
 | `/share` | `list` (autocomplete: lists you manage), `user` (required), `role` (viewer / editor / manager, default viewer) | Ephemeral | 👥 Invite someone to a list. They get a DM with **Accept** / **Decline** (if their DMs are closed you are told, and the invitation waits in `/invites`). The person must have used TaskQuest before; bots and yourself are refused. Only a manager invites, and only the owner invites managers. |
 | `/invites` | — | Ephemeral | 📨 Invitations to shared lists waiting for you, with Accept / Decline buttons (valid 7 days). |
 | `/members` | `list` (autocomplete: shared lists) | Ephemeral | 👥 Who is on a shared list, by display name and role. A manager gets a menu to remove someone (only the owner removes a manager). `/share` and `/party invite` answer "If that person can be invited, they have been sent an invitation." when nothing was sent for a reason the inviter must not learn (unknown person, invitations off, a recent decline, already in a party). Names in invitations and lists are escaped (no links, formatting or pings from someone else's list or display name), and invitation DMs never ping. |
@@ -27,7 +27,7 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 | `/automation` | — | Ephemeral | Turn deadline reminder DMs on or off |
 | `/timezone` | `zone` (autocomplete, IANA name), `hour` (0–23, default 9) | Ephemeral | 🕒 Your time zone: when "today" starts for you (daily limits, quests, the weekly review, Stats) and when in the day reminders and the weekly digest arrive. A zone can change once every 24 hours. With no options it shows the current settings. |
 | `/weekly` | — | Ephemeral | 📅 Turn the Monday weekly summary DM on or off |
-| `/quick` | `text` (required, ≤ 300), `list` (autocomplete, required) | Ephemeral | ⚡ Add a task from one line: dates (`today`, `tomorrow`, `fri`, `in 3 days`, `2030-05-04`, `jan 5`), `!high`/`!med`/`!low`, `#tags` (max 5) and repeats (`daily`, `every week`, `monthly`) are read from the text and the rest is the name. |
+| `/quick` | `text` (required, ≤ 300), `list` (autocomplete, required; lists you can edit, same-named ones told apart by owner) | Ephemeral | ⚡ Add a task from one line: dates (`today`, `tomorrow`, `fri`, `in 3 days`, `2030-05-04`, `jan 5`), `!high`/`!med`/`!low`, `#tags` (max 5) and repeats (`daily`, `every week`, `monthly`) are read from the text and the rest is the name. |
 | `/help` | — | Public | Command overview |
 | `/app` | — | Ephemeral | Link to the web app (`WEB_APP_URL`). It says "not configured" when unset. |
 | `/ping` | — | Ephemeral | Bot and API latency |

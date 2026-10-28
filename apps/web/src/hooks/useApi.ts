@@ -87,6 +87,9 @@ function invalidateTaskViews(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['today'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
     qc.invalidateQueries({ queryKey: ['parties'] }); // the party's weekly task count
+    // Quests and the weekly review are counted live from task rows, so a reopened or deleted task changes them too.
+    qc.invalidateQueries({ queryKey: ['quests'] });
+    qc.invalidateQueries({ queryKey: ['review'] });
 }
 
 /** Refresh everything that depends on the player's XP balance. */
@@ -514,9 +517,13 @@ export function useReorderItems() {
     });
 }
 
+/** The key every task toggle runs under, so a page can tell that a task is already being finished elsewhere on it. */
+export const TOGGLE_ITEM_KEY = ['toggle-item'] as const;
+
 export function useToggleItem() {
     const qc = useQueryClient();
     return useMutation({
+        mutationKey: TOGGLE_ITEM_KEY,
         // `completed` makes the request idempotent (a double click cannot flip the task back).
         // `quiet` is for a batch: the caller shows one summary toast instead of one per task.
         mutationFn: (arg: number | { itemId: number; completed?: boolean; quiet?: boolean }) =>
@@ -545,7 +552,14 @@ export function useToggleItem() {
             }
             if (result.completed) {
                 // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing.
-                const undo = () => itemsApi.toggle(result.id, false).then(() => invalidateTaskViews(qc)).catch(showError);
+                const undo = () =>
+                    itemsApi
+                        .toggle(result.id, false)
+                        .then(() => {
+                            invalidateTaskViews(qc);
+                            invalidateProgress(qc); // the profile's totals and the party count it too
+                        })
+                        .catch(showError);
                 showXPNotification(result, 'Task done!', '✨', undo);
             }
             if (result.nextItem) {

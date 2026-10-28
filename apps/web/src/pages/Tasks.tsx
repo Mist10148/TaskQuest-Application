@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import {
   useLists, useList, useCreateList, useUpdateList, useDeleteList,
-  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems, useMoveItem, useListMembers,
+  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems, useMoveItem, useListMembers, invalidateProgress,
 } from "@/hooks/useApi";
 import { ListOverview } from "@/components/tasks/ListOverview";
 import { ListDetail } from "@/components/tasks/ListDetail";
@@ -244,6 +244,9 @@ const Tasks = () => {
       for (const id of finished) await itemsApi.toggle(id, false).catch(() => (failed = true));
       if (failed) toast.error("Some tasks could not be reopened.");
       refetchList();
+      // Quests, the weekly review, Today, the party and the profile totals count finished tasks too.
+      qc.invalidateQueries({ queryKey: ["lists"] });
+      invalidateProgress(qc);
     };
     if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`, { action: { label: "Undo", onClick: () => void undo() }, duration: 6000 });
     refetchList();

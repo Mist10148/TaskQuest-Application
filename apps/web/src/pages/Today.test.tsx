@@ -2,10 +2,12 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TodayData, TodayTask } from "@/lib/api";
 
 const hooks = vi.hoisted(() => ({
+  TOGGLE_ITEM_KEY: ["toggle-item"],
   useToday: vi.fn(),
   useToggleItem: vi.fn(),
   useWriteReflection: vi.fn(),
@@ -47,7 +49,12 @@ const day = (over: Partial<TodayData> = {}): TodayData => ({
 });
 
 const load = (data: TodayData) => hooks.useToday.mockReturnValue({ data, isLoading: false, isError: false, error: null, refetch: vi.fn(), isFetching: false });
-const show = () => render(<MemoryRouter><Today /></MemoryRouter>);
+const show = () =>
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter><Today /></MemoryRouter>
+    </QueryClientProvider>
+  );
 
 describe("Today page", () => {
   beforeEach(() => {
@@ -103,5 +110,25 @@ describe("Today page", () => {
     load(day({ tasks: [task(4, "Big thing", null, { priority: "HIGH" })] }));
     show();
     expect(screen.queryByRole("button", { name: /Snooze/ })).toBeNull();
+  });
+
+  it("sets a weekly goal only in range, and says why the button is off", async () => {
+    load(day());
+    show();
+    const box = screen.getByLabelText(/Tasks to finish this week/);
+    await userEvent.clear(box);
+    await userEvent.type(box, "100");
+    expect(screen.getByText("Enter a whole number from 3 to 60.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set goal" })).toBeDisabled();
+    await userEvent.clear(box);
+    await userEvent.type(box, "12");
+    await userEvent.click(screen.getByRole("button", { name: "Set goal" }));
+    expect(hooks.useSetGoal.mock.results[0].value.mutate).toHaveBeenCalledWith(12);
+  });
+
+  it("links each task to a focus session", () => {
+    load(day());
+    show();
+    expect(screen.getByRole("link", { name: 'Start a focus session for "Pay rent"' })).toHaveAttribute("href", "/focus");
   });
 });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AlarmClock, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Loader2, PenLine, Target, Timer } from "lucide-react";
+import { AlarmClock, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Hourglass, Loader2, PenLine, Target, Timer } from "lucide-react";
+import { useIsMutating } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
@@ -8,7 +9,7 @@ import { PriorityPanel } from "@/components/ai/PriorityPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useClaimGoal, useSetGoal, useToday, useToggleItem, useUpdateItem, useWriteReflection } from "@/hooks/useApi";
+import { TOGGLE_ITEM_KEY, useClaimGoal, useSetGoal, useToday, useToggleItem, useUpdateItem, useWriteReflection } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
 import { formatDeadline, formatDue } from "@/lib/dates";
 import { todayHeadline, goalPercent } from "@/lib/today";
@@ -22,6 +23,15 @@ const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "
 const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
   const toggle = useToggleItem();
   const update = useUpdateItem();
+  // The same task can be listed twice (due now and coming up): either line's click marks both busy.
+  const finishing =
+    useIsMutating({
+      mutationKey: TOGGLE_ITEM_KEY,
+      predicate: (m) => {
+        const v = m.state.variables as number | { itemId: number } | undefined;
+        return (typeof v === "number" ? v : v?.itemId) === task.id;
+      },
+    }) > 0;
   // Due today or late: push it to tomorrow without opening the quest.
   const canSnooze = Boolean(task.dueDate && task.dueDate <= today);
   const snooze = () =>
@@ -31,11 +41,11 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
       <button
         type="button"
         aria-label={`Mark "${task.name}" done`}
-        disabled={toggle.isPending}
+        disabled={finishing}
         onClick={() => toggle.mutate({ itemId: task.id, completed: true })}
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 border-border transition-colors hover:border-success hover:bg-success/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {toggle.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5 text-transparent hover:text-success" aria-hidden />}
+        {finishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5 text-transparent hover:text-success" aria-hidden />}
       </button>
       <div className="min-w-0 flex-1">
         <Link to={`/tasks?list=${task.listId}&task=${task.id}`} className="line-clamp-2 break-words text-sm font-medium hover:text-primary-text hover:underline underline-offset-2 sm:text-base">{task.name}</Link>
@@ -52,6 +62,11 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
           ) : null}
         </p>
       </div>
+      <Button asChild variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs">
+        <Link to="/focus" aria-label={`Start a focus session for "${task.name}"`} title="Focus on this">
+          <Hourglass className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Focus</span>
+        </Link>
+      </Button>
       {canSnooze && (
         <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs" disabled={update.isPending} onClick={snooze} aria-label={`Snooze "${task.name}" to tomorrow`}>
           <AlarmClock className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Snooze</span>
@@ -100,6 +115,9 @@ const GoalCard = ({ data }: { data: TodayData }) => {
   // A suggestion above this week's progress, within the allowed range (a default over the maximum could not be submitted).
   const [target, setTarget] = useState(String(Math.min(g.max, Math.max(g.min, g.progress + 5))));
   const pct = goalPercent(g.progress, g.target);
+  const wanted = /^\d+$/.test(target.trim()) ? Number(target) : null;
+  const inRange = wanted !== null && wanted >= g.min && wanted <= g.max;
+  const showRangeError = target.trim() !== "" && !inRange;
   return (
     <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="goal-title">
       <h2 id="goal-title" className="flex items-center gap-2 font-heading font-semibold"><Target className="h-5 w-5 text-primary-text" aria-hidden /> Weekly goal</h2>
@@ -125,14 +143,27 @@ const GoalCard = ({ data }: { data: TodayData }) => {
           className="mt-2 flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            setGoal.mutate(Number(target));
+            if (inRange) setGoal.mutate(wanted);
           }}
         >
           <div>
             <label htmlFor="goal-target" className="mb-1 block text-sm text-foreground-muted">Tasks to finish this week ({g.min} to {g.max})</label>
-            <Input id="goal-target" type="number" inputMode="numeric" min={g.min} max={g.max} value={target} onChange={(e) => setTarget(e.target.value)} className="w-28" />
+            <Input
+              id="goal-target"
+              type="number"
+              inputMode="numeric"
+              required
+              min={g.min}
+              max={g.max}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              aria-invalid={showRangeError}
+              aria-describedby={showRangeError ? "goal-target-error" : undefined}
+              className="w-28"
+            />
           </div>
-          <Button type="submit" size="sm" disabled={setGoal.isPending}>Set goal</Button>
+          <Button type="submit" size="sm" disabled={setGoal.isPending || !inRange}>Set goal</Button>
+          {showRangeError && <p id="goal-target-error" className="w-full text-sm text-destructive-text">Enter a whole number from {g.min} to {g.max}.</p>}
         </form>
       )}
     </section>

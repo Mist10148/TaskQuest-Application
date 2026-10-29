@@ -61,6 +61,12 @@ test('a snooze fires once it has ended, regardless of the hour', () => {
     assert.equal(decideReminder(l, at('2030-03-11T03:00:00Z')), 'snooze');
 });
 
+test('a pending snooze holds back the overdue notice', () => {
+    const l = list({ deadline_notified: 1, remind_at: '2030-03-11T11:00:00Z' });
+    assert.equal(decideReminder(l, at('2030-03-11T10:00:00Z')), null, 'snoozed until 11:00: no overdue notice at 10:00');
+    assert.equal(decideReminder(l, at('2030-03-11T11:00:00Z')), 'snooze');
+});
+
 function setup({ lists, sendError }) {
     const marked = [];
     const sent = [];

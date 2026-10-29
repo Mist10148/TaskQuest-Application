@@ -163,6 +163,7 @@ const dayNumber = (ymd) => Math.floor(Date.parse(`${String(ymd).slice(0, 10)}T00
 function decideReminder(list, now = new Date()) {
     const complete = Number(list.items_total) > 0 && Number(list.items_done) >= Number(list.items_total);
     if (list.remind_at && new Date(list.remind_at).getTime() <= now.getTime()) return complete ? 'snooze_done' : 'snooze';
+    if (list.remind_at) return null; // snoozed: nothing else (not even the overdue notice) until the snooze ends
 
     const hour = Number.isInteger(Number(list.reminder_hour)) ? Number(list.reminder_hour) : 9;
     if (hourInZone(list.timezone, now) < hour) return null;

@@ -266,3 +266,22 @@ test('/list acknowledges before reading the database, and a missing list is told
         Object.assign(db.tasks, { getLists: real.getLists, getListByName: real.getListByName });
     }
 });
+
+test('the search box refuses a blank search and does not render markdown from what was typed', async () => {
+    const db = require('@taskquest/shared/db');
+    const { handleModal } = require('../commands/list');
+    const real = db.tasks.searchLists;
+    const searched = [];
+    db.tasks.searchLists = async (uid, q) => (searched.push(q), []);
+    const replies = [];
+    const modal = (q) => ({ customId: 'm_search', user: { id: '9' }, fields: { getTextInputValue: () => q }, reply: async (r) => replies.push(r) });
+    try {
+        await handleModal(modal('   '));
+        assert.deepEqual(searched, [], 'a blank search is not run');
+        assert.match(replies[0].embeds[0].toJSON().description, /Enter something/);
+        await handleModal(modal('[free](https://evil.example)'));
+        assert.doesNotMatch(replies[1].embeds[0].toJSON().description, /\[free\]\(https/);
+    } finally {
+        db.tasks.searchLists = real;
+    }
+});

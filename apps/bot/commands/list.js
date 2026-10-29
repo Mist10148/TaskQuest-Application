@@ -496,8 +496,10 @@ async function routeModal(interaction) {
 
     if (id === 'm_search') {
         const q = (field(interaction, 'q') || '').trim();
+        // Discord's "required" lets a lone space through, which would search for everything.
+        if (!q) return interaction.reply({ embeds: [ui.info('Search', 'Enter something to search for.')], ...EPHEMERAL });
         const lists = await tasks.searchLists(userId, q);
-        if (!lists.length) return interaction.reply({ embeds: [ui.info('No Results', `Nothing found for "${q.slice(0, 100)}"`)], ...EPHEMERAL });
+        if (!lists.length) return interaction.reply({ embeds: [ui.info('No Results', `Nothing found for "${escapeDiscord(q, { max: 100 })}"`)], ...EPHEMERAL });
         const sel = ui.listSelect(lists);
         return interaction.reply({ embeds: [ui.listsOverviewEmbed(lists, `Search: ${q.slice(0, 100)}`, '', await todayFor(userId))], components: sel ? [sel] : [], ...EPHEMERAL });
     }

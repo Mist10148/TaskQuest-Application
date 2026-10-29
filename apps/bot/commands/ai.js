@@ -8,7 +8,7 @@
  */
 
 const { SlashCommandBuilder } = require('discord.js');
-const { TaskQuestError } = require('@taskquest/shared');
+const { TaskQuestError, escapeDiscord } = require('@taskquest/shared');
 const { tasks, users } = require('@taskquest/shared/db');
 const { createAiClient } = require('@taskquest/shared/ai');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
@@ -94,10 +94,12 @@ async function resolveListId(discordId, value) {
     const byId = ID_VALUE.exec(text);
     // Autocomplete sends `#<id>`; a typed value is a name (which may itself be all digits, e.g. "2026"). A bare id is what
     // older autocomplete menus sent, so it still works when no quest is called that.
-    const match = byId
-        ? lists.find((l) => String(l.id) === byId[1])
-        : lists.find((l) => l.name.toLowerCase() === text.toLowerCase()) || lists.find((l) => String(l.id) === text);
-    if (!match) throw new TaskQuestError('NOT_FOUND', `No quest named "${value}".`, 404);
+    // A typed `#12` that is no quest's id may be a quest's name.
+    const match =
+        (byId && lists.find((l) => String(l.id) === byId[1])) ||
+        lists.find((l) => l.name.toLowerCase() === text.toLowerCase()) ||
+        (!byId && lists.find((l) => String(l.id) === text));
+    if (!match) throw new TaskQuestError('NOT_FOUND', `No quest named "${escapeDiscord(value, { max: 100 })}".`, 404);
     return match.id;
 }
 

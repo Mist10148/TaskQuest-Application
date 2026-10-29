@@ -100,13 +100,17 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
   const completed = topLevel.filter((i: Item) => i.completed).length;
   const progress = topLevel.length > 0 ? (completed / topLevel.length) * 100 : 0;
 
-  // Filters and grouping (remembered per browser). A tag this quest does not use counts as "any tag".
+  // Filters and grouping (remembered per browser). A tag this quest does not use counts as "any tag", and on a quest without
+  // assignees (where the Assignee menu is hidden) a remembered assignee filter counts as "anyone", so nothing is hidden unseen.
   const [prefs, setPrefs] = useState(loadFilterPrefs);
   const questTags = useMemo(() => tagsIn(items), [items]);
-  const filter: TaskFilter = useMemo(
-    () => (prefs.filter.tag && !questTags.includes(prefs.filter.tag) ? { ...prefs.filter, tag: "" } : prefs.filter),
-    [prefs.filter, questTags]
-  );
+  const showAssignee = Boolean(list.shared) || items.some((i) => i.assignee);
+  const filter: TaskFilter = useMemo(() => {
+    let f = prefs.filter;
+    if (f.tag && !questTags.includes(f.tag)) f = { ...f, tag: "" };
+    if (f.assignee !== "any" && !showAssignee) f = { ...f, assignee: "any" };
+    return f;
+  }, [prefs.filter, questTags, showAssignee]);
   const groupBy = prefs.groupBy;
   const updatePrefs = (next: { filter?: TaskFilter; groupBy?: GroupBy }) => {
     const merged = { filter: next.filter ?? filter, groupBy: next.groupBy ?? groupBy };
@@ -216,7 +220,6 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     "2": () => { if (items.length > 0) setView("board"); },
     "3": () => { if (items.length > 0) setView("calendar"); },
     A: () => { if (editable && selectMode) setSelected(new Set(visibleOrder)); },
-    "?": () => setShowHelp(true),
     Escape: () => (selectMode ? leaveSelectMode() : onBack()),
   });
 
@@ -227,10 +230,11 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     const reordered = [...siblings];
     [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
     const parentId = reordered[0].parent_id;
-    if (!parentId) return void saveTopLevelOrder(reordered.map((s) => s.id));
+    // A refused save is already shown by the mutation's error toast; catch it so it is not also an unhandled rejection.
+    if (!parentId) return void saveTopLevelOrder(reordered.map((s) => s.id)).catch(() => {});
     // Subtasks: rewrite the whole list with this parent's children in their new order.
     const flat = topLevel.flatMap((t) => [t.id, ...(t.id === parentId ? reordered : childrenOf.get(t.id) || []).map((c) => c.id)]);
-    void reorderAll(flat);
+    void reorderAll(flat).catch(() => {});
   };
 
   const row = (item: Item, siblings: Item[], isSubtask: boolean) => {
@@ -375,7 +379,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
           filter={filter}
           onFilter={(next) => updatePrefs({ filter: next })}
           tags={questTags}
-          showAssignee={Boolean(list.shared) || items.some((i) => i.assignee)}
+          showAssignee={showAssignee}
           groupBy={view === "list" ? groupBy : undefined}
           onGroupBy={(next) => updatePrefs({ groupBy: next })}
           shown={shownItems.length}

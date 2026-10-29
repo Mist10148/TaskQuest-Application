@@ -20,4 +20,13 @@ describe("MobileBottomNav", () => {
     await userEvent.click(screen.getByRole("button", { name: "More" }));
     expect(onMore).toHaveBeenCalledOnce();
   });
+
+  it("says that More opens a dialog, and whether it is open", () => {
+    const { rerender } = render(<MemoryRouter><MobileBottomNav onMore={() => {}} /></MemoryRouter>);
+    const more = screen.getByRole("button", { name: "More" });
+    expect(more).toHaveAttribute("aria-haspopup", "dialog");
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    rerender(<MemoryRouter><MobileBottomNav onMore={() => {}} menuOpen /></MemoryRouter>);
+    expect(more).toHaveAttribute("aria-expanded", "true");
+  });
 });

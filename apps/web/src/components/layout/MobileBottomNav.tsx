@@ -10,7 +10,7 @@ const ITEMS = [
 ];
 
 /** Four places to go with a thumb, and the full menu. Phones and small tablets only (the sidebar takes over from lg). */
-export const MobileBottomNav = ({ onMore }: { onMore: () => void }) => {
+export const MobileBottomNav = ({ onMore, menuOpen = false }: { onMore: () => void; menuOpen?: boolean }) => {
   const { pathname } = useLocation();
   return (
     <nav aria-label="Quick navigation" className="lg:hidden fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm">
@@ -28,7 +28,7 @@ export const MobileBottomNav = ({ onMore }: { onMore: () => void }) => {
           </Link>
         );
       })}
-      <button type="button" onClick={onMore} className="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-medium text-foreground-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+      <button type="button" onClick={onMore} aria-haspopup="dialog" aria-expanded={menuOpen} className="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-medium text-foreground-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
         <Menu className="h-5 w-5" aria-hidden />
         More
       </button>

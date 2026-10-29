@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, Mail, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,13 +31,20 @@ const Row = ({ invite, busy, onAnswer }: { invite: MyInvite; busy: boolean; onAn
 export const InvitesBanner = () => {
   const { data } = useMyInvites();
   const respond = useRespondToInvite();
+  // Each answer is tracked by itself: a mutation's `variables` and per-call callbacks follow only the latest call, so with
+  // two answers in flight the first one's buttons came back on and its toast was lost.
+  const [busy, setBusy] = useState<ReadonlySet<number>>(new Set());
   if (!data || data.length === 0) return null;
 
-  const answer = (invite: MyInvite, accept: boolean) =>
-    respond.mutate(
-      { id: invite.id, accept },
-      { onSuccess: () => toast.success(accept ? `🤝 You joined "${invite.listName}"` : `Declined the invitation to "${invite.listName}"`) }
-    );
+  const answer = (invite: MyInvite, accept: boolean) => {
+    if (busy.has(invite.id)) return;
+    setBusy((ids) => new Set(ids).add(invite.id));
+    respond
+      .mutateAsync({ id: invite.id, accept })
+      .then(() => toast.success(accept ? `🤝 You joined "${invite.listName}"` : `Declined the invitation to "${invite.listName}"`))
+      .catch(() => { /* error toast shown by the mutation hook */ })
+      .finally(() => setBusy((ids) => { const next = new Set(ids); next.delete(invite.id); return next; }));
+  };
 
   return (
     <section aria-label="Quest invitations" className="mb-6 rounded-xl border border-primary/40 bg-primary/5">
@@ -45,7 +53,7 @@ export const InvitesBanner = () => {
       </h2>
       <ul className="divide-y divide-border">
         {data.map((invite) => (
-          <Row key={invite.id} invite={invite} busy={respond.isPending && respond.variables?.id === invite.id} onAnswer={answer} />
+          <Row key={invite.id} invite={invite} busy={busy.has(invite.id)} onAnswer={answer} />
         ))}
       </ul>
     </section>

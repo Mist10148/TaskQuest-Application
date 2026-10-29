@@ -22,12 +22,12 @@ export const GlobalShortcuts = ({ aiEnabled }: { aiEnabled: boolean }) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
       if (pendingSince.current && Date.now() - pendingSince.current < GO_TO_WINDOW_MS) {
+        if (e.key === "Shift") return; // still waiting for the letter
         pendingSince.current = 0;
         const path = goToPath(e.key, aiEnabled);
-        if (path) {
-          e.preventDefault();
-          navigate(path);
-        }
+        // The key after "g" is spent even when it goes nowhere, so "g x" never completes the highlighted task.
+        if (path || e.key.length === 1) e.preventDefault();
+        if (path) navigate(path);
         return;
       }
       pendingSince.current = 0;

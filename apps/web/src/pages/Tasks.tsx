@@ -370,7 +370,7 @@ const Tasks = () => {
           </div>
         )
       ) : (
-        <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={openListAndTask} onCreate={() => setListDialog("create")} onOpenTemplates={() => setTemplatesOpen(true)} />
+        <ListOverview lists={lists} loading={listsQuery.isLoading} error={listsQuery.isError ? listsQuery.error : null} onRetry={() => void listsQuery.refetch()} retrying={listsQuery.isFetching} filters={filters} onOpen={openListAndTask} onCreate={() => setListDialog("create")} onOpenTemplates={() => setTemplatesOpen(true)} aiEnabled={Boolean(user?.features?.ai)} />
       )}
 
       <ListFormDialog

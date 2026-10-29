@@ -43,6 +43,18 @@ describe("GlobalShortcuts", () => {
     expect(pageShortcut).not.toHaveBeenCalled();
   });
 
+  it("spends a key after g that goes nowhere, so g x does not complete the highlighted task", async () => {
+    const pageShortcut = vi.fn();
+    const onKey = (e: KeyboardEvent) => { if (!e.defaultPrevented && e.key === "x") pageShortcut(); };
+    window.addEventListener("keydown", onKey);
+    mount();
+    await userEvent.keyboard("gx");
+    expect(pageShortcut).not.toHaveBeenCalled();
+    await userEvent.keyboard("x");
+    window.removeEventListener("keydown", onKey);
+    expect(pageShortcut).toHaveBeenCalledTimes(1);
+  });
+
   it("? opens the list of shortcuts on any page, with the go-to keys", async () => {
     mount(true);
     await userEvent.keyboard("?");

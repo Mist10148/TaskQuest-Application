@@ -24,15 +24,16 @@ interface Props {
   onOpen: (listId: number, taskId?: number) => void;
   onCreate: () => void;
   onOpenTemplates: () => void;
+  aiEnabled?: boolean;
 }
 
 /** The quest log: header, AI priorities, filters and the grid of quest cards. */
-export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters, onOpen, onCreate, onOpenTemplates }: Props) => {
+export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters, onOpen, onCreate, onOpenTemplates, aiEnabled = false }: Props) => {
   const [showHelp, setShowHelp] = useState(false);
   useHotkeys({
     n: (e) => { e.preventDefault(); onCreate(); },
     "/": (e) => { e.preventDefault(); document.getElementById("quest-search")?.focus(); },
-    "?": () => setShowHelp(true),
+    // "?" itself is GlobalShortcuts' (it handles the key first); the footer button below opens the same list.
   });
   return (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -112,7 +113,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
         <Keyboard className="h-3.5 w-3.5" aria-hidden /> Keyboard shortcuts (?)
       </button>
     </p>
-    <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} />
+    <ShortcutsDialog open={showHelp} onOpenChange={setShowHelp} aiEnabled={aiEnabled} />
   </motion.div>
   );
 };

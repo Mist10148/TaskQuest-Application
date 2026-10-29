@@ -780,6 +780,11 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const { item: c } = await db.tasks.addItem(QID, list.id, { name: 'c', priority: 'high' });
         await db.tasks.setItemCompleted(QID, c.id, true);
         assert.equal(await progress('DAILY_HIGH_1'), 1);
+        // with XP off nothing reads as claimable, since the claim would be refused
+        await db.getPool().query('UPDATE users SET gamification_enabled = 0 WHERE discord_id = ?', [QID]);
+        assert.equal((await db.quests.getQuests(QID)).find((q) => q.key === 'DAILY_HIGH_1').claimable, false);
+        await db.getPool().query('UPDATE users SET gamification_enabled = 1 WHERE discord_id = ?', [QID]);
+        assert.equal((await db.quests.getQuests(QID)).find((q) => q.key === 'DAILY_HIGH_1').claimable, true);
         // a claim made under another time zone key still reads as claimed, since claiming again would be refused
         await db.quests.claimQuest(QID, 'DAILY_HIGH_1');
         await db.getPool().query("UPDATE quest_claims SET period_start = period_start - 1 WHERE discord_id = ? AND quest_key = 'DAILY_HIGH_1'", [QID]);

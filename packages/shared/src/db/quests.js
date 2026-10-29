@@ -9,7 +9,7 @@
 
 const { getPool, withTransaction } = require('./pool');
 const { lockUser, progressFloor } = require('./users');
-const { applyXP, claimedSince, requireGamification, unlockAchievements, userZone } = require('./progression');
+const { applyXP, claimedSince, requireGamification, unlockAchievements } = require('./progression');
 const { errors } = require('../errors');
 const { QUESTS, ROTATING_QUESTS } = require('../constants');
 const { questPeriod, activeRotatingQuest } = require('../quests');
@@ -77,7 +77,8 @@ async function metricProgress(conn, discordId, metric, windowFrom, to) {
     }
 }
 
-async function questState(conn, discordId, now = new Date(), zone = null) {
+/** `xpOn` false (XP turned off) leaves every quest unclaimable, since claimQuest would refuse it. */
+async function questState(conn, discordId, now = new Date(), zone = null, xpOn = true) {
     const weekly = questPeriod('weekly', now, zone);
     const monthly = questPeriod('monthly', now, zone);
     // A time zone change re-keys the period, so a claim made since the period's real start counts too (claimQuest refuses it).
@@ -105,7 +106,7 @@ async function questState(conn, discordId, now = new Date(), zone = null) {
             reward: q.reward,
             progress,
             claimed: isClaimed,
-            claimable: !isClaimed && progress >= q.target,
+            claimable: xpOn && !isClaimed && progress >= q.target,
             periodStart: period.start,
             resetsAt: period.endsAt.toISOString()
         });
@@ -117,7 +118,9 @@ async function questState(conn, discordId, now = new Date(), zone = null) {
 async function getQuests(discordId, now = new Date()) {
     const conn = await getPool().getConnection();
     try {
-        return await questState(conn, String(discordId), now, await userZone(conn, discordId));
+        const [rows] = await conn.query('SELECT timezone, gamification_enabled FROM users WHERE discord_id = ?', [String(discordId)]);
+        const user = rows[0];
+        return await questState(conn, String(discordId), now, user ? user.timezone || null : null, user ? Boolean(user.gamification_enabled) : true);
     } finally {
         conn.release();
     }

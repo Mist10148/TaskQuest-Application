@@ -389,7 +389,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         await assert.rejects(db.transfer.importAll(IVY, { lists: [{ name: 'ok' }, { name: 'bad', deadline: '2030-02-30' }] }), { code: 'VALIDATION' });
         assert.equal(await count(), n, 'a bad entry imports nothing');
         await assert.rejects(db.transfer.importAll(IVY, { lists: 'nope' }), { code: 'VALIDATION' });
-        await assert.rejects(db.transfer.importAll(IVY, { lists: Array.from({ length: 101 }, (_, i) => ({ name: `l${i}` })) }), { code: 'VALIDATION' });
+        await assert.rejects(db.transfer.importAll(IVY, { lists: Array.from({ length: require('../src/constants').IMPORT_LIMITS.LISTS + 1 }, (_, i) => ({ name: `l${i}` })) }), { code: 'VALIDATION' });
         await assert.rejects(db.transfer.importAll(IVY, { lists: [{ name: 'x', items: [{ name: 'y', tags: 'a b c d e f' }] }] }), { code: 'VALIDATION' });
 
         // Calendar token: create, look up, rotate (old one dies), revoke.

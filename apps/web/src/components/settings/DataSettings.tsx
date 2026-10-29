@@ -9,8 +9,8 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { csvCounts, csvErrorLines, csvFileProblem } from "@/lib/csvImport";
 import { SettingRow } from "./SettingsSection";
 
-const MAX_IMPORT_BYTES = 2_000_000; // the server accepts 2 MB for a JSON import
-const MAX_FILE_BYTES = 8_000_000; // a bigger file is refused before it is read; its comments may still bring it under the limit
+const MAX_IMPORT_BYTES = 8_000_000; // the server accepts 8 MB for a JSON import
+const MAX_FILE_BYTES = 32_000_000; // a bigger file is refused before it is read; its comments may still bring it under the limit
 
 /** The import ignores an export's comments, so they are not sent: an export with many of them would otherwise pass the limit. */
 const importPayload = (parsed: unknown): unknown => {
@@ -126,7 +126,7 @@ export const DataSettings = () => {
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     try {
-      const tooLarge = "That file is too large to import (2 MB limit, not counting comments).";
+      const tooLarge = "That file is too large to import (8 MB limit, not counting comments).";
       if (file.size > MAX_FILE_BYTES) return void toast.error(tooLarge);
       let parsed: unknown;
       try {

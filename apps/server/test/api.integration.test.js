@@ -1083,13 +1083,13 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
 
     await t.test('large bodies: refused before they are read unless the caller is signed in; limits still apply', async () => {
         const fat = (bytes) => ({ lists: [{ name: 'Big', description: 'x'.repeat(bytes) }] });
-        // A stranger is turned away with 401 whatever the size: the 1 MB / 2 MB parsers are behind the session and requireAuth.
-        for (const [path, bytes] of [['/api/user/import', 3_000_000], ['/api/import', 3_000_000], ['/api/games/arcade/finish', 300_000], ['/api/User/Import/', 3_000_000]]) {
+        // A stranger is turned away with 401 whatever the size: the 2 MB / 8 MB parsers are behind the session and requireAuth.
+        for (const [path, bytes] of [['/api/user/import', 9_000_000], ['/api/import', 3_000_000], ['/api/games/arcade/finish', 300_000], ['/api/User/Import/', 9_000_000]]) {
             assert.equal((await call('POST', path, { body: fat(bytes) })).status, 401, path);
         }
         // Signed in: over the route's own limit is 413; under it the route runs.
-        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: fat(2_200_000) })).status, 413);
-        assert.notEqual((await call('POST', '/api/user/import', { cookie: alice, body: fat(1_200_000) })).status, 413, 'an export with comments can pass 1 MB');
+        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: fat(8_400_000) })).status, 413);
+        assert.notEqual((await call('POST', '/api/user/import', { cookie: alice, body: fat(3_000_000) })).status, 413, 'a full account export can pass 2 MB');
         assert.equal((await call('POST', '/api/import', { cookie: alice, body: { csv: 'x'.repeat(2_200_000) } })).status, 413);
         assert.notEqual((await call('POST', '/api/import', { cookie: alice, body: { csv: 'x'.repeat(1_500_000) } })).status, 413, 'a CSV up to 2 MB of JSON is allowed');
         assert.equal((await call('POST', '/api/games/arcade/finish', { cookie: alice, body: fat(200_000) })).status, 413);

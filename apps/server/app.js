@@ -40,11 +40,12 @@ const SESSION_COOKIE = 'tq.sid';
  * Imports carry whole lists (the shared service caps their size); a CSV of up to 1 MB of text grows a little once its line
  * breaks and quotes are escaped as JSON; an arcade run carries its recorded input timeline (up to ~12k small integers);
  * a reorder carries every task id of the list (up to 5,000 ids of up to 10 digits). A JSON export also carries the comments
- * you wrote, which the import ignores but which still count, so the JSON import gets the same 2 MB as the CSV one.
+ * you wrote, which the import ignores but which still count. The JSON import takes 8 MB, enough for a full account's export
+ * (5,000 tasks with long descriptions); the CSV import keeps 2 MB, since its text is capped at 1,000,000 characters.
  * `match`, when set, is the exact path (lower-cased, no trailing slash) for a route with a parameter in it.
  */
 const LARGE_BODIES = [
-    { prefix: '/api/user/import', limit: '2mb', heavy: true },
+    { prefix: '/api/user/import', limit: '8mb', heavy: true },
     { prefix: '/api/import', limit: '2mb', heavy: true },
     { prefix: '/api/games/arcade', limit: '128kb' },
     { prefix: '/api/lists/:id/reorder', match: /^\/api\/lists\/\d+\/reorder$/, limit: '64kb' }

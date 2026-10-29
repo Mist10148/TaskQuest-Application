@@ -777,11 +777,14 @@ const TAG_LIMITS = {
     MAX_LENGTH: 20
 };
 
-/** The most one JSON import may hold (the per-user list and task quotas in LIMITS apply on top). */
+/**
+ * The most one JSON import may hold: the account quota itself, so a full account's own export can always be restored
+ * (the per-user list and task quotas in LIMITS still apply on top, counting what the account already has).
+ */
 const IMPORT_LIMITS = {
-    LISTS: 100,
-    ITEMS_PER_LIST: 500,
-    ITEMS_TOTAL: 1000
+    LISTS: LIMITS.MAX_LISTS_PER_USER,
+    ITEMS_PER_LIST: LIMITS.MAX_ITEMS_PER_USER,
+    ITEMS_TOTAL: LIMITS.MAX_ITEMS_PER_USER
 };
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];

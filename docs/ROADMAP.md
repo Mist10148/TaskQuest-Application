@@ -26,7 +26,7 @@ Work that is understood and waits only for time, a key or a decision.
 | Item | Notes |
 |---|---|
 | Custom statuses, start dates with a timeline, task dependencies, simple automations, real-time updates on shared quests | Needs a data model; each is its own design note |
-| More component tests for the web app (#24) | The Dashboard, Focus, Tasks, Achievements and Profile pages are the gaps; the dialogs and the Settings, Stats, Leaderboard, Shop, Classes, Games, Skills and Party pages are covered |
+| More component tests for the web app (#24) | The Tasks page is the gap (its URL and dialog wiring); every other page and the dialogs are covered |
 | Full internationalisation | Extract strings into `apps/web/src/i18n/messages.ts`, add a language picker once there is a second catalog |
 | README screenshots (#26) and push delivery tested against real push services (#30) | The capture spec exists; see [CONTRIBUTING](../CONTRIBUTING.md#readme-screenshots) |
 

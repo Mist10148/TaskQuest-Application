@@ -453,7 +453,7 @@ const REWARDS = {
     HABIT_MIN_STREAK: 2,
     FOCUS_XP_PER_MINUTE: 0.6,
     WEEKLY_REVIEW: 40,
-    // Engagement sources (migration 024): flat, capped, no class or skill modifiers.
+    // Engagement sources: flat, capped, no class or skill modifiers.
     PERFECT_DAY: 30,
     INBOX_ZERO: 40,
     BOSS_DEFEATED: 30,
@@ -640,7 +640,7 @@ const COSMETICS = {
 /** users column holding the equipped cosmetic of each kind. */
 const COSMETIC_COLUMNS = { title: 'equipped_title', frame: 'equipped_frame', accent: 'equipped_accent' };
 
-/** Anti-farming limits (per user, per UTC day unless noted). */
+/** Anti-farming limits (per user, per day in the user's time zone unless noted; see progression.dayWindow). */
 const LIMITS = {
     /** Only the first N list creations per day award XP. */
     LIST_CREATE_REWARDS_PER_DAY: 10,

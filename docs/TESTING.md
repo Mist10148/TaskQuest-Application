@@ -12,7 +12,7 @@ npm test            # unit tests in every workspace, including the web app's Vit
 npm run build       # the web bundle
 ```
 
-With no `TEST_DB_NAME`, the database-backed suites are **skipped**, so a green `npm test` does not mean they ran: look for `set TEST_DB_NAME to run` among the skipped tests.
+With no `TEST_DB_NAME`, the database-backed suites are **skipped**, so a green `npm test` does not mean they ran: look for `set TEST_DB_NAME to run` among the skipped tests. `npm run test:db` prints the command that runs them.
 
 ## Database tests
 
@@ -56,9 +56,20 @@ Nothing in the suite calls Gemini. The live runbook is in [OPERATIONS](OPERATION
 
 ## Docs checks
 
-`packages/shared/test/docs.test.js` checks the GAMEPLAY and CLASS_GUIDE tables against `constants.js` and the balance simulator. After changing a number run `npm run balance` and update the docs in the same commit.
+`packages/shared/test/docs.test.js` checks the GAMEPLAY and CLASS_GUIDE tables against `constants.js` and the balance simulator, and `packages/shared/test/xpGuide.test.js` checks the amounts and caps in the XP_GUIDE table. After changing a number run `npm run balance` and update the docs in the same commit.
 
 `packages/shared/test/docLinks.test.js` follows every relative link in the Markdown files (root, `docs/`, `docs/design/`, `db/legacy/` and each package's README) and fails when a file or a `#heading` anchor it names does not exist (GitHub's slug rules; links in code are ignored). `apps/bot/test/commandsDoc.test.js` reads the command set from `deploy-commands.js` and checks that `docs/COMMANDS.md` has a table row for each slash command, and none for a command that is not registered.
+
+## Reports and maintenance scripts
+
+These are not tests, but they read a real database (the one in `.env`) and are the way to check the game against real play:
+
+| Command | What it does |
+|---|---|
+| `npm run balance` | Simulates a player per class and prints the XP each earns (no database); the docs tests compare against it |
+| `npm run xp-report` | XP earned per source and class from `xp_transactions`, to compare with the [previews](KNOWN_ISSUES.md#by-design) |
+| `npm run arcade-report` | How fast real players score in each arcade game, to calibrate the anti-cheat bound ([#39](KNOWN_ISSUES.md#limitations)) |
+| `npm run archive -- --days 365` | Moves old XP and game rows to archive tables and deletes old task history; `--dry-run` only counts ([DATABASE](DATABASE.md#backups-and-maintenance)) |
 
 ## What CI runs
 

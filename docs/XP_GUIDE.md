@@ -1,6 +1,6 @@
 # How XP is earned
 
-One page that answers "where does my XP come from, how much, and what limits it?". Every number comes from [`packages/shared/src/constants.js`](../packages/shared/src/constants.js); the exact rules and edge cases are in [GAMEPLAY.md](GAMEPLAY.md), and a test fails if the two disagree. Days, weeks and months below are **yours** (your time zone, UTC until you set one), except where noted.
+One page that answers "where does my XP come from, how much, and what limits it?". Every number comes from [`packages/shared/src/constants.js`](../packages/shared/src/constants.js); the exact rules and edge cases are in [GAMEPLAY.md](GAMEPLAY.md). A test (`packages/shared/test/xpGuide.test.js`) fails if the table below disagrees with the code. Days, weeks and months below are **yours** (your time zone, UTC until you set one), except where noted.
 
 ## Two kinds of XP
 
@@ -36,7 +36,7 @@ Spending never lowers your level (levels come from lifetime XP), and XP you only
 | `focus_session` | floor(minutes × 0.6) for a 10 to 90 minute session | 100 XP and 8 sessions a day | No |
 | `weekly_review` | +40 after finishing at least one task that week | Once a week | No |
 | `quest_reward` | Daily 15 / 25 / 30, weekly 80 / 120 and the rotating quest 50 to 80, monthly boss 400 ([GAMEPLAY §5b](GAMEPLAY.md#5b-quests)) | Once per quest per period | No |
-| `party_quest` | +60 for the party weekly quest | Once per person per week (UTC week), after 6 tasks of your own | No |
+| `party_quest` | +60 for the party task quest, +40 for the party focus quest | Each once per person per week (UTC week): the task quest after 6 tasks of your own, the focus quest after 20 focus minutes of your own | No |
 | `game_reward` | RPS win 10 base; Hangman max(10, 10 × lives left) base; arcade points × rate (Snake 2, Dino 1, Invaders 3 per point, max 100 / 100 / 150 per run; a run under 5 seconds of play pays nothing) | 500 XP a day across all free games, 3 s cooldown | Yes (then trimmed to the remaining allowance) |
 | `blackjack_win`, `blackjack_blackjack` | Winnings: 1:1, or 3:2 for a natural. Balance only: Blackjack never adds lifetime XP, so it cannot raise your level | Bet 10 to min(25% of balance, 1000) | No (flat on purpose) |
 

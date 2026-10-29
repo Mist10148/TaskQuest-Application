@@ -103,7 +103,7 @@ In production, set the variables in your host's dashboard instead. Because the b
 | Variable | Required | Description |
 |---|---|---|
 | `DISCORD_TOKEN` | ✓ | Bot token |
-| `CLIENT_ID` | for `deploy:commands` | Application ID |
+| `CLIENT_ID` | for `deploy:commands` | Application ID. Falls back to `DISCORD_CLIENT_ID`, so with one shared `.env` you need only that one. |
 | `GUILD_ID` | | Default guild for `deploy:commands` |
 | `WEB_APP_URL` | | Link used by `/app` (e.g. your `PUBLIC_URL`) |
 | `BOT_PORT` / `PORT` | | Health endpoint port (default 3000; `BOT_PORT` wins) |
@@ -223,6 +223,9 @@ The repository includes [`render.yaml`](../render.yaml).
 - **AI service.** `render.yaml` also defines a private service `taskquest-ai` (a paid plan) and a `taskquest-ai` env group holding a generated `AI_INTERNAL_TOKEN`, shared with the web service and the bot. To enable AI: set `GEMINI_API_KEY` and `WEB_INTERNAL_URL` on `taskquest-ai`, set `AI_SERVICE_URL` (its internal host) on `taskquest-web` and `taskquest-bot`, then flip `AI_ENABLED` to `true` on both. The AI commands (`/summary`, `/prioritize`, `/ask`, `/forget`, `/ai-format`) are always registered, whether or not AI is on; until `AI_ENABLED` is `true` they answer that AI is off, so no re-registration is needed. Its build command embeds the help docs; that step is skipped, not failed, if the database or key is unavailable at build time.
 - The first AI request after a free web instance wakes can take 10 to 30 seconds. The UI shows a "waking up" message after 5 seconds.
 - Health checks: the web service uses `GET /api/health`. The bot's `GET /` returns 200 once it is connected to Discord.
+- **Web push** is not in the blueprint. To turn it on, add the three `WEB_PUSH_*` VAPID values to `taskquest-web` and `WEB_PUSH_INTERNAL_URL` (the web service's private host) to `taskquest-bot`; the token falls back to `AI_INTERNAL_TOKEN`, so with the AI env group attached nothing else is needed. See [Web push](#web-push-optional) and the [checklist](OPERATIONS.md#web-push-does-not-arrive) if nothing arrives.
+- `TRUST_PROXY` can stay unset on Render: in production it defaults to one proxy hop, which is what Render puts in front of the service.
+- **Before you turn AI on**, run `python -m app.preflight --check-models` in `apps/ai` with the production key: it checks the configuration and asks Google which of the configured model ids exist. The full first-run checklist is in [OPERATIONS](OPERATIONS.md#first-live-gemini-run).
 
 ## 5. Deploying elsewhere
 

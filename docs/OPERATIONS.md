@@ -93,11 +93,29 @@ Start with the health checks: web `GET /api/health` (`{status:"ok", database:"co
 | Games: "cooldown" or wins paying 0 | 3-second cooldown, or the 500 XP daily free-game cap is used up | The Games page shows how much allowance is left. |
 | AI: 503 `AI_UNAVAILABLE` / `AI_DISABLED` | The AI service is down or timing out, or `AI_ENABLED` is not `true` on the web server | Check `GET /health` on the AI service, `AI_SERVICE_URL`, and that `AI_INTERNAL_TOKEN` is identical everywhere. |
 | AI: 429 `AI_QUOTA` | The user hit `AI_DAILY_REQUEST_LIMIT` | It resets at the user's own midnight (their time zone setting); raise the limit if it is too tight. |
-| Push notifications never arrive | Web push is off (the three `WEB_PUSH_*` VAPID variables unset), the site is not HTTPS, the bot has no `WEB_PUSH_INTERNAL_URL` or the shared token differs, or the browser's subscription expired (the server deletes it on a 404 or 410) | See [DEPLOYMENT.md](DEPLOYMENT.md#web-push-optional); check `GET /api/push/config` and that the user turned it on per browser in Settings. |
+| Push notifications never arrive | Web push is off (the three `WEB_PUSH_*` VAPID variables unset), the site is not HTTPS, the bot has no `WEB_PUSH_INTERNAL_URL` or the shared token differs, or the browser's subscription expired (the server deletes it on a 404 or 410) | Work through [Web push does not arrive](#web-push-does-not-arrive) below. |
 | Calendar feed returns 404 | The token was rotated or turned off, or the URL was copied wrongly | Create a new address in Settings → Calendar feed and re-subscribe. |
 | Import fails with a 400 message | The file isn't a TaskQuest export (or a CSV with a header row), or breaks a limit (JSON: 8 MB; CSV: 1,000,000 characters; both: 200 lists and 5,000 tasks per account, counting what you already have) | The message names the entry (for example `lists[3]: ... deadline`) or, for CSV, the file row. Fix it and retry; nothing is imported on error. |
 | "Could not acquire migration lock" at startup | Another process is migrating, or a crashed one left the advisory lock | Wait a minute; the lock dies with its session. If it persists, restart the service. On Supabase, `DB_URL` must be the **session** pooler (port 5432): through the transaction pooler (6543) the lock does not hold. |
 | Site works but is slow on the first request | Free hosting plans sleep when idle | Expected on Render's free tier; use a paid plan for the bot. |
+
+### Web push does not arrive
+
+A push passes through four places, and each one can drop it quietly (the Discord DM is sent either way). Check them in order:
+
+1. **The web server has push on.** `GET /api/push/config` must answer `{enabled: true, publicKey}`. `{enabled: false}` means the three VAPID values (`WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT`) are not all set on the web service. Setting only one or two stops the server from starting.
+2. **The page is HTTPS** (or `localhost`). Browsers refuse push and service workers on plain http, and the Settings toggle stays off.
+3. **The browser subscribed.** The user turns push on under **Settings → Push notifications** in each browser, and `users.web_push` must be on. In the database, `SELECT COUNT(*) FROM push_subscriptions WHERE discord_id = '<id>'` should be at least 1. A subscription the push service reports as gone (404 or 410) is deleted, so a long-unused browser has to opt in again.
+4. **The bot can reach the server.** The bot needs `WEB_PUSH_INTERNAL_URL` (the web service's own address; the private host on Render), and both services need the same token: `WEB_PUSH_INTERNAL_TOKEN`, or `AI_INTERNAL_TOKEN` when that is unset, at least 32 characters. Test it from the bot's host:
+
+   ```bash
+   curl -s -X POST "$WEB_PUSH_INTERNAL_URL/internal/push" -H "Content-Type: application/json" \
+        -H "X-AI-Token: $WEB_PUSH_INTERNAL_TOKEN" -d '{"discordId":"<id>","title":"Test"}'
+   ```
+
+   `404` means push is off on the server, or no token is set there. `401` means the tokens differ. A `{sent: 0, skipped: "no-subscriptions"}` answer sends you back to step 3, and `{failed: n}` means the push service refused the message: check the server log.
+
+Endpoints outside the browsers' own push services are refused unless `WEB_PUSH_ALLOWED_HOSTS` names them ([DEPLOYMENT](DEPLOYMENT.md#web-push-optional)).
 
 ### Useful queries
 

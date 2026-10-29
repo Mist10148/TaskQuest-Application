@@ -271,8 +271,8 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
       <div className="mb-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-foreground mb-4 text-sm group">
-          <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" /> Back to Quests
+        <button type="button" onClick={onBack} className="flex items-center gap-2 text-foreground-muted hover:text-foreground mb-4 text-sm group">
+          <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" aria-hidden /> Back to Quests
         </button>
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
@@ -529,8 +529,8 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         showThread
       />
 
-      {editable && <button onClick={() => onAddItem()} className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 text-foreground-muted text-sm transition-all group">
-        <Plus className="h-5 w-5 group-hover:scale-110 transition-transform" /> Add New Task
+      {editable && <button type="button" onClick={() => onAddItem()} className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 text-foreground-muted text-sm transition-all group">
+        <Plus className="h-5 w-5 group-hover:scale-110 transition-transform" aria-hidden /> Add New Task
       </button>}
     </motion.div>
   );

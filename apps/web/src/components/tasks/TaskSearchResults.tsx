@@ -18,7 +18,14 @@ export const TaskSearchResults = ({ query, onOpen }: Props) => {
     return <p className="text-center py-12 text-foreground-muted">Type at least two characters to search inside your tasks.</p>;
   }
   if (isError) return <ErrorCard what="the search" error={error} onRetry={() => void refetch()} retrying={isFetching} />;
-  if (!data) return <div className="flex justify-center py-12" aria-busy="true"><Loader2 className="h-6 w-6 animate-spin text-foreground-muted" /></div>;
+  if (!data) {
+    return (
+      <div className="flex justify-center py-12" role="status" aria-busy="true">
+        <Loader2 className="h-6 w-6 animate-spin text-foreground-muted" aria-hidden />
+        <span className="sr-only">Searching your tasks…</span>
+      </div>
+    );
+  }
   if (data.tasks.length === 0) return <p className="text-center py-12 text-foreground-muted">No tasks match "{q}".</p>;
 
   return (

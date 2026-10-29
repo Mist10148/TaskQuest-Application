@@ -118,7 +118,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
           className="rounded-xl border-2 border-dashed border-border p-6 flex flex-col items-center justify-center hover:border-primary/50 hover:bg-primary/5 min-h-[200px] transition-all group"
           onClick={onCreate}
         >
-          <Plus className="h-8 w-8 text-foreground-muted mb-2 group-hover:scale-110 transition-transform" />
+          <Plus className="h-8 w-8 text-foreground-muted mb-2 group-hover:scale-110 transition-transform" aria-hidden />
           <p className="text-foreground-muted text-sm">Create New Quest</p>
         </motion.button>
       </div>

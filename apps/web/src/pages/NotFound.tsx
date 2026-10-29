@@ -1,4 +1,4 @@
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useT } from "@/i18n/useT";
 
@@ -7,7 +7,7 @@ const NotFound = () => {
   const t = useT();
 
   useEffect(() => {
-    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
+    if (import.meta.env.DEV) console.warn("404: no route for", location.pathname);
   }, [location.pathname]);
 
   return (
@@ -15,9 +15,10 @@ const NotFound = () => {
       <div className="text-center">
         <h1 className="mb-4 text-4xl font-bold">{t("notFound.title")}</h1>
         <p className="mb-4 text-xl text-muted-foreground">{t("notFound.message")}</p>
-        <a href="/" className="text-primary-text underline hover:text-primary-text/90">
+        {/* A client-side link keeps the app and its cached data; a plain <a> would reload everything. */}
+        <Link to="/" className="text-primary-text underline hover:text-primary-text/90">
           {t("notFound.home")}
-        </a>
+        </Link>
       </div>
     </div>
   );

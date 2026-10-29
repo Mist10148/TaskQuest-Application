@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { FileStack, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useApplyTemplate, useDeleteTemplate, useTemplates } from "@/hooks/useApi";
-import { templateSummary } from "@/lib/templates";
+import { TEMPLATE_MAX_COUNT, templateSummary } from "@/lib/templates";
 
 interface Props {
   open: boolean;
@@ -17,6 +18,7 @@ export const TemplatesDialog = ({ open, onOpenChange, onApplied }: Props) => {
   const templates = useTemplates();
   const apply = useApplyTemplate();
   const remove = useDeleteTemplate();
+  const saved = templates.data?.length ?? 0;
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [applyingId, setApplyingId] = useState<number | null>(null);
 
@@ -55,7 +57,7 @@ export const TemplatesDialog = ({ open, onOpenChange, onApplied }: Props) => {
                 </div>
                 {confirmId === t.id ? (
                   <div className="flex gap-1 shrink-0" role="group" aria-label={`Delete ${t.name}?`}>
-                    <Button type="button" size="sm" variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate(t.id, { onSettled: () => setConfirmId(null) })}>Delete</Button>
+                    <Button type="button" size="sm" variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate(t.id, { onSuccess: () => toast.success(`Deleted the template "${t.name}"`), onSettled: () => setConfirmId(null) })}>Delete</Button>
                     <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmId(null)}>Keep</Button>
                   </div>
                 ) : (
@@ -72,6 +74,11 @@ export const TemplatesDialog = ({ open, onOpenChange, onApplied }: Props) => {
             ))
           )}
         </div>
+        {saved > 0 && (
+          <p className="text-xs text-foreground-muted">
+            {saved} of {TEMPLATE_MAX_COUNT} templates saved{saved >= TEMPLATE_MAX_COUNT ? ": delete one to save another." : "."}
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );

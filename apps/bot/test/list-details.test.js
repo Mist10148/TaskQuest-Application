@@ -188,6 +188,20 @@ test('list autocomplete offers a shared list that shares a name with your own by
     assert.deepEqual(share.map((c) => c.value), ['#1', '#2']);
 });
 
+test('list autocomplete treats names that differ only in case as the same name, and offers a #digits name by id', () => {
+    const { autocompleteChoices } = require('../utils/listChoice');
+    const lists = [
+        { id: 1, name: 'Work', is_owner: true, shared: false },
+        { id: 2, name: 'work', is_owner: false, shared: true, owner_name: 'bob' },
+        { id: 3, name: '#12', is_owner: true, shared: false }
+    ];
+    assert.deepEqual(autocompleteChoices(lists, () => true, ''), [
+        { name: 'Work (yours)', value: '#1' },
+        { name: 'work (by bob)', value: '#2' },
+        { name: '#12', value: '#3' }
+    ]);
+});
+
 test('a #id value picks that list, a typed name falls back to the name lookup', async () => {
     const db = require('@taskquest/shared/db');
     const { findList } = require('../utils/listChoice');
@@ -200,6 +214,10 @@ test('a #id value picks that list, a typed name falls back to the name lookup', 
         await findList('9', 'Work');
         await findList('9', '#nope');
         assert.deepEqual(calls, [['id', '42'], ['name', 'Work'], ['name', '#nope']]);
+        calls.length = 0;
+        db.tasks.getList = async (uid, id) => (calls.push(['id', id]), null);
+        assert.deepEqual(await findList('9', '#12'), { id: 1 }, 'a typed #12 that is no list id is read as a name');
+        assert.deepEqual(calls, [['id', '12'], ['name', '#12']]);
     } finally {
         Object.assign(db.tasks, real);
     }

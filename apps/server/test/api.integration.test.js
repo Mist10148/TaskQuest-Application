@@ -1088,10 +1088,15 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
             assert.equal((await call('POST', path, { body: fat(bytes) })).status, 401, path);
         }
         // Signed in: over the route's own limit is 413; under it the route runs.
-        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: fat(1_200_000) })).status, 413);
+        assert.equal((await call('POST', '/api/user/import', { cookie: alice, body: fat(2_200_000) })).status, 413);
+        assert.notEqual((await call('POST', '/api/user/import', { cookie: alice, body: fat(1_200_000) })).status, 413, 'an export with comments can pass 1 MB');
         assert.equal((await call('POST', '/api/import', { cookie: alice, body: { csv: 'x'.repeat(2_200_000) } })).status, 413);
         assert.notEqual((await call('POST', '/api/import', { cookie: alice, body: { csv: 'x'.repeat(1_500_000) } })).status, 413, 'a CSV up to 2 MB of JSON is allowed');
         assert.equal((await call('POST', '/api/games/arcade/finish', { cookie: alice, body: fat(200_000) })).status, 413);
+        // A reorder of a 5,000 task list (ids of up to 10 digits) passes 16 KB; it gets 64 KB.
+        const ids = Array.from({ length: 5000 }, (_, i) => 1_000_000_000 + i);
+        assert.notEqual((await call('PATCH', '/api/lists/1/reorder', { cookie: alice, body: { itemIds: ids } })).status, 413);
+        assert.equal((await call('PATCH', '/api/lists/1/reorder', { cookie: alice, body: { itemIds: ids, pad: 'x'.repeat(70_000) } })).status, 413);
         // Every other route keeps the small 16 KB default, signed in or not.
         assert.equal((await call('POST', '/api/lists', { cookie: alice, body: { name: 'x', description: 'y'.repeat(20_000) } })).status, 413);
         assert.equal((await call('POST', '/api/lists', { body: { name: 'x', description: 'y'.repeat(20_000) } })).status, 413);

@@ -38,18 +38,22 @@ const SESSION_COOKIE = 'tq.sid';
  * session, the rate limiter and requireAuth, so a stranger or a flood is refused before a large body is read or parsed.
  * The imports also get the per-account heavyLimiter first, so one account cannot make the server parse megabyte bodies all day.
  * Imports carry whole lists (the shared service caps their size); a CSV of up to 1 MB of text grows a little once its line
- * breaks and quotes are escaped as JSON; an arcade run carries its recorded input timeline (up to ~12k small integers).
+ * breaks and quotes are escaped as JSON; an arcade run carries its recorded input timeline (up to ~12k small integers);
+ * a reorder carries every task id of the list (up to 5,000 ids of up to 10 digits). A JSON export also carries the comments
+ * you wrote, which the import ignores but which still count, so the JSON import gets the same 2 MB as the CSV one.
+ * `match`, when set, is the exact path (lower-cased, no trailing slash) for a route with a parameter in it.
  */
 const LARGE_BODIES = [
-    { prefix: '/api/user/import', limit: '1mb', heavy: true },
+    { prefix: '/api/user/import', limit: '2mb', heavy: true },
     { prefix: '/api/import', limit: '2mb', heavy: true },
-    { prefix: '/api/games/arcade', limit: '128kb' }
+    { prefix: '/api/games/arcade', limit: '128kb' },
+    { prefix: '/api/lists/:id/reorder', match: /^\/api\/lists\/\d+\/reorder$/, limit: '64kb' }
 ];
 
 /** Whether the request path is under one of the routes above (compared the way Express routes: ignoring case and a trailing slash). */
 const hasLargeBody = (req) => {
     const path = req.path.toLowerCase().replace(/\/+$/, '');
-    return LARGE_BODIES.some(({ prefix }) => path === prefix || path.startsWith(`${prefix}/`));
+    return LARGE_BODIES.some(({ prefix, match }) => (match ? match.test(path) : path === prefix || path.startsWith(`${prefix}/`)));
 };
 
 export function createApp() {

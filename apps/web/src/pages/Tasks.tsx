@@ -45,7 +45,9 @@ const Tasks = () => {
   // The open quest lives in the URL (/tasks?list=42): links from AI answers open it, refresh keeps it,
   // and the browser's Back button returns to the quest log. Opening adds a history entry; closing replaces it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedListId: number | null = Number(searchParams.get("list")) || null;
+  // Only a plain positive id opens a quest: "-3" or "1.5" would otherwise show "Quest not found." with a Retry that cannot work.
+  const listParam = searchParams.get("list") ?? "";
+  const selectedListId: number | null = /^\d{1,15}$/.test(listParam) && Number(listParam) > 0 ? Number(listParam) : null;
   const setSelectedListId = useCallback((id: number | null) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -113,13 +115,15 @@ const Tasks = () => {
     if (wantsNew === "quest") setListDialog("create");
     else if (wantsNew === "task") {
       // Until the open quest has loaded its role is unknown: wait for it, or a viewer gets a form the server then refuses.
-      if (selectedListId && !selectedList) return;
-      if (selectedListId && selectedList && !canEditTasks(roleOf(selectedList))) toast("You only have view access to this quest.");
+      // If it failed to load, drop the param, or a later successful Retry would pop the form open out of nowhere.
+      if (selectedListId && !selectedList) {
+        if (!listFailed) return; // still loading; a failed load has its own error card
+      } else if (selectedListId && selectedList && !canEditTasks(roleOf(selectedList))) toast("You only have view access to this quest.");
       else if (selectedListId) setItemDialog({ mode: "create" });
       else toast("Open a quest first, then press N or use Add Task.");
     }
     setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("new"); return next; }, { replace: true });
-  }, [wantsNew, selectedListId, selectedList, setSearchParams]);
+  }, [wantsNew, selectedListId, selectedList, listFailed, setSearchParams]);
 
   const editListInitial = useMemo<ListFormValues>(
     () =>

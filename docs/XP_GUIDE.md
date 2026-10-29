@@ -54,7 +54,7 @@ For a modified reward:
 
 1. **Class mechanic** turns the base into a class result (Hero adds its flat bonus, Wizard a combo or burst, Monk its Rhythm bonus, and so on).
 2. **Multiplier** = 1 + percentage skills (Quick Learner, Inspire, Legendary, Focus, Steady Aim, Momentum, Scholar, Night Shift, Bleed), added together and limited to +75%, + the class-gated bonuses (Execute, Revenge, Crusade), which are not limited, + the prestige bonus (+2% each, not limited). These are added together, not multiplied.
-3. **Final** = ⌊class result × multiplier⌋ + flat skill bonuses (Valor, Fortify, Arcane Study, which only work with their own class; on task completions also Multishot (Archer only), Rally (HIGH priority tasks), Anchor (repeating tasks), Last Stand (Hero only) and Tidy Mind when the completion clears a list, and the prestige flat bonus of +1 per prestige).
+3. **Final** = ⌊class result × multiplier⌋ + flat skill bonuses (Valor, Fortify, Arcane Study, which only work with their own class; on task completions also Multishot (Archer only), Rally (HIGH priority tasks), Anchor (repeating tasks), Last Stand (from the Hero tree, with any class) and Tidy Mind when the completion clears a list, and the prestige flat bonus of +1 per prestige).
 4. **Champion** (Hero only) adds 35% when your level is a multiple of 5.
 5. **Critical hit** (Assassin skill) adds +50% (+100% with Shadow Step) and arms Bleed.
 6. **Double Down** may double it, then **Jackpot** may multiply it by 10.

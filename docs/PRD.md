@@ -251,7 +251,7 @@ TaskQuest addresses this in three ways:
 | Templates | — | ✓ |
 | Time zone, reminder hour, weekly digest | `/timezone`, `/weekly` | ✓ |
 | Quick add | `/quick` | ✓ (quick-add bar) |
-| Subtasks, bulk actions, undo | Set through `/quick` and AI | ✓ |
+| Subtasks, bulk actions, undo | Subtasks only through the AI's break-down tool (`/quick` and `/list` cannot make one) | ✓ |
 | Export / import (JSON, CSV) / calendar feed | — | ✓ |
 | Command palette, tour, light and dark theme | — | ✓ |
 

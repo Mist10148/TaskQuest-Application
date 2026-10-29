@@ -55,7 +55,9 @@ For every reward:
                   + prestige bonus (+2% each, not limited)
 3. final      = ⌊classXP × multiplier⌋ + Σ flat skill bonuses
                   (Valor, Fortify, Arcane Study, and on task completions Multishot, each only
-                   with its own class equipped; Rally for HIGH priority, Anchor for recurring tasks)
+                   with its own class equipped; Rally for HIGH priority, Anchor for recurring tasks,
+                   Last Stand and Tidy Mind when the completion clears a list)
+                  + prestige flat bonus on task completions (+1 per prestige)
 4. Hero Champion: ×1.35 if your level is a multiple of 5 (Hero equipped)
 5. Crit (Assassin Critical Hit): +50 % (or +100 % with Shadow Step); a crit arms Bleed
 6. Double Down skill: chance to ×2
@@ -541,6 +543,6 @@ Every "per day" below, the quests, the weekly review and the Stats page use **yo
 | Import / export | Imports never grant XP, counters or achievements |
 | Free-game XP (RPS + Hangman + arcade) per day | 500 |
 | Time zone changes | Once every 24 hours |
-| Cooldown between RPS and Hangman rounds | 3 seconds |
+| Cooldown between RPS and Hangman rounds and arcade starts | 3 seconds |
 | Abandoned game session timeout | 30 minutes |
 | Web API rate limit | 900 requests / 15 min; games 90 / min |

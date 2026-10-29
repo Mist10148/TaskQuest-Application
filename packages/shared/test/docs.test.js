@@ -320,7 +320,7 @@ test('GAMEPLAY §8 limits table matches LIMITS, STREAK_FREEZE, PRESTIGE, PARTY_Q
         [/^Achievement rewards$/, [C.REWARDS.ACHIEVEMENT]],
         [/^Prestige$/, [C.PRESTIGE.MIN_LEVEL, C.PRESTIGE.MAX]],
         [/^Free-game XP/, [L.FREE_GAME_XP_PER_DAY]],
-        [/^Cooldown between RPS and Hangman rounds$/, [L.GAME_COOLDOWN_MS / 1000]],
+        [/^Cooldown between RPS and Hangman rounds and arcade starts$/, [L.GAME_COOLDOWN_MS / 1000]],
         [/^Abandoned game session timeout$/, [L.GAME_SESSION_TTL_MINUTES]]
     ];
     for (const [re, expected] of spec) {

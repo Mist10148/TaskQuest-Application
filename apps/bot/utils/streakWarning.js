@@ -37,8 +37,17 @@ function warningEmbed(streak, deadline = null) {
 async function sendStreakWarnings({ db, client, log, push, now = new Date() }) {
     const result = { sent: 0, skipped: 0, retry: 0 };
     for (const w of await db.today.getStreakWarnings(now)) {
-        // Claim the day first (atomic UPDATE) so overlapping runs cannot both send it.
-        if (!(await db.today.claimStreakWarning(w.discord_id, w.day))) continue;
+        // Claim the day first (atomic UPDATE) so overlapping runs cannot both send it. A failed claim is retried at the next run
+        // and does not stop the rest of the batch.
+        let claimed;
+        try {
+            claimed = await db.today.claimStreakWarning(w.discord_id, w.day);
+        } catch (err) {
+            result.retry++;
+            log('⚠️', 'STREAK', `${w.discord_id}: ${err.message} (claim failed, will retry)`);
+            continue;
+        }
+        if (!claimed) continue;
         try {
             const user = await client.users.fetch(w.discord_id);
             await user.send({ embeds: [warningEmbed(w.streak, deadlineText(w.expiresAt, w.timezone, now))] });

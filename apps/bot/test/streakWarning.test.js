@@ -102,3 +102,18 @@ test('works without a push client and with several people', async () => {
     assert.deepEqual(await sendStreakWarnings(ctx), { sent: 2, skipped: 0, retry: 0 });
     assert.deepEqual(ctx.claimed.map(([id]) => id), ['42', '43']);
 });
+
+test('a claim that fails is retried later and does not stop the rest of the batch', async () => {
+    const ctx = setup({
+        warnings: [warning({ discord_id: '1' }), warning({ discord_id: '2' })],
+        claims: (id) => {
+            if (id === '1') throw new Error('connection reset');
+            return true;
+        }
+    });
+    const result = await sendStreakWarnings(ctx);
+    assert.deepEqual(result, { sent: 1, skipped: 0, retry: 1 });
+    assert.deepEqual(ctx.claimed, [['2', '2030-03-12']]);
+    assert.equal(ctx.sent.length, 1);
+    assert.deepEqual(ctx.released, [], 'nothing was claimed for the failed one, so nothing is given back');
+});

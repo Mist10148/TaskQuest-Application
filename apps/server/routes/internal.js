@@ -75,7 +75,7 @@ router.patch(
         const { discordId, completed } = parse(internalToggleBody, req.body);
         const r = await db.tasks.asOwner.setItemCompleted(discordId, id, completed);
         if (r.item?.list_id) aiClient.reindex(discordId, r.item.list_id);
-        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses });
+        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses, nextItem: r.nextItem });
     })
 );
 

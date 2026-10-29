@@ -647,6 +647,13 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
             assert.equal((await internal('PATCH', `/items/${item.id}`, { discordId: malloryId, priority: 'HIGH' })).status, 404, 'another user cannot change it');
             assert.equal((await internal('PATCH', `/items/${item.id}`, { discordId: aliceId, priority: 'HIGH' }, 'wrong-token')).status, 401);
 
+            // Finishing a repeating task through the assistant reports its next copy, as the public toggle does.
+            const habitList = await (await call('POST', '/api/lists', { cookie: alice, body: { name: 'AI habits' } })).json();
+            const habit = await (await internal('POST', `/lists/${habitList.id}/items`, { discordId: aliceId, name: 'Stretch', recurrence: 'daily' })).json();
+            const toggled = await (await internal('PATCH', `/items/${habit.id}/toggle`, { discordId: aliceId, completed: true })).json();
+            assert.equal(toggled.completed, true);
+            assert.ok(toggled.nextItem && toggled.nextItem.name === 'Stretch', 'the next copy is in the response');
+
             // Break down: all or none, one level, owner-scoped, 2-8 names.
             const names = ['Outline', 'Draft', 'Edit'];
             const split = await internal('POST', `/items/${item.id}/subtasks`, { discordId: aliceId, names });

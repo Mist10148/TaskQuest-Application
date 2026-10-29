@@ -7,11 +7,12 @@ const hooks = vi.hoisted(() => ({
   revoke: vi.fn(),
   check: vi.fn(),
   run: vi.fn(),
+  importJson: vi.fn(),
 }));
 vi.mock("@/hooks/useApi", () => ({
   useCalendarToken: () => ({ create: { mutate: hooks.create, isPending: false }, revoke: { mutate: hooks.revoke, isPending: false } }),
   useCsvImport: () => ({ check: { mutateAsync: hooks.check, isPending: false }, run: { mutateAsync: hooks.run, isPending: false } }),
-  useImportData: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useImportData: () => ({ mutateAsync: hooks.importJson, isPending: false }),
 }));
 
 import { CalendarFeed, DataSettings } from "./DataSettings";
@@ -55,5 +56,17 @@ describe("CSV import", () => {
     expect(picker.value).toBe("");
     await userEvent.upload(picker, file);
     expect(hooks.check).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("JSON import", () => {
+  beforeEach(() => hooks.importJson.mockReset());
+
+  it("leaves the export's comments out of the upload, since the import ignores them", async () => {
+    hooks.importJson.mockResolvedValue({ success: true, lists: 1, items: 0 });
+    render(<DataSettings />);
+    const doc = { app: "TaskQuest", version: 1, lists: [{ name: "Home", items: [] }], comments: [{ body: "x".repeat(50) }] };
+    await userEvent.upload(screen.getByLabelText("Choose a JSON export"), new File([JSON.stringify(doc)], "export.json", { type: "application/json" }));
+    expect(hooks.importJson).toHaveBeenCalledWith({ app: "TaskQuest", version: 1, lists: [{ name: "Home", items: [] }] });
   });
 });

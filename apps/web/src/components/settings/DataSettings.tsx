@@ -9,7 +9,15 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { csvCounts, csvErrorLines, csvFileProblem } from "@/lib/csvImport";
 import { SettingRow } from "./SettingsSection";
 
-const MAX_IMPORT_BYTES = 1_000_000; // the server accepts 1 MB for imports
+const MAX_IMPORT_BYTES = 2_000_000; // the server accepts 2 MB for a JSON import
+const MAX_FILE_BYTES = 8_000_000; // a bigger file is refused before it is read; its comments may still bring it under the limit
+
+/** The import ignores an export's comments, so they are not sent: an export with many of them would otherwise pass the limit. */
+const importPayload = (parsed: unknown): unknown => {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
+  const { comments: _comments, ...rest } = parsed as Record<string, unknown>;
+  return rest;
+};
 
 /** Calendar feed address for a token: on the API's own host, which is this site's unless VITE_API_URL splits them. */
 const feedUrl = (token: string) => apiUrl(`/api/calendar/${token}.ics`);
@@ -118,13 +126,15 @@ export const DataSettings = () => {
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     try {
-      if (file.size > MAX_IMPORT_BYTES) return void toast.error("That file is too large to import (1 MB limit).");
+      const tooLarge = "That file is too large to import (2 MB limit, not counting comments).";
+      if (file.size > MAX_FILE_BYTES) return void toast.error(tooLarge);
       let parsed: unknown;
       try {
-        parsed = JSON.parse(await file.text());
+        parsed = importPayload(JSON.parse(await file.text()));
       } catch {
         return void toast.error("That file isn't valid JSON. Import a TaskQuest export.");
       }
+      if (new Blob([JSON.stringify(parsed)]).size > MAX_IMPORT_BYTES) return void toast.error(tooLarge);
       try {
         const result = await importData.mutateAsync(parsed);
         toast.success(`Imported ${result.lists} quest${result.lists === 1 ? "" : "s"} and ${result.items} task${result.items === 1 ? "" : "s"}`, {
@@ -149,7 +159,7 @@ export const DataSettings = () => {
       </SettingRow>
       <SettingRow label="Import from JSON" description="Adds quests from a TaskQuest export. Nothing you have is changed, and imports earn no XP.">
         <div>
-          <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" id="import-file" onChange={(e) => void onFile(e.target.files?.[0])} />
+          <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" id="import-file" aria-label="Choose a JSON export" onChange={(e) => void onFile(e.target.files?.[0])} />
           <Button type="button" variant="outline" size="sm" disabled={importData.isPending} onClick={() => fileRef.current?.click()}>
             {importData.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}Choose file
           </Button>

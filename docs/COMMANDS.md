@@ -69,7 +69,8 @@ Both views show each task's priority dot, due date (⚠️ when an open task is 
 
 - List names are unique per user (1–100 characters).
 - Every button and menu acts only on lists the **person clicking** may use: their own, or a shared list according to their role (a viewer cannot edit). Because `/list` overviews are public, anyone but the person who ran `/list` who clicks its buttons or menus gets an ephemeral "This isn't your list view" and the shared message is left untouched.
-- Select menus hold at most 25 options. With more lists or tasks, the first and last option become **◀ Previous** / **▶ More** entries and the placeholder shows the range (for example `(1-24 of 60)`); on the overview, paging keeps the current sort and filter (they are read back from the embed footer). Search results (which are not paged) show `(showing 25 of N)`; narrow the search to reach the rest.
+- Select menus hold at most 25 options. With more lists or tasks, the first and last option become **◀ Previous** / **▶ More** entries and the placeholder shows the range (for example `(1-24 of 60)`); on the overview, paging keeps the current sort and filter (they are read back from the embed footer). Search results (which are not paged) show `(showing 25 of N)`; narrow the search to reach the rest. A blank search is refused.
+- Assignees, comments, task history, moving a task to another quest, the filter bar and bulk edit are on the web app only; `/list` shows a shared quest's tasks without them.
 
 ## `/game`
 

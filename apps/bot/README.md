@@ -30,5 +30,6 @@ npm test                        # node:test (from the repo root: npm test -w @ta
 | `utils/profile.js` | Keeps the cached Discord profile fresh for anyone who uses a command, so bot-only players can be invited by username |
 | `utils/ui.js` | Embeds, buttons, menus and modals |
 | `utils/respond.js` | Error and reward responses |
+| `utils/listChoice.js` | List autocomplete and lookup for `/quick`, `/list`, `/share`, `/leave` and `/summary`: a name two of your lists share (ignoring case), or one that looks like `#12`, is offered as `#<id>` |
 
 See [docs/COMMANDS.md](../../docs/COMMANDS.md) for every command and [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) for hosting.

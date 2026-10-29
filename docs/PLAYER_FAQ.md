@@ -10,6 +10,8 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 - [Time zones and "your day"](#time-zones-and-your-day)
 - [Prestige](#prestige)
 - [Sharing lists and parties](#sharing-lists-and-parties)
+- [Working together on a quest](#working-together-on-a-quest)
+- [The AI assistant](#the-ai-assistant)
 - [Import and export](#import-and-export)
 - [Push notifications](#push-notifications)
 - [Blackjack and the other games](#blackjack-and-the-other-games)
@@ -20,7 +22,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 **I missed a day. Is my streak gone?** Probably, unless something protects it. In order: the Tank's *Unstoppable* skill (free, always), a longer window (the *Streak Shield* skill or the Paladin class forgive one missed day; Paladin with Sanctuary forgives two), then a **streak freeze**. A freeze costs 150 XP (120 with *Freeze Cache*, which also lets you hold 5 instead of 3) and is used automatically at your next claim, only when a streak of 2 or more days would otherwise break. One freeze covers one missed day, so a longer gap needs one freeze per day. Buy one with `/freeze` or on your profile before you need it.
 
-**What is the Today page?** One screen for right now: the tasks that are overdue, due today or marked HIGH (tick them off from there), a warning (with a Claim button) when today is the last day to keep your streak, what is coming up later in the week, the week's bonus modifier, a one-line reflection (+10 XP once a day) and your weekly goal (pick 3 to 60 tasks, claim 10 + 2 XP per task, at most 80, once a week).
+**What is the Today page?** One screen for right now: the tasks that are overdue, due today or marked HIGH (tick them off from there), a warning (with a Claim button) when today is the last day to keep your streak, what is coming up later in the week, the week's bonus modifier, tasks someone assigned to you on their shared quests, a one-line reflection (+10 XP once a day) and your weekly goal (pick 3 to 60 tasks, claim 10 + 2 XP per task, at most 80, once a week).
 
 **Will I be warned before I lose a streak?** If you have a streak of 3 or more days, reminders on (`/automation`) and XP on, the bot sends one DM on the evening (18:00 your time) of the last day you can still save it by claiming the daily reward, once the reward can be claimed again, with the time the streak ends (often not midnight: a streak lasts at least 48 hours from your last claim), and a web push if you turned push on. The Today page shows the same warning.
 
@@ -50,19 +52,41 @@ Set your zone with `/timezone` or in Settings (UTC until you do). Your zone deci
 
 ## Prestige
 
-At **level 30** you can prestige (profile, or `/prestige`), up to 10 times. You are asked to confirm because it **resets** your balance, level, classes, skills and streak freezes, and it **keeps** your achievements, quest claims, tasks, daily streak and everything you own in the shop. Each prestige gives a permanent +2% XP (up to +20%) and a title (Veteran, Seasoned, Champion, and on to Eternal). Your lifetime XP leaderboard score and XP achievements are unaffected, because they use a total that is never reset. Small rewards may not show the extra 2% at once: it adds to your other percentage bonuses and the result rounds down.
+At **level 30** you can prestige (profile, or `/prestige`), up to 10 times. You are asked to confirm because it **resets** your balance, level, classes, skills and streak freezes, and it **keeps** your achievements, quest claims, tasks, daily streak and everything you own in the shop. Each prestige gives a permanent +2% XP (up to +20%), +1 flat XP on every task you complete, and a title (Veteran, Seasoned, Champion, and on to Eternal). Your lifetime XP leaderboard score and XP achievements are unaffected, because they use a total that is never reset. Small rewards may not show the extra 2% at once: it adds to your other percentage bonuses and the result rounds down.
 
 ## Sharing lists and parties
 
 **How do I share a list?** On the web, open the list's members dialog and type the person's exact Discord username (not their display name); you confirm the name you found before anything is sent. On Discord, use `/share` with their mention. They get an invitation (7 days) to accept or decline in `/invites` or the web banner. They must have signed in on the web or used a command since the sharing update (that is when their username is stored), and bots and yourself cannot be invited.
 
-**What can each role do?** Viewers read. Editors add, edit, reorder and complete tasks and delete tasks they added themselves (not one that somebody else finished). Managers also edit the list's details and invite and remove people (only the owner makes or removes managers). Only the owner deletes the list. You can leave any list you do not own with `/leave` or on the web.
+**What can each role do?** Viewers read. Editors add, edit, reorder, complete, assign, comment on and move tasks, and delete tasks they added themselves (not one that somebody else finished). Managers also edit the list's details and invite and remove people (only the owner makes or removes managers). Only the owner deletes the list. You can leave any list you do not own with `/leave` or on the web.
 
 **Whose XP is it?** Yours, always: the person who finishes a task gets its XP, quest progress and statistics, whoever owns the list. The owner gets nothing for a member's work, and nobody sees another person's XP or Discord ID, only display names.
 
 **Why didn't my invitation say who was found or not found?** On purpose. The answer is the same whether the person exists, turned invitations off, declined you recently (you cannot invite them again for 7 days) or you invited them already, so nobody can use it to look up who uses TaskQuest. People can switch invitations off in Settings.
 
-**What is a party?** Up to six people with one shared weekly quest (Monday to Monday in UTC): 12 tasks for each member who finished at least 6 tasks themselves. Each member who finished 6 tasks themselves since joining gets +60 XP when it is reached, once per week. See [GAMEPLAY §5i](GAMEPLAY.md#5i-parties). You can be in one party at a time; the owner invites, removes members and disbands.
+**What is a party?** Up to six people with one shared weekly quest (Monday to Monday in UTC): 12 tasks for each member who finished at least 6 tasks themselves. Each member who finished 6 tasks themselves since joining gets +60 XP when it is reached, once per week. See [GAMEPLAY §5i](GAMEPLAY.md#5i-parties). A second weekly quest, **Focus together**, pays +40 XP to each member who focused at least 20 minutes once the party's focus minutes reach 60 per member who focused. You can be in one party at a time; the owner invites, removes members and disbands.
+
+## Working together on a quest
+
+These are on the web app only; the Discord bot shows a shared quest's tasks but cannot assign, comment, move or filter.
+
+**How do I give someone a task?** Open the task's details (the info button, or `i` on the highlighted task) and pick its owner or a member under **Assignee**. Everyone sees who has it on the task's row, and it shows on that person's Today page. Assigning needs editor; anyone on the quest, viewers included, can be assigned. When someone leaves the quest, their tasks are unassigned.
+
+**Comments and history.** The details drawer has a **Comments** tab (anyone who can edit the quest can post; the author or a manager can delete, and there is no editing) and an **Activity** tab that lists who created, renamed, finished, reopened or moved the task and changed its priority, due date or assignee.
+
+**Moving a task.** "Move to another quest" in the details, or select several tasks and choose **Move to…**: the task moves with its subtasks to the end of another quest you can edit. A finished task that you move keeps its XP, but the quest it lands in does not pay its clear bonus for it.
+
+**Filters.** The bar above a quest shows only open or finished, a priority, overdue / due today / next 7 days / no date, one tag, or "assigned to me" / "unassigned" tasks, and the list view can group by priority, due date or tag. Your choice is remembered in this browser; reordering is off while a filter or group is on.
+
+## The AI assistant
+
+**Is it always there?** Only when the operator turned it on, and you can turn it off for yourself in **Settings → AI Assistant** (the bot's `/summary`, `/prioritize` and `/ask` then stop for you too). Your quests are sent to Google Gemini only when you use an AI feature.
+
+**Is there a limit?** Yes, a daily number of AI requests per person (100 by default), shared by the web app and the bot and refilled at your own midnight. When it is used up, "what should I do next?" falls back to ranking by deadline and priority and says so; summaries and chat wait for the next day.
+
+**The Chat page says the assistant is unreachable.** The AI service is down or restarting. The page checks again every 30 seconds and has a **Check again** button; nothing you typed is lost, and the rest of TaskQuest works as usual.
+
+**Will it change my quests without asking?** No. Every change it suggests (a new quest, new tasks, a completion) shows a card you approve or cancel first. `/forget` in Discord wipes what it remembers of your conversation in that channel.
 
 ## Import and export
 

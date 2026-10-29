@@ -26,6 +26,15 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **Drag on the board** to change a task's priority, and **bulk edit tags** on many tasks at once.
 - **Your streak on the dashboard,** the same seven-day strip as on the Today page.
 
+## Games, stats and small helpers (late October 2026)
+
+- **Games show the real rules.** Bet limits, rewards and arcade payouts come from the server, the free-game allowance counts down to its reset, each arcade game remembers your best score in this browser, and Recent Games shows won / lost / net XP per game. Play Blackjack with H, S and D, and type a letter to guess in Hangman.
+- **Recent XP** on your profile (the last five) and on the Stats page (the full list, earned and spent, with where it came from).
+- **The leaderboard** shows games played and has a **My class** shortcut.
+- **Chat says when the assistant is down** instead of failing your first message, and checks again by itself.
+- **A Focus link on each Today task,** counts on the achievement filters, keyboard navigation in the calendar (arrows, Home/End, PageUp/PageDown), and the Focus page says before you start when today's focus XP is already used up.
+- **Templates** show how many of your 20 you have saved.
+
 ## Smaller things (October 2026 review)
 
 - **Install it.** Add TaskQuest to your phone's home screen from the browser menu; it opens like an app.

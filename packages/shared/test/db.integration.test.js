@@ -1234,6 +1234,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.deepEqual(next.upcoming.map((x) => x.name), ['soon', 'later']);
         assert.ok(next.tasks.some((x) => x.name === 'big'), 'a HIGH task due this week is in the main list');
         assert.equal(next.upcoming[0].dueDate, day(1));
+        // on one due date, a task with a priority comes before one without (no priority is the lowest, not the highest)
+        await add({ name: 'medium today', due_date: day(0), priority: 'medium' });
+        const order = (await db.today.getToday(Y)).tasks.map((x) => x.name);
+        assert.ok(order.indexOf('medium today') < order.indexOf('now'), order.join(', '));
 
         // the streak: claimed today is safe; a streak last claimed yesterday has until the end of today
         await db.query('UPDATE users SET streak_count = 5, last_daily_claim = CURRENT_TIMESTAMP WHERE discord_id = ?', [Y]);

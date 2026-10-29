@@ -100,7 +100,7 @@ async function getToday(discordId, now = new Date()) {
            FROM items i JOIN lists l ON l.id = i.list_id
           WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL
             AND (i.due_date <= ? OR COALESCE(i.priority, l.priority) = 'HIGH')
-          ORDER BY (i.due_date IS NULL), i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 0 END, i.id
+          ORDER BY (i.due_date IS NULL), i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, i.id
           LIMIT ${TASK_LIMIT}`,
         [id, id, id, today]
     );
@@ -115,7 +115,7 @@ async function getToday(discordId, now = new Date()) {
         `SELECT i.id, i.name, i.list_id, l.name AS list_name, i.due_date, COALESCE(i.priority, l.priority) AS priority, i.estimate_minutes
            FROM items i JOIN lists l ON l.id = i.list_id
           WHERE ${MINE} AND i.completed = 0 AND i.parent_id IS NULL AND i.due_date > ?::date AND i.due_date <= ?::date + ${UPCOMING_DAYS}
-          ORDER BY i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 0 END, i.id
+          ORDER BY i.due_date ASC, CASE COALESCE(i.priority, l.priority) WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, i.id
           LIMIT ${TASK_LIMIT + UPCOMING_LIMIT}`,
         [id, id, id, today, today]
     );

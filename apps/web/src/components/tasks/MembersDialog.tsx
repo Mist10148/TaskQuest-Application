@@ -48,6 +48,8 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
   const setRole = useSetMemberRole(listId);
   const removeMember = useRemoveMember(listId);
   const transfer = useTransferList(listId);
+  // Until the members list has refetched, the row is still there: one change at a time, so a second click cannot repeat it.
+  const busy = setRole.isPending || removeMember.isPending || transfer.isPending;
   const [toOwn, setToOwn] = useState<ListMember | null>(null);
   const revoke = useRevokeInvite(listId);
   const leave = useLeaveList(listId);
@@ -160,17 +162,17 @@ export const MembersDialog = ({ open, onOpenChange, listId, listName, onAccessLo
                             id={`role-${m.memberKey}`}
                             className={selectClass}
                             value={m.role}
-                            disabled={setRole.isPending}
+                            disabled={busy}
                             onChange={(e) => setRole.mutate({ memberKey: m.memberKey, role: e.target.value as ListRole })}
                           >
                             {rolesFor(me, m).map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                           </select>
                           {data.isOwner && (
-                            <Button variant="ghost" size="sm" aria-label={`Make ${m.name ?? "member"} the owner`} title="Hand the quest over" onClick={() => setToOwn(m)}>
+                            <Button variant="ghost" size="sm" aria-label={`Make ${m.name ?? "member"} the owner`} title="Hand the quest over" disabled={busy} onClick={() => setToOwn(m)}>
                               <Crown className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="sm" className="text-destructive-text hover:bg-destructive/10" aria-label={`Remove ${m.name ?? "member"}`} onClick={() => setToRemove(m)}>
+                          <Button variant="ghost" size="sm" className="text-destructive-text hover:bg-destructive/10" aria-label={`Remove ${m.name ?? "member"}`} disabled={busy} onClick={() => setToRemove(m)}>
                             <UserMinus className="h-4 w-4" />
                           </Button>
                         </>

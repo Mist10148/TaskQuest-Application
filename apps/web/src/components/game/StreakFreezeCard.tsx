@@ -15,7 +15,7 @@ interface Props {
 
 /** Buy streak freezes: each one saves the daily streak once if you miss a day. */
 export const StreakFreezeCard = ({ freezes, cost: COST, max: MAX, balance, gamificationOn }: Props) => {
-  const buy = useBuyStreakFreeze();
+  const buy = useBuyStreakFreeze(MAX);
   // Spending XP asks first, as buying a class, a skill or a cosmetic does.
   const [confirming, setConfirming] = useState(false);
   const full = freezes >= MAX;

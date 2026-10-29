@@ -42,6 +42,7 @@ import {
     type AchievementUnlock,
     type CosmeticKind,
     type CreateListData,
+    type FocusStatus,
     type HistoryRange,
     type ItemInput,
     type LeaderboardBoard,
@@ -93,22 +94,16 @@ function invalidateTaskViews(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['review'] });
 }
 
-/** Refresh everything that depends on the player's XP balance. */
+/**
+ * Refresh everything that depends on the player's XP balance. The promise settles once the queries on screen have refetched:
+ * a mutation that returns it stays pending until then, so its button does not come back on next to stale numbers.
+ */
 export function invalidateProgress(qc: QueryClient) {
-    qc.invalidateQueries({ queryKey: ['user'] });
-    qc.invalidateQueries({ queryKey: ['auth'] });
-    qc.invalidateQueries({ queryKey: ['classes'] });
-    qc.invalidateQueries({ queryKey: ['cosmetics'] });
-    qc.invalidateQueries({ queryKey: ['skills'] });
-    qc.invalidateQueries({ queryKey: ['leaderboard'] });
-    qc.invalidateQueries({ queryKey: ['quests'] });
-    qc.invalidateQueries({ queryKey: ['review'] });
-    qc.invalidateQueries({ queryKey: ['focus'] });
-    qc.invalidateQueries({ queryKey: ['stats'] });
-    qc.invalidateQueries({ queryKey: ['prestige'] });
-    qc.invalidateQueries({ queryKey: ['today'] });
-    qc.invalidateQueries({ queryKey: ['parties'] }); // party progress counts tasks and focus minutes
-    qc.invalidateQueries({ queryKey: ['xp-history'] });
+    return Promise.all(
+        ['user', 'auth', 'classes', 'cosmetics', 'skills', 'leaderboard', 'quests', 'review', 'focus', 'stats', 'prestige', 'today',
+            'parties', // party progress counts tasks and focus minutes
+            'xp-history'].map((key) => qc.invalidateQueries({ queryKey: [key] })),
+    );
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -192,14 +187,15 @@ export function useCsvImport() {
     };
 }
 
-export function useBuyStreakFreeze() {
+/** `max` is this player's cap (Freeze Cache raises it), shown when the server's answer leaves it out. */
+export function useBuyStreakFreeze(max?: number) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: userApi.buyStreakFreeze,
         onSuccess: (result) => {
-            invalidateProgress(qc);
-            toast.success(`🧊 Streak freeze bought (${result.freezes}/${result.max ?? 3})`, { description: 'It saves your streak automatically if you miss a day.' });
+            toast.success(`🧊 Streak freeze bought (${result.freezes}/${result.max ?? max ?? 3})`, { description: 'It saves your streak automatically if you miss a day.' });
             showAchievementNotifications(result.newAchievements, qc);
+            return invalidateProgress(qc); // stay pending until the count and balance are fresh
         },
         onError: showError,
     });
@@ -314,11 +310,13 @@ export function useMyInvites() {
     return useQuery({ queryKey: ['invites'], queryFn: sharingApi.myInvites, retry: false });
 }
 
-/** Everything that shows who is on a quest or what I may do on it. */
+/** Everything that shows who is on a quest or what I may do on it. Settles once it has refetched (see invalidateProgress). */
 function refreshSharing(qc: QueryClient, listId?: number) {
-    qc.invalidateQueries({ queryKey: ['lists'] });
-    qc.invalidateQueries({ queryKey: ['invites'] });
-    if (listId) qc.invalidateQueries({ queryKey: ['list-members', listId] });
+    return Promise.all([
+        qc.invalidateQueries({ queryKey: ['lists'] }),
+        qc.invalidateQueries({ queryKey: ['invites'] }),
+        listId ? qc.invalidateQueries({ queryKey: ['list-members', listId] }) : undefined,
+    ]);
 }
 
 export function useInviteMember(listId: number) {
@@ -912,6 +910,8 @@ export function useFinishFocus() {
     return useMutation({
         mutationFn: (sessionId: number) => focusApi.finish(sessionId),
         onSuccess: (result) => {
+            // The session is over: drop it at once so its Finish and Give up buttons go before the refetch lands.
+            qc.setQueryData<FocusStatus>(['focus'], (old) => (old ? { ...old, active: null } : old));
             invalidateProgress(qc);
             if (result.state === 'finished' && result.xp > 0) {
                 celebrate(result.leveledUp ? 'level' : 'quest');

@@ -82,7 +82,8 @@ const Dashboard = () => {
           xpEnabled={xpEnabled}
         />
 
-        {/* XP Progress with neon effects */}
+        {/* XP Progress with neon effects (hidden with XP off, like the daily claim: nothing moves it then) */}
+        {xpEnabled && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="rounded-2xl bg-card border border-border p-4 sm:p-6 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-xp/50 to-transparent" />
           <div className="absolute inset-0 bg-linear-to-br from-xp/5 via-transparent to-transparent" />
@@ -105,6 +106,7 @@ const Dashboard = () => {
             <XPProgressBar currentXP={currentXP} xpToNextLevel={100} level={level} />
           </div>
         </motion.div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

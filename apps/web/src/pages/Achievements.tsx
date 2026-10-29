@@ -83,7 +83,8 @@ const Achievements = () => {
         </motion.div>
       </div>
 
-      {/* Progress Card */}
+      {/* Progress Card: only once loaded, so a loading or failed page does not also say 0/0 */}
+      {data && (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6 sm:mb-8 p-4 sm:p-6 rounded-xl bg-linear-to-br from-card to-card/50 border border-border relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-xp/5 via-transparent to-transparent" />
         <div className="relative">
@@ -119,6 +120,7 @@ const Achievements = () => {
           )}
         </div>
       </motion.div>
+      )}
 
       <div role="group" aria-label="Filter achievements" className="mb-6 flex w-fit gap-1 rounded-lg bg-background-secondary p-1">
         {FILTERS.map((f) => (

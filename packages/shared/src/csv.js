@@ -33,13 +33,18 @@ function sniffDelimiter(text) {
 /**
  * Parse CSV text into rows of strings. Handles a BOM, quoted cells, doubled quotes, CRLF/LF/CR line
  * ends and newlines inside quotes. Fully blank lines are skipped. Throws on an unterminated quote.
- * @returns {{ rows: string[][], delimiter: string }}
+ * `lines[i]` is the file line (1-based) where `rows[i]` starts, so a message can name the row as an editor shows it even
+ * after skipped blank lines or a cell with line breaks in it.
+ * @returns {{ rows: string[][], lines: number[], delimiter: string }}
  */
 function parseCsv(input, { delimiter } = {}) {
     let text = String(input ?? '');
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
     const sep = delimiter || sniffDelimiter(text);
     const rows = [];
+    const lines = [];
+    let line = 1; // the line being read
+    let rowStart = 1; // the line the current row started on
     let row = [];
     let cell = '';
     let inQuotes = false;
@@ -53,9 +58,13 @@ function parseCsv(input, { delimiter } = {}) {
     };
     const endRow = () => {
         endCell();
-        if (!(row.length === 1 && row[0] === '' && !quotedRow)) rows.push(row);
+        if (!(row.length === 1 && row[0] === '' && !quotedRow)) {
+            rows.push(row);
+            lines.push(rowStart);
+        }
         row = [];
         quotedRow = false;
+        rowStart = line;
     };
 
     for (let i = 0; i < text.length; i++) {
@@ -66,7 +75,10 @@ function parseCsv(input, { delimiter } = {}) {
                     cell += '"';
                     i++;
                 } else inQuotes = false;
-            } else cell += ch;
+            } else {
+                if (ch === '\n' || (ch === '\r' && text[i + 1] !== '\n')) line++;
+                cell += ch;
+            }
         } else if (ch === '"' && cell === '' && !quotedCell) {
             inQuotes = true;
             quotedCell = true;
@@ -74,13 +86,16 @@ function parseCsv(input, { delimiter } = {}) {
         } else if (ch === sep) endCell();
         else if (ch === '\r') {
             if (text[i + 1] === '\n') i++;
+            line++;
             endRow();
-        } else if (ch === '\n') endRow();
-        else cell += ch;
+        } else if (ch === '\n') {
+            line++;
+            endRow();
+        } else cell += ch;
     }
     if (inQuotes) throw new Error('The file has a quoted cell that never closes.');
     if (cell !== '' || row.length || quotedCell) endRow();
-    return { rows, delimiter: sep };
+    return { rows, lines, delimiter: sep };
 }
 
 // ─── CSV rows -> import data ─────────────────────────────────────────────────
@@ -147,6 +162,7 @@ function csvToImport(text) {
         return empty([{ row: 1, message: err.message }]);
     }
     const [header, ...body] = parsed.rows;
+    const lineOf = (at) => parsed.lines[at + 1]; // body[at] is rows[at + 1]
     if (!header) return empty([{ row: 1, message: 'The file is empty.' }]);
     const col = mapHeader(header);
     if (col.task === undefined && col.list === undefined) {
@@ -165,7 +181,7 @@ function csvToImport(text) {
     let rowCount = 0;
 
     body.forEach((cells, at) => {
-        const row = at + 2;
+        const row = lineOf(at);
         const get = (field) => (col[field] === undefined ? '' : unquoteFormula(String(cells[col[field]] ?? '')));
         if (cells.every((c) => !String(c).trim())) return;
         rowCount++;
@@ -215,23 +231,24 @@ function csvToImport(text) {
         if (preview.length < 5) preview.push({ row, list: listName, task: item ? item.name : '', due_date: item?.due_date ?? null, priority: item?.priority ?? null, tags: item?.tags ?? null, completed: item?.completed ?? false });
     });
 
-    // Resolve subtask_of by name among the same list's top-level tasks.
+    // Resolve subtask_of by name among the same list's top-level tasks. When two of them share the name, the subtask belongs
+    // to the nearest one above it (the export writes each task's subtasks right under it); with none above it the file cannot
+    // say which one is meant, and guessing would hang the subtask on the wrong parent.
     for (const list of lists.values()) {
-        const tops = new Map();
-        const repeated = new Set();
+        const tops = new Map(); // name -> every top-level task with it, in file order
         for (const it of list.items) {
             if (it.subtaskOf) continue;
             const name = it.name.toLowerCase();
-            if (tops.has(name)) repeated.add(name);
-            else tops.set(name, it);
+            tops.set(name, [...(tops.get(name) || []), it]);
         }
         for (const it of list.items) {
             if (!it.subtaskOf) continue;
-            const parent = tops.get(it.subtaskOf.toLowerCase());
-            if (!parent) fail(it.row, `Subtask of "${it.subtaskOf}": no such top-level task in the list "${list.name}".`);
-            // Two top-level tasks with one name: the file cannot say which one is meant, and guessing would hang the subtask on the wrong parent.
-            else if (repeated.has(it.subtaskOf.toLowerCase())) fail(it.row, `Subtask of "${it.subtaskOf}": the list "${list.name}" has more than one top-level task with that name. Rename one of them.`);
-            else it.parentRef = parent.ref;
+            const named = tops.get(it.subtaskOf.toLowerCase());
+            const above = named?.filter((t) => t.row < it.row).at(-1);
+            if (!named) fail(it.row, `Subtask of "${it.subtaskOf}": no such top-level task in the list "${list.name}".`);
+            else if (named.length === 1) it.parentRef = named[0].ref;
+            else if (above) it.parentRef = above.ref;
+            else fail(it.row, `Subtask of "${it.subtaskOf}": the list "${list.name}" has more than one top-level task with that name and none of them is above this row. Move the row under its task, or rename one of them.`);
         }
     }
 

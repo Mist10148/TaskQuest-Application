@@ -88,11 +88,35 @@ test('csvToImport: structural problems', () => {
     assert.match(orphan.errors[0].message, /no such top-level task/);
     const deep = csvToImport('task,subtask_of\na,\nb,a\nc,b\n');
     assert.equal(deep.errors[0].row, 4, 'subtasks of subtasks are rejected');
-    const twin = csvToImport('task,subtask_of\nCall mom,\nCall mom,\nask,Call mom\n');
+    const twin = csvToImport('task,subtask_of\nask,Call mom\nCall mom,\nCall mom,\n');
     assert.match(twin.errors[0].message, /more than one top-level task/);
-    assert.equal(twin.errors[0].row, 4);
+    assert.equal(twin.errors[0].row, 2);
     const noTask = csvToImport('list,task,due\n,,2030-01-01\n');
     assert.equal(noTask.errors[0].row, 2);
+});
+
+test('csvToImport: row numbers are file lines, after blank lines and cells with line breaks', () => {
+    const r = csvToImport('task,due\n\nok,\n"two\nlines",2030-02-30\nbad,2030-13-01\n');
+    assert.deepEqual(r.errors.map((e) => e.row), [4, 6]);
+    assert.deepEqual(parseCsv('a\r\n\r\n"b\r\nc"\rd\n').lines, [1, 3, 5]);
+});
+
+test('csvToImport: a subtask of a repeated name belongs to the nearest such task above it', () => {
+    const r = csvToImport('task,subtask_of\nShop,\nmilk,Shop\nShop,\nnails,Shop\n');
+    assert.equal(r.errorCount, 0);
+    const [first, milk, second, nails] = r.data.lists[0].items;
+    assert.deepEqual([milk.parent_id, nails.parent_id], [first.id, second.id]);
+});
+
+test('toCsv writes subtasks under their task, so two same-named tasks with subtasks import back', () => {
+    const { toCsv } = require('../src/db/transfer');
+    const item = (id, name, parent_id = null) => ({ id, parent_id, name, description: null, completed: false, due_date: null, priority: null, tags: null, recurrence: null });
+    const exported = { lists: [{ name: 'L', description: null, category: null, priority: null, deadline: null, items: [item(1, 'Shop'), item(2, 'Shop'), item(3, 'milk', 1), item(4, 'nails', 2)] }] };
+    const back = csvToImport(toCsv(exported));
+    assert.equal(back.errorCount, 0);
+    const items = back.data.lists[0].items;
+    assert.deepEqual(items.map((i) => i.name), ['Shop', 'milk', 'Shop', 'nails']);
+    assert.deepEqual([items[1].parent_id, items[3].parent_id], [items[0].id, items[2].id]);
 });
 
 test('csvToImport: caps the reported errors but counts them all', () => {

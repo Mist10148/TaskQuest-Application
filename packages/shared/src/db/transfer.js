@@ -74,13 +74,20 @@ function csvCell(value) {
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** One row per task: list, task, subtask-of, done, due date, priority, tags, repeat, list deadline and category, description. */
+/**
+ * One row per task: list, task, subtask-of, done, due date, priority, tags, repeat, list deadline and category, description.
+ * Each task's subtasks follow it directly, so the import can tell two top-level tasks with the same name apart.
+ */
 function toCsv(data) {
     const rows = [['list', 'task', 'subtask_of', 'done', 'due_date', 'priority', 'tags', 'repeat', 'list_deadline', 'list_category', 'description']];
     for (const l of data.lists) {
         const names = new Map(l.items.map((i) => [i.id, i.name]));
+        const isChild = (i) => Boolean(i.parent_id) && names.has(i.parent_id);
+        const children = new Map();
+        for (const i of l.items) if (isChild(i)) children.set(i.parent_id, [...(children.get(i.parent_id) || []), i]);
+        const ordered = l.items.filter((i) => !isChild(i)).flatMap((i) => [i, ...(children.get(i.id) || [])]);
         if (!l.items.length) rows.push([l.name, '', '', '', '', '', '', '', l.deadline, l.category, '']);
-        for (const i of l.items) {
+        for (const i of ordered) {
             rows.push([l.name, i.name, i.parent_id ? names.get(i.parent_id) || '' : '', i.completed ? 'yes' : 'no', i.due_date, i.priority, i.tags, i.recurrence, l.deadline, l.category, i.description]);
         }
     }

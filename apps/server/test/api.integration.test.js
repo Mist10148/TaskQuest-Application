@@ -251,6 +251,21 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         assert.equal((await call('PATCH', `/api/lists/${list.id}/reorder`, { cookie: alice, body: { itemIds: [c.id] } })).status, 400);
         assert.equal((await call('PATCH', `/api/lists/${list.id}/reorder`, { cookie: mallory, body: { itemIds: [c.id, a.id, b.id] } })).status, 404);
 
+        // Paging: position order, one task at a time, the cursor leads to the next page and the last page has none.
+        const pages = [];
+        for (let cursor = '', n = 0; n < 5; n++) {
+            const page = await (await call('GET', `/api/lists/${list.id}?limit=1${cursor ? `&cursor=${cursor}` : ''}`, { cookie: alice })).json();
+            pages.push(...page.items.map((i) => i.name));
+            if (!page.nextCursor) break;
+            cursor = page.nextCursor;
+        }
+        assert.deepEqual(pages, ['c', 'a', 'b']);
+        const whole = await (await call('GET', `/api/lists/${list.id}`, { cookie: alice })).json();
+        assert.equal(whole.items.length, 3);
+        assert.equal('nextCursor' in whole, false, 'unpaged reads are unchanged');
+        assert.equal((await call('GET', `/api/lists/${list.id}?cursor=1.1`, { cookie: alice })).status, 400, 'a cursor needs a limit');
+        assert.equal((await call('GET', `/api/lists/${list.id}?limit=1`, { cookie: mallory })).status, 404);
+
         const done = await (await call('PATCH', `/api/items/${c.id}/toggle`, { cookie: alice })).json();
         assert.ok(done.nextItem && done.nextItem.name === 'c', 'repeating task spawns its next copy');
 

@@ -7,7 +7,7 @@ import { Router } from 'express';
 import db from '@taskquest/shared/db';
 import aiClient from '../lib/aiClient.js';
 import { asyncRoute, parse, uid, xpResult } from '../lib/http.js';
-import { idParam, listIdParam, searchQuery, saveTemplateBody, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody, moveItemBody } from '../lib/schemas.js';
+import { idParam, listIdParam, listItemsQuery, searchQuery, saveTemplateBody, createListBody, updateListBody, createItemBody, updateItemBody, toggleItemBody, reorderBody, moveItemBody } from '../lib/schemas.js';
 
 export const listsRouter = Router();
 export const itemsRouter = Router();
@@ -46,10 +46,16 @@ listsRouter.get(
     '/:id',
     asyncRoute(async (req, res) => {
         const { id } = parse(idParam, req.params);
+        const { limit, cursor } = parse(listItemsQuery, req.query);
         const list = await db.tasks.getList(uid(req), id);
         if (!list) return res.status(404).json({ error: 'List not found', code: 'NOT_FOUND' });
-        const items = await db.tasks.getItems(uid(req), id);
-        res.json({ ...sharing(list), items });
+        if (limit === undefined) return res.json({ ...sharing(list), items: await db.tasks.getItems(uid(req), id, { list }) });
+        // One page: read one task more than asked to know whether another page follows.
+        const [position, after] = cursor ? cursor.split('.').map(Number) : [];
+        const page = await db.tasks.getItems(uid(req), id, { list, limit: limit + 1, after: cursor ? { position, id: after } : null });
+        const items = page.slice(0, limit);
+        const last = items[items.length - 1];
+        res.json({ ...sharing(list), items, nextCursor: page.length > limit ? `${last.position}.${last.id}` : null });
     })
 );
 

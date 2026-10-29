@@ -335,22 +335,38 @@ async function search(discordId, query, { scope = 'lists' } = {}) {
 
 // ─── Items ───────────────────────────────────────────────────────────────────
 
-/** Items of an owned list, or null if the list isn't the user's. */
-async function getItems(discordId, listId, { sortBy = 'position', order = 'ASC' } = {}) {
-    return listItems(discordId, listId, { sortBy, order });
+/**
+ * Items of a list the user can see, or null if they cannot. `list` is the list as getList returned it for this user, when the
+ * caller already has it (saves a second access check). `limit` with `after` ({position, id} of the last task already read)
+ * reads one page in position order.
+ */
+async function getItems(discordId, listId, { sortBy = 'position', order = 'ASC', list = null, limit = null, after = null } = {}) {
+    return listItems(discordId, listId, { sortBy, order, list, limit, after });
 }
 
 /** getItems, or with `itemId` just that one task of the list (in the same shape), or null. */
-async function listItems(discordId, listId, { sortBy = 'position', order = 'ASC', itemId = null } = {}) {
-    const list = await getList(discordId, listId);
+async function listItems(discordId, listId, { sortBy = 'position', order = 'ASC', itemId = null, list: known = null, limit = null, after = null } = {}) {
+    const list = known && known.id === Number(listId) ? known : await getList(discordId, listId);
     if (!list) return null;
     // On a shared list each task also says who finished it (a display name, never an ID).
     const names = list.shared ? ', cu.discord_username AS completed_by_name' : '';
     const join = list.shared ? 'LEFT JOIN users cu ON cu.discord_id = i.completed_by' : '';
-    const one = itemId === null ? '' : ' AND i.id = ?';
+    const where = ['i.list_id = ?'];
+    const params = [list.id];
+    if (itemId !== null) {
+        where.push('i.id = ?');
+        params.push(itemId);
+    }
+    // A page is always in position order, so the cursor (position, id) is stable.
+    const paged = limit !== null;
+    if (paged && after) {
+        where.push('(i.position, i.id) > (?, ?)');
+        params.push(after.position, after.id);
+    }
+    const sort = paged ? 'i.position ASC' : orderClause(ITEM_SORTS, sortBy, order, 'position');
     const rows = await run(
-        `SELECT i.*${names} FROM items i ${join} WHERE i.list_id = ?${one} ORDER BY ${orderClause(ITEM_SORTS, sortBy, order, 'position')}, i.id`,
-        itemId === null ? [list.id] : [list.id, itemId]
+        `SELECT i.*${names} FROM items i ${join} WHERE ${where.join(' AND ')} ORDER BY ${sort}, i.id${paged ? ` LIMIT ${Number(limit)}` : ''}`,
+        params
     );
     const people = await decorate(getPool(), rows, discordId);
     // can_delete tells the UI which delete buttons to offer (the server decides again on every delete).

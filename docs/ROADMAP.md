@@ -13,7 +13,7 @@ Work that is understood and waits only for time, a key or a decision.
 | A multi-instance lock for AI confirmations, and a fix for the one-thread-per-`/ask` growth (#51; pruning and the embed debounce are done) | A choice between a database lock and a thread-row claim |
 | Auto-delete versus quest progress (#49) | A product decision |
 | Persist the rate limiters and split the internal token (see KNOWN_ISSUES) | A choice of store (Postgres or Redis) and a change to deployed env vars |
-| Limit and cursor parameters for large quests and the calendar feed (#60) | An API design |
+| Page large quests in the web app, and bound the calendar feed (#60; the list route already takes `limit` and `cursor`) | How far back the feed should reach |
 | Shared leaderboard caches and a cheaper weekly and streak board (#59) | A shared store, as for the rate limiters |
 | Hash the calendar feed token (#61) | Settings shows the address again today, so it would need a "shown once" flow |
 | A baseline that does not need `vector` with AI off (#62; checksums are done) | Nothing; split the vector parts into a later migration, which would be a new migration for databases that already ran 001 |

@@ -105,6 +105,18 @@ const listFields = {
 /** GET /api/lists/search: the text to find and where to look (quests by default). */
 export const searchQuery = z.object({ q: z.string().trim().min(1).max(100), scope: z.enum(['lists', 'tasks', 'all']).default('lists') }).strip();
 
+/** GET /api/lists/:id: optionally one page of tasks in position order. `cursor` is the `nextCursor` of the page before. */
+export const listItemsQuery = z
+    .object({
+        limit: z.coerce.number().int().min(1).max(1000).optional(),
+        cursor: z
+            .string()
+            .regex(/^\d{1,10}\.\d{1,19}$/, 'cursor must be the nextCursor of the previous page')
+            .optional()
+    })
+    .strip()
+    .refine((q) => q.cursor === undefined || q.limit !== undefined, 'cursor needs limit');
+
 export const createListBody = z.object(listFields).strict();
 export const updateListBody = z
     .object(listFields)

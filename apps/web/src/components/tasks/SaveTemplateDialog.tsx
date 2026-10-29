@@ -18,12 +18,16 @@ interface Props {
 export const SaveTemplateDialog = ({ open, onOpenChange, listId, listName }: Props) => {
   const save = useSaveAsTemplate();
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState("");
   useEffect(() => {
-    if (open) setName(defaultTemplateName(listName));
+    if (open) {
+      setName(defaultTemplateName(listName));
+      setNameError("");
+    }
   }, [open, listName]);
 
   const submit = async () => {
-    if (!name.trim()) return;
+    if (!name.trim()) return setNameError("Give your template a name.");
     try {
       await save.mutateAsync({ listId, name: name.trim() });
       onOpenChange(false);
@@ -42,11 +46,20 @@ export const SaveTemplateDialog = ({ open, onOpenChange, listId, listName }: Pro
         <form className="space-y-4 py-2" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
           <div>
             <label htmlFor="template-name" className="text-sm font-medium block mb-1">Template name</label>
-            <Input id="template-name" value={name} maxLength={TEXT_LIMITS.LIST_NAME} onChange={(e) => setName(e.target.value)} autoFocus />
+            <Input
+              id="template-name"
+              value={name}
+              maxLength={TEXT_LIMITS.LIST_NAME}
+              onChange={(e) => { setName(e.target.value); setNameError(""); }}
+              autoFocus
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? "template-name-error" : undefined}
+            />
+            {nameError && <p id="template-name-error" role="alert" className="text-xs text-destructive-text mt-1">{nameError}</p>}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={save.isPending || !name.trim()}>{save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save template</Button>
+            <Button type="submit" disabled={save.isPending}>{save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Save template</Button>
           </DialogFooter>
         </form>
       </DialogContent>

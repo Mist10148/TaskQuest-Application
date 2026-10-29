@@ -70,16 +70,16 @@ export const ListFormDialog = ({ open, onOpenChange, mode, initial, resetKey = n
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium block mb-1">Category</label>
+              <label htmlFor="list-category" className="text-sm font-medium block mb-1">Category</label>
               <Select value={form.category} onValueChange={(v) => set("category", v)}>
-                <SelectTrigger aria-label="Category"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="list-category"><SelectValue /></SelectTrigger>
                 <SelectContent>{CATEGORIES.filter((c) => c.value !== "all").map((c) => <SelectItem key={c.value} value={c.value}>{c.emoji} {c.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium block mb-1">Priority</label>
+              <label htmlFor="list-priority" className="text-sm font-medium block mb-1">Priority</label>
               <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
-                <SelectTrigger aria-label="Priority"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="list-priority"><SelectValue /></SelectTrigger>
                 <SelectContent>{PRIORITIES.filter((p) => p.value !== "all").map((p) => <SelectItem key={p.value} value={p.value}>{p.emoji} {p.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>

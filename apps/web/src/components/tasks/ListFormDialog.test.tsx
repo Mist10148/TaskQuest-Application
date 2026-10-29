@@ -27,6 +27,12 @@ describe("ListFormDialog", () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ name: "Spring clean", description: "Whole flat" }));
   });
 
+  it("labels the category and priority pickers", () => {
+    renderDialog();
+    expect(screen.getByLabelText("Category")).toHaveAttribute("id", "list-category");
+    expect(screen.getByLabelText("Priority")).toHaveAttribute("id", "list-priority");
+  });
+
   it("starts from the quest being edited", () => {
     const initial: ListFormValues = { ...EMPTY_LIST_FORM, name: "Taxes", deadline: "2030-04-15" };
     renderDialog({ mode: "edit", initial, resetKey: 7 });

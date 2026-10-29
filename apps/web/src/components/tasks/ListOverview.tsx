@@ -64,7 +64,7 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
     ) : error ? (
       <ErrorCard what="your quests" error={error} onRetry={onRetry} retrying={retrying} />
     ) : loading ? (
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy="true">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" role="status" aria-busy="true" aria-label="Loading quests">
         {[...Array(6)].map((_, i) => <div key={i} className="h-48 rounded-xl bg-card/50 animate-pulse" />)}
       </div>
     ) : filters.visible.length === 0 ? (
@@ -77,7 +77,22 @@ export const ListOverview = ({ lists, loading, error, onRetry, retrying, filters
             <Button onClick={onCreate} className="gap-2"><Plus className="h-4 w-4" /> Create Quest</Button>
           </>
         ) : (
-          <p className="text-foreground-muted">No quests match your filters</p>
+          <>
+            <p className="text-foreground-muted">No quests match your filters</p>
+            {(filters.activeFilters > 0 || filters.searchQuery.trim() !== "") && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  filters.clearFilters();
+                  filters.setSearchQuery("");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </>
         )}
       </div>
     ) : (

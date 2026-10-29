@@ -164,7 +164,7 @@ const Tasks = () => {
   }, [selectedList, itemDialog]);
 
   const handleCreateList = async (values: ListFormValues) => {
-    if (!values.name.trim()) return void toast.error("Enter a name");
+    if (!values.name.trim()) return; // the dialog shows the error inline
     const { name, description, category, priority, deadline } = listPayload(values);
     try {
       await createList.mutateAsync({ name, description: description ?? undefined, category: category ?? undefined, priority: priority ?? undefined, deadline: deadline ?? undefined });
@@ -173,7 +173,7 @@ const Tasks = () => {
   };
 
   const handleSaveList = async (values: ListFormValues) => {
-    if (!values.name.trim()) return void toast.error("Enter a name");
+    if (!values.name.trim()) return; // the dialog shows the error inline
     if (!selectedListId) return;
     try {
       await updateList.mutateAsync({ listId: selectedListId, data: listPayload(values) });
@@ -184,7 +184,7 @@ const Tasks = () => {
   };
 
   const handleSaveItem = async (values: ItemFormValues) => {
-    if (!values.name.trim()) return void toast.error("Enter a name");
+    if (!values.name.trim()) return; // the dialog shows the error inline
     if (!selectedListId || !itemDialog) return;
     const data = itemPayload(values);
     try {

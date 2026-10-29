@@ -31,8 +31,11 @@ interface Props {
 /** Deadline reminders: on/off, the time zone and hour they arrive, the weekly digest and auto-delete. */
 export const ReminderSettings = ({ user, automation, weeklyDigest, autoDelete, onToggle, onSave, saving }: Props) => {
   const busy = (field: string) => saving?.has(field) ?? false;
-  const zones = useMemo(listTimeZones, []);
   const zone = user.timezone || "";
+  // A zone saved elsewhere (the bot, another browser) may be a name this browser does not list, e.g. Asia/Kolkata where
+  // Chromium says Asia/Calcutta: it is still offered, or the select would show some other zone as the current one.
+  const known = useMemo(listTimeZones, []);
+  const zones = useMemo(() => (zone && !known.includes(zone) ? [zone, ...known] : known), [known, zone]);
   const detected = detectedZone();
   // A zone change is locked for 24 hours, so picking one in the list (or arrowing past it with the keyboard) must not
   // save it: the choice is a draft until Save is pressed.

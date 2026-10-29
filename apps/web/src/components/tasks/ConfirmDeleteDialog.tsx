@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useT } from "@/i18n/useT";
 
 interface Props {
   open: boolean;
@@ -19,7 +20,9 @@ interface Props {
  * Destructive confirmation used for deleting quests and tasks. An alert dialog: it is announced as one, and a click outside
  * does not dismiss it. The caller closes it once the delete has gone through, so it stays open while `pending`.
  */
-export const ConfirmDeleteDialog = ({ open, onOpenChange, title, description, confirmLabel, pending, onConfirm }: Props) => (
+export const ConfirmDeleteDialog = ({ open, onOpenChange, title, description, confirmLabel, pending, onConfirm }: Props) => {
+  const t = useT();
+  return (
   <AlertDialog open={open} onOpenChange={onOpenChange}>
     <AlertDialogContent className="sm:max-w-md">
       <AlertDialogHeader>
@@ -32,11 +35,12 @@ export const ConfirmDeleteDialog = ({ open, onOpenChange, title, description, co
         <AlertDialogDescription className="pt-2">{description}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter className="gap-2 sm:gap-0">
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
+        <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
         <Button variant="destructive" onClick={onConfirm} disabled={pending}>
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : confirmLabel}
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>
-);
+  );
+};

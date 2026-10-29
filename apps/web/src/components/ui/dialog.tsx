@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -27,6 +28,12 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+/** The close button's spoken label, in the player's language. */
+const CloseLabel = () => {
+  const t = useT();
+  return <span className="sr-only">{t("common.close")}</span>;
+};
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
@@ -43,8 +50,8 @@ const DialogContent = React.forwardRef<
     >
       {children}
       <DialogPrimitive.Close className="absolute right-2 top-2 rounded-sm p-2 opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
+        <X className="h-4 w-4" aria-hidden />
+        <CloseLabel />
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>

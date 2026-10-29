@@ -4,8 +4,9 @@
  * showing a raw key. To add a language: add its code to LOCALES, add a catalog to
  * `catalogs` below, and give it a name in LOCALE_NAMES.
  *
- * Only the NotFound and Review pages are extracted so far; the rest of the app still
- * uses inline English (see docs/PRD.md, roadmap). Placeholders are written `{name}`.
+ * Extracted so far: the NotFound and Review pages, the quest, task and template dialogs
+ * and the shared dialog buttons; the rest of the app still uses inline English (see
+ * docs/ROADMAP.md). Placeholders are written `{name}`.
  */
 
 export const en = {
@@ -26,6 +27,55 @@ export const en = {
   "review.claimed": "Claimed",
   "review.claim": "Claim review bonus",
   "review.footer": "Week of {week} · resets in {left} (Monday 00:00 in your time zone)",
+
+  "common.cancel": "Cancel",
+  "common.close": "Close",
+
+  "quest.createTitle": "Create Quest",
+  "quest.editTitle": "Edit Quest",
+  "quest.createHint": "Name your quest and set its details.",
+  "quest.editHint": "Change this quest's details.",
+  "quest.name": "Name *",
+  "quest.namePlaceholder": "Quest name...",
+  "quest.nameMissing": "Give your quest a name.",
+  "quest.description": "Description (optional)",
+  "quest.descriptionPlaceholder": "What's this quest about?",
+  "quest.category": "Category",
+  "quest.priority": "Priority",
+  "quest.deadline": "Deadline (optional)",
+  "quest.create": "Create",
+  "quest.save": "Save Changes",
+
+  "task.addTitle": "Add Task",
+  "task.editTitle": "Edit Task",
+  "task.addHint": "Name your task and set its details.",
+  "task.editHint": "Change this task's details.",
+  "task.name": "Task Name *",
+  "task.namePlaceholder": "What needs to be done?",
+  "task.nameMissing": "Give your task a name.",
+  "task.description": "Description (optional)",
+  "task.descriptionPlaceholder": "Add more details...",
+  "task.due": "Due date",
+  "task.quickDue": "Quick due dates",
+  "task.priority": "Priority",
+  "task.repeat": "Repeat",
+  "task.repeat.none": "No repeat",
+  "task.repeat.daily": "🔁 Daily",
+  "task.repeat.weekly": "🔁 Weekly",
+  "task.repeat.monthly": "🔁 Monthly",
+  "task.tags": "Tags",
+  "task.estimate": "Estimate (minutes)",
+  "task.estimateHint": "Finish it right after a focus session of about that length for a bonus.",
+  "task.parent": "Subtask of",
+  "task.noParent": "Not a subtask",
+  "task.add": "Add Task",
+  "task.save": "Save",
+
+  "template.saveTitle": "Save as template",
+  "template.saveHint": "Keeps this quest's tasks (names, notes, priorities, tags and repeats) so you can start a new quest from them later.",
+  "template.name": "Template name",
+  "template.nameMissing": "Give your template a name.",
+  "template.save": "Save template",
 } as const;
 
 export type MessageKey = keyof typeof en;

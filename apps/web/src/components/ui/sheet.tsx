@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 const Sheet = SheetPrimitive.Root;
 
@@ -51,6 +52,12 @@ interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {}
 
+/** The close button's spoken label, in the player's language. */
+const CloseLabel = () => {
+  const t = useT();
+  return <span className="sr-only">{t("common.close")}</span>;
+};
+
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
   ({ side = "right", className, children, ...props }, ref) => (
     <SheetPortal>
@@ -58,8 +65,8 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
       <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
         {children}
         <SheetPrimitive.Close className="absolute right-2 top-2 rounded-sm p-2 opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
+          <X className="h-4 w-4" aria-hidden />
+          <CloseLabel />
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
     </SheetPortal>

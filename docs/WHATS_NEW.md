@@ -69,6 +69,13 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **Chat:** the box grows as you type, a Jump to latest button, Copy on every answer, and New chat really starts over.
 - **In Discord,** `/list` says overdue by your own date, and someone else's `/profile` stays private when they turned XP off.
 
+## Small fixes (30 October 2026)
+
+- **Undo really undoes a repeating task.** Undo after finishing a repeating task (or a batch of tasks) now also removes the next copy it created, as long as you have not changed that copy. Finish the task again and the copy comes back; the XP was already paid, so it is not paid twice.
+- **Your own export always imports.** A backup of a large account (up to the 200 quest and 5,000 task limit) can be imported in one go.
+- **Clear filters** on the quest log when your filters hide every quest.
+- **New words explained** in the [glossary](GLOSSARY.md).
+
 ## The balance pass (October 2026)
 
 The rules were checked with a simulator against every class, and a few numbers were wrong.

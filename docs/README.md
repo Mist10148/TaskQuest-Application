@@ -1,6 +1,6 @@
 # Documentation index
 
-Last verified against code: 29 October 2026 (2026-10-29), after the review passes listed in the [CHANGELOG](../CHANGELOG.md#unreleased).
+Last verified against code: 30 October 2026 (2026-10-30), after the review passes listed in the [CHANGELOG](../CHANGELOG.md#unreleased).
 
 `packages/shared/test/docs.test.js` (run by `npm test`) checks the tables in GAMEPLAY.md against `packages/shared/src/constants.js`, the numbers in the class and skill descriptions against the rules, and the build tables in CLASS_GUIDE.md against the balance simulator; `docLinks.test.js` checks that every relative link and anchor resolves, the bot's `commandsDoc.test.js` that COMMANDS.md lists exactly the registered commands, and `xpGuide.test.js` the amounts and caps in XP_GUIDE.md. The rest of the content is checked by hand: when you change behaviour, update the matching document in the same commit and add a line to the [CHANGELOG](../CHANGELOG.md).
 

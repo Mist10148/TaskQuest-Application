@@ -14,7 +14,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Upgrade notes
 
-> **Migration numbers in this section.** Entries below that name a migration from `004` up to `026` (for example `018`, `021`, `024`) refer to the pre-squash MySQL migration names. Those migrations are folded into `001_baseline`; the migrations that exist in `packages/shared/src/db/migrations` are `001_baseline`, `002_drop_skill_points`, `003_ai_prioritize_cache`, `004_item_assignee`, `005_item_activity` and `006_item_comments`, so the next one is `007`. Names below such as `003_ai`, `004_lists_updated_at`, `005_ai_thread_source` and `006_ai_chat_format` are pre-squash names and do not match the files of the same number.
+> **Migration numbers in this section.** Entries below that name a migration from `004` up to `026` (for example `018`, `021`, `024`) refer to the pre-squash MySQL migration names. Those migrations are folded into `001_baseline`; the migrations that exist in `packages/shared/src/db/migrations` are `001_baseline`, `002_drop_skill_points`, `003_ai_prioritize_cache`, `004_item_assignee`, `005_item_activity`, `006_item_comments` and `007_item_next_copy`, so the next one is `008`. Names below such as `003_ai`, `004_lists_updated_at`, `005_ai_thread_source` and `006_ai_chat_format` are pre-squash names and do not match the files of the same number.
 
 - **The database is now PostgreSQL (Supabase), and it starts empty.** MySQL, MariaDB and TiDB are no longer supported, and nothing is copied from the old database: players link again on their first command or web login. Create a Supabase project, set `DB_URL` to its **Session pooler** URL (port 5432) with `DB_SSL=true`, and deploy; the single migration `001_baseline` runs on start. Follow [MIGRATION_POSTGRES.md](docs/MIGRATION_POSTGRES.md) for the runbook and rollback. Do not deploy this release against the old MySQL database: it can no longer talk to it.
 - **Two new migrations run on start** (`002_drop_skill_points`, `003_ai_prioritize_cache`). `002` drops a column the previous version still reads, so rolling back to the previous version after it ran is not supported; take a backup first if that matters (see OPERATIONS).
@@ -30,10 +30,16 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 - **Time zones are stored in canonical form.** `europe/paris` is saved as `Europe/Paris`, and offset zones such as `+05:30` are refused. A value saved earlier is left as it is; the AI service falls back to UTC for a name it cannot resolve.
 - **The CSV export has a `description` column** (last, so older readers still work).
 - **Three more migrations run on start** (`004_item_assignee`, `005_item_activity`, `006_item_comments`): task assignees, a per-task history and task comments. They only add a column and two tables.
+- **One more migration runs on start** (`007_item_next_copy`): two columns on `items` so that undoing a repeating task's completion can remove the copy it created. It only adds columns and a partial index.
+- **The JSON import body limit is 8 MB** (was 2 MB) on `POST /api/user/import`, so a full account's export fits. A reverse proxy in front of the web service with its own, smaller body limit needs raising too.
 - **Quest progress counts top-level tasks.** `itemsTotal` / `itemsCompleted` in `GET /api/lists` no longer count subtasks, so a quest's progress bar matches when it counts as cleared.
 
 ### Added
 
+- **Paging for large quests.** `GET /api/lists/:id` takes optional `limit` (1 to 1000) and `cursor` query parameters and returns one page of tasks in position order with a `nextCursor`; without them the response is unchanged (known issue #60, in part). The route also checks access once instead of twice.
+- **Clear filters** on the quest log when the filters or the search hide every quest, and inline name errors in Save as template.
+- **docs/GLOSSARY.md**, a web push troubleshooting checklist in OPERATIONS, the report and maintenance scripts in TESTING, and `xpGuide.test.js`, which checks the XP guide's amounts and caps against the code.
+- Component tests for the Tasks and Not Found pages, the quest log, the task search results and the save-as-template dialog (known issue #24).
 - **Templates and focus say where you stand.** The templates dialog shows "n of 20 templates saved" (and, at the limit, to delete one first) and confirms a delete; the Focus page says before a session starts when today's focus XP is already used up.
 - **Docs checks:** `docLinks.test.js` fails on a relative link or `#anchor` in any Markdown file that does not resolve, and `commandsDoc.test.js` checks that COMMANDS.md lists exactly the commands `deploy-commands.js` registers. A player FAQ on working together on a quest and on the AI assistant.
 - Component tests for the Dashboard, Focus, Achievements and Profile pages, the templates dialog and the reminder settings.
@@ -235,6 +241,12 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Undoing a repeating task's completion removes its next copy** while nobody has touched it (still open, never edited, moved or reordered, no subtasks or comments), for one task and for a bulk completion. Completing the task again creates the copy again, with no XP; an edited copy stays and the series goes on from it. The toggle returns `removedItemId`. Closes known issue #63.
+- **A full account's export can be imported again.** The JSON import took at most 100 lists, 500 tasks per list and 1,000 tasks, below the account quota of 200 lists and 5,000 tasks; it now takes the quota itself. Closes known issue #67.
+- **The assistant's task toggle** (`PATCH /internal/items/:id/toggle`) returns `nextItem` like the public one, so the AI service knows when a repeating task's copy was created.
+- **Bot:** one database error while claiming a streak warning no longer skips every player after it in that run.
+- **Web:** the 404 page's Home link stays in the app (it used to reload the page and drop the cached data), a running task search and the quest log's loading grid are announced to screen readers, the quest dialog's Category and Priority labels point at their pickers, and the quest, task and template dialogs, the delete confirmation's Cancel and the dialogs' spoken Close label read their text from the i18n catalog.
+- **Tests and docs:** the API suite's Today test listed the response's old keys; XP_GUIDE's `party_quest` row missed the 40 XP focus quest; DEPLOYMENT now says `CLIENT_ID` falls back to `DISCORD_CLIENT_ID` and how to turn on web push on Render; two stale comments in `constants.js`.
 - **Bot:** a snoozed list reminder no longer sends the overdue notice before the snooze ends; the list picker treats "Work" and "work" as one name (the lookup ignores case) and offers a list named like `#12` by its id; a blank search no longer lists everything, and typed text echoed in "Nothing found" and "No quest named" is escaped.
 - **Server:** reordering a quest of more than about 2,000 tasks no longer fails with 413 (the reorder route takes 64 KB), and the JSON import takes 2 MB, since an export carries comments the import ignores. The web leaves the comments out of the upload.
 - **CSV:** import errors name the file line, counting blank lines and cells with line breaks; the CSV export writes each task's subtasks under it, and a `subtask_of` naming two top-level tasks goes to the nearest one above it, so an export with two same-named parents imports back.

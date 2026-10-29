@@ -47,7 +47,7 @@ const push = require('@taskquest/shared/push');   // asks the web server to send
 |---|---|
 | `src/db/index.js` | Entry point: exports the pool, migrations and the services below (`extras.js` is internal to `tasks.js`, `assignees.js` to `tasks.js` and `sharing.js`) |
 | `src/db/pool.js` | `pg` connection pool behind a mysql2-style layer (`?` placeholders, `[rows]` results, `insertId` via `RETURNING id`), `withTransaction` (retries `40P01` / `40001`), `savepoint`, `isUniqueViolation`, `isUndefinedTable` |
-| `src/db/migrate.js`, `src/db/migrations/*` | Versioned schema migrations (`npm run db:migrate`): `001_baseline` creates the whole Postgres schema, `002` onwards follow (`004_item_assignee`: task assignees, `005_item_activity`: task history, `006_item_comments`: comments) |
+| `src/db/migrate.js`, `src/db/migrations/*` | Versioned schema migrations (`npm run db:migrate`): `001_baseline` creates the whole Postgres schema, `002` onwards follow (`004_item_assignee`: task assignees, `005_item_activity`: task history, `006_item_comments`: comments, `007_item_next_copy`: undoable repeat copies) |
 | `src/db/access.js` | The one rule for who may touch a list or task (`forList`, `forItem`, `accessSql`): owner or member, strangers get `NOT_FOUND` |
 | `src/db/users.js` | Users, settings, stats, leaderboard, reset |
 | `src/db/progression.js` | `applyXP`, rewards, achievements, daily, classes, skills |

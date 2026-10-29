@@ -2,7 +2,7 @@
 
 Last verified against code: 29 October 2026 (2026-10-29), after the review passes listed in the [CHANGELOG](../CHANGELOG.md#unreleased).
 
-`packages/shared/test/docs.test.js` (run by `npm test`) checks the tables in GAMEPLAY.md against `packages/shared/src/constants.js`, the numbers in the class and skill descriptions against the rules, and the build tables in CLASS_GUIDE.md against the balance simulator; `docLinks.test.js` checks that every relative link and anchor resolves, and the bot's `commandsDoc.test.js` that COMMANDS.md lists exactly the registered commands. The rest of the content is checked by hand: when you change behaviour, update the matching document in the same commit and add a line to the [CHANGELOG](../CHANGELOG.md).
+`packages/shared/test/docs.test.js` (run by `npm test`) checks the tables in GAMEPLAY.md against `packages/shared/src/constants.js`, the numbers in the class and skill descriptions against the rules, and the build tables in CLASS_GUIDE.md against the balance simulator; `docLinks.test.js` checks that every relative link and anchor resolves, the bot's `commandsDoc.test.js` that COMMANDS.md lists exactly the registered commands, and `xpGuide.test.js` the amounts and caps in XP_GUIDE.md. The rest of the content is checked by hand: when you change behaviour, update the matching document in the same commit and add a line to the [CHANGELOG](../CHANGELOG.md).
 
 ## For players
 
@@ -15,6 +15,7 @@ Last verified against code: 29 October 2026 (2026-10-29), after the review passe
 | [PLAYER_FAQ.md](PLAYER_FAQ.md) | Streaks, freezes, XP off, reminders, time zone days, prestige, sharing, import and export, push, Blackjack |
 | [GAMEPLAY.md](GAMEPLAY.md) | The exact rules: XP, levels, classes, skills, quests, bonuses, prestige, cosmetics, parties, achievements, games, limits |
 | [COMMANDS.md](COMMANDS.md) | Every Discord command, the `/list` flow, background behaviour and interaction ids |
+| [GLOSSARY.md](GLOSSARY.md) | The words TaskQuest uses (quest, balance, lifetime XP, flat XP, member key, ...), each with a link to its rules |
 
 ## For developers
 

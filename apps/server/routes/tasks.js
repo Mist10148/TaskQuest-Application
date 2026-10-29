@@ -148,7 +148,7 @@ itemsRouter.patch(
         const body = parse(toggleItemBody, req.body && Object.keys(req.body).length ? req.body : undefined);
         const r = await db.tasks.setItemCompleted(uid(req), id, body?.completed);
         if (r.item?.list_id) aiClient.reindex(uid(req), r.item.list_id);
-        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses, nextItem: r.nextItem });
+        res.json({ ...r.item, completed: r.completed, newAchievements: r.achievements, xpResult: xpResult(r.xp), bonuses: r.bonuses, nextItem: r.nextItem, removedItemId: r.removedItemId });
     })
 );
 

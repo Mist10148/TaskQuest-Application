@@ -2386,6 +2386,42 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(Boolean(items.find((i) => i.name === 'Parent' && i.completed)), true);
     });
 
+    await t.test('undoing a repeating completion removes its untouched copy, and finishing again brings it back once', async () => {
+        const U = '100000000000000951';
+        await db.users.ensureUser(U);
+        const { list } = await db.tasks.createList(U, { name: 'Undo repeats' });
+        const names = async () => (await db.tasks.getItems(U, list.id)).map((i) => [i.name, Boolean(i.completed)]);
+        const { item } = await db.tasks.addItem(U, list.id, { name: 'water plants', recurrence: 'weekly', due_date: '2030-04-01' });
+
+        const first = await db.tasks.setItemCompleted(U, item.id, true);
+        assert.ok(first.nextItem, 'the first completion creates the copy');
+        assert.equal('next_copy_id' in first.item, false, 'the bookkeeping never leaves the service');
+        const xpAfterFirst = Number((await db.users.getUser(U)).player_xp);
+
+        const undo = await db.tasks.setItemCompleted(U, item.id, false);
+        assert.equal(undo.removedItemId, first.nextItem.id, 'the reopen names the copy it removed');
+        assert.deepEqual(await names(), [['water plants', false]]);
+
+        const again = await db.tasks.setItemCompleted(U, item.id, true);
+        assert.ok(again.nextItem && again.nextItem.id !== first.nextItem.id, 'finishing again brings the copy back');
+        assert.equal(again.xp, null, 'and pays nothing the second time');
+        assert.equal(Number((await db.users.getUser(U)).player_xp), xpAfterFirst);
+        assert.deepEqual(await names(), [['water plants', true], ['water plants', false]]);
+
+        // An edited copy stays: the series goes on from it, and finishing the original again creates no other copy.
+        await db.tasks.updateItem(U, again.nextItem.id, { priority: 'HIGH' });
+        assert.equal((await db.tasks.setItemCompleted(U, item.id, false)).removedItemId, null);
+        assert.equal((await db.tasks.setItemCompleted(U, item.id, true)).nextItem, null);
+        assert.equal((await names()).length, 2);
+
+        // A copy with a comment is touched too.
+        const { item: other } = await db.tasks.addItem(U, list.id, { name: 'stretch', recurrence: 'daily' });
+        const done = await db.tasks.setItemCompleted(U, other.id, true);
+        await db.comments.addComment(U, done.nextItem.id, 'did ten minutes');
+        assert.equal((await db.tasks.setItemCompleted(U, other.id, false)).removedItemId, null);
+        assert.equal((await names()).filter(([n]) => n === 'stretch').length, 2);
+    });
+
     await t.test('search: scopes, literal wildcards, ownership and bounds', async () => {
         const S = '100000000000000311';
         const T = '100000000000000312';

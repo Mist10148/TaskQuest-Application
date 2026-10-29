@@ -301,7 +301,7 @@ export const itemsApi = {
     create: (listId: number, data: ItemInput) => post<Item & RewardFields>(`/api/lists/${listId}/items`, data),
     update: (id: number, data: Partial<ItemInput> & { position?: number }) => patch<Item>(`/api/items/${id}`, data),
     toggle: (id: number, completed?: boolean) =>
-        patch<Item & RewardFields & { nextItem?: Item | null }>(`/api/items/${id}/toggle`, completed === undefined ? undefined : { completed }),
+        patch<Item & RewardFields & { nextItem?: Item | null; removedItemId?: number | null }>(`/api/items/${id}/toggle`, completed === undefined ? undefined : { completed }),
     /** `init.keepalive` lets the request finish while the page is being closed. */
     delete: (id: number, init?: RequestInit) => del<{ success: boolean }>(`/api/items/${id}`, init),
     /** Move a top-level task (with its subtasks) to another quest. */

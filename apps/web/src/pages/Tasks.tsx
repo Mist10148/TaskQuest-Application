@@ -242,7 +242,7 @@ const Tasks = () => {
     }
     const done = finished.length;
     // Undo un-checks the batch again, like Undo on one task: the XP stays paid (once per task), and a repeating task's next copy
-    // stays too.
+    // is removed again while nobody has touched it (the server decides).
     const undo = async () => {
       let failed = false;
       for (const id of finished) await itemsApi.toggle(id, false).catch(() => (failed = true));

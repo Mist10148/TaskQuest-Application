@@ -35,6 +35,7 @@ Both apps also run pending migrations on startup unless `MIGRATE_ON_START=false`
 | `004_item_assignee` | Adds `items.assignee_id` (VARCHAR(32) NULL → `users(discord_id)` ON DELETE SET NULL) and its index `idx_items_assignee`. |
 | `005_item_activity` | Adds `item_activity`, a task's history (see the table below). |
 | `006_item_comments` | Adds `item_comments`, comments on tasks (see the table below). |
+| `007_item_next_copy` | Adds `items.next_copy_id` (INT NULL → `items(id)` ON DELETE SET NULL, partial index `idx_items_next_copy`) and `items.copy_undone` (SMALLINT, default 0): a repeating task remembers the copy its completion created, so undoing the completion can remove it while it is untouched, and completing again creates it once more. |
 
 New migrations continue from the next free number. To add one, create `packages/shared/src/db/migrations/NNN_<name>.js` exporting `description` and `async up(h)`. Use the helpers on `h`: `exec`, `tableExists(table)`, `columnInfo(table, column)`, `columnExists(table, column)`, `indexExists(table, index)`, `foreignKeyExists(table, column, refTable)`, `addColumnIfMissing(table, column, definition)`, `addIndexIfMissing(table, index, columns, { unique })`, `addForeignKeyIfMissing(table, column, refTable, refColumn, name)`. Never edit a migration that has already been released.
 

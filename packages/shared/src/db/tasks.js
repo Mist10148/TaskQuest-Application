@@ -78,8 +78,8 @@ async function writableItem(conn, discordId, itemId, min, { ownerOnly = false } 
 
 // ─── Lists ───────────────────────────────────────────────────────────────────
 
-/** Columns that hold other people's Discord IDs never leave this module (an assignee goes out as `assignee`, see ./assignees). */
-const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by', 'assignee_id'];
+/** Columns that hold other people's Discord IDs never leave this module (an assignee goes out as `assignee`, see ./assignees), nor does the repeat-copy bookkeeping. */
+const HIDDEN_ITEM_COLUMNS = ['created_by', 'completed_by', 'first_completed_by', 'assignee_id', 'next_copy_id', 'copy_undone'];
 
 /**
  * What a person who does not own the list may see of a task: what the UI draws, nothing of the owner's private state (their reminder
@@ -773,10 +773,10 @@ async function moveReminderState(conn, ids, { targetId, sourceOwner, targetOwner
 }
 
 /**
- * Create the next copy of a repeating task. It runs only on the first completion
- * (the xp_awarded guard), so un-checking and re-checking cannot duplicate it, and it
- * grants no creation XP or counters and never counts towards quests (counts_for_quests = 0),
- * so repeating tasks cannot be used to farm.
+ * Create the next copy of a repeating task. It runs on the first completion (the xp_awarded guard), and again only when
+ * undoing that completion removed the copy (copy_undone), so un-checking and re-checking cannot duplicate it. It grants no
+ * creation XP or counters and never counts towards quests (counts_for_quests = 0), so repeating tasks cannot be used to farm.
+ * The task remembers its copy (next_copy_id) for undoCopy.
  */
 async function spawnNextOccurrence(conn, item, user, habitStreak = 0, isOwner = true) {
     const today = todayInZone(user.timezone);
@@ -797,9 +797,31 @@ async function spawnNextOccurrence(conn, item, user, habitStreak = 0, isOwner = 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) RETURNING id`,
         [item.list_id, item.name, item.description, Number(pos.next), due, new Date(), item.priority, item.tags, item.recurrence, item.estimate_minutes ?? null, item.parent_id, anchor, habitStreak, item.created_by || user.discord_id, item.assignee_id || null]
     );
+    await conn.query('UPDATE items SET next_copy_id = ?, copy_undone = 0 WHERE id = ?', [res.insertId, item.id]);
     const [[created]] = await conn.query('SELECT * FROM items WHERE id = ?', [res.insertId]);
     const [withPerson] = await decorate(conn, [created], user.discord_id);
     return shapeItem(withPerson, isOwner);
+}
+
+/**
+ * Undoing a repeating task's completion: remove the copy that completion created, but only while nobody has touched it (still
+ * open, never edited, moved or reordered, no subtasks and no comments). An edited copy stays, and the series goes on from it.
+ * @returns {Promise<number|null>} the id of the removed copy, or null
+ */
+async function undoCopy(conn, item) {
+    if (!item.next_copy_id) return null;
+    const [[copy]] = await conn.query(
+        `SELECT c.id FROM items c
+         WHERE c.id = ? AND c.list_id = ? AND c.completed = 0 AND c.updated_at = c.created_at
+           AND NOT EXISTS (SELECT 1 FROM items s WHERE s.parent_id = c.id)
+           AND NOT EXISTS (SELECT 1 FROM item_comments ic WHERE ic.item_id = c.id)
+         FOR UPDATE`,
+        [item.next_copy_id, item.list_id]
+    );
+    if (!copy) return null;
+    await conn.query('DELETE FROM items WHERE id = ?', [copy.id]);
+    await conn.query('UPDATE items SET next_copy_id = NULL, copy_undone = 1 WHERE id = ?', [item.id]);
+    return copy.id;
 }
 
 /**
@@ -969,6 +991,13 @@ async function setItemCompleted(discordId, itemId, completed, scope = {}) {
         let achievements = [];
         let nextItem = null;
         let bonuses = [];
+        let removedItemId = null;
+        if (!target && item.completed && item.recurrence) removedItemId = await undoCopy(conn, item);
+        if (target && !item.completed && item.xp_awarded && item.recurrence && item.copy_undone) {
+            // Completed again after an undo removed the copy: the copy comes back, the XP was already paid.
+            const habit = habitOutcome(item, { scheduledDate: item.due_date ? String(item.due_date).slice(0, 10) : null, today: todayInZone(user.timezone) });
+            nextItem = await spawnNextOccurrence(conn, item, user, habit.streak, isOwner);
+        }
         if (target && !item.xp_awarded) {
             // first_completed_* is what quests count: set once, never rewritten by a re-check or a later priority edit.
             const dueOn = trustedDueDate(item, now);
@@ -1002,7 +1031,7 @@ async function setItemCompleted(discordId, itemId, completed, scope = {}) {
         }
         const [[updated]] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
         const [withPerson] = await decorate(conn, [updated], user.discord_id);
-        return { item: shapeItem(withPerson, isOwner), completed: target, xp, bonuses, achievements, nextItem, firstCompletion: Boolean(target && !item.xp_awarded) };
+        return { item: shapeItem(withPerson, isOwner), completed: target, xp, bonuses, achievements, nextItem, removedItemId, firstCompletion: Boolean(target && !item.xp_awarded) };
     });
 }
 

@@ -17,7 +17,6 @@ Work that is understood and waits only for time, a key or a decision.
 | Shared leaderboard caches and a cheaper weekly and streak board (#59) | A shared store, as for the rate limiters |
 | Hash the calendar feed token (#61) | Settings shows the address again today, so it would need a "shown once" flow |
 | A baseline that does not need `vector` with AI off (#62; checksums are done) | Nothing; split the vector parts into a later migration, which would be a new migration for databases that already ran 001 |
-| Undo of a repeating task's completion also removes the copy it created (#63) | A rule for a copy that was already edited |
 | Index the player guides for the AI's how-to answers | A choice of which guides; see [AI_ARCHITECTURE](AI_ARCHITECTURE.md#3-rag-pipeline) |
 
 ## Later

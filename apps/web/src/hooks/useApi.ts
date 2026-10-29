@@ -550,7 +550,8 @@ export function useToggleItem() {
                 return;
             }
             if (result.completed) {
-                // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing.
+                // Undo un-checks the task again; the XP stays paid, and finishing it again later pays nothing. A repeating task's
+                // untouched next copy is removed by the server, and the refetch drops it from the view.
                 const undo = () =>
                     itemsApi
                         .toggle(result.id, false)

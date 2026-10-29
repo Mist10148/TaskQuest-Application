@@ -35,7 +35,7 @@ Every number on this page comes from [`packages/shared/src/constants.js`](../pac
 |---|---|---|
 | Create a list | 10 | Only the first 10 list creations per day are rewarded |
 | Add a task | 5 | Only the first 50 per day are rewarded |
-| Complete a task | 10 | **Once per task, ever**, and only the first **50 completions per day** are rewarded (so add, complete, delete loops can't farm XP). Un-completing and re-completing pays nothing. A repeating task's next copy is a new task that can earn its own completion XP, within the same daily cap. |
+| Complete a task | 10 | **Once per task, ever**, and only the first **50 completions per day** are rewarded (so add, complete, delete loops can't farm XP). Un-completing and re-completing pays nothing. A repeating task's next copy is a new task that can earn its own completion XP, within the same daily cap. Undoing the completion removes that copy again while it is untouched, and finishing the task again brings it back. |
 | Claim a quest | 15–120 | Flat reward, once per period (see §5b) |
 | Daily reward | 100 | Plus streak and skill bonuses (see §5) |
 | RPS win | 10 | Free game |

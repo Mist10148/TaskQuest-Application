@@ -58,6 +58,8 @@ Nothing in the suite calls Gemini. The live runbook is in [OPERATIONS](OPERATION
 
 `packages/shared/test/docs.test.js` checks the GAMEPLAY and CLASS_GUIDE tables against `constants.js` and the balance simulator. After changing a number run `npm run balance` and update the docs in the same commit.
 
+`packages/shared/test/docLinks.test.js` follows every relative link in the Markdown files (root, `docs/`, `docs/design/`, `db/legacy/` and each package's README) and fails when a file or a `#heading` anchor it names does not exist (GitHub's slug rules; links in code are ignored). `apps/bot/test/commandsDoc.test.js` reads the command set from `deploy-commands.js` and checks that `docs/COMMANDS.md` has a table row for each slash command, and none for a command that is not registered.
+
 ## What CI runs
 
 `.github/workflows/ci.yml`: lint, typecheck, build, syntax check, unit tests, integration tests on `pgvector/pgvector:pg16`, the AI service (`ruff`, `mypy`, `pytest`, Postgres SQL tests), Playwright, and `npm audit --omit=dev --audit-level=high`.

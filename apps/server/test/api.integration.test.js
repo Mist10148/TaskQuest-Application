@@ -400,9 +400,9 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
     await t.test('today endpoint', async () => {
         assert.equal((await call('GET', '/api/today')).status, 401);
         const today = await (await call('GET', '/api/today', { cookie: mallory })).json();
-        assert.deepEqual(Object.keys(today).sort(), ['counts', 'day', 'goal', 'reflection', 'season', 'streak', 'tasks', 'xpEnabled']);
+        assert.deepEqual(Object.keys(today).sort(), ['counts', 'day', 'goal', 'reflection', 'season', 'streak', 'tasks', 'upcoming', 'xpEnabled']);
         assert.deepEqual(Object.keys(today.counts).sort(), ['doneToday', 'dueToday', 'overdue']);
-        assert.deepEqual(Object.keys(today.streak).sort(), ['atRisk', 'claimedToday', 'count', 'daysLeft', 'live']);
+        assert.deepEqual(Object.keys(today.streak).sort(), ['atRisk', 'claimableAt', 'claimedToday', 'count', 'daysLeft', 'expiresAt', 'live']);
         assert.ok(Array.isArray(today.tasks) && today.tasks.length <= 6);
         assert.ok(today.season.name && today.season.doubles);
         assert.equal(today.goal.min, 3);

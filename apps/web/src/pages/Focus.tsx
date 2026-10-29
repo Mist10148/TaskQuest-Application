@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { CheckCircle2, Hourglass, Loader2, Play, Timer, XCircle } from "lucide-react";
 import type { FocusActive, FocusFinishResult, FocusStatus } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { pageTitle } from "@/lib/pageTitle";
+import { APP_TITLE, pageTitle } from "@/lib/pageTitle";
 import { QueryState } from "@/components/feedback/QueryState";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,8 @@ const Starter = ({ status }: { status: FocusStatus }) => {
   const [custom, setCustom] = useState("");
   const customMinutes = parseMinutes(custom, minMinutes, maxMinutes);
   const full = status.today.remainingSessions <= 0;
+  // Sessions are still allowed after the day's focus XP is used up; say so before one starts, not only in its result.
+  const noXpLeft = !full && status.today.remainingXP <= 0;
   const invalidCustom = custom.trim() !== "" && customMinutes === null;
 
   return (
@@ -113,6 +115,7 @@ const Starter = ({ status }: { status: FocusStatus }) => {
         </Button>
       </form>
       {invalidCustom && <p id="focus-custom-error" className="mt-2 text-sm text-destructive-text">Enter a whole number from {minMinutes} to {maxMinutes}.</p>}
+      {noXpLeft && <p className="mt-3 text-sm text-foreground-muted">You have earned today's {status.config.xpPerDay} focus XP. A session still counts its minutes (for a party's focus quest) but pays no more XP until midnight in your time zone.</p>}
       {full && <p className="mt-3 text-sm text-foreground-muted">You finished all {status.config.sessionsPerDay} sessions for today. The limit resets at midnight in your time zone.</p>}
     </section>
   );
@@ -140,9 +143,9 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
     },
     []
   );
+  // Built from the app name, not the current title: that is already "Focus · TaskQuest", which read "Focus – Focus".
   useEffect(() => {
-    const base = document.title.replace(/^[\d:]+ · Focus(?: – )?/, "");
-    document.title = left > 0 ? focusTitle(left, base) : `Time's up · ${base}`;
+    document.title = left > 0 ? focusTitle(left, APP_TITLE) : `Time's up · Focus – ${APP_TITLE}`;
   }, [left]);
 
   // When the time runs out: a soft chime (it follows the "Game sounds" setting), and keyboard focus moves to "Finish session",

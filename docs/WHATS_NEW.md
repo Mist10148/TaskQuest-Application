@@ -35,6 +35,15 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **A Focus link on each Today task,** counts on the achievement filters, keyboard navigation in the calendar (arrows, Home/End, PageUp/PageDown), and the Focus page says before you start when today's focus XP is already used up.
 - **Templates** show how many of your 20 you have saved.
 
+## Discord catches up (30 October 2026)
+
+- **`/today`** shows what is due and overdue, what is coming up this week, your streak and your weekly goal, like the web Today page.
+- **`/focus start`**, **`/focus finish`** and **`/focus status`** run the focus timer from Discord. It is the same timer as the web's, so you can start on one and finish on the other.
+- **Change your weekly goal** after setting it, as long as it is not claimed yet.
+- **Focus on a task:** the Focus link on a Today task opens the timer with that task named, and a **Mark done** button for when you finish it.
+- **Add a task on a calendar day** from the quest calendar, and a counter while finishing, editing or moving many tasks at once.
+- **Fixes you might have hit:** Discord buttons that said "This interaction failed" although the change went through, a Focus session cancelled because your device clock ran fast, and a streak shown in `/profile` or the Monday digest after it had already ended.
+
 ## Smaller things (October 2026 review)
 
 - **Install it.** Add TaskQuest to your phone's home screen from the browser menu; it opens like an app.

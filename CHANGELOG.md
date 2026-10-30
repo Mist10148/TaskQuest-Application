@@ -36,6 +36,11 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **`/today` and `/focus` on Discord.** `/today` shows what the web Today page shows (due, overdue and done counts, the tasks that need doing, what is coming up this week, the live streak and the weekly goal); `/focus start|finish|status` drives the same server-timed focus timer as the web, and `finish` refuses rather than cancel a session that cannot pay yet. The bot now registers 32 commands.
+- **Change goal** on the Today page's weekly goal card (the server already allowed raising or lowering an unclaimed goal), and **Focus from a task**: a Today task's Focus link opens `/focus?task=<id>`, which names the task and offers Mark done.
+- **Add on this day** in a quest's calendar opens the task form with that due date, and bulk complete, edit and move count their progress in a toast ("Completing 3 of 12…") from three tasks on.
+- `GET /api/focus` returns `serverNow`.
+- **CI:** every job has a timeout, the audit job runs `pip-audit` on the AI service, and `npm run check` covers `scripts/`.
 - **Paging for large quests.** `GET /api/lists/:id` takes optional `limit` (1 to 1000) and `cursor` query parameters and returns one page of tasks in position order with a `nextCursor`; without them the response is unchanged (known issue #60, in part). The route also checks access once instead of twice.
 - **Clear filters** on the quest log when the filters or the search hide every quest, and inline name errors in Save as template.
 - **docs/GLOSSARY.md**, a web push troubleshooting checklist in OPERATIONS, the report and maintenance scripts in TESTING, and `xpGuide.test.js`, which checks the XP guide's amounts and caps against the code.
@@ -189,6 +194,7 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **More of the web app reads from the message catalog:** the task form's quick due dates, priority names and tags placeholder, the delete-quest and invitation confirmations, the templates dialog and the default Cancel button.
 - **The daily AI quota refills at the user's own midnight.** `AI_DAILY_REQUEST_LIMIT` is now counted per day in the user's time zone (`users.timezone`, UTC until set) instead of per UTC day, like the daily caps and quests; `ai_usage.day` keeps its type and rows. The quota messages say "your midnight". The AI service gains a `tzdata` dependency (a Windows host has no zone database; an unknown zone falls back to UTC). Closes known issue #31.
 - **Arcade hardening (option B, in part).** Free-game XP no longer counts for the public weekly leaderboard (`WEEKLY_BOARD_XP_SOURCES`; your own review, Stats and digest still include it); a valid arcade run with under 5 seconds of play is accepted but pays 0 XP (`tooShort` in the result, with a toast); and `npm run arcade-report` prints how fast real players score per game so the plausibility bound can be calibrated. The bounds themselves and a per-game cooldown are deliberately unchanged (known issue #39).
 - **The bot's browsers survive a restart.** The `/list` reorder, the achievements pager and the `/class` browser no longer keep their position in memory: each button carries the page, class or first pick in its custom ID (`ach_next_2`, `class_next_HERO`, `sel_swap2_<list>_<task>`), and the select menus name their skill tree. Messages opened before this update show "This button has expired" on their old buttons. Closes known issues #6 and #7; the chat cooldown (#21) stays in memory by design.
@@ -241,6 +247,17 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **Bot buttons answer Discord before their database work.** Skill reset and unlock, class buy and equip, quest and task delete, category, priority and swap picks, member removal, leaving a list, list invitations and party invites and disband ran a transaction before acknowledging the click; on a cold database the change was made but the player saw "This interaction failed". They now defer first.
+- **The Focus timer follows the server's clock.** A device clock running fast turned Finish on early and the server then cancelled the session for 0 XP.
+- **A failed task tick or priority change puts back only that task.** It restored the whole saved quest, which also undid any other task changed meanwhile.
+- **The weekly goal form asks for a target above this week's progress** (the server's rule), and its suggestion follows progress.
+- **Quest links check their ids** (`?list=` past the database's range and odd `?task=` values no longer end in an error with a Retry that cannot work), and opening another quest resets select mode and the keyboard cursor.
+- **Due-today and overdue markers follow midnight** on a page left open, and Today asks the server again once your day has moved on.
+- **The weekly digest, `/review` and `/profile` show the live streak**, not a lapsed one.
+- **The AI service re-checks the opt-out before a delayed re-index**, refunds a `/v1/prioritize` request whose quest read failed, and refunds a request that crossed midnight to the day it was booked on.
+- **Export filenames use your own date**, not UTC's, and a paging cursor past the integer range is a `400`, not a `500`.
+- **The pending delete button keeps its accessible name**, and Cancel waits for the delete.
+- **Docs:** `/ai-format` never says "AI is off", the next migration is `008`, and the archive job moves game sessions only with `--games`.
 - **Undoing a repeating task's completion removes its next copy** while nobody has touched it (still open, never edited, moved or reordered, no subtasks or comments), for one task and for a bulk completion. Completing the task again creates the copy again, with no XP; an edited copy stays and the series goes on from it. The toggle returns `removedItemId`. Closes known issue #63.
 - **A full account's export can be imported again.** The JSON import took at most 100 lists, 500 tasks per list and 1,000 tasks, below the account quota of 200 lists and 5,000 tasks; it now takes the quota itself. Closes known issue #67.
 - **The assistant's task toggle** (`PATCH /internal/items/:id/toggle`) returns `nextItem` like the public one, so the AI service knows when a repeating task's copy was created.

@@ -97,3 +97,11 @@ test('bigIdParam: a comment id past 2^31 is valid, junk is not', async () => {
     assert.throws(() => bigIdParam.parse({ id: '0' }));
     assert.throws(() => bigIdParam.parse({ id: '1.5' }));
 });
+
+test('listItemsQuery rejects a cursor whose parts would overflow an INTEGER column', async () => {
+    const { listItemsQuery } = await import('../lib/schemas.js');
+    assert.equal(listItemsQuery.parse({ limit: '10', cursor: '5.12' }).cursor, '5.12');
+    assert.equal(listItemsQuery.parse({ limit: '10', cursor: '2147483647.2147483647' }).cursor, '2147483647.2147483647');
+    assert.throws(() => listItemsQuery.parse({ limit: '10', cursor: '9999999999.1' }));
+    assert.throws(() => listItemsQuery.parse({ limit: '10', cursor: '1.9999999999999' }));
+});

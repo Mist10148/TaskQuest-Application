@@ -112,6 +112,8 @@ export const listItemsQuery = z
         cursor: z
             .string()
             .regex(/^\d{1,10}\.\d{1,19}$/, 'cursor must be the nextCursor of the previous page')
+            // Both parts are compared with INTEGER columns: a bigger number would be a Postgres range error (a 500), not a 400.
+            .refine((c) => c.split('.').every((n) => Number(n) <= MAX_ID), 'cursor must be the nextCursor of the previous page')
             .optional()
     })
     .strip()

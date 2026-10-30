@@ -256,9 +256,15 @@ async def reconcile(conn: AsyncConnection, store: EmbeddingStore, embedder: Embe
 
 
 async def reindex_list(discord_id: str, list_id: int) -> None:
+    store = runtime.get_store()
     async with pool.connection() as conn:
-        await index_list(conn, runtime.get_store(), runtime.get_embedder(), discord_id, list_id)
-    runtime.get_store().invalidate(discord_id)  # after the commit, so a reader cannot cache the old rows
+        # This can run seconds after it was asked for (the edit debounce): if the player turned AI off in between, their
+        # list is not sent to the embedding model, and what was stored for it goes.
+        if await repo.ai_enabled(conn, discord_id):
+            await index_list(conn, store, runtime.get_embedder(), discord_id, list_id)
+        else:
+            await store.delete(conn, discord_id, list_id=list_id)
+    store.invalidate(discord_id)  # after the commit, so a reader cannot cache the old rows
 
 
 async def forget_list(discord_id: str, list_id: int) -> None:

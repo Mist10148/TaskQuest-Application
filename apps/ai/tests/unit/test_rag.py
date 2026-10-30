@@ -520,6 +520,32 @@ def test_subtask_due_date_priority_and_tags_are_part_of_the_quest_text():
     assert "- [x] Pack\n" in text_ + "\n"
 
 
+async def test_a_delayed_reindex_checks_the_opt_out_again(seeded, monkeypatch):
+    from app.config import get_settings
+    from app.rag import runtime
+
+    store, emb = make_store(), FakeEmbedder()
+    runtime.set_runtime(store, emb)
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+    try:
+        async with seeded.begin() as conn:
+            await indexer.index_list(conn, store, emb, UID, 1)
+            # AI turned off after the edit was queued, before the debounced re-index runs
+            await conn.execute(text("UPDATE users SET ai_enabled = 0 WHERE discord_id = :u"), {"u": UID})
+        calls_before = emb.doc_calls
+        await indexer.reindex_list(UID, 1)
+        assert emb.doc_calls == calls_before  # nothing sent to the embedding model
+        async with seeded.connect() as conn:
+            n = (
+                await conn.execute(
+                    text("SELECT COUNT(*) FROM ai_embeddings WHERE discord_id = :u AND list_id = 1"), {"u": UID}
+                )
+            ).scalar()
+        assert n == 0
+    finally:
+        runtime.set_runtime(None, None)
+
+
 async def test_index_calls_for_one_list_are_coalesced_when_a_delay_is_set(seeded, monkeypatch):
     import asyncio
 

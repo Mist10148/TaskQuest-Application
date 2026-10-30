@@ -68,14 +68,15 @@ router.post(
 
 // ── Data portability ────────────────────────────────────────────────────────
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** The player's own date for export filenames, not UTC: an evening export west of Greenwich would be named after tomorrow. */
+const playerToday = async (req) => shared.todayInZone((await db.users.getUser(uid(req)))?.timezone);
 
 router.get(
     '/export',
     heavyLimiter,
     asyncRoute(async (req, res) => {
-        const data = await db.transfer.exportAll(uid(req));
-        res.set('Content-Disposition', `attachment; filename="taskquest-export-${today()}.json"`);
+        const [data, day] = await Promise.all([db.transfer.exportAll(uid(req)), playerToday(req)]);
+        res.set('Content-Disposition', `attachment; filename="taskquest-export-${day}.json"`);
         res.json(data);
     })
 );
@@ -84,8 +85,9 @@ router.get(
     '/export.csv',
     heavyLimiter,
     asyncRoute(async (req, res) => {
-        const csv = db.transfer.toCsv(await db.transfer.exportAll(uid(req)));
-        res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="taskquest-tasks-${today()}.csv"` });
+        const [data, day] = await Promise.all([db.transfer.exportAll(uid(req)), playerToday(req)]);
+        const csv = db.transfer.toCsv(data);
+        res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="taskquest-tasks-${day}.csv"` });
         res.send(csv);
     })
 );

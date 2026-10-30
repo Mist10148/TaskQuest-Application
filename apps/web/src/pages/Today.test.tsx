@@ -126,6 +126,25 @@ describe("Today page", () => {
     expect(hooks.useSetGoal.mock.results[0].value.mutate).toHaveBeenCalledWith(12);
   });
 
+  it("wants a weekly goal above this week's progress, and the suggestion follows it", async () => {
+    const goal = { ...day().goal, progress: 8 };
+    load(day({ goal }));
+    show();
+    const box = screen.getByLabelText(/Tasks to finish this week \(9 to 60\)/);
+    expect(box).toHaveValue(13);
+    await userEvent.clear(box);
+    await userEvent.type(box, "8");
+    expect(screen.getByText("Enter a whole number from 9 to 60.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set goal" })).toBeDisabled();
+  });
+
+  it("says when this week is already past the largest goal", () => {
+    load(day({ goal: { ...day().goal, progress: 60 } }));
+    show();
+    expect(screen.getByText(/more than the largest goal/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set goal" })).toBeDisabled();
+  });
+
   it("links each task to a focus session", () => {
     load(day());
     show();

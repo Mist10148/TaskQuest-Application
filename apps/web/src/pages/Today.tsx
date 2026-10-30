@@ -112,12 +112,16 @@ const GoalCard = ({ data }: { data: TodayData }) => {
   const setGoal = useSetGoal();
   const claim = useClaimGoal();
   const g = data.goal;
-  // A suggestion above this week's progress, within the allowed range (a default over the maximum could not be submitted).
-  const [target, setTarget] = useState(String(Math.min(g.max, Math.max(g.min, g.progress + 5))));
+  // The server wants a goal above what is already finished this week, within the allowed range.
+  const lowest = Math.max(g.min, g.progress + 1);
+  // Until something is typed, the suggestion follows progress (tasks finished while the page is open move it up).
+  const [typed, setTarget] = useState<string | null>(null);
+  const target = typed ?? String(Math.min(g.max, Math.max(lowest, g.progress + 5)));
   const pct = goalPercent(g.progress, g.target);
   const wanted = /^\d+$/.test(target.trim()) ? Number(target) : null;
-  const inRange = wanted !== null && wanted >= g.min && wanted <= g.max;
+  const inRange = wanted !== null && wanted >= lowest && wanted <= g.max;
   const showRangeError = target.trim() !== "" && !inRange;
+  const noRoom = lowest > g.max;
   return (
     <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="goal-title">
       <h2 id="goal-title" className="flex items-center gap-2 font-heading font-semibold"><Target className="h-5 w-5 text-primary-text" aria-hidden /> Weekly goal</h2>
@@ -147,13 +151,13 @@ const GoalCard = ({ data }: { data: TodayData }) => {
           }}
         >
           <div>
-            <label htmlFor="goal-target" className="mb-1 block text-sm text-foreground-muted">Tasks to finish this week ({g.min} to {g.max})</label>
+            <label htmlFor="goal-target" className="mb-1 block text-sm text-foreground-muted">Tasks to finish this week ({lowest} to {g.max})</label>
             <Input
               id="goal-target"
               type="number"
               inputMode="numeric"
               required
-              min={g.min}
+              min={lowest}
               max={g.max}
               value={target}
               onChange={(e) => setTarget(e.target.value)}
@@ -163,7 +167,8 @@ const GoalCard = ({ data }: { data: TodayData }) => {
             />
           </div>
           <Button type="submit" size="sm" disabled={setGoal.isPending || !inRange}>Set goal</Button>
-          {showRangeError && <p id="goal-target-error" className="w-full text-sm text-destructive-text">Enter a whole number from {g.min} to {g.max}.</p>}
+          {showRangeError && !noRoom && <p id="goal-target-error" className="w-full text-sm text-destructive-text">Enter a whole number from {lowest} to {g.max}.</p>}
+          {noRoom && <p id="goal-target-error" className="w-full text-sm text-foreground-muted">You have already finished {g.progress} tasks this week, more than the largest goal. Set one next week.</p>}
         </form>
       )}
     </section>

@@ -79,7 +79,7 @@ TaskQuest addresses this in three ways:
 - **A full calendar.** Tasks and lists have due dates, tasks can repeat, and reminders arrive once on the due day at the user's reminder hour (Discord DM, optionally a browser push). There are no times of day, and the calendar is a read-only `.ics` feed.
 - **Native mobile apps.** The web app is responsive, and push notifications are optional and browser-based, but there is no app-store product.
 - **Server moderation features.**
-- **Internationalisation.** The product is English only. A message catalog and a language preference exist (`apps/web/src/i18n`), but only the Review and Not-found pages use them and there is no second language.
+- **Internationalisation.** The product is English only. A message catalog and a language preference exist (`apps/web/src/i18n`), but only the Review and Not-found pages and the task-editing dialogs use them, and there is no second language.
 
 ## 4. Personas
 

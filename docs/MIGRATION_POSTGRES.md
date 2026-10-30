@@ -24,7 +24,7 @@ This page explains why and how TaskQuest moved its database from MySQL (TiDB Clo
 |---|---|
 | Data | **Start fresh.** The Supabase database starts empty; no rows are copied from TiDB. Players link again through the bot or the web login. |
 | Dialects | **PostgreSQL only.** MySQL and MariaDB support is removed: one SQL dialect, one test matrix. |
-| Migrations | **Squashed.** The 26 MySQL migrations are replaced by one Postgres baseline, `001_baseline`, which creates the final schema. The old files stay in git history. New migrations continue from `002` (`002` to `006` exist now, so the next one is `007`). |
+| Migrations | **Squashed.** The 26 MySQL migrations are replaced by one Postgres baseline, `001_baseline`, which creates the final schema. The old files stay in git history. New migrations continue from `002` (`002` to `007` exist now, so the next one is `008`). |
 | Supabase features | **Plain Postgres + pgvector.** No Supabase Auth, no Row Level Security, no client-side Supabase SDK. The apps connect with an ordinary Postgres connection string. AI embeddings move to a `vector(768)` column. |
 
 ## What changes

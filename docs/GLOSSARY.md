@@ -4,7 +4,7 @@ The words TaskQuest uses, in one place. Each entry links to the document that ha
 
 | Term | Meaning |
 |---|---|
-| **Quest** | What the app and the bot call a list of tasks. The code, the database and the API call it a *list* (`lists`, `/api/lists`), so the two words mean the same thing. |
+| **Quest** | What the web app calls a list of tasks. The bot's `/list`, `/share` and `/quick` still say *list* (its AI commands say quest), and the code, the database and the API call it a *list* (`lists`, `/api/lists`), so the two words mean the same thing. |
 | **Task** | One item on a quest (`items`). It can have a due date, a priority, tags, a repeat, an estimate, an assignee and one level of subtasks. |
 | **Subtask** | A task under another task (`parent_id`). Only one level deep: a subtask cannot have subtasks of its own. |
 | **Repeating task** | A task with a repeat (daily, weekly or monthly). Completing it creates its *next copy*, a new task due on the next date. Undoing the completion removes that copy while nobody has touched it. See [GAMEPLAY](GAMEPLAY.md#1-xp-and-levels). |

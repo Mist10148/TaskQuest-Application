@@ -69,7 +69,7 @@ These are not tests, but they read a real database (the one in `.env`) and are t
 | `npm run balance` | Simulates a player per class and prints the XP each earns (no database); the docs tests compare against it |
 | `npm run xp-report` | XP earned per source and class from `xp_transactions`, to compare with the [previews](KNOWN_ISSUES.md#by-design) |
 | `npm run arcade-report` | How fast real players score in each arcade game, to calibrate the anti-cheat bound ([#39](KNOWN_ISSUES.md#limitations)) |
-| `npm run archive -- --days 365` | Moves old XP and game rows to archive tables and deletes old task history; `--dry-run` only counts ([DATABASE](DATABASE.md#backups-and-maintenance)) |
+| `npm run archive -- --days 365` | Moves old XP rows to the archive table (game sessions too with `--games`) and deletes old task history; `--dry-run` only counts ([DATABASE](DATABASE.md#backups-and-maintenance)) |
 
 ## What CI runs
 

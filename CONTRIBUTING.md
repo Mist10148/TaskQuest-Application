@@ -55,7 +55,7 @@ npm run typecheck
 npm run build
 ```
 
-The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop, CSV, stats, sharing and party helpers and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). Component tests (jsdom and Testing Library, `*.test.tsx` next to the component) cover the shared building blocks and a few pages: mock `@/hooks/useApi` with `vi.mock` and render the component, as `QuestsCard.test.tsx` and `Review.test.tsx` do. Browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
+The web app's unit tests (`apps/web/src/**/*.test.ts`) cover pure logic: date helpers, the quick-add parser, the game loop, CSV, stats, sharing and party helpers and the WCAG contrast of both themes (`theme.test.ts` reads `index.css`, so a colour change that makes text unreadable fails the build). Component tests (jsdom and Testing Library, `*.test.tsx` next to the component) cover the shared building blocks and every page: mock `@/hooks/useApi` with `vi.mock` and render the component, as `QuestsCard.test.tsx` and `Review.test.tsx` do. Browser smoke tests are described under "Browser tests" below, and "Trying the web app locally" has a manual check.
 
 ### Integration tests
 
@@ -135,7 +135,7 @@ Discord login needs a real application, which is overkill for checking a UI chan
 
 Check the page you changed in **both themes**, at a phone width, and with the keyboard only.
 
-User-facing text in the web app is moving into a typed message catalog (`apps/web/src/i18n/messages.ts`, read with `useT()`); the Review and Not-found pages use it. Put new strings there when you touch a page, with `{name}` placeholders instead of string concatenation. A translation is a partial catalog, so a missing key shows English.
+User-facing text in the web app is moving into a typed message catalog (`apps/web/src/i18n/messages.ts`, read with `useT()`); the Review and Not-found pages, the quest, task, template, delete and invitation dialogs and the shared dialog buttons use it. Put new strings there when you touch a page, with `{name}` placeholders instead of string concatenation. A translation is a partial catalog, so a missing key shows English.
 
 ## Style
 

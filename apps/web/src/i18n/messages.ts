@@ -4,9 +4,9 @@
  * showing a raw key. To add a language: add its code to LOCALES, add a catalog to
  * `catalogs` below, and give it a name in LOCALE_NAMES.
  *
- * Extracted so far: the NotFound and Review pages, the quest, task and template dialogs
- * and the shared dialog buttons; the rest of the app still uses inline English (see
- * docs/ROADMAP.md). Placeholders are written `{name}`.
+ * Extracted so far: the NotFound and Review pages, the quest, task, template, delete and
+ * invitation dialogs and the shared dialog buttons; the rest of the app still uses inline
+ * English (see docs/ROADMAP.md). Placeholders are written `{name}`.
  */
 
 export const en = {
@@ -64,6 +64,15 @@ export const en = {
   "task.repeat.weekly": "🔁 Weekly",
   "task.repeat.monthly": "🔁 Monthly",
   "task.tags": "Tags",
+  "task.tagsPlaceholder": "work, urgent",
+  "task.due.today": "Today",
+  "task.due.tomorrow": "Tomorrow",
+  "task.due.nextWeek": "Next week",
+  "task.due.none": "No date",
+  "priority.none": "None",
+  "priority.HIGH": "High",
+  "priority.MEDIUM": "Medium",
+  "priority.LOW": "Low",
   "task.estimate": "Estimate (minutes)",
   "task.estimateHint": "Finish it right after a focus session of about that length for a bonus.",
   "task.parent": "Subtask of",
@@ -76,6 +85,31 @@ export const en = {
   "template.name": "Template name",
   "template.nameMissing": "Give your template a name.",
   "template.save": "Save template",
+  "template.listTitle": "Quest templates",
+  "template.listHint": "Start a new quest with a ready-made set of tasks. Tasks pay XP like any new task, within the daily limits.",
+  "template.loadFailed": "Could not load your templates.",
+  "template.retry": "Try again",
+  "template.empty": "No templates yet. Open a quest and choose \"Save as template\".",
+  "template.use": "Use",
+  "template.delete": "Delete",
+  "template.keep": "Keep",
+  "template.confirmDelete": "Delete {name}?",
+  "template.deleteLabel": "Delete template {name}",
+  "template.deleted": "Deleted the template \"{name}\"",
+  "template.count": "{saved} of {max} templates saved.",
+  "template.countFull": "{saved} of {max} templates saved: delete one to save another.",
+
+  "quest.deleteTitle": "Delete Quest",
+  "quest.deleteConfirm": "Delete Quest",
+  "quest.deleteBefore": "Are you sure you want to delete ",
+  "quest.deleteAfter": "? All tasks within this quest will also be deleted.",
+
+  "invite.title": "Invite {name}?",
+  "invite.thisPerson": "this person",
+  "invite.thisPersonStart": "This person",
+  "invite.body": " will get an invitation to {target}. Check this is the person you meant.",
+  "invite.send": "Send invitation",
+  "invite.notThem": "Not them",
 } as const;
 
 export type MessageKey = keyof typeof en;

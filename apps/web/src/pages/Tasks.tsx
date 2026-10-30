@@ -28,6 +28,7 @@ import { saveTemplateProblem } from "@/lib/templates";
 import { MembersDialog } from "@/components/tasks/MembersDialog";
 import { canEditTasks, idFromParam, isAccessLost, roleOf } from "@/lib/sharing";
 import { useQueryClient } from "@tanstack/react-query";
+import { useT } from "@/i18n/useT";
 
 /** Batches go one task at a time; from this size on, a loading toast counts them so a long batch does not look stuck. */
 const BULK_PROGRESS_FROM = 3;
@@ -43,6 +44,7 @@ function bulkProgress(verb: string, total: number) {
 }
 
 const Tasks = () => {
+  const t = useT();
   const listsQuery = useLists();
   const lists = useMemo(() => listsQuery.data ?? [], [listsQuery.data]);
   const createList = useCreateList();
@@ -438,13 +440,13 @@ const Tasks = () => {
       <ConfirmDeleteDialog
         open={listToDelete !== null}
         onOpenChange={(open) => !open && setListToDelete(null)}
-        title="Delete Quest"
+        title={t("quest.deleteTitle")}
         description={
           <>
-            Are you sure you want to delete <span className="font-semibold text-foreground">"{selectedList?.name}"</span>? All tasks within this quest will also be deleted.
+            {t("quest.deleteBefore")}<span className="font-semibold text-foreground">"{selectedList?.name}"</span>{t("quest.deleteAfter")}
           </>
         }
-        confirmLabel="Delete Quest"
+        confirmLabel={t("quest.deleteConfirm")}
         pending={deleteList.isPending}
         onConfirm={confirmDeleteList}
       />

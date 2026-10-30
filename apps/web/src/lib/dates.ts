@@ -4,6 +4,7 @@
  * midnight, which marks a list overdue on its own due date and shows the
  * previous day to users west of UTC. Mirrors packages/shared/src/dates.js.
  */
+import type { MessageKey } from "@/i18n/messages";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -45,13 +46,13 @@ export function addDays(day: string, days: number): string {
   return browserDay(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
 }
 
-/** The quick picks next to a due-date field. "" clears the date. */
-export function quickDueDates(today: string = localToday()): Array<{ label: string; value: string }> {
+/** The quick picks next to a due-date field, labelled by catalog key. "" clears the date. */
+export function quickDueDates(today: string = localToday()): Array<{ label: MessageKey; value: string }> {
   return [
-    { label: "Today", value: today },
-    { label: "Tomorrow", value: addDays(today, 1) },
-    { label: "Next week", value: addDays(today, 7) },
-    { label: "No date", value: "" },
+    { label: "task.due.today", value: today },
+    { label: "task.due.tomorrow", value: addDays(today, 1) },
+    { label: "task.due.nextWeek", value: addDays(today, 7) },
+    { label: "task.due.none", value: "" },
   ];
 }
 

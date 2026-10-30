@@ -77,10 +77,10 @@ describe("deadline helpers", () => {
 
   it("offers today, tomorrow, next week and no date as quick picks", () => {
     expect(quickDueDates("2030-01-29")).toEqual([
-      { label: "Today", value: "2030-01-29" },
-      { label: "Tomorrow", value: "2030-01-30" },
-      { label: "Next week", value: "2030-02-05" },
-      { label: "No date", value: "" },
+      { label: "task.due.today", value: "2030-01-29" },
+      { label: "task.due.tomorrow", value: "2030-01-30" },
+      { label: "task.due.nextWeek", value: "2030-02-05" },
+      { label: "task.due.none", value: "" },
     ]);
   });
 });

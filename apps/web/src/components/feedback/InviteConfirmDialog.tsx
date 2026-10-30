@@ -1,4 +1,5 @@
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { useT } from "@/i18n/useT";
 import type { InvitePreview } from "@/lib/api";
 
 interface Props {
@@ -11,11 +12,13 @@ interface Props {
 }
 
 /** "Invite Bob Smith?" with their picture, shown before an invitation is really sent, so a mistyped username cannot reach the wrong person. */
-export const InviteConfirmDialog = ({ preview, target, onCancel, onConfirm }: Props) => (
+export const InviteConfirmDialog = ({ preview, target, onCancel, onConfirm }: Props) => {
+  const t = useT();
+  return (
   <ConfirmDialog
     open={preview !== null}
     onOpenChange={(open) => !open && onCancel()}
-    title={`Invite ${preview?.name ?? "this person"}?`}
+    title={t("invite.title", { name: preview?.name ?? t("invite.thisPerson") })}
     description={
       <div className="flex items-center gap-3">
         {preview?.avatarUrl ? (
@@ -26,12 +29,13 @@ export const InviteConfirmDialog = ({ preview, target, onCancel, onConfirm }: Pr
           </span>
         )}
         <p>
-          <span className="font-medium text-foreground">{preview?.name ?? "This person"}</span> will get an invitation to {target}. Check this is the person you meant.
+          <span className="font-medium text-foreground">{preview?.name ?? t("invite.thisPersonStart")}</span>{t("invite.body", { target })}
         </p>
       </div>
     }
-    confirmLabel="Send invitation"
-    cancelLabel="Not them"
+    confirmLabel={t("invite.send")}
+    cancelLabel={t("invite.notThem")}
     onConfirm={onConfirm}
   />
-);
+  );
+};

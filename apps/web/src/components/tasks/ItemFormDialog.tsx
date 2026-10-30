@@ -84,7 +84,7 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
                     aria-pressed={form.due_date === q.value}
                     className="rounded-full border border-border px-2 py-0.5 text-xs text-foreground-muted transition-colors hover:border-primary hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary aria-pressed:text-foreground"
                   >
-                    {q.label}
+                    {t(q.label)}
                   </button>
                 ))}
               </div>
@@ -93,7 +93,7 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
               <label htmlFor="item-priority" className="text-sm font-medium block mb-1">{t("task.priority")}</label>
               <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
                 <SelectTrigger id="item-priority"><SelectValue /></SelectTrigger>
-                <SelectContent>{PRIORITIES.filter((p) => p.value !== "all").map((p) => <SelectItem key={p.value} value={p.value}>{p.emoji} {p.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{PRIORITIES.filter((p) => p.value !== "all").map((p) => <SelectItem key={p.value} value={p.value}>{p.emoji} {t(`priority.${p.value}` as MessageKey)}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
@@ -107,7 +107,7 @@ export const ItemFormDialog = ({ open, onOpenChange, mode, initial, parentOption
             </div>
             <div>
               <label htmlFor="item-tags" className="text-sm font-medium block mb-1">{t("task.tags")}</label>
-              <Input id="item-tags" placeholder="work, urgent" value={form.tags} onChange={(e) => set("tags", e.target.value)} />
+              <Input id="item-tags" placeholder={t("task.tagsPlaceholder")} value={form.tags} onChange={(e) => set("tags", e.target.value)} />
             </div>
           </div>
           <div>

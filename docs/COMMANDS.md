@@ -6,6 +6,8 @@ All commands work in servers and DMs. Responses that show XP, achievements, game
 
 | Command | Options | Visibility | Description |
 |---|---|---|---|
+| `/today` | — | Ephemeral | 📅 The web Today page on Discord: how many tasks are due today, overdue and done today, the tasks that need doing (overdue, due today or HIGH priority, a few at most), what is coming up this week, your live streak (with a reminder when today is its last day) and your weekly goal. |
+| `/focus` | subcommands `start [minutes]` (10–90, default 25), `finish`, `status` | Ephemeral | ⏳ The Focus timer, kept by the server: a session started here can be finished on the web and the other way round. `start` ends any unfinished session. `finish` pays for the minutes that really passed (at least 10; 0.6 XP a minute, 100 focus XP a day); before 10 minutes it refuses rather than cancel the session. `status` shows the running session and today's sessions and focus XP. |
 | `/list` | `name` (autocomplete, optional) | Public overview / view | Your lists. With `name`, opens that list directly. A name two of your lists share (your own and a shared one) is offered once for each, with its owner, and opens the one you pick. |
 | `/share` | `list` (autocomplete: lists you manage), `user` (required), `role` (viewer / editor / manager, default viewer) | Ephemeral | 👥 Invite someone to a list. They get a DM with **Accept** / **Decline** (if their DMs are closed you are told, and the invitation waits in `/invites`). The person must have used TaskQuest before; bots and yourself are refused. Only a manager invites, and only the owner invites managers. |
 | `/invites` | — | Ephemeral | 📨 Invitations to shared lists waiting for you, with Accept / Decline buttons (valid 7 days). |

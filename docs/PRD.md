@@ -246,7 +246,8 @@ TaskQuest addresses this in three ways:
 | Cosmetics shop | `/shop` | ✓ (Shop page) |
 | Shared lists: invite, members, leave | `/share`, `/invites`, `/members`, `/leave` | ✓ (members dialog, invitation banner) |
 | Parties and the party quest | `/party` | ✓ (Party page) |
-| Focus sessions | — | ✓ (Focus page) |
+| Today view (due, overdue, streak, weekly goal) | `/today` (read-only; the goal is set and claimed on the web) | ✓ (Today page) |
+| Focus sessions | `/focus start`, `finish`, `status` | ✓ (Focus page, can start from a Today task) |
 | Stats and XP history | — | ✓ (Stats page) |
 | Templates | — | ✓ |
 | Time zone, reminder hour, weekly digest | `/timezone`, `/weekly` | ✓ |

@@ -4,7 +4,7 @@
  *   /list → overview → view (read-only) → edit (all mutations)
  *   /game → blackjack · rock paper scissors · hangman
  *   /daily /profile /achievements /class /leaderboard /toggle /automation /help /app /ping
- *   /review /prestige /shop
+ *   /review /prestige /shop /today /focus
  *   /share /invites /members /leave → shared lists
  *   /party → a small group with a shared weekly quest
  *   /summary /prioritize /ask /forget /ai-format → AI service (when AI_ENABLED)
@@ -39,6 +39,8 @@ const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
 const sharingCommands = require('./commands/sharing');
 const partyCommand = require('./commands/party');
+const todayCommand = require('./commands/today');
+const focusCommand = require('./commands/focus');
 const chat = require('./chat');
 const { refreshProfile } = require('./utils/profile');
 
@@ -131,6 +133,8 @@ const COMMANDS = {
     weekly: weeklyCommand.execute,
     quick: quickCommand.execute,
     party: partyCommand.execute,
+    today: todayCommand.execute,
+    focus: focusCommand.execute,
     share: sharingCommands.share,
     invites: sharingCommands.invites,
     members: sharingCommands.members,

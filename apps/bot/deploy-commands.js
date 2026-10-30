@@ -25,6 +25,8 @@ const weeklyCommand = require('./commands/weekly');
 const quickCommand = require('./commands/quick');
 const sharingCommands = require('./commands/sharing');
 const partyCommand = require('./commands/party');
+const todayCommand = require('./commands/today');
+const focusCommand = require('./commands/focus');
 
 const commands = [
     listCommand.data,
@@ -40,6 +42,8 @@ const commands = [
     weeklyCommand.data,
     quickCommand.data,
     partyCommand.data,
+    todayCommand.data,
+    focusCommand.data,
     sharingCommands.shareData,
     sharingCommands.invitesData,
     sharingCommands.membersData,

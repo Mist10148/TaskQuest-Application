@@ -4,7 +4,7 @@ TaskQuest is a gamified task manager. You keep to-do lists, and finishing work e
 
 You can use it in two places, and both share one account and one database:
 
-- **Discord bot**: 30 slash commands, buttons and modals inside any server (see [docs/COMMANDS.md](docs/COMMANDS.md)), plus deadline and task reminders by DM.
+- **Discord bot**: 32 slash commands, buttons and modals inside any server (see [docs/COMMANDS.md](docs/COMMANDS.md)), plus deadline and task reminders by DM.
 - **Web app**: a React dashboard with Discord sign-in, visual skill trees, statistics, a focus timer, a shop, a leaderboard, three web-only arcade games and optional push notifications.
 
 A task completed in Discord shows up on the web immediately, and a class bought on the web applies in Discord.

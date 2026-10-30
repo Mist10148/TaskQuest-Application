@@ -14,6 +14,8 @@ router.get(
     asyncRoute(async (req, res) => {
         res.json({
             ...(await db.focus.getFocusStatus(uid(req))),
+            // Lets the browser correct for a fast or slow device clock when it decides whether a session can be finished.
+            serverNow: new Date().toISOString(),
             config: {
                 minMinutes: LIMITS.FOCUS_MIN_MINUTES,
                 maxMinutes: LIMITS.FOCUS_MAX_MINUTES,

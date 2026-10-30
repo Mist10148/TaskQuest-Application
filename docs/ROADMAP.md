@@ -12,7 +12,7 @@ Work that is understood and waits only for time, a key or a decision.
 | An offline write queue for plain edits (#53) | A conflict rule when the server copy changed |
 | A multi-instance lock for AI confirmations, and a fix for the one-thread-per-`/ask` growth (#51; pruning and the embed debounce are done) | A choice between a database lock and a thread-row claim |
 | Auto-delete versus quest progress (#49) | A product decision |
-| Persist the rate limiters and split the internal token (see KNOWN_ISSUES) | A choice of store (Postgres or Redis) and a change to deployed env vars |
+| Persist the rate limiters and split the internal token ([#57, #58](KNOWN_ISSUES.md)) | A choice of store (Postgres or Redis) and a change to deployed env vars |
 | Page large quests in the web app, and bound the calendar feed (#60; the list route already takes `limit` and `cursor`) | How far back the feed should reach |
 | Shared leaderboard caches and a cheaper weekly and streak board (#59) | A shared store, as for the rate limiters |
 | Hash the calendar feed token (#61) | Settings shows the address again today, so it would need a "shown once" flow |
@@ -24,8 +24,7 @@ Work that is understood and waits only for time, a key or a decision.
 | Item | Notes |
 |---|---|
 | Custom statuses, start dates with a timeline, task dependencies, simple automations, real-time updates on shared quests | Needs a data model; each is its own design note |
-| More component tests for the web app (#24) | Every page and dialog has its own; grow them with new work |
-| Full internationalisation | Extract strings into `apps/web/src/i18n/messages.ts`, add a language picker once there is a second catalog |
+| Full internationalisation | Extract the remaining strings (toasts in `useApi.ts` and the Tasks page, the bulk-edit, members and shortcuts dialogs, and most pages) into `apps/web/src/i18n/messages.ts`, then add a language picker once there is a second catalog |
 | README screenshots (#26) and push delivery tested against real push services (#30) | The capture spec exists; see [CONTRIBUTING](../CONTRIBUTING.md#readme-screenshots) |
 
 ## Open product decisions
@@ -33,4 +32,4 @@ Work that is understood and waits only for time, a key or a decision.
 - A party of one can claim both party rewards (#50).
 - The arcade plausibility bound, `arcade-report` calibration and a per-game cooldown (#39).
 - Whether a manager may delete a shared quest ([shared-lists](design/shared-lists.md)).
-- Whether the weekly goal pays only for tasks finished after it is set. Today the target can be set or lowered at any time while unclaimed (as long as it is above the progress), so a goal set on Sunday at progress + 1 pays as if it had been planned all week.
+- Whether the weekly goal pays only for tasks finished after it is set. Today the target can be set or lowered at any time while unclaimed (as long as it is above the progress; the Today page's Change goal does this), so a goal set on Sunday at progress + 1 pays as if it had been planned all week.

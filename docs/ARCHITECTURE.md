@@ -271,7 +271,7 @@ The LangChain/LangGraph internals (RAG pipeline, graphs, checkpointer, persona, 
 | Services | `packages/shared/test/db.integration.test.js`: ownership, farming, races, escrow, refunds, caps | Yes |
 | HTTP | `apps/server/test/api.integration.test.js`: headers, auth, CSRF, validation, IDOR, games, privacy | Yes |
 | Bot | `apps/bot/test/flows.integration.test.js`: every command flow with fake interactions | Yes |
-| Docs | `packages/shared/test/docs.test.js`: the tables in `docs/GAMEPLAY.md` against `constants.js`, the class and skill description texts against `CLASS_RULES` and the skill tables, and the build tables in `docs/CLASS_GUIDE.md` against the balance simulator | No |
+| Docs | `packages/shared/test/docs.test.js`: the tables in `docs/GAMEPLAY.md` against `constants.js`, the class and skill description texts against `CLASS_RULES` and the skill tables, and the build tables in `docs/CLASS_GUIDE.md` against the balance simulator; `docLinks.test.js` (every relative link and anchor resolves), `xpGuide.test.js` (`docs/XP_GUIDE.md` against the XP rules) and `apps/bot/test/commandsDoc.test.js` (`docs/COMMANDS.md` lists exactly the registered commands) | No |
 | Web | `tsc` + ESLint + `vite build`, Vitest unit tests for pure logic (`apps/web/src/lib/*.test.ts`, incl. theme contrast) and component tests with Testing Library in jsdom (`*.test.tsx` next to the components and pages) | No |
 | Browser | `apps/web/e2e` (Playwright): the main flows against the built app, a real API and a seeded database; `npm run test:e2e` and its own CI job | Yes |
 | AI client, internal token, AI schemas | `apps/server/test/ai.test.js` against a stub AI service | No |

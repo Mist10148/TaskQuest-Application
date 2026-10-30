@@ -627,7 +627,7 @@ Configuration and deployment are documented in [DEPLOYMENT.md](DEPLOYMENT.md#ai-
 | # | Phase | Deliverables | Done when |
 |---|---|---|---|
 | 0 | **Skeleton and plumbing** | `apps/ai` FastAPI app, config, `/health`; `aiClient.js`; `/api/ai/ping`; env vars; `render.yaml` service | Logged-in user hits `/api/ai/ping` → Express → AI service → Gemini "pong"; unauthenticated returns 401 |
-| 1 | **Data and RAG foundation** | Migration `003_ai.js`; chunking, embed, `MySQLNumpyStore`, `TaskRetriever`; indexer + re-index hooks; backfill; docs indexing | Editing a task updates its embedding within seconds; retrieval eval recall@5 ≥ 0.85 |
+| 1 | **Data and RAG foundation** | Migration `003_ai.js`; chunking, embed, `MySQLNumpyStore`, `TaskRetriever` (as planned; built as part of `001_baseline` with `EmbeddingStore` on pgvector); indexer + re-index hooks; backfill; docs indexing | Editing a task updates its embedding within seconds; retrieval eval recall@5 ≥ 0.85 |
 | 2 | **Summarizer** | LCEL chain, 3 modes, cache, `/api/ai/summary`; Summarize button + Dashboard briefing | Golden-set faithfulness passes; repeat calls hit the cache |
 | 3 | **Prioritizer** | LangGraph graph with fallback; `/api/ai/prioritize`; Prioritize panel with Accept/Reject | All graph paths tested; with Gemini disabled the panel still works (fallback) |
 | 4 | **Chat (read-only)** | Chat graph (router, rewrite, retrieve, agent, read tools); MySQL checkpointer; threads API; SSE; `Chat.tsx` | Multi-turn conversation with citations persists across reloads |

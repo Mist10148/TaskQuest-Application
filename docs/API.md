@@ -6,23 +6,23 @@ Base path: `/api`. The API and the web app share one origin. In development, the
 
 - **Authentication.** An HTTP-only session cookie `tq.sid` is set by the Discord login. Endpoints marked 🔒 return `401 {"error":"Not authenticated","code":"UNAUTHENTICATED"}` without it.
 - **CSRF.** Every `POST`/`PATCH`/`PUT`/`DELETE` must send an `Origin` (or `Referer`) header matching `PUBLIC_URL` or `ALLOWED_ORIGINS`. A failure returns `403 CSRF`. Requests with a body must use `Content-Type: application/json`, otherwise they get `415`. Browsers using the bundled client satisfy both automatically.
-- **Validation.** Bodies are validated with strict schemas, so unknown fields are rejected. Business rules (lengths, real dates, ownership) are enforced again by the shared services. The body limit is 16 KB, except the JSON import (8 MB), the CSV import (2 MB), arcade runs (128 KB) and a reorder (64 KB).
+- **Validation.** Bodies are validated with strict schemas, so unknown fields are rejected. Business rules (lengths, real dates, ownership) are enforced again by the shared services. The body limit is 16 KB, except the JSON import (8 MB), the CSV import (2 MB), arcade runs (128 KB) and a reorder (64 KB); `/internal/push` takes at most 4 KB.
 - **Errors.** Errors return `{ "error": string, "code": string, "details"?: object }`:
 
 | Status | `code` | When |
 |---|---|---|
 | 400 | `VALIDATION` / `INSUFFICIENT_XP` | Bad input; not enough XP (`details: {needed, balance}`) |
 | 401 | `UNAUTHENTICATED` | Not logged in |
-| 403 | `FORBIDDEN` / `GAMIFICATION_DISABLED` / `CSRF` | Locked skill or class; XP turned off; cross-site request |
+| 403 | `FORBIDDEN` / `GAMIFICATION_DISABLED` / `CSRF` / `AI_OPTED_OUT` | Locked skill or class; XP turned off; cross-site request; the user turned AI features off in Settings |
 | 404 | `NOT_FOUND` | Missing, **or not yours** (ownership never leaks) |
 | 409 | `CONFLICT` | Duplicate list name, already owned, game already finished |
 | 413 / 415 | `VALIDATION` / `UNSUPPORTED_MEDIA_TYPE` | Body too large / not JSON |
-| 403 | `AI_OPTED_OUT` | The user turned AI features off in Settings |
 | 429 | `COOLDOWN` / `RATE_LIMITED` / `AI_QUOTA` | Free-game cooldown (with a `Retry-After` header); rate limit; daily AI request limit reached |
 | 503 | `AI_DISABLED` / `AI_UNAVAILABLE` | AI is not enabled on this server; the AI service is down or timed out |
 | 500 | `INTERNAL` | Bug. Details are logged server-side only. |
+| 502 | `UPSTREAM` | `/api/leaderboard/avatar/:token` could not fetch the picture from Discord |
 
-- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 starts (`/api/auth/discord`) and 30 callbacks per 15 min per client address (IPv6 clients are counted per /64; the callback answers a limit with a redirect to `?error=rate_limited`). `/api/games/*`: 90 per minute. `/api/ai/*`: 20 per minute per user (plus a daily per-user request quota enforced by the AI service). Posting a comment (`POST /api/items/:id/comments`): 30 per minute per user. The simulations, the imports and the exports (`GET /api/skills/preview`, `GET /api/classes/:key/preview`, `POST /api/import/csv`, `POST /api/user/import`, `GET /api/user/export`, `GET /api/user/export.csv`): 20 per minute per user together, since each one is CPU work on the server's only thread.
+- **Rate limits.** General API: 900 requests per 15 min per user (or IP). Login endpoints: 30 starts (`/api/auth/discord`) and 30 callbacks per 15 min per client address (IPv6 clients are counted per /64; the callback answers a limit with a redirect to `?error=rate_limited`). `/api/games/*`: 90 per minute. `/api/ai/*`: 20 per minute per user (plus a daily per-user request quota enforced by the AI service). Posting a comment (`POST /api/items/:id/comments`): 30 per minute per user. Invitations (`POST /api/lists/:id/invites`, `POST /api/parties/invites`): 30 per 15 min and 100 a day per account, and 60 per 15 min and 300 a day per address, because they look usernames up. The simulations, the imports and the exports (`GET /api/skills/preview`, `GET /api/classes/:key/preview`, `POST /api/import/csv`, `POST /api/user/import`, `GET /api/user/export`, `GET /api/user/export.csv`): 20 per minute per user together, since each one is CPU work on the server's only thread.
 - **Reward fields.** Actions that can grant XP return `xpResult` and `newAchievements`:
 
 ```jsonc
@@ -237,7 +237,7 @@ A server-timed work timer. The server measures the time; the client only says st
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/focus` | — | `{active: {sessionId, startedAt, minutes, endsAt}\|null, today: {sessions, xp, remainingSessions, remainingXP}, config: {minMinutes, maxMinutes, xpPerMinute, xpPerDay, sessionsPerDay}}` |
+| GET | `/api/focus` | — | `{active: {sessionId, startedAt, minutes, endsAt}\|null, today: {sessions, xp, remainingSessions, remainingXP}, config: {minMinutes, maxMinutes, xpPerMinute, xpPerDay, sessionsPerDay}, serverNow}`. `serverNow` is the server's clock (ISO): the web app measures the device clock against it, so a fast clock cannot turn Finish on before the session pays. |
 | POST | `/api/focus/start` | `{minutes: integer 10–90}` | `{success, sessionId, startedAt, minutes, endsAt}`. Cancels any unfinished session. `409` once 8 sessions finished today, `400` for a bad length. |
 | POST | `/api/focus/finish` | `{sessionId}` | `{success, sessionId, state: "finished"\|"cancelled"\|"expired", minutesCredited, xp, capped, balance, level, leveledUp, newAchievements}`. Credits min(planned, elapsed) minutes if at least 10 passed and pays floor(minutes × 0.6) XP under 100 XP a day (`capped: true` when trimmed). Earlier than 10 minutes cancels with no XP; after 3 hours expires with none. `404` for someone else's or an unknown session, `409` if already over. |
 

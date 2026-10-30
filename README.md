@@ -202,6 +202,7 @@ More in [docs/OPERATIONS.md](docs/OPERATIONS.md#troubleshooting).
 | [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | XP, levels, classes, skills, achievements and game rules, with exact numbers |
 | [docs/XP_GUIDE.md](docs/XP_GUIDE.md) | How XP is earned: every source with its amount, cap and modifiers |
 | [docs/CLASS_GUIDE.md](docs/CLASS_GUIDE.md) | Choosing a class: what each rewards, example builds and pitfalls |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | The words the app, the bot and the code use (quest and list, balance and lifetime XP, and more) |
 | [docs/PLAYER_FAQ.md](docs/PLAYER_FAQ.md) | Streaks, freezes, reminders, time zone days, prestige, sharing and push, from the player's side |
 | [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) | How the AI service works: graphs, retrieval, tools, guardrails |
 | [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | The AI design record: goals, decisions, and how the build differs from the plan |

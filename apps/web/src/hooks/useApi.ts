@@ -409,6 +409,20 @@ export function useCreateItem() {
     });
 }
 
+/**
+ * Undo an optimistic change to one task: put back only that task's fields, then refetch. Restoring the whole saved quest
+ * would also undo any other task changed meanwhile (tick A, tick B, A fails: B would show unticked again).
+ */
+function rollBackItem(qc: QueryClient, itemId: number, previous: Array<[QueryKey, ListWithItems]> | undefined) {
+    for (const [key, saved] of previous ?? []) {
+        const before = saved.items.find((i) => i.id === itemId);
+        const current = qc.getQueryData<ListWithItems>(key);
+        if (!before || !current || !Array.isArray(current.items)) continue;
+        qc.setQueryData<ListWithItems>(key, { ...current, items: current.items.map((i) => (i.id === itemId ? before : i)) });
+    }
+    if (previous?.length) qc.invalidateQueries({ queryKey: ['lists'] });
+}
+
 export function useUpdateItem() {
     const qc = useQueryClient();
     return useMutation({
@@ -428,8 +442,8 @@ export function useUpdateItem() {
             return { previous };
         },
         onSuccess: () => invalidateTaskViews(qc),
-        onError: (error, _arg, context) => {
-            for (const [key, cached] of context?.previous ?? []) qc.setQueryData(key, cached);
+        onError: (error, { itemId }, context) => {
+            rollBackItem(qc, itemId, context?.previous);
             showError(error);
         },
     });
@@ -567,8 +581,8 @@ export function useToggleItem() {
             }
             showAchievementNotifications(result.newAchievements, qc);
         },
-        onError: (error, _arg, context) => {
-            for (const [key, data] of context?.previous ?? []) qc.setQueryData(key, data);
+        onError: (error, arg, context) => {
+            rollBackItem(qc, typeof arg === 'number' ? arg : arg.itemId, context?.previous);
             showError(error);
         },
     });

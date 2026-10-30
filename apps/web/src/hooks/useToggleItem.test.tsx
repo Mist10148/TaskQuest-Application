@@ -45,6 +45,25 @@ describe("useToggleItem", () => {
     expect(completedOf(5)).toBe(false);
   });
 
+  it("a failed toggle puts back only its own task, not one changed meanwhile", async () => {
+    let failFirst: (e: unknown) => void = () => {};
+    toggle
+      .mockReturnValueOnce(new Promise((_resolve, reject) => { failFirst = reject; }))
+      .mockResolvedValueOnce({ id: 6, completed: true, newAchievements: [] });
+    const { qc, completedOf } = setup();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    const a = renderHook(() => useToggleItem(), { wrapper }).result;
+    const b = renderHook(() => useToggleItem(), { wrapper }).result;
+    act(() => void a.current.mutate({ itemId: 5, completed: true }));
+    await waitFor(() => expect(completedOf(5)).toBe(true));
+    act(() => void b.current.mutate({ itemId: 6, completed: true }));
+    await waitFor(() => expect(b.current.isSuccess).toBe(true));
+    await act(async () => failFirst(new Error("nope")));
+    await waitFor(() => expect(a.current.isError).toBe(true));
+    expect(completedOf(5)).toBe(false);
+    expect(completedOf(6)).toBe(true);
+  });
+
   it("does not guess when only an id is given", async () => {
     let finish: (v: unknown) => void = () => {};
     toggle.mockReturnValue(new Promise((resolve) => { finish = resolve; }));

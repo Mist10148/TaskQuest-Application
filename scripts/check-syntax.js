@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-/** `node --check` every JavaScript file of the Node workspaces (bot, server, shared). */
+/** `node --check` every JavaScript file of the Node workspaces (bot, server, shared) and the maintenance scripts. */
 'use strict';
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const roots = ['apps/bot', 'apps/server', 'packages/shared'];
+const roots = ['apps/bot', 'apps/server', 'packages/shared', 'scripts'];
 const files = [];
 const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

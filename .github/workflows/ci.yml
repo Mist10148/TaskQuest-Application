@@ -16,6 +16,8 @@ jobs:
   web:
     name: Web (lint, typecheck, build)
     runs-on: ubuntu-latest
+    # A hung step (a database that never comes up, a stuck browser) fails the job instead of running for 6 hours.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,6 +32,7 @@ jobs:
   node:
     name: Node (syntax, tests on PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -60,6 +63,7 @@ jobs:
   e2e:
     name: Browser tests (Playwright, PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -101,6 +105,7 @@ jobs:
   ai:
     name: AI service (ruff, mypy, pytest)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/ai
@@ -121,6 +126,7 @@ jobs:
   ai-postgres:
     name: AI service on PostgreSQL (migrated schema)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -162,6 +168,7 @@ jobs:
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -170,3 +177,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
+      # The AI service's Python dependencies have lower bounds only, so audit what a fresh install resolves to today.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/ai/pyproject.toml
+      - run: pip install pip-audit
+      - run: pip-audit ./apps/ai

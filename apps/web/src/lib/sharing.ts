@@ -91,3 +91,13 @@ export const isAccessLost = (error: unknown): boolean => {
   const status = typeof error === "object" && error !== null && "status" in error ? (error as { status?: number }).status : undefined;
   return status === 404 || status === 403;
 };
+
+/** The largest id the database stores (a Postgres INTEGER); the server rejects anything bigger with a 400. */
+export const MAX_ID = 2147483647;
+
+/** A quest or task id from the URL: a plain positive whole number in the database's range, otherwise null. */
+export function idFromParam(value: string | null): number | null {
+  if (!value || !/^\d{1,10}$/.test(value)) return null;
+  const n = Number(value);
+  return n > 0 && n <= MAX_ID ? n : null;
+}

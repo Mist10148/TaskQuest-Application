@@ -26,7 +26,7 @@ import { bulkPatch, tooManyTags, type BulkEditValues } from "@/lib/bulkEdit";
 import { MAX_TAGS, parseTags } from "@/lib/tags";
 import { saveTemplateProblem } from "@/lib/templates";
 import { MembersDialog } from "@/components/tasks/MembersDialog";
-import { canEditTasks, isAccessLost, roleOf } from "@/lib/sharing";
+import { canEditTasks, idFromParam, isAccessLost, roleOf } from "@/lib/sharing";
 import { useQueryClient } from "@tanstack/react-query";
 
 const Tasks = () => {
@@ -45,9 +45,9 @@ const Tasks = () => {
   // The open quest lives in the URL (/tasks?list=42): links from AI answers open it, refresh keeps it,
   // and the browser's Back button returns to the quest log. Opening adds a history entry; closing replaces it.
   const [searchParams, setSearchParams] = useSearchParams();
-  // Only a plain positive id opens a quest: "-3" or "1.5" would otherwise show "Quest not found." with a Retry that cannot work.
-  const listParam = searchParams.get("list") ?? "";
-  const selectedListId: number | null = /^\d{1,15}$/.test(listParam) && Number(listParam) > 0 ? Number(listParam) : null;
+  // Only a plain positive id in the database's range opens a quest: "-3", "1.5" or 3000000000 would otherwise show an error
+  // with a Retry that cannot work.
+  const selectedListId = idFromParam(searchParams.get("list"));
   const setSelectedListId = useCallback((id: number | null) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -60,7 +60,7 @@ const Tasks = () => {
     }, { replace: id === null });
   }, [setSearchParams]);
   // /tasks?list=42&task=7 opens the quest with that task's drawer (links from search results and the command palette).
-  const openTaskId: number | null = Number(searchParams.get("task")) || null;
+  const openTaskId = idFromParam(searchParams.get("task"));
   const openListAndTask = useCallback((listId: number, taskId?: number) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -327,6 +327,8 @@ const Tasks = () => {
     <DashboardLayout>
       {detail ? (
         <ListDetail
+          // A new quest starts with fresh view state: select mode, the keyboard cursor and a pending bulk confirm stay behind.
+          key={detail.id}
           list={detail}
           openTaskId={openTaskId}
           onTaskOpened={clearTaskParam}

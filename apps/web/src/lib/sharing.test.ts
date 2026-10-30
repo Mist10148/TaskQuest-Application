@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assignableRoles, canChangeRole, canDeleteList, canEditTasks, canInviteRole, canLeaveList, canManageList, isAccessLost,
+  assignableRoles, canChangeRole, canDeleteList, canEditTasks, canInviteRole, canLeaveList, canManageList, idFromParam, isAccessLost,
   peopleLabel, remainingSlots, rolesFor, roleLabel, sharedSubtitle, type MemberLike, type SharingFields,
 } from "./sharing";
 
@@ -86,5 +86,16 @@ describe("isAccessLost", () => {
     expect(isAccessLost({ status: 500 })).toBe(false);
     expect(isAccessLost(new Error("x"))).toBe(false);
     expect(isAccessLost(null)).toBe(false);
+  });
+});
+
+describe("idFromParam", () => {
+  it("accepts plain positive ids up to the database's limit", () => {
+    expect(idFromParam("42")).toBe(42);
+    expect(idFromParam("2147483647")).toBe(2147483647);
+  });
+
+  it("refuses anything that would end in an error with a Retry that cannot work", () => {
+    for (const v of [null, "", "0", "-3", "1.5", "1e3", "abc", "2147483648", "3000000000", "999999999999999"]) expect(idFromParam(v)).toBeNull();
   });
 });

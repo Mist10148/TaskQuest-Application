@@ -7,7 +7,7 @@ const { LEADERBOARDS, WEEKLY_XP_SOURCES, WEEKLY_BOARD_XP_SOURCES, DAILY } = requ
 const { errors } = require('../errors');
 const { canonicalTimeZone, todayInZone } = require('../dates');
 const { questPeriod } = require('../quests');
-const { prestigeTitle } = require('../xp');
+const { liveStreak, prestigeTitle } = require('../xp');
 const { describeEquipped } = require('../cosmetics');
 const { accessSql, actorSql } = require('./access');
 
@@ -375,7 +375,7 @@ async function getWeeklyStats(discordId, now = new Date()) {
     const id = String(discordId);
     const since = new Date(now.getTime() - 7 * 86400e3);
     const marks = WEEKLY_XP_SOURCES.map(() => '?').join(', ');
-    const user = await getUser(id);
+    const [user, skills] = await Promise.all([getUser(id), getUserSkills(id)]);
     const today = todayInZone(user?.timezone, now); // "overdue" is the user's own calendar day
     const acc = accessSql('l', id); // open lists include the ones shared with the user
     const [[done], [xp], [open]] = await Promise.all([
@@ -405,7 +405,8 @@ async function getWeeklyStats(discordId, now = new Date()) {
         xpEarned: Number(xp.n),
         listsOpen: Number(open.lists_open),
         listsOverdue: Number(open.lists_overdue),
-        streak: user ? Number(user.streak_count) : 0,
+        // The live streak, as Today shows it: a lapsed one reads 0 even before a claim resets the stored count.
+        streak: user ? liveStreak(user, skills, now.getTime()) : 0,
         level: user ? Number(user.player_level) : 1
     };
 }

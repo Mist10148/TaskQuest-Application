@@ -18,7 +18,7 @@
 
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { users, progression } = require('@taskquest/shared/db');
-const { CLASSES, SKILL_TREES, ACHIEVEMENTS, LIMITS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress, describeEquipped, escapeDiscord } = require('@taskquest/shared');
+const { CLASSES, SKILL_TREES, ACHIEVEMENTS, LIMITS, STREAK_FREEZE, STREAK_FREEZE_CACHE, levelProgress, describeEquipped, escapeDiscord, liveStreak } = require('@taskquest/shared');
 const ui = require('../utils/ui');
 const { EPHEMERAL, handleError, sendRewards } = require('../utils/respond');
 
@@ -236,6 +236,8 @@ async function profile(interaction) {
     // Class info
     const classInfo = CLASS_INFO[user.player_class] || CLASS_INFO.DEFAULT;
     const skillCount = userSkills?.length || 0;
+    // As Today shows it: a lapsed streak reads 0 even before a claim resets the stored count.
+    const streak = liveStreak(user, userSkills || []);
     const counterLine = ui.classCounterLine(user, userSkills);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -305,9 +307,7 @@ async function profile(interaction) {
         },
         {
             name: '🔥 Streak',
-            value: user.streak_count > 0
-                ? `${user.streak_count} days`
-                : `No streak`,
+            value: streak > 0 ? `${streak} days` : `No streak`,
             inline: true
         },
         {

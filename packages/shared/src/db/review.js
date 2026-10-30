@@ -7,11 +7,12 @@
 'use strict';
 
 const { getPool, withTransaction } = require('./pool');
-const { lockUser, progressFloor } = require('./users');
+const { getUserSkills, lockUser, progressFloor } = require('./users');
 const { awardFlat, claimedSince, requireGamification, unlockAchievements } = require('./progression');
 const { errors } = require('../errors');
 const { REWARDS, LIMITS, WEEKLY_REVIEW_KEY, WEEKLY_XP_SOURCES } = require('../constants');
 const { questPeriod } = require('../quests');
+const { liveStreak } = require('../xp');
 const { actorSql } = require('./access');
 
 /** Tasks the user first completed (and was paid for) in the week, on any list they can use, never imported or auto-spawned copies. */
@@ -46,7 +47,8 @@ async function reviewState(conn, user, now) {
         xpEarned: Number(xp.n),
         claimed: Boolean(claim),
         claimable: !claim && Boolean(user.gamification_enabled) && completed >= LIMITS.WEEKLY_REVIEW_MIN_COMPLETED,
-        streak: Number(user.streak_count) || 0
+        // The live streak, as Today shows it: a lapsed one reads 0 even before a claim resets the stored count.
+        streak: liveStreak(user, await getUserSkills(user.discord_id, conn), new Date(now).getTime())
     };
 }
 
@@ -54,7 +56,7 @@ async function reviewState(conn, user, now) {
 async function getReview(discordId, now = new Date()) {
     const conn = await getPool().getConnection();
     try {
-        const [[user]] = await conn.query('SELECT discord_id, gamification_enabled, streak_count, timezone FROM users WHERE discord_id = ?', [String(discordId)]);
+        const [[user]] = await conn.query('SELECT discord_id, gamification_enabled, streak_count, last_daily_claim, player_class, timezone FROM users WHERE discord_id = ?', [String(discordId)]);
         const s = await reviewState(conn, user || { discord_id: String(discordId), gamification_enabled: 1, streak_count: 0 }, now);
         return {
             weekStart: s.period.start,

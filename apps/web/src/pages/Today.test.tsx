@@ -123,7 +123,7 @@ describe("Today page", () => {
     await userEvent.clear(box);
     await userEvent.type(box, "12");
     await userEvent.click(screen.getByRole("button", { name: "Set goal" }));
-    expect(hooks.useSetGoal.mock.results[0].value.mutate).toHaveBeenCalledWith(12);
+    expect(hooks.useSetGoal.mock.results[0].value.mutate).toHaveBeenCalledWith(12, expect.anything());
   });
 
   it("wants a weekly goal above this week's progress, and the suggestion follows it", async () => {
@@ -136,6 +136,24 @@ describe("Today page", () => {
     await userEvent.type(box, "8");
     expect(screen.getByText("Enter a whole number from 9 to 60.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Set goal" })).toBeDisabled();
+  });
+
+  it("changes a goal that is set but not claimed", async () => {
+    load(day({ goal: { ...day().goal, target: 10, progress: 4, reward: 100 } }));
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "Change goal" }));
+    const box = screen.getByLabelText(/Tasks to finish this week/);
+    expect(box).toHaveValue(10);
+    await userEvent.clear(box);
+    await userEvent.type(box, "7");
+    await userEvent.click(screen.getByRole("button", { name: "Set goal" }));
+    expect(hooks.useSetGoal.mock.results.at(-1)?.value.mutate).toHaveBeenCalledWith(7, expect.anything());
+  });
+
+  it("offers no change once the goal is claimed", () => {
+    load(day({ goal: { ...day().goal, target: 10, progress: 12, claimed: true, reward: 100 } }));
+    show();
+    expect(screen.queryByRole("button", { name: "Change goal" })).toBeNull();
   });
 
   it("says when this week is already past the largest goal", () => {

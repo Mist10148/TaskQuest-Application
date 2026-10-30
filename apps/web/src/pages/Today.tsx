@@ -122,10 +122,12 @@ const GoalCard = ({ data }: { data: TodayData }) => {
   const inRange = wanted !== null && wanted >= lowest && wanted <= g.max;
   const showRangeError = target.trim() !== "" && !inRange;
   const noRoom = lowest > g.max;
+  // An unclaimed goal can be raised or lowered (still above progress): the same form, opened from "Change goal".
+  const [editing, setEditing] = useState(false);
   return (
     <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="goal-title">
       <h2 id="goal-title" className="flex items-center gap-2 font-heading font-semibold"><Target className="h-5 w-5 text-primary-text" aria-hidden /> Weekly goal</h2>
-      {g.target ? (
+      {g.target && !editing ? (
         <div className="mt-2 space-y-2">
           <p className="text-sm">
             <span className="font-heading text-xl font-bold" data-testid="goal-progress">{g.progress}</span> of {g.target} tasks
@@ -137,9 +139,16 @@ const GoalCard = ({ data }: { data: TodayData }) => {
           {g.claimed ? (
             <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden /> Goal claimed this week</p>
           ) : (
-            <Button size="sm" className="gap-1" disabled={!g.claimable || claim.isPending} onClick={() => claim.mutate()}>
-              {claim.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Gift className="h-4 w-4" aria-hidden />} Claim goal reward
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" className="gap-1" disabled={!g.claimable || claim.isPending} onClick={() => claim.mutate()}>
+                {claim.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Gift className="h-4 w-4" aria-hidden />} Claim goal reward
+              </Button>
+              {!noRoom && (
+                <Button size="sm" variant="outline" onClick={() => { setTarget(String(Math.min(g.max, Math.max(lowest, g.target ?? lowest)))); setEditing(true); }}>
+                  Change goal
+                </Button>
+              )}
+            </div>
           )}
         </div>
       ) : (
@@ -147,7 +156,7 @@ const GoalCard = ({ data }: { data: TodayData }) => {
           className="mt-2 flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (inRange) setGoal.mutate(wanted);
+            if (inRange) setGoal.mutate(wanted, { onSuccess: () => setEditing(false) });
           }}
         >
           <div>
@@ -167,6 +176,7 @@ const GoalCard = ({ data }: { data: TodayData }) => {
             />
           </div>
           <Button type="submit" size="sm" disabled={setGoal.isPending || !inRange}>Set goal</Button>
+          {editing && <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
           {showRangeError && !noRoom && <p id="goal-target-error" className="w-full text-sm text-destructive-text">Enter a whole number from {lowest} to {g.max}.</p>}
           {noRoom && <p id="goal-target-error" className="w-full text-sm text-foreground-muted">You have already finished {g.progress} tasks this week, more than the largest goal. Set one next week.</p>}
         </form>

@@ -222,6 +222,20 @@ async def test_endpoint_degrades_to_the_heuristic_when_quota_is_used_up(seeded, 
         assert (await conn.execute(text("SELECT COALESCE(SUM(requests), 0) FROM ai_usage"))).scalar() == 0
 
 
+async def test_endpoint_hands_the_request_back_when_reading_the_quests_fails(seeded, monkeypatch):
+    async def broken(*_a, **_k):
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(P.repo, "lists_for_user", broken)
+    app = create_app()
+    app.dependency_overrides[get_llm_factory] = lambda: factory_for(ScriptedLLM([]))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://ai") as c:
+        r = await c.post("/v1/prioritize", json={}, headers=auth(UID))
+        assert r.status_code == 500
+    async with seeded.connect() as conn:  # the reserved request was not spent: the model never ran
+        assert (await conn.execute(text("SELECT COALESCE(SUM(requests), 0) FROM ai_usage"))).scalar() == 0
+
+
 async def test_endpoint_still_refuses_opted_out_users(seeded):
     async with seeded.begin() as conn:
         await conn.execute(text("UPDATE users SET ai_enabled = 0 WHERE discord_id = :u"), {"u": UID})

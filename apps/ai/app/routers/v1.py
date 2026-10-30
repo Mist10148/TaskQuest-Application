@@ -41,6 +41,7 @@ async def summary(
             list_id=body.listId,
             range_=body.range,
             reserved=True,
+            reserved_day=access.day,
         )
     except summarize_chain.NotFound:
         access.settled = True  # the chain already handed the request back
@@ -62,7 +63,11 @@ async def prioritize(
 ):
     try:
         return await prioritize_graph.prioritize(
-            access.discord_id, llm_factory, limit=body.limit if body else None, reserved=access.reserved
+            access.discord_id,
+            llm_factory,
+            limit=body.limit if body else None,
+            reserved=access.reserved,
+            reserved_day=access.day,
         )
     except Exception:
         access.settled = True  # the graph already handed the request back

@@ -144,6 +144,21 @@ async def test_release_hands_back_a_request_from_the_users_own_day(engine, clock
     assert [r[0] for r in rows] == ["2030-03-13"], "booked under Auckland's date, not UTC's"
 
 
+async def test_a_refund_after_midnight_goes_to_the_day_it_was_reserved_on(engine, clock):
+    await set_zone(engine, UID, None)
+    clock.set("2030-03-12T23:59:50")
+    async with engine.begin() as conn:
+        day = await usage.reserve(conn, UID, "summary")
+    assert day == "2030-03-12"
+    clock.set("2030-03-13T00:00:30")  # the call failed after midnight
+    async with engine.begin() as conn:
+        await usage.reserve(conn, UID, "summary")  # a new request today
+        await usage.release(conn, UID, "summary", day)
+    async with engine.connect() as conn:
+        rows = dict((await conn.execute(text("SELECT day, requests FROM ai_usage WHERE discord_id = :u"), {"u": UID})).all())
+    assert rows == {"2030-03-12": 0, "2030-03-13": 1}, "yesterday handed back, today's request untouched"
+
+
 async def test_an_unknown_user_or_zone_still_gets_a_working_quota(engine, clock):
     clock.set("2030-03-12T12:00:00")
     async with engine.connect() as conn:

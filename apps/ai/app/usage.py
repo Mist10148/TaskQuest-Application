@@ -89,9 +89,10 @@ async def record(
     await _add(conn, discord_id, feature, int(requests), int(input_tokens), int(output_tokens))
 
 
-async def _add(conn: AsyncConnection, discord_id: str, feature: str, requests: int, i: int, o: int) -> None:
-    """Atomic upsert (no read-then-write race between concurrent requests)."""
-    params = {"uid": discord_id, "day": await user_day(conn, discord_id), "f": feature, "n": requests, "i": i, "o": o}
+async def _add(conn: AsyncConnection, discord_id: str, feature: str, requests: int, i: int, o: int) -> str:
+    """Atomic upsert (no read-then-write race between concurrent requests). Returns the day it booked."""
+    day = await user_day(conn, discord_id)
+    params = {"uid": discord_id, "day": day, "f": feature, "n": requests, "i": i, "o": o}
     clause = (
         "ON CONFLICT (discord_id, day, feature) DO UPDATE SET requests = ai_usage.requests + excluded.requests, "
         "input_tokens = ai_usage.input_tokens + excluded.input_tokens, "
@@ -104,32 +105,38 @@ async def _add(conn: AsyncConnection, discord_id: str, feature: str, requests: i
         ),
         params,
     )
+    return day
 
 
-async def reserve(conn: AsyncConnection, discord_id: str, feature: str) -> None:
+async def reserve(conn: AsyncConnection, discord_id: str, feature: str) -> str:
     """Spend one request up front, atomically, or raise QuotaExceeded (and leave nothing booked).
 
     The increment happens before the limit is read, so concurrent requests cannot all slip under
     the limit. Each feature has its own row, so on Postgres the user's row is locked first: reservations of one user
     queue up (a plain read would miss another feature's booking, and locking the usage rows one by one deadlocks).
-    Run it inside a transaction that rolls back when this raises.
+    Run it inside a transaction that rolls back when this raises. Returns the day the request was booked on, for release().
     """
     assert feature in FEATURES
     if is_postgres(conn):
         await conn.execute(text("SELECT 1 FROM users WHERE discord_id = :uid FOR UPDATE"), {"uid": discord_id})
-    await _add(conn, discord_id, feature, 1, 0, 0)
+    day = await _add(conn, discord_id, feature, 1, 0, 0)
     if await requests_today(conn, discord_id) > get_settings().ai_daily_request_limit:
         raise QuotaExceeded
+    return day
 
 
-async def release(conn: AsyncConnection, discord_id: str, feature: str) -> None:
-    """Hand back a reserved request when the call never reached the model (404, cache hit, LLM down)."""
+async def release(conn: AsyncConnection, discord_id: str, feature: str, day: str | None = None) -> None:
+    """Hand back a reserved request when the call never reached the model (404, cache hit, LLM down).
+
+    ``day``: the day reserve() booked it on. A call that crosses the user's midnight refunds that day, not the new one
+    (which would leave the old day spent and hand out an extra request today). Without it, today.
+    """
     await conn.execute(
         text(
             "UPDATE ai_usage SET requests = CASE WHEN requests > 0 THEN requests - 1 ELSE 0 END "
             "WHERE discord_id = :uid AND day = :day AND feature = :f"
         ),
-        {"uid": discord_id, "day": await user_day(conn, discord_id), "f": feature},
+        {"uid": discord_id, "day": day or await user_day(conn, discord_id), "f": feature},
     )
 
 

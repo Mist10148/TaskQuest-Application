@@ -52,6 +52,7 @@ class AIAccess:
     feature: str
     settled: bool = False  # the reserved request was already refunded or accounted for
     reserved: bool = True  # False: the quota was used up and the route degrades without the model (nothing booked)
+    day: str | None = None  # the usage day the request was booked on, so a refund after midnight goes to that day
 
     @property
     def discord_id(self) -> str:
@@ -63,7 +64,7 @@ class AIAccess:
             return
         self.settled = True
         async with pool.connection() as conn:
-            await usage.release(conn, self.caller.discord_id, self.feature)
+            await usage.release(conn, self.caller.discord_id, self.feature, self.day)
 
 
 def require_ai(feature: str, *, degrade_on_quota: bool = False):
@@ -80,16 +81,17 @@ def require_ai(feature: str, *, degrade_on_quota: bool = False):
 
     async def dependency(caller: Caller = Depends(get_caller)) -> AsyncIterator[AIAccess]:
         reserved = True
+        day: str | None = None
         try:
             async with pool.connection() as conn:
                 if not await repo.ai_enabled(conn, caller.discord_id):
                     raise AIOptedOut
-                await usage.reserve(conn, caller.discord_id, feature)  # raises QuotaExceeded -> rolled back
+                day = await usage.reserve(conn, caller.discord_id, feature)  # raises QuotaExceeded -> rolled back
         except usage.QuotaExceeded:
             if not degrade_on_quota:
                 raise
             reserved = False
-        access = AIAccess(caller, feature, settled=not reserved, reserved=reserved)
+        access = AIAccess(caller, feature, settled=not reserved, reserved=reserved, day=day)
         try:
             yield access
         except Exception:

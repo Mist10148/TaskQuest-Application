@@ -262,6 +262,7 @@ async def summarize(
     range_: str = "week",
     today: date | None = None,
     reserved: bool = False,
+    reserved_day: str | None = None,
 ) -> dict[str, Any]:
     """Full flow. ``llm_factory`` is only called on a cache miss, so cache hits cost no quota or LLM setup.
 
@@ -274,7 +275,7 @@ async def summarize(
     async def give_back() -> None:
         if reserved:
             async with pool.connection() as conn:
-                await usage.release(conn, discord_id, "summary")
+                await usage.release(conn, discord_id, "summary", reserved_day)
 
     today = today or await usage.user_today(discord_id)
     try:

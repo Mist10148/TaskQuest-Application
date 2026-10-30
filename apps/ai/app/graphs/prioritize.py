@@ -401,6 +401,7 @@ async def prioritize(
     limit: int | None = None,
     today: date | None = None,
     reserved: bool = False,
+    reserved_day: str | None = None,
 ) -> dict[str, Any]:
     """Run the graph. Results are cached for 5 minutes per (user, open-task set): in this process's memory and in
     ai_prioritize_cache, so several AI instances share one answer.
@@ -414,18 +415,23 @@ async def prioritize(
     async def give_back() -> None:
         if reserved:
             async with pool.connection() as conn:
-                await usage.release(conn, discord_id, "prioritize")
+                await usage.release(conn, discord_id, "prioritize", reserved_day)
 
-    # Cache key = hash of the same features the model sees, so any edit invalidates it.
-    async with pool.connection() as conn:
-        lists = await repo.lists_for_user(conn, discord_id, open_only=True)
-    sig = json.dumps([asdict(f) for f in build_features(lists, today)], sort_keys=True, default=str)
-    digest = hashlib.sha256(f"{limit}:{sig}".encode()).hexdigest()
-    key = f"{discord_id}:{digest}"
+    # Cache key = hash of the same features the model sees, so any edit invalidates it. A failure here (the database)
+    # comes before the model too, so the request is handed back: the route marks it settled and will not.
+    try:
+        async with pool.connection() as conn:
+            lists = await repo.lists_for_user(conn, discord_id, open_only=True)
+        sig = json.dumps([asdict(f) for f in build_features(lists, today)], sort_keys=True, default=str)
+        digest = hashlib.sha256(f"{limit}:{sig}".encode()).hexdigest()
+        key = f"{discord_id}:{digest}"
+        shared = None if key in _cache else await _shared_get(discord_id, digest)
+    except Exception:
+        await give_back()
+        raise
     if key in _cache:
         await give_back()
         return {**_cache[key], "cached": True}
-    shared = await _shared_get(discord_id, digest)
     if shared is not None:
         _cache[key] = shared
         await give_back()

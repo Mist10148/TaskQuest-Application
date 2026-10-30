@@ -81,7 +81,7 @@ const Tasks = () => {
   const filters = useListFilters(lists);
 
   const [listDialog, setListDialog] = useState<"create" | "edit" | null>(null);
-  const [itemDialog, setItemDialog] = useState<{ mode: "create"; parentId?: number } | { mode: "edit"; item: Item } | null>(null);
+  const [itemDialog, setItemDialog] = useState<{ mode: "create"; parentId?: number; dueDate?: string } | { mode: "edit"; item: Item } | null>(null);
   const { user } = useAuth();
   const [listToDelete, setListToDelete] = useState<number | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
@@ -152,7 +152,8 @@ const Tasks = () => {
         parent_id: i.parent_id ? String(i.parent_id) : "none",
       };
     }
-    return { ...EMPTY_ITEM_FORM, parent_id: itemDialog?.mode === "create" && itemDialog.parentId ? String(itemDialog.parentId) : "none" };
+    const create = itemDialog?.mode === "create" ? itemDialog : null;
+    return { ...EMPTY_ITEM_FORM, parent_id: create?.parentId ? String(create.parentId) : "none", due_date: create?.dueDate ?? EMPTY_ITEM_FORM.due_date };
   }, [itemDialog]);
 
   // A task can become a subtask of any other top-level task, unless it has subtasks itself.
@@ -336,7 +337,7 @@ const Tasks = () => {
           onOpenMembers={() => setMembersOpen(true)}
           aiEnabled={Boolean(user?.features?.ai)}
           quickAddPending={createItem.isPending}
-          onAddItem={(parentId) => setItemDialog({ mode: "create", parentId })}
+          onAddItem={(parentId, dueDate) => setItemDialog({ mode: "create", parentId, dueDate })}
           onQuickAdd={handleQuickAdd}
           onEditList={() => setListDialog("edit")}
           onSaveTemplate={() => {

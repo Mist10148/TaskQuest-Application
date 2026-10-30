@@ -38,6 +38,22 @@ describe("TaskCalendar", () => {
     expect(onToggle).toHaveBeenCalledWith(1);
   });
 
+  it("names the weekday columns", () => {
+    render(<TaskCalendar items={[]} onToggle={() => {}} onEdit={() => {}} />);
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  });
+
+  it("adds a task due on the picked day, but not in a read-only quest", async () => {
+    const onAddOnDate = vi.fn();
+    const { unmount } = render(<TaskCalendar items={[]} onToggle={() => {}} onEdit={() => {}} onAddOnDate={onAddOnDate} />);
+    await userEvent.click(screen.getByRole("gridcell", { name: /Friday, January 18, 2030/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Add a task due Friday, January 18, 2030" }));
+    expect(onAddOnDate).toHaveBeenCalledWith("2030-01-18");
+    unmount();
+    render(<TaskCalendar items={[]} readOnly onToggle={() => {}} onEdit={() => {}} />);
+    expect(screen.queryByRole("button", { name: /Add a task due/ })).toBeNull();
+  });
+
   it("moves between months and mentions tasks without a date", async () => {
     render(<TaskCalendar items={[item(1, null), item(2, "2030-02-03")]} onToggle={() => {}} onEdit={() => {}} />);
     expect(screen.getByText(/1 open task has no due date/)).toBeInTheDocument();

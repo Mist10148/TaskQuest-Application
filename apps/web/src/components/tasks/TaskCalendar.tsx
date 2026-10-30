@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronLeft, ChevronRight, Check, Circle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Circle, Plus } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { calendarKeyTarget, monthGrid, shiftMonth, tasksByDate } from "@/lib/taskViews";
@@ -12,13 +12,15 @@ interface Props {
   readOnly?: boolean;
   onToggle: (itemId: number) => void;
   onEdit: (itemId: number) => void;
+  /** Start a new task due on the picked day; left out when the quest is read-only. */
+  onAddOnDate?: (date: string) => void;
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** A month grid of the quest's due dates. Pick a day to see (and tick off) its tasks below the grid. */
-export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
+export const TaskCalendar = ({ items, readOnly, onToggle, onEdit, onAddOnDate }: Props) => {
   const today = useLocalToday();
   const [view, setView] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }));
   const [picked, setPicked] = useState<string>(today);
@@ -57,10 +59,10 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
         <h3 className="font-heading font-semibold" aria-live="polite">{MONTHS[view.month - 1]} {view.year}</h3>
         <Button type="button" variant="outline" size="sm" aria-label="Next month" onClick={() => setView((v) => shiftMonth(v.year, v.month, 1))}><ChevronRight className="h-4 w-4" /></Button>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-foreground-muted" aria-hidden>
-        {WEEKDAYS.map((d) => <div key={d}>{d}</div>)}
-      </div>
-      <div className="mt-1 grid grid-cols-7 gap-1" role="grid" ref={gridRef} aria-label={`${MONTHS[view.month - 1]} ${view.year}`}>
+      <div className="grid grid-cols-7 gap-1" role="grid" ref={gridRef} aria-label={`${MONTHS[view.month - 1]} ${view.year}`}>
+        <div role="row" className="contents">
+          {WEEKDAYS.map((d) => <div key={d} role="columnheader" className="pb-1 text-center text-xs text-foreground-muted">{d}</div>)}
+        </div>
         {weeks.map((week) => (
           <div key={week[0].date} role="row" className="contents">
             {week.map((cell) => {
@@ -107,7 +109,14 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
       </div>
 
       <section className="mt-4 rounded-xl border border-border bg-card/60 p-3" aria-label={`Tasks due ${formatDayLabel(picked)}`}>
-        <h4 className="mb-2 text-sm font-heading font-semibold">{picked === today ? "Today" : picked}</h4>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h4 className="text-sm font-heading font-semibold">{picked === today ? "Today" : picked}</h4>
+          {onAddOnDate && (
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => onAddOnDate(picked)} aria-label={`Add a task due ${formatDayLabel(picked)}`}>
+              <Plus className="h-3.5 w-3.5" aria-hidden /> Add on this day
+            </Button>
+          )}
+        </div>
         {dayItems.length === 0 ? (
           <p className="text-sm text-foreground-muted">No tasks are due this day.</p>
         ) : (

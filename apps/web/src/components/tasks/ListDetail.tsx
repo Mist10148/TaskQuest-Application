@@ -40,7 +40,8 @@ interface Props {
   hiddenIds: Set<number>;
   onBack: () => void;
   onOpenMembers: () => void;
-  onAddItem: (parentId?: number) => void;
+  /** A new task, optionally as a subtask of `parentId` or due on `dueDate` (the calendar's "Add on this day"). */
+  onAddItem: (parentId?: number, dueDate?: string) => void;
   onQuickAdd: (parsed: QuickAddResult) => Promise<boolean>;
   onEditList: () => void;
   onSaveTemplate: () => void;
@@ -405,7 +406,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
       ) : view === "board" ? (
         <TaskBoard items={shownItems} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onSetPriority={onSetPriority} />
       ) : view === "calendar" ? (
-        <TaskCalendar items={shownItems} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} />
+        <TaskCalendar items={shownItems} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onAddOnDate={editable ? (date) => onAddItem(undefined, date) : undefined} />
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-foreground-muted mb-3 flex items-center gap-2">

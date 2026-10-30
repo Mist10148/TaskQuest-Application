@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { CheckCircle2, Hourglass, Loader2, Play, Timer, XCircle } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { CheckCircle2, Circle, Hourglass, Loader2, Play, Timer, XCircle } from "lucide-react";
 import type { FocusActive, FocusFinishResult, FocusStatus } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { APP_TITLE, pageTitle } from "@/lib/pageTitle";
@@ -8,7 +8,8 @@ import { QueryState } from "@/components/feedback/QueryState";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useFinishFocus, useFocus, useParty, useStartFocus } from "@/hooks/useApi";
+import { useFinishFocus, useFocus, useParty, useStartFocus, useToday, useToggleItem } from "@/hooks/useApi";
+import { idFromParam } from "@/lib/sharing";
 import { FOCUS_PRESETS, canFinish, focusTitle, formatClock, minutesUntilPayable, parseMinutes, remainingMs } from "@/lib/focus";
 import { playSound } from "@/lib/sound";
 import { cn } from "@/lib/utils";
@@ -211,12 +212,43 @@ const PartyFocusLink = () => {
   );
 };
 
+/**
+ * /focus?task=7 (the Focus link on Today): name the task being worked on and let it be ticked off from here. The task comes
+ * from Today's list, so a link to a task that is no longer due or open shows nothing extra.
+ */
+const FocusTask = () => {
+  const [params] = useSearchParams();
+  const taskId = idFromParam(params.get("task"));
+  const today = useToday();
+  const toggle = useToggleItem();
+  const task = taskId === null ? undefined : [...(today.data?.tasks ?? []), ...(today.data?.upcoming ?? [])].find((t) => t.id === taskId);
+  if (!task) return null;
+  const done = toggle.isSuccess && toggle.variables !== undefined;
+  return (
+    <section className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4" aria-label="Task you are focusing on">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-foreground-muted">Focusing on</p>
+        <Link to={`/tasks?list=${task.listId}&task=${task.id}`} className="line-clamp-2 break-words font-medium hover:text-primary-text hover:underline underline-offset-2">{task.name}</Link>
+        <p className="text-xs text-foreground-muted">{task.listName}</p>
+      </div>
+      {done ? (
+        <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden /> Done</p>
+      ) : (
+        <Button size="sm" variant="outline" className="gap-1" disabled={toggle.isPending} onClick={() => toggle.mutate({ itemId: task.id, completed: true })} aria-label={`Mark "${task.name}" done`}>
+          {toggle.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Circle className="h-4 w-4" aria-hidden />} Mark done
+        </Button>
+      )}
+    </section>
+  );
+};
+
 const FocusBody = ({ status }: { status: FocusStatus }) => {
   const [result, setResult] = useState<FocusFinishResult | null>(null);
   const finish = useFinishFocus();
   return (
     <div className="space-y-4 sm:space-y-6">
       {result && <ResultCard result={result} onDismiss={() => setResult(null)} />}
+      <FocusTask />
       {status.active ? <Running key={status.active.sessionId} active={status.active} status={status} finishing={finish.isPending} onFinish={(id) => finish.mutate(id, { onSuccess: setResult })} /> : <Starter status={status} />}
       <TodayCard status={status} />
       <PartyFocusLink />

@@ -63,7 +63,7 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
         </p>
       </div>
       <Button asChild variant="ghost" size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs">
-        <Link to="/focus" aria-label={`Start a focus session for "${task.name}"`} title="Focus on this">
+        <Link to={`/focus?task=${task.id}`} aria-label={`Focus on "${task.name}"`} title="Focus on this">
           <Hourglass className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Focus</span>
         </Link>
       </Button>

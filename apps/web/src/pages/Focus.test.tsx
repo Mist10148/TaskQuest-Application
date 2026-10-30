@@ -10,6 +10,8 @@ const hooks = vi.hoisted(() => ({
   useStartFocus: vi.fn(),
   useFinishFocus: vi.fn(),
   useParty: vi.fn(),
+  useToday: vi.fn(),
+  useToggleItem: vi.fn(),
 }));
 vi.mock("@/hooks/useApi", () => hooks);
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
@@ -25,9 +27,9 @@ const status = (over: Partial<FocusStatus> = {}): FocusStatus => ({
   ...over,
 });
 const load = (data: FocusStatus) => hooks.useFocus.mockReturnValue({ data, isLoading: false, isError: false, error: null, refetch: vi.fn(), isFetching: false });
-const show = () =>
+const show = (path = "/focus") =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <Focus />
     </MemoryRouter>
   );
@@ -38,6 +40,8 @@ describe("Focus page", () => {
     start.mockReset();
     hooks.useStartFocus.mockReturnValue({ mutate: start, isPending: false, variables: undefined });
     hooks.useFinishFocus.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    hooks.useToday.mockReturnValue({ data: undefined });
+    hooks.useToggleItem.mockReturnValue({ mutate: vi.fn(), isPending: false, isSuccess: false });
     hooks.useParty.mockReturnValue({ data: { party: null, invites: [] } });
   });
   afterEach(() => {
@@ -83,5 +87,23 @@ describe("Focus page", () => {
     hooks.useParty.mockReturnValue({ data: { party: { focusQuest: { progress: 30, target: 120 } }, invites: [] } });
     show();
     expect(screen.getByRole("link", { name: "Open the party" })).toHaveAttribute("href", "/party");
+  });
+
+  it("names the task from ?task= and ticks it off", async () => {
+    load(status());
+    const toggle = vi.fn();
+    hooks.useToggleItem.mockReturnValue({ mutate: toggle, isPending: false, isSuccess: false });
+    hooks.useToday.mockReturnValue({ data: { tasks: [{ id: 7, name: "Write report", listId: 3, listName: "Work", dueDate: null, priority: null, estimateMinutes: null, overdueDays: 0 }] } });
+    show("/focus?task=7");
+    expect(screen.getByRole("link", { name: "Write report" })).toHaveAttribute("href", "/tasks?list=3&task=7");
+    await userEvent.click(screen.getByRole("button", { name: 'Mark "Write report" done' }));
+    expect(toggle).toHaveBeenCalledWith({ itemId: 7, completed: true });
+  });
+
+  it("shows no task for an unknown or missing id", () => {
+    load(status());
+    hooks.useToday.mockReturnValue({ data: { tasks: [] } });
+    show("/focus?task=7");
+    expect(screen.queryByText("Focusing on")).toBeNull();
   });
 });

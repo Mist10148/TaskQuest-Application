@@ -166,6 +166,6 @@ describe("Today page", () => {
   it("links each task to a focus session", () => {
     load(day());
     show();
-    expect(screen.getByRole("link", { name: 'Start a focus session for "Pay rent"' })).toHaveAttribute("href", "/focus");
+    expect(screen.getByRole("link", { name: 'Focus on "Pay rent"' })).toHaveAttribute("href", "/focus?task=1");
   });
 });

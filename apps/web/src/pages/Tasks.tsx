@@ -29,6 +29,19 @@ import { MembersDialog } from "@/components/tasks/MembersDialog";
 import { canEditTasks, idFromParam, isAccessLost, roleOf } from "@/lib/sharing";
 import { useQueryClient } from "@tanstack/react-query";
 
+/** Batches go one task at a time; from this size on, a loading toast counts them so a long batch does not look stuck. */
+const BULK_PROGRESS_FROM = 3;
+
+/** A "Completing 3 of 12…" toast for a batch, replaced by the summary toast (or removed) when it ends. */
+function bulkProgress(verb: string, total: number) {
+  if (total < BULK_PROGRESS_FROM) return { step: () => {}, end: () => {} };
+  const id = toast.loading(`${verb} 1 of ${total}…`);
+  return {
+    step: (n: number) => void toast.loading(`${verb} ${Math.min(n + 1, total)} of ${total}…`, { id }),
+    end: () => toast.dismiss(id),
+  };
+}
+
 const Tasks = () => {
   const listsQuery = useLists();
   const lists = useMemo(() => listsQuery.data ?? [], [listsQuery.data]);
@@ -230,7 +243,9 @@ const Tasks = () => {
   const completeItems = async (ids: number[]) => {
     const finished: number[] = [];
     let xp = 0;
-    for (const id of ids) {
+    const progress = bulkProgress("Completing", ids.length);
+    for (const [n, id] of ids.entries()) {
+      progress.step(n);
       try {
         const result = await toggleItem.mutateAsync({ itemId: id, completed: true, quiet: true });
         if (result.completed) {
@@ -241,6 +256,7 @@ const Tasks = () => {
         break; // error toast shown by the mutation hook
       }
     }
+    progress.end();
     const done = finished.length;
     // Undo un-checks the batch again, like Undo on one task: the XP stays paid (once per task), and a repeating task's next copy
     // is removed again while nobody has touched it (the server decides).
@@ -262,7 +278,9 @@ const Tasks = () => {
     if (!bulkPatch(values)) return;
     let done = 0;
     let tooMany = 0;
-    for (const id of ids) {
+    const progress = bulkProgress("Updating", ids.length);
+    for (const [n, id] of ids.entries()) {
+      progress.step(n);
       // Adding or removing tags depends on each task's own tags, so every task gets its own patch.
       const current = parseTags(selectedList?.items.find((i: Item) => i.id === id)?.tags);
       if (tooManyTags(values, current)) {
@@ -278,6 +296,7 @@ const Tasks = () => {
         break; // error toast shown by the mutation hook
       }
     }
+    progress.end();
     if (done > 0) toast.success(`✏️ ${done} ${done === 1 ? "task" : "tasks"} updated${done < ids.length ? ` (${ids.length - done} not changed)` : ""}`);
     if (tooMany > 0) toast.warning(`${tooMany} ${tooMany === 1 ? "task was" : "tasks were"} skipped: a task can have at most ${MAX_TAGS} tags.`);
     refetchList();
@@ -313,7 +332,9 @@ const Tasks = () => {
   const moveItems = async (ids: number[], listId: number) => {
     const target = lists.find((l) => l.id === listId)?.name ?? "the other quest";
     let done = 0;
-    for (const id of ids) {
+    const progress = bulkProgress("Moving", ids.length);
+    for (const [n, id] of ids.entries()) {
+      progress.step(n);
       try {
         await moveItem.mutateAsync({ itemId: id, listId });
         done += 1;
@@ -321,6 +342,7 @@ const Tasks = () => {
         break; // error toast shown by the mutation hook
       }
     }
+    progress.end();
     if (done > 0) toast.success(`📦 Moved ${done === 1 ? `"${nameOf(ids[0])}"` : `${done} tasks`} to ${target}`);
   };
 

@@ -23,7 +23,7 @@ const hooks = vi.hoisted(() => ({
   invalidateProgress: vi.fn(),
 }));
 vi.mock("@/hooks/useApi", () => hooks);
-const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn(), loading: vi.fn(() => "progress"), dismiss: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { features: { ai: false } } }) }));
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
@@ -124,5 +124,19 @@ describe("Tasks page", () => {
     const [message, options] = toast.success.mock.calls[0];
     expect(message).toBe("✨ 2 tasks done +22 XP!");
     expect(options.action.label).toBe("Undo");
+  });
+
+  it("counts a longer batch in a loading toast and removes it at the end", async () => {
+    const toggle = mutation();
+    toggle.mutateAsync.mockResolvedValue({ completed: true, xpResult: { finalXP: 1 } });
+    hooks.useToggleItem.mockReturnValue(toggle);
+    const items = [1, 2, 3].map((id) => ({ id, name: `T${id}`, completed: 0 }));
+    hooks.useList.mockReturnValue(listQuery({ data: quest({ items } as unknown as Partial<ListWithItems>) }));
+    show("/tasks?list=7");
+    await userEvent.click(screen.getByRole("button", { name: "complete all" }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    expect(toast.loading).toHaveBeenCalledWith("Completing 1 of 3…");
+    expect(toast.loading).toHaveBeenCalledWith("Completing 3 of 3…", { id: "progress" });
+    expect(toast.dismiss).toHaveBeenCalledWith("progress");
   });
 });

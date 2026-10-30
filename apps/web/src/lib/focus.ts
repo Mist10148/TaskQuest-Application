@@ -17,6 +17,17 @@ export function formatClock(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+/**
+ * How far the server's clock is ahead of this device's, from the server's time in an answer received at `receivedAtMs`.
+ * The session's start comes from the server, so a device clock running fast would otherwise turn "Finish" on before the
+ * server counts enough minutes, and finishing would cancel the session. The answer's travel time makes this slightly
+ * small, which errs towards waiting a moment longer. 0 when the server sent no time.
+ */
+export function clockOffsetMs(serverNowIso: string | undefined, receivedAtMs: number): number {
+  const server = serverNowIso ? Date.parse(serverNowIso) : NaN;
+  return Number.isFinite(server) ? server - receivedAtMs : 0;
+}
+
 /** Whole minutes that have passed since the session started. */
 export function elapsedMinutes(startedAtMs: number, nowMs: number): number {
   return Math.max(0, Math.floor((nowMs - startedAtMs) / 60_000));

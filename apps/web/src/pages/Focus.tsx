@@ -122,7 +122,9 @@ const Starter = ({ status }: { status: FocusStatus }) => {
 };
 
 const Running = ({ active, status, onFinish, finishing }: { active: FocusActive; status: FocusStatus; onFinish: (sessionId: number) => void; finishing: boolean }) => {
-  const [now, setNow] = useState(() => Date.now());
+  // Server time, estimated: every timing rule here is the server's, so the device clock is corrected by the measured offset.
+  const offset = status.clockOffsetMs ?? 0;
+  const [now, setNow] = useState(() => Date.now() + offset);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const startedAt = useMemo(() => Date.parse(active.startedAt), [active.startedAt]);
   const endsAt = useMemo(() => Date.parse(active.endsAt), [active.endsAt]);
@@ -131,9 +133,9 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
   const wasRunning = useRef(left > 0);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    const id = window.setInterval(() => setNow(Date.now() + offset), 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [offset]);
 
   // The tab title keeps the countdown visible from other tabs. Restored in a layout effect: when you leave Focus, a plain
   // effect's clean-up would run after the next page set its title and put "Focus" back on it.

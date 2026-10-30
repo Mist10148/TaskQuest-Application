@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canFinish, elapsedMinutes, focusTitle, formatClock, minutesUntilPayable, parseMinutes, remainingMs } from "./focus";
+import { canFinish, clockOffsetMs, elapsedMinutes, focusTitle, formatClock, minutesUntilPayable, parseMinutes, remainingMs } from "./focus";
 
 describe("formatClock", () => {
   it("shows minutes and seconds under an hour", () => {
@@ -54,5 +54,26 @@ describe("focusTitle", () => {
   it("puts the clock first", () => {
     expect(focusTitle(90_000, "TaskQuest")).toBe("01:30 · Focus – TaskQuest");
     expect(focusTitle(90_000, "")).toBe("01:30 · Focus");
+  });
+});
+
+describe("clockOffsetMs", () => {
+  it("is how far the server's clock is ahead of this device's", () => {
+    const device = Date.parse("2026-10-30T12:00:00Z");
+    expect(clockOffsetMs("2026-10-30T12:00:30Z", device)).toBe(30_000);
+    expect(clockOffsetMs("2026-10-30T11:59:00Z", device)).toBe(-60_000);
+  });
+
+  it("is 0 when the server sent no usable time", () => {
+    expect(clockOffsetMs(undefined, 1)).toBe(0);
+    expect(clockOffsetMs("not a date", 1)).toBe(0);
+  });
+
+  it("keeps a fast device from finishing early", () => {
+    const started = Date.parse("2026-10-30T12:00:00Z");
+    const deviceNow = started + 10 * 60_000; // the device runs 90 s fast
+    const offset = clockOffsetMs("2026-10-30T12:08:30Z", deviceNow);
+    expect(canFinish(started, deviceNow, 10)).toBe(true);
+    expect(canFinish(started, deviceNow + offset, 10)).toBe(false);
   });
 });

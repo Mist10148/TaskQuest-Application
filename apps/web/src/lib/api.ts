@@ -7,6 +7,7 @@
  * VITE_API_URL is only needed for unusual split deployments.
  */
 
+import { clockOffsetMs } from './focus';
 import type { ListRole, MemberLike, SharingFields } from './sharing';
 import { isNetworkFailure, OFFLINE_MESSAGE } from './online';
 
@@ -516,7 +517,7 @@ export const statsApi = {
 };
 
 export const focusApi = {
-    get: () => apiFetch<FocusStatus>('/api/focus'),
+    get: () => apiFetch<FocusStatus>('/api/focus').then((s) => ({ ...s, clockOffsetMs: clockOffsetMs(s.serverNow, Date.now()) })),
     start: (minutes: number) => post<FocusStartResult>('/api/focus/start', { minutes }),
     finish: (sessionId: number) => post<FocusFinishResult>('/api/focus/finish', { sessionId }),
 };
@@ -1106,6 +1107,10 @@ export interface FocusActive {
 
 export interface FocusStatus {
     active: FocusActive | null;
+    /** The server's clock when it answered. */
+    serverNow?: string;
+    /** Added in the browser: how far the server's clock is ahead of this device's (see clockOffsetMs). */
+    clockOffsetMs?: number;
     today: { sessions: number; xp: number; remainingSessions: number; remainingXP: number };
     config: { minMinutes: number; maxMinutes: number; xpPerMinute: number; xpPerDay: number; sessionsPerDay: number };
 }

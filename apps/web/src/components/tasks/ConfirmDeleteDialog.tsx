@@ -35,9 +35,10 @@ export const ConfirmDeleteDialog = ({ open, onOpenChange, title, description, co
         <AlertDialogDescription className="pt-2">{description}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter className="gap-2 sm:gap-0">
-        <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-        <Button variant="destructive" onClick={onConfirm} disabled={pending}>
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : confirmLabel}
+        <AlertDialogCancel disabled={pending}>{t("common.cancel")}</AlertDialogCancel>
+        {/* While pending the label stays for screen readers, so the button keeps its name next to the spinner. */}
+        <Button variant="destructive" onClick={onConfirm} disabled={pending} aria-busy={pending || undefined}>
+          {pending ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /><span className="sr-only">{confirmLabel}</span></> : confirmLabel}
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>

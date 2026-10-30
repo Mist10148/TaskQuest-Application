@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight, Check, Circle } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { calendarKeyTarget, monthGrid, shiftMonth, tasksByDate } from "@/lib/taskViews";
-import { formatDayLabel, localToday } from "@/lib/dates";
+import { formatDayLabel } from "@/lib/dates";
+import { useLocalToday } from "@/hooks/useLocalToday";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -18,7 +19,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 
 /** A month grid of the quest's due dates. Pick a day to see (and tick off) its tasks below the grid. */
 export const TaskCalendar = ({ items, readOnly, onToggle, onEdit }: Props) => {
-  const today = localToday();
+  const today = useLocalToday();
   const [view, setView] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }));
   const [picked, setPicked] = useState<string>(today);
   const byDate = useMemo(() => tasksByDate(items), [items]);

@@ -16,7 +16,7 @@ import { TaskRow } from "./TaskRow";
 import { TaskBoard } from "./TaskBoard";
 import { TaskFilterBar } from "./TaskFilterBar";
 import { DEFAULT_FILTER, filterTasks, groupTasks, isFiltering, loadFilterPrefs, saveFilterPrefs, tagsIn, type GroupBy, type TaskFilter } from "@/lib/taskFilters";
-import { localToday } from "@/lib/dates";
+import { useLocalToday } from "@/hooks/useLocalToday";
 import { TaskCalendar } from "./TaskCalendar";
 import { TaskDetailSheet } from "./TaskDetailSheet";
 import { BulkEditDialog } from "./BulkEditDialog";
@@ -117,7 +117,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     setPrefs(merged);
     saveFilterPrefs(merged.filter, merged.groupBy);
   };
-  const today = localToday();
+  const today = useLocalToday();
   const shown = useMemo(() => filterTasks(topLevel, childrenOf, filter, list.priority, today), [topLevel, childrenOf, filter, list.priority, today]);
   const shownItems = useMemo(() => shown.topLevel.flatMap((t) => [t, ...(shown.childrenOf.get(t.id) ?? [])]), [shown]);
   const groups = useMemo(() => groupTasks(shown.topLevel, groupBy, list.priority, today), [shown.topLevel, groupBy, list.priority, today]);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlarmClock, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Hourglass, Loader2, PenLine, Target, Timer } from "lucide-react";
 import { useIsMutating } from "@tanstack/react-query";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TOGGLE_ITEM_KEY, useClaimGoal, useSetGoal, useToday, useToggleItem, useUpdateItem, useWriteReflection } from "@/hooks/useApi";
+import { useLocalToday } from "@/hooks/useLocalToday";
 import { cn } from "@/lib/utils";
 import { formatDeadline, formatDue } from "@/lib/dates";
 import { todayHeadline, goalPercent } from "@/lib/today";
@@ -239,6 +240,13 @@ const TodayView = ({ data }: { data: TodayData }) => (
 
 const Today = () => {
   const today = useToday();
+  // The server decides the day; when the player's midnight passes with the page open, ask it again.
+  const localDay = useLocalToday();
+  const { refetch } = today;
+  const serverDay = today.data?.day;
+  useEffect(() => {
+    if (serverDay && serverDay < localDay) void refetch();
+  }, [serverDay, localDay, refetch]);
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-3xl space-y-4 sm:space-y-6">

@@ -25,7 +25,7 @@ const auth = vi.hoisted(() => ({ xp: 500 }));
 vi.mock("@/hooks/useApi", () => hooks);
 vi.mock("@/lib/api", () => ({ gamesApi: games }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { user: { player_xp: auth.xp } } }) }));
-vi.mock("@/contexts/PreferencesContext", () => ({ usePreferences: () => ({ sound: false, setSound: vi.fn() }) }));
+vi.mock("@/contexts/PreferencesContext", () => ({ usePreferences: () => ({ sound: false, setSound: vi.fn() }), useLocale: () => "en" }));
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/lib/sound", () => ({ playSound: vi.fn(), setSoundEnabled: vi.fn() }));
 

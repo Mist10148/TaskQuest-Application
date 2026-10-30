@@ -18,7 +18,7 @@ vi.mock("@/hooks/useApi", () => ({
   useAiStatus: () => mocks.aiStatus,
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { features: { ai: true } } }) }));
-vi.mock("@/contexts/PreferencesContext", () => ({ usePreferences: () => ({ reduceMotion: true }) }));
+vi.mock("@/contexts/PreferencesContext", () => ({ usePreferences: () => ({ reduceMotion: true }), useLocale: () => "en" }));
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
 import Chat from "./Chat";

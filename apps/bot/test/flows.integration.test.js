@@ -513,8 +513,9 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.equal(await db.tasks.getList(P.st, shared.id), null);
         const accept = fake({ userId: P.ed, customId: `inv_accept_${edInvite.id}`, message: { embeds: [] } });
         await sharing.handleInviteButton(accept);
-        assert.equal(accept.calls[0].type, 'update');
-        assert.match(text(accept.calls[0]), /Joined/);
+        // Acknowledged before the transaction, then the message is edited.
+        assert.deepEqual(accept.calls.map((c) => c.type), ['deferUpdate', 'editReply']);
+        assert.match(text(accept.calls[1]), /Joined/);
         const again = fake({ userId: P.ed, customId: `inv_accept_${edInvite.id}`, message: { embeds: [] } });
         await sharing.handleInviteButton(again);
         assert.match(text(again.calls.at(-1)), /no longer open/i, 'a stale button explains itself');
@@ -522,8 +523,8 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         const vwInvite = (await db.sharing.listInvites(P.vw))[0];
         const accept2 = fake({ userId: P.vw, customId: `inv_accept_${vwInvite.id}`, message: { embeds: [{ title: '📨 Invitations' }] } });
         await sharing.handleInviteButton(accept2);
-        assert.match(accept2.calls[0].payload.content, /Joined/);
-        assert.match(text(accept2.calls[0]), /No invitations/);
+        assert.match(accept2.calls[1].payload.content, /Joined/);
+        assert.match(text(accept2.calls[1]), /No invitations/);
 
         // /list shows the sharing marker and role; an editor edits, a viewer only reads.
         const ov = fake({ userId: P.ed, commandName: 'list' });
@@ -594,7 +595,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.ok(await db.tasks.getList(P.vw, shared.id));
         const remove = fake({ userId: P.own, customId: `mem_rm_${shared.id}`, values: [menu.options.find((o) => o.label === 'bot_vw').value] });
         await sharing.handleSelect(remove);
-        assert.equal(remove.calls[0].type, 'update');
+        assert.deepEqual(remove.calls.map((c) => c.type), ['deferUpdate', 'editReply']);
         assert.equal(await db.tasks.getList(P.vw, shared.id), null, 'removed');
         const staleView = fake({ userId: P.vw, customId: `edit_${shared.id}` });
         await list.handleButton(staleView);
@@ -662,14 +663,15 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
         assert.match(text(hijack.calls.at(-1)), /No longer open|Invitation not found/);
         const join = fake({ userId: P.mem, customId: `party_accept_${invite.id}`, message: { embeds: [] } });
         await party.handleButton(join);
-        assert.match(text(join.calls[0]), /Joined the party/);
+        assert.equal(join.calls[0].type, 'deferUpdate', 'acknowledged before the transaction');
+        assert.match(text(join.calls[1]), /Joined the party/);
         assert.match(text((await run(P.mem, 'invite', { user: { id: P.out, username: 'pbot_out', bot: false, send: async () => {} } })).calls.at(-1)), /Only the owner/);
         // The out user sees the closed-DM invitation under /party invites and can decline it.
         const list = await run(P.out, 'invites');
         assert.match(text(list.calls.at(-1)), /Bot Crew/);
         const decline = fake({ userId: P.out, customId: `party_decline_${(await db.parties.listInvites(P.out))[0].id}`, message: { embeds: [{ title: '📨 Party invitations' }] } });
         await party.handleButton(decline);
-        assert.match(decline.calls[0].payload.content, /declined/i);
+        assert.match(decline.calls[1].payload.content, /declined/i);
 
         // Status: names and counts, no Discord IDs, no Claim button until the quest is done.
         const st = await run(P.mem, 'status');

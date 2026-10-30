@@ -237,11 +237,14 @@ async function routeButton(interaction) {
         return interaction.reply({ embeds: [ui.warn('Confirm Delete', `Delete **${safe(list.name)}** and all its tasks?`)], components: [ui.confirmButtons(list.id)], ...EPHEMERAL });
     }
     if (id.startsWith('yes_')) {
+        // Acknowledge before the reads and the delete: a cold database can outlast Discord's 3 seconds, and a late update
+        // would show "This interaction failed" after the quest was already gone.
+        await interaction.deferUpdate();
         const list = await tasks.getList(userId, idFrom(id, 'yes_'));
-        if (!list) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
+        if (!list) return interaction.editReply({ embeds: [ui.error('Not found')], components: [] });
         await tasks.deleteList(userId, list.id);
         aiSync.forget(userId, list.id);
-        return interaction.update({ embeds: [ui.success('Deleted', `**${safe(list.name)}** deleted`)], components: [] });
+        return interaction.editReply({ embeds: [ui.success('Deleted', `**${safe(list.name)}** deleted`)], components: [] });
     }
     if (id.startsWith('no_')) return interaction.update({ embeds: [ui.info('Cancelled', 'Delete cancelled')], components: [] });
 }
@@ -284,9 +287,10 @@ async function routeSelect(interaction) {
         const isCat = id.startsWith('cat_');
         const listId = idFrom(id, isCat ? 'cat_' : 'pri_');
         const value = val === 'NONE' ? null : val;
+        await interaction.deferUpdate(); // before the write (see yes_)
         const list = await tasks.updateList(userId, listId, isCat ? { category: value } : { priority: value });
         aiSync.reindex(userId, listId);
-        return interaction.update({
+        return interaction.editReply({
             embeds: [
                 ui.info(
                     'Edit List Info',
@@ -306,11 +310,12 @@ async function routeSelect(interaction) {
     }
 
     if (id.startsWith('sel_del_')) {
+        await interaction.deferUpdate(); // before the read and the delete (see yes_)
         const item = await tasks.getItem(userId, val);
-        if (!item) return interaction.update({ embeds: [ui.error('Not Found')], components: [] });
+        if (!item) return interaction.editReply({ embeds: [ui.error('Not Found')], components: [] });
         await tasks.deleteItem(userId, item.id);
         aiSync.reindex(userId, item.list_id);
-        return interaction.update({ embeds: [ui.success('Deleted', `**${safe(item.name)}** deleted`)], components: [] });
+        return interaction.editReply({ embeds: [ui.success('Deleted', `**${safe(item.name)}** deleted`)], components: [] });
     }
 
     if (id.startsWith('sel_done_')) {
@@ -342,9 +347,10 @@ async function routeSelect(interaction) {
         const listId = ids && Number(ids[1]);
         const firstId = ids && Number(ids[2]);
         if (!firstId) return interaction.update({ embeds: [ui.error('Expired', 'Start the reorder again.')], components: [] });
+        await interaction.deferUpdate(); // before the write (see yes_)
         await tasks.swapItemPositions(userId, firstId, val);
         aiSync.reindex(userId, listId);
-        return interaction.update({ embeds: [ui.success('Swapped', 'Positions swapped')], components: [] });
+        return interaction.editReply({ embeds: [ui.success('Swapped', 'Positions swapped')], components: [] });
     }
 }
 
@@ -471,7 +477,9 @@ async function routeModal(interaction) {
         const listId = idFrom(id, 'm_additem_');
         const result = await tasks.addItem(userId, listId, { name: field(interaction, 'name'), description: field(interaction, 'desc') });
         aiSync.reindex(userId, listId);
-        await interaction.reply({ ...(await renderList(userId, listId, 'edit')), ...EPHEMERAL });
+        // The quest can vanish (deleted, or access removed) between the add and the render: still confirm the add.
+        const view = await renderList(userId, listId, 'edit');
+        await interaction.reply({ ...(view || { embeds: [ui.success('Task added', `**${safe(result.item.name)}**`)] }), ...EPHEMERAL });
         return sendRewards(interaction, result);
     }
 

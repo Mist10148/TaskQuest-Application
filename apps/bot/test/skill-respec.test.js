@@ -25,7 +25,7 @@ function fake(customId) {
     const record = (kind) => async (payload) => {
         calls.push({ kind, payload });
     };
-    return {
+    const interaction = {
         user: { id: '42' },
         customId,
         calls,
@@ -34,8 +34,15 @@ function fake(customId) {
         update: record('update'),
         reply: record('reply'),
         followUp: record('followUp'),
-        deferUpdate: record('deferUpdate')
+        editReply: record('editReply'),
+        isMessageComponent: () => true,
+        // Like discord.js: after this the answer is an edit, and errors go in a follow-up.
+        deferUpdate: async () => {
+            interaction.deferred = true;
+            calls.push({ kind: 'deferUpdate' });
+        }
     };
+    return interaction;
 }
 
 const rows = (payload) => payload.components.map((r) => r.toJSON().components);
@@ -96,9 +103,10 @@ test('confirming resets the tree through progression, refreshes the tree and rep
     await gamification.handleClassButton(yes);
 
     assert.deepEqual(args, ['42', 'HERO']);
-    assert.deepEqual(yes.calls.map((c) => c.kind), ['update', 'followUp']);
-    assert.ok(rows(yes.calls[0].payload)[0].some((c) => c.custom_id === 'skill_select_HERO'), 'back on the tree');
-    assert.match(description(yes.calls[1].payload), /refunded \*\*75 XP\*\*/);
+    // Acknowledged before the paid transaction, so a slow database cannot make Discord drop the click after the refund.
+    assert.deepEqual(yes.calls.map((c) => c.kind), ['deferUpdate', 'editReply', 'followUp']);
+    assert.ok(rows(yes.calls[1].payload)[0].some((c) => c.custom_id === 'skill_select_HERO'), 'back on the tree');
+    assert.match(description(yes.calls[2].payload), /refunded \*\*75 XP\*\*/);
 });
 
 test('the once-a-day limit is shown as the error it is, and nothing else changes', async () => {
@@ -108,10 +116,9 @@ test('the once-a-day limit is shown as the error it is, and nothing else changes
     };
     const yes = fake('skill_respec_yes_HERO');
     await gamification.handleClassButton(yes);
-    assert.equal(yes.calls.length, 1);
-    assert.equal(yes.calls[0].kind, 'reply');
+    assert.deepEqual(yes.calls.map((c) => c.kind), ['deferUpdate', 'followUp']);
     assert.ok(errors.cooldown(1) instanceof TaskQuestError);
-    assert.match(description(yes.calls[0].payload), /Slow down/);
+    assert.match(description(yes.calls[1].payload), /Slow down/);
 });
 
 test('with no skills in the tree there is nothing to confirm, and a bogus class is ignored', async () => {

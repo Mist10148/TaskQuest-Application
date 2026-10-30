@@ -182,22 +182,24 @@ async function handleButton(interaction) {
             return await sendRewards(interaction, { achievements: r.achievements });
         }
         if (id === 'party_disband_no') return await interaction.update({ embeds: [ui.info('Cancelled', 'The party stays.')], components: [] });
+        // The rest write first: acknowledge so a slow database cannot outlast Discord's 3 seconds after the change is made.
+        await interaction.deferUpdate();
         if (id === 'party_disband_yes') {
             await parties.disband(interaction.user.id);
-            return await interaction.update({ embeds: [ui.success('Party disbanded', 'It is gone for everyone.')], components: [] });
+            return await interaction.editReply({ embeds: [ui.success('Party disbanded', 'It is gone for everyone.')], components: [] });
         }
         const accept = id.startsWith('party_accept_');
         const inviteId = idFrom(id, accept ? 'party_accept_' : 'party_decline_');
         const r = await parties.respond(interaction.user.id, inviteId, accept);
         const inList = Boolean(interaction.message?.embeds?.some?.((e) => (e.title || e.data?.title) === '📨 Party invitations'));
-        if (inList) return await interaction.update({ ...invitesView(await parties.listInvites(interaction.user.id)), content: r.accepted ? `Joined **${escapeDiscord(r.party.name, { max: 40 })}**.` : 'Invitation declined.' });
-        return await interaction.update({
+        if (inList) return await interaction.editReply({ ...invitesView(await parties.listInvites(interaction.user.id)), content: r.accepted ? `Joined **${escapeDiscord(r.party.name, { max: 40 })}**.` : 'Invitation declined.' });
+        return await interaction.editReply({
             embeds: [r.accepted ? ui.success('Joined the party', `Welcome to **${escapeDiscord(r.party.name, { max: 40 })}**. See the quest with /party status.`) : ui.info('Declined', 'Invitation declined.')],
             components: []
         });
     } catch (err) {
-        if (!interaction.deferred && !interaction.replied && (err.code === 'CONFLICT' || err.code === 'NOT_FOUND') && id.startsWith('party_') && /accept_|decline_/.test(id)) {
-            return interaction.update({ embeds: [ui.info('No longer open', err.message)], components: [], content: '' }).catch(() => handleError(interaction, err));
+        if (interaction.deferred && !interaction.replied && (err.code === 'CONFLICT' || err.code === 'NOT_FOUND') && /^party_(accept|decline)_/.test(id)) {
+            return interaction.editReply({ embeds: [ui.info('No longer open', err.message)], components: [], content: '' }).catch(() => handleError(interaction, err));
         }
         return handleError(interaction, err);
     }

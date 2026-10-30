@@ -173,7 +173,8 @@ test('the first pick of a reorder travels in the second menu, so a restart does 
     const second = fake({ customId: 'sel_swap2_5_12', values: ['13'] });
     await listCommand.handleSelectMenu(second);
     assert.deepEqual(swapped, ['42', 12, '13']);
-    assert.match(embedTitle(second.calls[0].payload), /Swapped/);
+    assert.deepEqual(second.calls.map((c) => c.kind), ['deferUpdate', 'editReply'], 'acknowledged before the write');
+    assert.match(embedTitle(second.calls[1].payload), /Swapped/);
 });
 
 test('a second reorder menu without the first pick says it expired', async () => {

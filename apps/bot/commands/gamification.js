@@ -525,13 +525,16 @@ async function routeClassButton(interaction) {
 
     if (id.startsWith('skill_respec_yes_')) {
         const classKey = classKeyFrom(id);
-        if (!classKey) return interaction.deferUpdate();
+        // Acknowledge first: the transaction and reads below can outlast Discord's 3 seconds on a cold database, and a late
+        // update would fail with "This interaction failed" after the refund was already made.
+        await interaction.deferUpdate();
+        if (!classKey) return;
         // Ownership, the once-a-day limit and the refund are enforced atomically.
         const result = await progression.respecSkills(userId, classKey);
         const user = await users.getUser(userId);
         const userSkills = await users.getUserSkills(userId);
 
-        await interaction.update(skillTreeView(user, userSkills, classKey));
+        await interaction.editReply(skillTreeView(user, userSkills, classKey));
         await interaction.followUp({
             embeds: [ui.success('Skills Reset', `Removed ${result.removed.length} skill${result.removed.length === 1 ? '' : 's'} and refunded **${result.refund.toLocaleString()} XP** (${result.percent}% of ${result.spent.toLocaleString()}). Balance: ${result.balance.toLocaleString()} XP.`)],
             ...EPHEMERAL
@@ -564,12 +567,13 @@ async function routeClassButton(interaction) {
 
     if (id.startsWith('skill_unlock_')) {
         const skillId = id.replace('skill_unlock_', '');
+        await interaction.deferUpdate(); // before the paid transaction (see skill_respec_yes_)
         // Ownership, prerequisites, max level and cost are enforced atomically.
         const result = await progression.unlockSkill(userId, skillId);
         const updatedUser = await users.getUser(userId);
         const updatedSkills = await users.getUserSkills(userId);
 
-        await interaction.update(skillTreeView(updatedUser, updatedSkills, result.treeKey));
+        await interaction.editReply(skillTreeView(updatedUser, updatedSkills, result.treeKey));
 
         const { skill } = result;
         await interaction.followUp({
@@ -585,12 +589,11 @@ async function routeClassButton(interaction) {
 
     if (id.startsWith('cbuy_')) {
         const classKey = id.replace('cbuy_', '');
+        await interaction.deferUpdate(); // before the paid transaction (see skill_respec_yes_)
         const { user, achievements: newAchs } = await progression.buyClass(userId, classKey);
         const cls = CLASSES[classKey];
 
-        await interaction.update({
-            ...(await classView(userId, user, classKey))
-        });
+        await interaction.editReply(await classView(userId, user, classKey));
         await interaction.followUp({ embeds: [ui.success('Purchased!', `Now a ${cls.emoji} **${cls.name}**!`)], ...EPHEMERAL });
         await sendRewards(interaction, { achievements: newAchs });
         return;
@@ -598,16 +601,15 @@ async function routeClassButton(interaction) {
 
     if (id.startsWith('ceq_')) {
         const classKey = id.replace('ceq_', '');
+        await interaction.deferUpdate(); // before the reads and the write (see skill_respec_yes_)
         const before = await users.getUser(userId);
         if (before && before.player_class === classKey) {
-            return interaction.reply({ embeds: [ui.info('Already equipped', `You are already using ${CLASSES[classKey]?.name || classKey}.`)], ...EPHEMERAL });
+            return interaction.followUp({ embeds: [ui.info('Already equipped', `You are already using ${CLASSES[classKey]?.name || classKey}.`)], ...EPHEMERAL });
         }
         const { user } = await progression.equipClass(userId, classKey);
         const cls = CLASSES[classKey];
 
-        await interaction.update({
-            ...(await classView(userId, user, classKey))
-        });
+        await interaction.editReply(await classView(userId, user, classKey));
         await interaction.followUp({ embeds: [ui.success('Equipped!', `Now a ${cls.emoji} **${cls.name}**!`)], ...EPHEMERAL });
     }
 }

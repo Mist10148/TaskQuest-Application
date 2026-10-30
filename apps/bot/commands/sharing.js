@@ -149,23 +149,24 @@ async function handleInviteButton(interaction) {
     const accept = interaction.customId.startsWith('inv_accept_');
     const id = idFrom(interaction.customId, accept ? 'inv_accept_' : 'inv_decline_');
     try {
+        // Acknowledge before the transaction: a cold database can outlast Discord's 3 seconds, and a late update would show
+        // "This interaction failed" after the invitation was already accepted.
+        await interaction.deferUpdate();
         const r = await sharing.respond(interaction.user.id, id, accept);
         const isInvitesView = Boolean(interaction.message?.embeds?.some?.((e) => (e.title || e.data?.title) === '📨 Invitations'));
         if (isInvitesView) {
             const note = r.accepted ? `Joined **${escapeDiscord(r.list.name, { max: 100 })}**.` : 'Invitation declined.';
             const view = invitesView(await sharing.listInvites(interaction.user.id));
-            return interaction.update({ ...view, content: note });
+            return await interaction.editReply({ ...view, content: note });
         }
-        return interaction.update({
+        return await interaction.editReply({
             embeds: [r.accepted ? ui.success('Joined', `You can now open **${escapeDiscord(r.list.name, { max: 100 })}** with /list (your role: ${r.role}).`) : ui.info('Declined', 'Invitation declined.')],
             components: []
         });
     } catch (err) {
-        if (!interaction.deferred && !interaction.replied && interaction.message) {
-            // A stale button (already answered, expired, revoked) turns the message into the reason.
-            if (err.code === 'CONFLICT' || err.code === 'NOT_FOUND') {
-                return interaction.update({ embeds: [ui.info('No longer open', err.message)], components: [], content: '' }).catch(() => handleError(interaction, err));
-            }
+        // A stale button (already answered, expired, revoked) turns the message into the reason.
+        if (interaction.deferred && !interaction.replied && interaction.message && (err.code === 'CONFLICT' || err.code === 'NOT_FOUND')) {
+            return interaction.editReply({ embeds: [ui.info('No longer open', err.message)], components: [], content: '' }).catch(() => handleError(interaction, err));
         }
         return handleError(interaction, err);
     }
@@ -214,9 +215,10 @@ async function members(interaction) {
 async function handleSelect(interaction) {
     try {
         const listId = idFrom(interaction.customId, 'mem_rm_');
+        await interaction.deferUpdate(); // before the write and the reads (see handleInviteButton)
         await sharing.removeMember(interaction.user.id, listId, interaction.values[0]);
         const view = await membersView(interaction.user.id, listId);
-        return interaction.update({ ...view, content: 'Removed.' });
+        return await interaction.editReply({ ...view, content: 'Removed.' });
     } catch (err) {
         return handleError(interaction, err);
     }
@@ -248,8 +250,9 @@ async function leave(interaction) {
 async function handleLeaveButton(interaction) {
     try {
         if (interaction.customId === 'leave_no') return await interaction.update({ embeds: [ui.info('Cancelled', 'You are still on the list.')], components: [] });
+        await interaction.deferUpdate(); // before the write (see handleInviteButton)
         await sharing.leave(interaction.user.id, idFrom(interaction.customId, 'leave_yes_'));
-        return await interaction.update({ embeds: [ui.success('Left the list', 'You no longer have access to it.')], components: [] });
+        return await interaction.editReply({ embeds: [ui.success('Left the list', 'You no longer have access to it.')], components: [] });
     } catch (err) {
         return handleError(interaction, err);
     }

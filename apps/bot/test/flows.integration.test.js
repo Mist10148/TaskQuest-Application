@@ -94,7 +94,7 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
 
         const bad = fake({ customId: 'm_newlist', fields: { name: 'x', deadline: '2024-13-45' } });
         await list.handleModal(bad);
-        assert.match(text(bad.calls[0]), /real calendar date|YYYY-MM-DD/);
+        assert.match(text(bad.calls.at(-1)), /real calendar date|YYYY-MM-DD/);
 
         const add = fake({ customId: `m_additem_${listId}`, fields: { name: 'Essay', desc: '' } });
         await list.handleModal(add);
@@ -184,15 +184,15 @@ test('bot flows', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => 
 
         const bad = fake({ userId: DET, customId: `m_details_${child.id}`, fields: { due: '2031-02-30', priority: '', tags: '', repeat: '' } });
         await list.handleModal(bad);
-        assert.match(text(bad.calls[0]), /real calendar date/);
+        assert.match(text(bad.calls.at(-1)), /real calendar date/);
         const badTags = fake({ userId: DET, customId: `m_details_${child.id}`, fields: { due: '', priority: '', tags: 'a b c d e f', repeat: '' } });
         await list.handleModal(badTags);
-        assert.match(text(badTags.calls[0]), /at most 5 tags/);
+        assert.match(text(badTags.calls.at(-1)), /at most 5 tags/);
         assert.equal((await db.tasks.getItem(DET, child.id)).priority, 'HIGH', 'a rejected save changes nothing');
 
         const theft = fake({ userId: OTHER, customId: `m_details_${child.id}`, fields: { due: '2031-05-05', priority: 'low', tags: '', repeat: '' } });
         await list.handleModal(theft);
-        assert.match(text(theft.calls[0]), /Not found/i);
+        assert.match(text(theft.calls.at(-1)), /Not found/i);
         assert.equal(String((await db.tasks.getItem(DET, child.id)).due_date).slice(0, 10), '2031-04-02');
 
         const clear = fake({ userId: DET, customId: `m_details_${child.id}`, fields: { due: '', priority: '', tags: '', repeat: 'none' } });

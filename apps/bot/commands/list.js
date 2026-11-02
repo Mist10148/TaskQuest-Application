@@ -444,9 +444,13 @@ const field = (interaction, name) => {
     }
 };
 
+/** Modals that write: they are acknowledged first, so a slow database cannot make a saved change read as "interaction failed". */
+const WRITE_MODALS = ['m_newlist', 'm_editlist_', 'm_additem_', 'm_edititem_', 'm_details_', 'm_desc_'];
+
 async function routeModal(interaction) {
     const id = interaction.customId;
     const userId = interaction.user.id;
+    if (WRITE_MODALS.some((prefix) => id.startsWith(prefix))) await interaction.deferReply(EPHEMERAL);
 
     if (id === 'm_newlist') {
         const result = await tasks.createList(userId, {
@@ -455,10 +459,9 @@ async function routeModal(interaction) {
             deadline: field(interaction, 'deadline')
         });
         aiSync.reindex(userId, result.list.id);
-        await interaction.reply({
+        await interaction.editReply({
             embeds: [ui.success('Created!', `**${safe(result.list.name)}**\nPick a category and priority below (optional).`)],
-            components: [ui.catSelect(`cat_${result.list.id}`), ui.priSelect(`pri_${result.list.id}`)],
-            ...EPHEMERAL
+            components: [ui.catSelect(`cat_${result.list.id}`), ui.priSelect(`pri_${result.list.id}`)]
         });
         return sendRewards(interaction, result);
     }
@@ -470,7 +473,7 @@ async function routeModal(interaction) {
             deadline: field(interaction, 'deadline')
         });
         aiSync.reindex(userId, list.id);
-        return interaction.reply({ embeds: [ui.success('Updated', `**${safe(list.name)}**`)], ...EPHEMERAL });
+        return interaction.editReply({ embeds: [ui.success('Updated', `**${safe(list.name)}**`)] });
     }
 
     if (id.startsWith('m_additem_')) {
@@ -479,27 +482,27 @@ async function routeModal(interaction) {
         aiSync.reindex(userId, listId);
         // The quest can vanish (deleted, or access removed) between the add and the render: still confirm the add.
         const view = await renderList(userId, listId, 'edit');
-        await interaction.reply({ ...(view || { embeds: [ui.success('Task added', `**${safe(result.item.name)}**`)] }), ...EPHEMERAL });
+        await interaction.editReply(view || { embeds: [ui.success('Task added', `**${safe(result.item.name)}**`)] });
         return sendRewards(interaction, result);
     }
 
     if (id.startsWith('m_edititem_')) {
         const item = await tasks.updateItem(userId, idFrom(id, 'm_edititem_'), { name: field(interaction, 'name') });
         aiSync.reindex(userId, item?.list_id);
-        return interaction.reply({ embeds: [ui.success('Updated', `**${safe(item.name)}**`)], ...EPHEMERAL });
+        return interaction.editReply({ embeds: [ui.success('Updated', `**${safe(item.name)}**`)] });
     }
 
     if (id.startsWith('m_details_')) {
         const item = await tasks.updateItem(userId, idFrom(id, 'm_details_'), parseDetails((name) => field(interaction, name)));
         aiSync.reindex(userId, item?.list_id);
-        return interaction.reply({ embeds: [ui.success('Updated', `**${safe(item.name)}**\n${ui.itemMeta(item, await todayFor(userId)) || 'No details set.'}`)], ...EPHEMERAL });
+        return interaction.editReply({ embeds: [ui.success('Updated', `**${safe(item.name)}**\n${ui.itemMeta(item, await todayFor(userId)) || 'No details set.'}`)] });
     }
 
     if (id.startsWith('m_desc_')) {
         const desc = field(interaction, 'desc');
         const item = await tasks.updateItem(userId, idFrom(id, 'm_desc_'), { description: desc || null });
         aiSync.reindex(userId, item?.list_id);
-        return interaction.reply({ embeds: [ui.success('Updated', desc ? 'Description saved' : 'Description cleared')], ...EPHEMERAL });
+        return interaction.editReply({ embeds: [ui.success('Updated', desc ? 'Description saved' : 'Description cleared')] });
     }
 
     if (id === 'm_search') {

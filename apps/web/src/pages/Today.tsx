@@ -206,7 +206,7 @@ const TodayView = ({ data }: { data: TodayData }) => (
 
     <StreakStrip day={data.day} live={data.streak.live} claimedToday={data.streak.claimedToday} />
 
-    {data.streak.atRisk && <StreakAtRisk live={data.streak.live} expiresAt={data.streak.expiresAt} />}
+    {data.streak.atRisk && <StreakAtRisk live={data.streak.live} expiresAt={data.streak.expiresAt} frozen={data.streak.frozen} />}
 
     <section aria-labelledby="todo-title">
       <h2 id="todo-title" className="mb-2 flex items-center gap-2 font-heading font-semibold"><Flame className="h-5 w-5 text-primary-text" aria-hidden /> What needs doing</h2>

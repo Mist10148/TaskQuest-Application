@@ -666,18 +666,27 @@ function streakContinues(user, bonuses, lastMs, nowMs) {
     return claimGapDays(user, lastMs, nowMs) <= streakWindowDays(user, bonuses) || nowMs - lastMs < streakWindowMs(user, bonuses);
 }
 
+/** Would the user's bought streak freezes save the streak for a claim at `nowMs` after one at `lastMs`? One per missed day. */
+function freezesCover(user, bonuses, lastMs, nowMs) {
+    const missedDays = Math.max(1, claimGapDays(user, lastMs, nowMs) - streakWindowDays(user, bonuses));
+    return (Number(user.streak_count) || 0) > 1 && (Number(user.streak_freezes) || 0) >= missedDays;
+}
+
 /**
  * The streak as it stands right now: the stored count while the next claim would still continue it (Unstoppable never
  * lapses), 0 once it has lapsed but nobody has claimed to reset it yet. `skills` is a skill list or the map from toSkillMap.
+ * With `opts.freezes`, a streak that the user's streak freezes would still save counts as alive too, since that is what the
+ * next claim continues: the number to show a player. Momentum and the streak leaderboard leave it off.
  */
-function liveStreak(user, skills, now = Date.now()) {
+function liveStreak(user, skills, now = Date.now(), opts = {}) {
     const count = Number(user.streak_count) || 0;
     const last = user.last_daily_claim ? new Date(user.last_daily_claim).getTime() : 0;
     if (!count) return 0;
     if (!last) return count; // no claim on record to measure a gap from
     const bonuses = getSkillBonuses(skills);
     const at = now === undefined || now === null ? Date.now() : new Date(now).getTime();
-    return bonuses.streakUnstoppable || streakContinues(user, bonuses, last, at) ? count : 0;
+    if (bonuses.streakUnstoppable || streakContinues(user, bonuses, last, at)) return count;
+    return opts.freezes && freezesCover(user, bonuses, last, at) ? count : 0;
 }
 
 function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
@@ -706,7 +715,7 @@ function calculateDailyReward(user, userSkills, now = Date.now(), opts = {}) {
     } else if (lastClaim && bonuses.streakUnstoppable) {
         newStreak = streak + 1;
         streakPreserved = true;
-    } else if (lastClaim && streak > 1 && (Number(user.streak_freezes) || 0) >= missedDays) {
+    } else if (lastClaim && freezesCover(user, bonuses, lastClaim, now)) {
         // Bought streak freezes save the streak (the skill above is free, so it goes first), one per missed day.
         newStreak = streak + 1;
         streakPreserved = true;

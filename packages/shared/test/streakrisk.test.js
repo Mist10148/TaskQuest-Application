@@ -30,3 +30,13 @@ test('a lapsed streak has no expiry and is not at risk', () => {
     const lapsed = streakState(user('2030-03-01T08:00:00Z'), [], new Date('2030-03-11T19:00:00Z'));
     assert.deepEqual([lapsed.live, lapsed.expiresAt, lapsed.atRisk], [0, null, false]);
 });
+
+test('a streak past its window that streak freezes would save is shown alive, frozen and at risk, without an expiry', () => {
+    // Claimed on the 8th, now the 11th: two calendar days past the 1 day window, so it needs two freezes.
+    const frozen = streakState(user('2030-03-08T08:00:00Z', { streak_freezes: 2 }), [], new Date('2030-03-11T19:00:00Z'));
+    assert.deepEqual([frozen.live, frozen.frozen, frozen.expiresAt, frozen.atRisk], [5, true, null, true]);
+    const short = streakState(user('2030-03-08T08:00:00Z', { streak_freezes: 1 }), [], new Date('2030-03-11T19:00:00Z'));
+    assert.deepEqual([short.live, short.frozen, short.atRisk], [0, false, false], 'one freeze cannot bridge two missed days');
+    const fresh = streakState(user('2030-03-10T08:00:00Z', { streak_freezes: 2 }), [], new Date('2030-03-11T19:00:00Z'));
+    assert.equal(fresh.frozen, false, 'a streak still in its window is not frozen');
+});

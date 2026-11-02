@@ -131,7 +131,7 @@ async function getStatsSummary(discordId, now = new Date()) {
     const { starts, end } = dayStarts(zone, now, 90);
     const since = (n) => starts[starts.length - n];
     const [[[user]], skills, [[done]], [sources], [weekdayRows]] = await Promise.all([
-        pool.query('SELECT timezone, player_class, streak_count, last_daily_claim FROM users WHERE discord_id = ?', [id]),
+        pool.query('SELECT timezone, player_class, streak_count, streak_freezes, last_daily_claim FROM users WHERE discord_id = ?', [id]),
         getUserSkills(id),
         pool.query(
             `SELECT COUNT(*) AS n FROM items i
@@ -161,7 +161,7 @@ async function getStatsSummary(discordId, now = new Date()) {
     const index = perWeekday.indexOf(best); // ties go to the earliest weekday, Sunday first
     return {
         // The live streak, as Today shows it: 0 once it has lapsed, even before a claim resets the stored count.
-        streak: user ? liveStreak(user, skills, now.getTime()) : 0,
+        streak: user ? liveStreak(user, skills, now.getTime(), { freezes: true }) : 0,
         tasksCompleted7d: Number(done.n),
         xpBySource30d: sources.map((r) => ({ source: r.source, label: sourceLabel(r.source), xp: Number(r.xp) })),
         busiestWeekday: best > 0 ? { index, name: WEEKDAYS[index], count: best } : null

@@ -48,7 +48,7 @@ async function reviewState(conn, user, now) {
         claimed: Boolean(claim),
         claimable: !claim && Boolean(user.gamification_enabled) && completed >= LIMITS.WEEKLY_REVIEW_MIN_COMPLETED,
         // The live streak, as Today shows it: a lapsed one reads 0 even before a claim resets the stored count.
-        streak: liveStreak(user, await getUserSkills(user.discord_id, conn), new Date(now).getTime())
+        streak: liveStreak(user, await getUserSkills(user.discord_id, conn), new Date(now).getTime(), { freezes: true })
     };
 }
 
@@ -56,7 +56,7 @@ async function reviewState(conn, user, now) {
 async function getReview(discordId, now = new Date()) {
     const conn = await getPool().getConnection();
     try {
-        const [[user]] = await conn.query('SELECT discord_id, gamification_enabled, streak_count, last_daily_claim, player_class, timezone FROM users WHERE discord_id = ?', [String(discordId)]);
+        const [[user]] = await conn.query('SELECT discord_id, gamification_enabled, streak_count, streak_freezes, last_daily_claim, player_class, timezone FROM users WHERE discord_id = ?', [String(discordId)]);
         const s = await reviewState(conn, user || { discord_id: String(discordId), gamification_enabled: 1, streak_count: 0 }, now);
         return {
             weekStart: s.period.start,

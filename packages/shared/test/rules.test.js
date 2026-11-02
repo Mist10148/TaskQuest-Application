@@ -251,6 +251,9 @@ test('liveStreak reads 0 once a streak has lapsed, and Momentum follows it', () 
     assert.equal(shared.liveStreak(at(49), [], now), 0);
     assert.equal(shared.liveStreak(at(49, { player_class: 'PALADIN' }), [], now), 9, 'Paladins have the 72 h window');
     assert.equal(shared.liveStreak(user({ streak_count: 0 }), [], now), 0);
+    assert.equal(shared.liveStreak(at(60, { streak_freezes: 1 }), [], now), 0, 'without the option a freeze does not count');
+    assert.equal(shared.liveStreak(at(60, { streak_freezes: 1 }), [], now, { freezes: true }), 9, 'a freeze would save it at the next claim');
+    assert.equal(shared.liveStreak(at(200, { streak_freezes: 2 }), [], now, { freezes: true }), 0, 'two freezes cannot bridge eight days');
 
     const momentum = [sk('default_momentum', 3)];
     const fresh = shared.calculateFinalXP(at(30), momentum, 100, { now, rng: () => 0.99 });

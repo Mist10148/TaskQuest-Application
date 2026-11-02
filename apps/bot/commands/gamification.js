@@ -237,7 +237,7 @@ async function profile(interaction) {
     const classInfo = CLASS_INFO[user.player_class] || CLASS_INFO.DEFAULT;
     const skillCount = userSkills?.length || 0;
     // As Today shows it: a lapsed streak reads 0 even before a claim resets the stored count.
-    const streak = liveStreak(user, userSkills || []);
+    const streak = liveStreak(user, userSkills || [], Date.now(), { freezes: true });
     const counterLine = ui.classCounterLine(user, userSkills);
 
     // ═══════════════════════════════════════════════════════════════════════════

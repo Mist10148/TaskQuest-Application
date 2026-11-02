@@ -47,7 +47,9 @@ function streakExpiry(user, bonuses, last) {
 function streakState(user, skills, now) {
     const count = Number(user.streak_count) || 0;
     const last = user.last_daily_claim ? new Date(user.last_daily_claim).getTime() : 0;
-    const live = liveStreak(user, skills, now.getTime());
+    const live = liveStreak(user, skills, now.getTime(), { freezes: true });
+    // Past its window and alive only because streak freezes would save it at the next claim (one freeze per missed day).
+    const frozen = live > 0 && liveStreak(user, skills, now.getTime()) === 0;
     const bonuses = getSkillBonuses(skills);
     const claimedToday = Boolean(last) && claimGapDays(user, last, now.getTime()) === 0;
     // Unstoppable never lapses; otherwise the claim has `windowDays - gap` days left, today included at zero. Below zero the
@@ -63,7 +65,9 @@ function streakState(user, skills, now) {
         claimedToday,
         daysLeft,
         claimableAt: claimableAt ? new Date(claimableAt).toISOString() : null,
-        expiresAt: live && expiresAt ? new Date(expiresAt).toISOString() : null,
+        frozen,
+        // A frozen streak's window has already ended; it lasts as long as the freezes do, one more for each day it waits.
+        expiresAt: live && !frozen && expiresAt ? new Date(expiresAt).toISOString() : null,
         atRisk: live >= 2 && !claimedToday && daysLeft === 0 && claimable
     };
 }
@@ -86,7 +90,7 @@ async function getToday(discordId, now = new Date()) {
     const id = String(discordId);
     const pool = getPool();
     const [[user]] = await pool.query(
-        'SELECT discord_id, timezone, streak_count, last_daily_claim, player_class, prestige, gamification_enabled FROM users WHERE discord_id = ?',
+        'SELECT discord_id, timezone, streak_count, streak_freezes, last_daily_claim, player_class, prestige, gamification_enabled FROM users WHERE discord_id = ?',
         [id]
     );
     const u = user || { discord_id: id, timezone: null, streak_count: 0, last_daily_claim: null, player_class: 'DEFAULT', gamification_enabled: 1 };

@@ -1163,8 +1163,10 @@ export interface TodayData {
         atRisk: boolean;
         /** When the daily reward can be claimed again (ISO), null before the first claim. */
         claimableAt?: string | null;
-        /** When a live streak lapses unless claimed (ISO), null when it never does or is not alive. */
+        /** When a live streak lapses unless claimed (ISO), null when it never does, is not alive or is frozen. */
         expiresAt?: string | null;
+        /** Past its window, and alive only because streak freezes will save it at the next claim. */
+        frozen?: boolean;
     };
     counts: { dueToday: number; overdue: number; doneToday: number };
     tasks: TodayTask[];

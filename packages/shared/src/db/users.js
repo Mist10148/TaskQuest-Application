@@ -406,7 +406,7 @@ async function getWeeklyStats(discordId, now = new Date()) {
         listsOpen: Number(open.lists_open),
         listsOverdue: Number(open.lists_overdue),
         // The live streak, as Today shows it: a lapsed one reads 0 even before a claim resets the stored count.
-        streak: user ? liveStreak(user, skills, now.getTime()) : 0,
+        streak: user ? liveStreak(user, skills, now.getTime(), { freezes: true }) : 0,
         level: user ? Number(user.player_level) : 1
     };
 }

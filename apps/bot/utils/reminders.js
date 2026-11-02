@@ -354,13 +354,17 @@ async function sendDeadlineReminders({ db, client, log, push, now = new Date(), 
     return result;
 }
 
-/** Buttons on a reminder DM: remind_snooze_<listId>, task_remind_snooze_<itemId> and remind_off. */
+/**
+ * Buttons on a reminder DM: remind_snooze_<listId>, task_remind_snooze_<itemId> and remind_off. Each one is acknowledged
+ * before its database write, so a slow database cannot turn a change that went through into "This interaction failed".
+ */
 async function handleButton(interaction, { db, now = new Date() } = {}) {
     const database = db || require('@taskquest/shared/db');
     const userId = interaction.user.id;
+    await interaction.deferUpdate();
     if (interaction.customId === 'remind_off') {
         await database.users.updateSettings(userId, { automation_enabled: false });
-        return interaction.update({ components: [], content: '🔕 Reminders are off. Turn them back on with `/automation`.' });
+        return interaction.editReply({ components: [], content: '🔕 Reminders are off. Turn them back on with `/automation`.' });
     }
     const isTask = interaction.customId.startsWith('task_remind_snooze_');
     const targetId = interaction.customId.slice((isTask ? 'task_remind_snooze_' : 'remind_snooze_').length);
@@ -372,13 +376,13 @@ async function handleButton(interaction, { db, now = new Date() } = {}) {
         // Only a list or task that is really gone strips the buttons; a temporary failure (a database blip) keeps them so
         // the player can press Snooze again.
         if (['NOT_FOUND', 'FORBIDDEN', 'VALIDATION'].includes(err?.code)) {
-            return interaction.update({ components: [], content: `That ${isTask ? 'task' : 'list'} no longer exists.` });
+            return interaction.editReply({ components: [], content: `That ${isTask ? 'task' : 'list'} no longer exists.` });
         }
         console.error('Snooze failed:', err);
-        return interaction.reply({ content: 'Could not snooze that right now. Try the button again in a moment.', flags: MessageFlags.Ephemeral });
+        return interaction.followUp({ content: 'Could not snooze that right now. Try the button again in a moment.', flags: MessageFlags.Ephemeral });
     }
     // No flags: an edit may only change SUPPRESS_EMBEDS, and Discord refuses the whole edit for any other.
-    return interaction.update({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.' });
+    return interaction.editReply({ components: [], content: '😴 Snoozed. I will remind you again in about 24 hours.' });
 }
 
 module.exports = { createBudget, flushOverflow, markWithRetry, pushReminder, MAX_DMS_PER_USER_PER_RUN, sendDeadlineReminders, sendTaskReminders, pushForList, pushForTask, decideReminder, decideTaskReminder, taskReminderMessage, reminderMessage, handleButton, PERMANENT_DM_ERRORS, SNOOZE_MS };

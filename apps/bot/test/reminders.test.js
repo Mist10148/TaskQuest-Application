@@ -136,20 +136,22 @@ test('the snooze button defers 24 hours; stop turns reminders off', async () => 
         users: { updateSettings: async (user, s) => calls.push(['settings', user, s]) }
     };
     const replies = [];
-    const interaction = (customId) => ({ customId, user: { id: '42' }, update: async (r) => replies.push(r) });
+    const interaction = (customId) => ({ customId, user: { id: '42' }, deferUpdate: async () => calls.push(['defer']), editReply: async (r) => replies.push(r) });
     await handleButton(interaction('remind_snooze_7'), { db, now: NOW });
-    assert.deepEqual(calls[0], ['snooze', '42', '7', NOW.getTime() + SNOOZE_MS]);
+    assert.deepEqual(calls[0], ['defer'], 'acknowledged before the write');
+    assert.deepEqual(calls[1], ['snooze', '42', '7', NOW.getTime() + SNOOZE_MS]);
     assert.match(replies[0].content, /Snoozed/);
     assert.deepEqual(replies[0].components, []);
     await handleButton(interaction('remind_off'), { db, now: NOW });
-    assert.deepEqual(calls[1], ['settings', '42', { automation_enabled: false }]);
+    assert.deepEqual(calls.slice(2), [['defer'], ['settings', '42', { automation_enabled: false }]]);
+    assert.match(replies[1].content, /Reminders are off/);
 });
 
 test('a snooze that fails for a temporary reason keeps the buttons; a vanished list removes them', async () => {
     const mk = (error) => ({ tasks: { snoozeList: async () => { throw error; } } });
     const replies = [];
     const updates = [];
-    const interaction = { customId: 'remind_snooze_7', user: { id: '42' }, update: async (r) => updates.push(r), reply: async (r) => replies.push(r) };
+    const interaction = { customId: 'remind_snooze_7', user: { id: '42' }, deferUpdate: async () => {}, editReply: async (r) => updates.push(r), followUp: async (r) => replies.push(r) };
     const quiet = console.error;
     console.error = () => {};
     try {
@@ -259,7 +261,7 @@ test('an overdue task reminder says so; the snooze button snoozes the task, not 
     const calls = [];
     const db = { tasks: { snoozeTask: async (u, id, until) => calls.push([u, id, until.getTime()]), snoozeList: async () => calls.push('list') } };
     const replies = [];
-    await handleButton({ customId: 'task_remind_snooze_5', user: { id: '42' }, update: async (r) => replies.push(r) }, { db, now: NOW });
+    await handleButton({ customId: 'task_remind_snooze_5', user: { id: '42' }, deferUpdate: async () => {}, editReply: async (r) => replies.push(r) }, { db, now: NOW });
     assert.deepEqual(calls, [['42', '5', NOW.getTime() + SNOOZE_MS]]);
     assert.match(replies[0].content, /Snoozed/);
 });

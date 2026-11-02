@@ -477,10 +477,11 @@ async function routeClassButton(interaction) {
 
     // Return to default class
     if (id === 'class_return_default') {
+        await interaction.deferUpdate(); // before the read and the write, as ceq_ does
         const user = await users.getUser(userId);
 
-        if (user.player_class === 'DEFAULT') {
-            return interaction.reply({
+        if (!user || user.player_class === 'DEFAULT') {
+            return interaction.followUp({
                 embeds: [ui.info('Already Default', 'You\'re already using the Default class.')],
                 flags: MessageFlags.Ephemeral
             });
@@ -488,7 +489,7 @@ async function routeClassButton(interaction) {
 
         const { user: updatedUser } = await progression.equipClass(userId, 'DEFAULT');
 
-        await interaction.update({
+        await interaction.editReply({
             ...(await classView(userId, updatedUser, 'DEFAULT'))
         });
 

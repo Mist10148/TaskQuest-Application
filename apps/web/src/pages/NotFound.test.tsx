@@ -16,6 +16,7 @@ describe("NotFound", () => {
     );
     expect(screen.getByRole("heading", { name: "404" })).toBeInTheDocument();
     expect(screen.getByText("Oops! Page not found")).toBeInTheDocument();
+    expect(document.title).toBe("Page not found · TaskQuest");
     await userEvent.click(screen.getByRole("link", { name: "Return to Home" }));
     expect(screen.getByText("home page")).toBeInTheDocument();
   });

@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useT } from "@/i18n/useT";
+import { APP_TITLE } from "@/lib/pageTitle";
 
 const NotFound = () => {
   const location = useLocation();
@@ -9,6 +10,9 @@ const NotFound = () => {
   useEffect(() => {
     if (import.meta.env.DEV) console.warn("404: no route for", location.pathname);
   }, [location.pathname]);
+  useEffect(() => {
+    document.title = `${t("notFound.tabTitle")} · ${APP_TITLE}`;
+  }, [t]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted">

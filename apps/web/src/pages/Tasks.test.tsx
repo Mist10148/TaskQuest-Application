@@ -83,6 +83,7 @@ describe("Tasks page", () => {
     show("/tasks?list=7");
     expect(hooks.useList).toHaveBeenCalledWith(7);
     expect(screen.getByText("quest Garden")).toBeInTheDocument();
+    expect(document.title).toBe("Garden · Tasks · TaskQuest");
   });
 
   it("?new=quest opens the quest dialog and drops the param", async () => {

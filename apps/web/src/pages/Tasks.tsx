@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { itemsApi, type Item, type ListWithItems } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -29,6 +29,7 @@ import { MembersDialog } from "@/components/tasks/MembersDialog";
 import { canEditTasks, idFromParam, isAccessLost, roleOf } from "@/lib/sharing";
 import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/i18n/useT";
+import { pageTitle } from "@/lib/pageTitle";
 
 /** Batches go one task at a time; from this size on, a loading toast counts them so a long batch does not look stuck. */
 const BULK_PROGRESS_FROM = 3;
@@ -323,6 +324,19 @@ const Tasks = () => {
   };
 
   const detail: ListWithItems | undefined = selectedListId ? selectedList : undefined;
+  // The tab names the open quest ("Groceries · Tasks · TaskQuest"): set after the layout's own title, and put back in a layout
+  // effect (as Games does) so that leaving for another page cannot overwrite the title that page set.
+  const detailName = detail?.name;
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (detailName) document.title = `${detailName} · ${pageTitle(pathname)}`;
+  }, [detailName, pathname]);
+  useLayoutEffect(() => {
+    if (!detailName) return;
+    return () => {
+      document.title = pageTitle(window.location.pathname);
+    };
+  }, [detailName]);
   // People a task can be assigned to: only a shared quest has anyone besides the owner.
   const membersQuery = useListMembers(detail?.id ?? 0, Boolean(detail?.shared));
   const assignOptions = detail?.shared ? membersQuery.data?.members : undefined;

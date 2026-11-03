@@ -13,6 +13,7 @@ export const en = {
   "notFound.title": "404",
   "notFound.message": "Oops! Page not found",
   "notFound.home": "Return to Home",
+  "notFound.tabTitle": "Page not found",
 
   "review.title": "Weekly review",
   "review.subtitle": "Look back at this week and collect a once-a-week bonus.",

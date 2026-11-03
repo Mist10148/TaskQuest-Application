@@ -32,4 +32,4 @@ Work that is understood and waits only for time, a key or a decision.
 - A party of one can claim both party rewards (#50).
 - The arcade plausibility bound, `arcade-report` calibration and a per-game cooldown (#39).
 - Whether a manager may delete a shared quest ([shared-lists](design/shared-lists.md)).
-- Whether the weekly goal pays only for tasks finished after it is set. Today the target can be set or lowered at any time while unclaimed (as long as it is above the progress; the Today page's Change goal does this), so a goal set on Sunday at progress + 1 pays as if it had been planned all week.
+- Whether the weekly goal pays only for tasks finished after it is set. Today the target can be set or lowered at any time while unclaimed (as long as it is above the progress; the web Today page's Change goal does this, and `/today` on Discord only shows the goal), so a goal set on Sunday at progress + 1 pays as if it had been planned all week.

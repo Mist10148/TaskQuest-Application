@@ -184,7 +184,7 @@ Check the ids against Google's current model list when building. Use the embeddi
 
 ## 4. Data model changes
 
-New migration *(new)* `packages/shared/src/db/migrations/003_ai.js`, following the same `exports.up = async (h) => { ... }` format as `002_upgrade_legacy.js`.
+New migration *(new)* `packages/shared/src/db/migrations/003_ai.js`, following the same `exports.up = async (h) => { ... }` format as `002_upgrade_legacy.js`. *(As built, these tables are part of `001_baseline`, `003` is `003_ai_prioritize_cache` and `002_upgrade_legacy` no longer exists; the real list is in [DATABASE](DATABASE.md).)*
 
 ```sql
 -- Vector store for RAG (one row per chunk)

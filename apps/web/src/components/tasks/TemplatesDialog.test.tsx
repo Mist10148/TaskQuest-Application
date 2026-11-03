@@ -59,6 +59,20 @@ describe("TemplatesDialog", () => {
     expect(screen.getByRole("button", { name: "Delete template Plan 1" })).toHaveFocus();
   });
 
+  it("names the new quest when a name is given, and keeps the template's name otherwise", async () => {
+    load([template(1)]);
+    const applyAsync = vi.fn(async () => ({ list: { id: 5, name: "x" } }));
+    hooks.useApplyTemplate.mockReturnValue({ mutateAsync: applyAsync, isPending: false });
+    const { unmount } = show();
+    await userEvent.type(screen.getByLabelText(/Name for the new quest/), "  Spring cleaning ");
+    await userEvent.click(screen.getByRole("button", { name: "Use" }));
+    expect(applyAsync).toHaveBeenCalledWith({ id: 1, listName: "Spring cleaning" });
+    unmount();
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "Use" }));
+    expect(applyAsync).toHaveBeenLastCalledWith({ id: 1, listName: undefined });
+  });
+
   it("shows no count when there are no templates", () => {
     load([]);
     show();

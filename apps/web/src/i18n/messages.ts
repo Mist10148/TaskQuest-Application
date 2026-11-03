@@ -92,6 +92,8 @@ export const en = {
   "template.retry": "Try again",
   "template.empty": "No templates yet. Open a quest and choose \"Save as template\".",
   "template.use": "Use",
+  "template.questName": "Name for the new quest (optional)",
+  "template.questNameHint": "Left empty, the quest takes the template's name.",
   "template.delete": "Delete",
   "template.keep": "Keep",
   "template.confirmDelete": "Delete {name}?",

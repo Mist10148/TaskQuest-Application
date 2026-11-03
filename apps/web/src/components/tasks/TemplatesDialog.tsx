@@ -2,9 +2,11 @@ import { useRef, useState } from "react";
 import { FileStack, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useApplyTemplate, useDeleteTemplate, useTemplates } from "@/hooks/useApi";
 import { TEMPLATE_MAX_COUNT, templateSummary } from "@/lib/templates";
+import { TEXT_LIMITS } from "./constants";
 import { useT } from "@/i18n/useT";
 
 interface Props {
@@ -25,11 +27,14 @@ export const TemplatesDialog = ({ open, onOpenChange, onApplied }: Props) => {
   // The template whose trash button gets focus back once Keep closes its confirmation.
   const refocusId = useRef<number | null>(null);
   const [applyingId, setApplyingId] = useState<number | null>(null);
+  // The name for the quest the next "Use" creates; empty keeps the template's own name.
+  const [questName, setQuestName] = useState("");
 
   const use = async (id: number) => {
     setApplyingId(id);
     try {
-      const result = await apply.mutateAsync({ id });
+      const result = await apply.mutateAsync({ id, listName: questName.trim() || undefined });
+      setQuestName("");
       onOpenChange(false);
       onApplied(result.list.id);
     } catch {
@@ -45,6 +50,13 @@ export const TemplatesDialog = ({ open, onOpenChange, onApplied }: Props) => {
           <DialogTitle className="flex items-center gap-2"><FileStack className="h-5 w-5 text-primary-text" aria-hidden />{tr("template.listTitle")}</DialogTitle>
           <DialogDescription>{tr("template.listHint")}</DialogDescription>
         </DialogHeader>
+        {saved > 0 && (
+          <div className="space-y-1">
+            <label htmlFor="template-quest-name" className="text-sm font-medium">{tr("template.questName")}</label>
+            <Input id="template-quest-name" value={questName} onChange={(e) => setQuestName(e.target.value)} maxLength={TEXT_LIMITS.LIST_NAME} aria-describedby="template-quest-name-hint" />
+            <p id="template-quest-name-hint" className="text-xs text-foreground-muted">{tr("template.questNameHint")}</p>
+          </div>
+        )}
         <div className="space-y-2 py-2 max-h-[60vh] overflow-y-auto">
           {templates.isLoading ? (
             <div className="flex justify-center py-6" aria-busy="true"><Loader2 className="h-5 w-5 animate-spin text-foreground-muted" /></div>

@@ -42,6 +42,8 @@ describe("streakDeadline", () => {
     const morning = new Date(2030, 2, 13, 8, 0);
     expect(streakDeadline(tonight.toISOString(), now)).toBe(`at ${time(tonight)} today`);
     expect(streakDeadline(morning.toISOString(), now)).toBe(`at ${time(morning)} tomorrow`);
+    const later = new Date(2030, 2, 14, 8, 0); // a 72 or 96 hour window can end the day after tomorrow
+    expect(streakDeadline(later.toISOString(), now)).toBe(`at ${time(later)} on ${later.toLocaleDateString([], { weekday: "long" })}`);
   });
   it("falls back to today without a time", () => {
     expect(streakDeadline(null)).toBe("today");

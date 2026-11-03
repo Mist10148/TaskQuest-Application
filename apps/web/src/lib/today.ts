@@ -16,13 +16,17 @@ export function goalPercent(progress: number, target: number | null): number {
 }
 
 /**
- * When a streak lapses, for the at-risk alert: "at 11:30 PM today", "at 8:00 AM tomorrow", or "today" when the server did not
- * say (an older server). Read in the browser's own zone, which is the one the time is shown in.
+ * When a streak lapses, for the at-risk alert: "at 11:30 PM today", "at 8:00 AM tomorrow", "at 8:00 AM on Thursday" further
+ * out (a rolling window can reach past tomorrow), or "today" when the server did not say (an older server). Read in the
+ * browser's own zone, which is the one the time is shown in.
  */
 export function streakDeadline(expiresAt: string | null | undefined, now: Date = new Date()): string {
   if (!expiresAt) return "today";
   const at = new Date(expiresAt);
   if (Number.isNaN(at.getTime())) return "today";
   const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  return `at ${time} ${at.toDateString() === now.toDateString() ? "today" : "tomorrow"}`;
+  if (at.toDateString() === now.toDateString()) return `at ${time} today`;
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (at.toDateString() === tomorrow.toDateString()) return `at ${time} tomorrow`;
+  return `at ${time} on ${at.toLocaleDateString([], { weekday: "long" })}`;
 }

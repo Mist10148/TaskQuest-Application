@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Circle, Hourglass, Loader2, Play, Timer, XCircle } from "lucide-react";
-import type { FocusActive, FocusFinishResult, FocusStatus } from "@/lib/api";
+import type { FocusActive, FocusFinishResult, FocusStatus, TodayTask } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { APP_TITLE, pageTitle } from "@/lib/pageTitle";
 import { QueryState } from "@/components/feedback/QueryState";
@@ -223,9 +223,21 @@ const FocusTask = () => {
   const taskId = idFromParam(params.get("task"));
   const today = useToday();
   const toggle = useToggleItem();
-  const task = taskId === null ? undefined : [...(today.data?.tasks ?? []), ...(today.data?.upcoming ?? [])].find((t) => t.id === taskId);
+  const found = taskId === null ? undefined : [...(today.data?.tasks ?? []), ...(today.data?.upcoming ?? [])].find((t) => t.id === taskId);
+  // Today lists open tasks only, so the task leaves it once marked done: keep showing it, with "Done", from what was found.
+  const [kept, setKept] = useState<TodayTask | null>(null);
+  useEffect(() => {
+    if (found) setKept(found);
+  }, [found]);
+  const toggled = toggle.variables;
+  const done = toggle.isSuccess && (typeof toggled === "number" ? toggled : toggled?.itemId) === taskId;
+  const task = found ?? (done && kept?.id === taskId ? kept : undefined);
+  // "Done" replaces the Mark done button: move focus to it, so keyboard users are not dropped at the top of the page.
+  const doneRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (done) doneRef.current?.focus();
+  }, [done]);
   if (!task) return null;
-  const done = toggle.isSuccess && toggle.variables !== undefined;
   return (
     <section className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4" aria-label="Task you are focusing on">
       <div className="min-w-0 flex-1">
@@ -234,7 +246,7 @@ const FocusTask = () => {
         <p className="text-xs text-foreground-muted">{task.listName}</p>
       </div>
       {done ? (
-        <p className="inline-flex items-center gap-1.5 text-sm font-medium text-success" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden /> Done</p>
+        <p ref={doneRef} tabIndex={-1} className="inline-flex items-center gap-1.5 text-sm font-medium text-success focus-visible:outline-hidden" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden /> Done</p>
       ) : (
         <Button size="sm" variant="outline" className="gap-1" disabled={toggle.isPending} onClick={() => toggle.mutate({ itemId: task.id, completed: true })} aria-label={`Mark "${task.name}" done`}>
           {toggle.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Circle className="h-4 w-4" aria-hidden />} Mark done

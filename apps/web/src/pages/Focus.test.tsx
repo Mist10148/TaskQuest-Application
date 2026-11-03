@@ -100,6 +100,32 @@ describe("Focus page", () => {
     expect(toggle).toHaveBeenCalledWith({ itemId: 7, completed: true });
   });
 
+  it("keeps the task with Done, and focus on it, once it is ticked off and leaves Today's list", () => {
+    load(status());
+    const written = { id: 7, name: "Write report", listId: 3, listName: "Work", dueDate: null, priority: null, estimateMinutes: null, overdueDays: 0 };
+    hooks.useToday.mockReturnValue({ data: { tasks: [written] } });
+    const { rerender } = show("/focus?task=7");
+    // The toggle succeeded and Today refetched without the (now finished) task.
+    hooks.useToggleItem.mockReturnValue({ mutate: vi.fn(), isPending: false, isSuccess: true, variables: { itemId: 7, completed: true } });
+    hooks.useToday.mockReturnValue({ data: { tasks: [] } });
+    rerender(
+      <MemoryRouter initialEntries={["/focus?task=7"]}>
+        <Focus />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole("link", { name: "Write report" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Done");
+    expect(screen.getByRole("status")).toHaveFocus();
+  });
+
+  it("does not call another task done", () => {
+    load(status());
+    hooks.useToggleItem.mockReturnValue({ mutate: vi.fn(), isPending: false, isSuccess: true, variables: { itemId: 99, completed: true } });
+    hooks.useToday.mockReturnValue({ data: { tasks: [{ id: 7, name: "Write report", listId: 3, listName: "Work", dueDate: null, priority: null, estimateMinutes: null, overdueDays: 0 }] } });
+    show("/focus?task=7");
+    expect(screen.getByRole("button", { name: 'Mark "Write report" done' })).toBeInTheDocument();
+  });
+
   it("shows no task for an unknown or missing id", () => {
     load(status());
     hooks.useToday.mockReturnValue({ data: { tasks: [] } });

@@ -34,12 +34,12 @@ import { pageTitle } from "@/lib/pageTitle";
 /** Batches go one task at a time; from this size on, a loading toast counts them so a long batch does not look stuck. */
 const BULK_PROGRESS_FROM = 3;
 
-/** A "Completing 3 of 12…" toast for a batch, replaced by the summary toast (or removed) when it ends. */
-function bulkProgress(verb: string, total: number) {
+/** A "Completing 3 of 12…" toast for a batch (`label` words it for task n), replaced by the summary toast (or removed) at the end. */
+function bulkProgress(total: number, label: (n: number) => string) {
   if (total < BULK_PROGRESS_FROM) return { step: () => {}, end: () => {} };
-  const id = toast.loading(`${verb} 1 of ${total}…`);
+  const id = toast.loading(label(1));
   return {
-    step: (n: number) => void toast.loading(`${verb} ${Math.min(n + 1, total)} of ${total}…`, { id }),
+    step: (n: number) => void toast.loading(label(Math.min(n + 1, total)), { id }),
     end: () => toast.dismiss(id),
   };
 }
@@ -109,12 +109,12 @@ const Tasks = () => {
   const accessLost = selectedListId !== null && listFailed && isAccessLost(listError);
   useEffect(() => {
     if (!accessLost || selectedListId === null) return;
-    toast.error("That quest was not found, or you no longer have access to it.");
+    toast.error(t("tasks.accessLost"));
     qc.removeQueries({ queryKey: ["lists", selectedListId] });
     void qc.invalidateQueries({ queryKey: ["lists"] });
     setMembersOpen(false);
     setSelectedListId(null);
-  }, [accessLost, selectedListId, qc, setSelectedListId]);
+  }, [accessLost, selectedListId, qc, setSelectedListId, t]);
   const itemDeletes = useUndoableDelete(
     async (id) => {
       await deleteItem.mutateAsync(id);
@@ -134,12 +134,12 @@ const Tasks = () => {
       // If it failed to load, drop the param, or a later successful Retry would pop the form open out of nowhere.
       if (selectedListId && !selectedList) {
         if (!listFailed) return; // still loading; a failed load has its own error card
-      } else if (selectedListId && selectedList && !canEditTasks(roleOf(selectedList))) toast("You only have view access to this quest.");
+      } else if (selectedListId && selectedList && !canEditTasks(roleOf(selectedList))) toast(t("tasks.viewOnly"));
       else if (selectedListId) setItemDialog({ mode: "create" });
-      else toast("Open a quest first, then press N or use Add Task.");
+      else toast(t("tasks.openQuestFirst"));
     }
     setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("new"); return next; }, { replace: true });
-  }, [wantsNew, selectedListId, selectedList, listFailed, setSearchParams]);
+  }, [wantsNew, selectedListId, selectedList, listFailed, setSearchParams, t]);
 
   const editListInitial = useMemo<ListFormValues>(
     () =>
@@ -194,7 +194,7 @@ const Tasks = () => {
     if (!selectedListId) return;
     try {
       await updateList.mutateAsync({ listId: selectedListId, data: listPayload(values) });
-      toast.success("✏️ Quest updated!");
+      toast.success(t("tasks.questUpdated"));
       setListDialog(null);
       refetchList();
     } catch { /* error toast shown by the mutation hook */ }
@@ -209,7 +209,7 @@ const Tasks = () => {
         await createItem.mutateAsync({ listId: selectedListId, ...data });
       } else {
         await updateItem.mutateAsync({ itemId: itemDialog.item.id, data });
-        toast.success("✏️ Task updated");
+        toast.success(t("tasks.taskUpdated"));
       }
       setItemDialog(null);
       refetchList();
@@ -231,22 +231,22 @@ const Tasks = () => {
     if (!listToDelete) return;
     try {
       await deleteList.mutateAsync(listToDelete);
-      toast.success("🗑️ Quest deleted successfully");
+      toast.success(t("tasks.questDeleted"));
       setSelectedListId(null);
       setListToDelete(null);
     } catch { /* error toast shown by the mutation hook */ }
   };
 
-  const nameOf = (id: number) => selectedList?.items.find((i: Item) => i.id === id)?.name ?? "task";
+  const nameOf = (id: number) => selectedList?.items.find((i: Item) => i.id === id)?.name ?? t("tasks.aTask");
   const deleteItems = (ids: number[]) =>
-    itemDeletes.request(ids, ids.length === 1 ? `Deleted "${nameOf(ids[0])}"` : `Deleted ${ids.length} tasks`);
+    itemDeletes.request(ids, ids.length === 1 ? t("tasks.deletedOne", { name: nameOf(ids[0]) }) : t("tasks.deletedMany", { count: ids.length }));
 
   // Complete one after another so each task pays its own XP and achievements.
   // The reward toasts are folded into one summary for the batch.
   const completeItems = async (ids: number[]) => {
     const finished: number[] = [];
     let xp = 0;
-    const progress = bulkProgress("Completing", ids.length);
+    const progress = bulkProgress(ids.length, (n) => t("tasks.completing", { n, total: ids.length }));
     for (const [n, id] of ids.entries()) {
       progress.step(n);
       try {
@@ -266,13 +266,14 @@ const Tasks = () => {
     const undo = async () => {
       let failed = false;
       for (const id of finished) await itemsApi.toggle(id, false).catch(() => (failed = true));
-      if (failed) toast.error("Some tasks could not be reopened.");
+      if (failed) toast.error(t("tasks.reopenFailed"));
       refetchList();
       // Quests, the weekly review, Today, the party and the profile totals count finished tasks too.
       qc.invalidateQueries({ queryKey: ["lists"] });
       invalidateProgress(qc);
     };
-    if (done > 0) toast.success(`✨ ${done} ${done === 1 ? "task" : "tasks"} done${xp > 0 ? ` +${xp} XP!` : ""}`, { action: { label: "Undo", onClick: () => void undo() }, duration: 6000 });
+    const doneText = done === 1 ? t("tasks.doneOne") : t("tasks.doneMany", { count: done });
+    if (done > 0) toast.success(`${doneText}${xp > 0 ? t("tasks.doneXp", { xp }) : ""}`, { action: { label: t("tasks.undo"), onClick: () => void undo() }, duration: 6000 });
     refetchList();
   };
 
@@ -281,7 +282,7 @@ const Tasks = () => {
     if (!bulkPatch(values)) return;
     let done = 0;
     let tooMany = 0;
-    const progress = bulkProgress("Updating", ids.length);
+    const progress = bulkProgress(ids.length, (n) => t("tasks.updating", { n, total: ids.length }));
     for (const [n, id] of ids.entries()) {
       progress.step(n);
       // Adding or removing tags depends on each task's own tags, so every task gets its own patch.
@@ -300,8 +301,9 @@ const Tasks = () => {
       }
     }
     progress.end();
-    if (done > 0) toast.success(`✏️ ${done} ${done === 1 ? "task" : "tasks"} updated${done < ids.length ? ` (${ids.length - done} not changed)` : ""}`);
-    if (tooMany > 0) toast.warning(`${tooMany} ${tooMany === 1 ? "task was" : "tasks were"} skipped: a task can have at most ${MAX_TAGS} tags.`);
+    const updatedText = done === 1 ? t("tasks.updatedOne") : t("tasks.updatedMany", { count: done });
+    if (done > 0) toast.success(`${updatedText}${done < ids.length ? t("tasks.notChanged", { count: ids.length - done }) : ""}`);
+    if (tooMany > 0) toast.warning(tooMany === 1 ? t("tasks.tooManyTagsOne", { max: MAX_TAGS }) : t("tasks.tooManyTagsMany", { count: tooMany, max: MAX_TAGS }));
     if (done > 0) invalidateTaskViews(qc); // once for the batch (each update was quiet)
     refetchList();
   };
@@ -347,9 +349,9 @@ const Tasks = () => {
   );
 
   const moveItems = async (ids: number[], listId: number) => {
-    const target = lists.find((l) => l.id === listId)?.name ?? "the other quest";
+    const target = lists.find((l) => l.id === listId)?.name ?? t("tasks.otherQuest");
     let done = 0;
-    const progress = bulkProgress("Moving", ids.length);
+    const progress = bulkProgress(ids.length, (n) => t("tasks.moving", { n, total: ids.length }));
     for (const [n, id] of ids.entries()) {
       progress.step(n);
       try {
@@ -361,7 +363,7 @@ const Tasks = () => {
     }
     progress.end();
     if (done > 0 && ids.length > 1) invalidateTaskViews(qc); // once for the batch (each move was quiet)
-    if (done > 0) toast.success(`📦 Moved ${done === 1 ? `"${nameOf(ids[0])}"` : `${done} tasks`} to ${target}`);
+    if (done > 0) toast.success(done === 1 ? t("tasks.movedOne", { name: nameOf(ids[0]), target }) : t("tasks.movedMany", { count: done, target }));
   };
 
   return (
@@ -389,7 +391,7 @@ const Tasks = () => {
           onToggleItem={handleToggleItem}
           onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
           onSnooze={(itemId) =>
-            updateItem.mutate({ itemId, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success("Snoozed to tomorrow") })
+            updateItem.mutate({ itemId, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success(t("tasks.snoozed")) })
           }
           assignOptions={assignOptions}
           onAssign={(itemId, memberKey) => updateItem.mutateAsync({ itemId, data: { assignee: memberKey } })}

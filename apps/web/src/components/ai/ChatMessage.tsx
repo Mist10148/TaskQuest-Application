@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Bot, Check, Copy, User as UserIcon, Wrench } from "lucide-react";
@@ -67,11 +67,16 @@ function renderBody(text: string, knownIds: Map<string, string>): ReactNode {
 /** Copy an answer as plain text (the way it was written, bullets and all). */
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  // "Copied" turns back into "Copy" after a moment; the timer goes with the button (a new chat, say).
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(id);
+  }, [copied]);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error("Couldn't copy. Select the text and copy it by hand.");
     }

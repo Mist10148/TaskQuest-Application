@@ -42,7 +42,7 @@ function render(s, now = Date.now()) {
                 `**${s.active.minutes} minute session** · ${now >= ends ? "time's up" : `ends ${stamp(s.active.endsAt, 'R')}`}`,
                 now >= payableAt
                     ? 'Finish with `/focus finish` to collect your XP.'
-                    : `Finishing pays from ${stamp(new Date(payableAt).toISOString(), 't')}; finishing sooner cancels the session.`
+                    : `Finishing pays from ${stamp(new Date(payableAt).toISOString(), 't')}; \`/focus finish\` refuses until then.`
             ].join('\n')
         );
     } else {
@@ -60,6 +60,7 @@ function render(s, now = Date.now()) {
 function finishedText(r) {
     if (r.state === 'cancelled') return ui.warn('Session cancelled', `It was shorter than ${LIMITS.FOCUS_MIN_MINUTES} minutes, so it earned no XP.`);
     if (r.state === 'expired') return ui.warn('Session expired', 'It was left running too long to count. Start a new one with `/focus start`.');
+    if (r.xpEnabled === false) return ui.success('Session finished', `${r.minutesCredited} minutes focused. Your XP is turned off (web Settings), so it paid none.`);
     const capped = r.capped ? `\n-# Today's focus XP limit (${LIMITS.FOCUS_XP_PER_DAY}) is reached.` : '';
     return ui.success('Session finished', `${r.minutesCredited} minutes focused · **+${r.xp} XP**. Balance: ${Number(r.balance).toLocaleString()} XP.${capped}`);
 }
@@ -83,7 +84,7 @@ async function execute(interaction) {
                     embeds: [ui.warn('Too early to finish', `Finishing pays from ${stamp(new Date(payableAt).toISOString(), 't')}. Finishing now would cancel the session with no XP, so keep going.`)]
                 });
             }
-            const r =await focus.finishFocus(userId, status.active.sessionId);
+            const r = await focus.finishFocus(userId, status.active.sessionId);
             await interaction.editReply({ embeds: [finishedText(r)] });
             return await sendRewards(interaction, { achievements: r.achievements });
         }

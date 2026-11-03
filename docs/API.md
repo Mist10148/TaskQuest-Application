@@ -239,7 +239,7 @@ A server-timed work timer. The server measures the time; the client only says st
 |---|---|---|---|
 | GET | `/api/focus` | — | `{active: {sessionId, startedAt, minutes, endsAt}\|null, today: {sessions, xp, remainingSessions, remainingXP}, config: {minMinutes, maxMinutes, xpPerMinute, xpPerDay, sessionsPerDay}, serverNow}`. `serverNow` is the server's clock (ISO): the web app measures the device clock against it, so a fast clock cannot turn Finish on before the session pays. |
 | POST | `/api/focus/start` | `{minutes: integer 10–90}` | `{success, sessionId, startedAt, minutes, endsAt}`. Cancels any unfinished session. `409` once 8 sessions finished today, `400` for a bad length. |
-| POST | `/api/focus/finish` | `{sessionId}` | `{success, sessionId, state: "finished"\|"cancelled"\|"expired", minutesCredited, xp, capped, balance, level, leveledUp, newAchievements}`. Credits min(planned, elapsed) minutes if at least 10 passed and pays floor(minutes × 0.6) XP under 100 XP a day (`capped: true` when trimmed). Earlier than 10 minutes cancels with no XP; after 3 hours expires with none. `404` for someone else's or an unknown session, `409` if already over. |
+| POST | `/api/focus/finish` | `{sessionId}` | `{success, sessionId, state: "finished"\|"cancelled"\|"expired", minutesCredited, xp, capped, xpEnabled, balance, level, leveledUp, newAchievements}`. Credits min(planned, elapsed) minutes if at least 10 passed and pays floor(minutes × 0.6) XP under 100 XP a day (`capped: true` when trimmed; with XP turned off nothing is paid, `capped` is false and `xpEnabled` is false). Earlier than 10 minutes cancels with no XP; after 3 hours expires with none. `404` for someone else's or an unknown session, `409` if already over. |
 
 ## Weekly review
 

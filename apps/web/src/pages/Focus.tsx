@@ -49,7 +49,9 @@ const ResultCard = ({ result, onDismiss }: { result: FocusFinishResult; onDismis
     result.state === "finished"
       ? result.xp > 0
         ? `You focused for ${result.minutesCredited} minutes and earned +${result.xp} XP${result.capped ? " (trimmed by the daily cap)" : ""}${result.leveledUp ? `. Level up! You are now level ${result.level}.` : "."}`
-        : `You focused for ${result.minutesCredited} minutes. The daily focus XP cap was already reached, so there is no XP this time.`
+        : result.xpEnabled === false
+          ? `You focused for ${result.minutesCredited} minutes. XP is turned off in Settings, so there is no XP.`
+          : `You focused for ${result.minutesCredited} minutes. The daily focus XP cap was already reached, so there is no XP this time.`
       : result.state === "cancelled"
         ? "That session ended before it could pay, so it was cancelled and earned no XP."
         : "That session ran too long without being finished, so it expired and earned no XP.";

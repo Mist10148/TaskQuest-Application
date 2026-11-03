@@ -1124,6 +1124,8 @@ export interface FocusFinishResult {
     minutesCredited: number;
     xp: number;
     capped: boolean;
+    /** False when the player has XP turned off, so nothing was paid (older servers leave it out). */
+    xpEnabled?: boolean;
     balance: number;
     level: number;
     leveledUp: boolean;

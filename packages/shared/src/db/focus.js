@@ -87,7 +87,8 @@ async function startFocus(discordId, minutes, now = new Date()) {
  * Finish a session. Credits min(planned, elapsed) minutes, and only when at least FOCUS_MIN_MINUTES really
  * passed; pays floor(minutes * 0.6) XP under the daily XP cap. Finishing too early cancels the session and
  * finishing after the expiry window credits nothing. Each session settles once.
- * @returns {Promise<{ sessionId, state: 'finished'|'cancelled'|'expired', minutesCredited, xp, capped, balance, level, leveledUp, achievements }>}
+ * `capped` is true only when a cap trimmed the pay; with XP off nothing is paid and `xpEnabled` is false instead.
+ * @returns {Promise<{ sessionId, state: 'finished'|'cancelled'|'expired', minutesCredited, xp, capped, xpEnabled, balance, level, leveledUp, achievements }>}
  */
 async function finishFocus(discordId, sessionId, now = new Date()) {
     const sid = Number(sessionId);
@@ -108,6 +109,7 @@ async function finishFocus(discordId, sessionId, now = new Date()) {
                 minutesCredited: credited,
                 xp,
                 capped,
+                xpEnabled: Boolean(user.gamification_enabled),
                 balance: Number(user.player_xp),
                 level: Number(user.player_level),
                 leveledUp: Number(user.player_level) > previousLevel,
@@ -121,10 +123,11 @@ async function finishFocus(discordId, sessionId, now = new Date()) {
         const credited = Math.min(Number(session.minutes_planned), elapsed);
         const wanted = Math.floor(credited * REWARDS.FOCUS_XP_PER_MINUTE);
         let paid = null;
-        let capped = true;
+        let capped = Boolean(user.gamification_enabled); // the session limit, unless the award below says otherwise
         if ((await finishedToday(conn, user, now)) < LIMITS.FOCUS_SESSIONS_PER_DAY) {
             paid = await awardFlat(conn, user, 'focus_session', wanted, { dailyCap: LIMITS.FOCUS_XP_PER_DAY, referenceId: sid });
-            capped = !paid || paid.xp < wanted;
+            // awardFlat pays nothing with XP off: that is not the cap.
+            capped = Boolean(user.gamification_enabled) && (!paid || paid.xp < wanted);
         }
         const result = await settle('finished', credited, paid ? paid.xp : 0, { capped });
         result.achievements = await unlockAchievements(conn, user);

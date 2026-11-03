@@ -73,6 +73,7 @@ async def stream_turn(
     graph_input: dict[str, Any] | Command,
     *,
     expect: Literal["any", "pending", "idle"] = "any",
+    reserved_day: str | None = None,
 ) -> AsyncIterator[dict[str, str]]:
     """Run one turn on a thread and stream it.
 
@@ -94,7 +95,7 @@ async def stream_turn(
                 if waiting != (expect == "pending"):
                     rejected = True
                     async with pool.connection() as conn:
-                        await usage.release(conn, discord_id, "chat")
+                        await usage.release(conn, discord_id, "chat", reserved_day)
                     message = (
                         "Nothing is waiting for confirmation."
                         if expect == "pending"
@@ -142,7 +143,7 @@ async def stream_turn(
                     # eat the daily quota. Once tokens were spent the request stays booked.
                     try:
                         async with pool.connection() as conn:
-                            await usage.release(conn, discord_id, "chat")
+                            await usage.release(conn, discord_id, "chat", reserved_day)
                     except Exception:  # noqa: BLE001 - the error event below matters more than the refund
                         log.exception("could not refund the request")
                 yield sse("error", {"message": "Something went wrong talking to the AI. Please try again."})

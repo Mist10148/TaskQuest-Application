@@ -258,6 +258,25 @@ async def test_a_failure_before_the_model_answers_hands_the_request_back(seeded)
     assert int(n) == 0, "no tokens were spent, so the reserved request is refunded"
 
 
+async def test_a_rejected_turn_refunds_the_day_it_was_booked_on(seeded):
+    """A turn reserved just before the user's midnight and rejected after it hands the request back to the booked day."""
+    async with pool.connection() as conn:
+        await conn.execute(
+            sql_text("INSERT INTO ai_usage (discord_id, day, feature, requests) VALUES (:u, '2000-01-01', 'chat', 1)"), {"u": UID}
+        )
+    llm = make_llm([])
+    # Nothing is waiting on this thread, so a resume ("pending") is rejected before the model runs.
+    events = await collect(
+        chat_service.stream_turn(
+            deps_for(llm), UID, "t10c", Command(resume={"approved": True}), expect="pending", reserved_day="2000-01-01"
+        )
+    )
+    assert "error" in kinds(events) or "done" in kinds(events)
+    async with pool.get_engine().connect() as conn:
+        rows = dict((await conn.execute(sql_text("SELECT day, requests FROM ai_usage WHERE feature = 'chat'"))).all())
+    assert {str(k): int(v) for k, v in rows.items()} == {"2000-01-01": 0}, "the booked day got its request back, not today"
+
+
 async def test_long_conversations_are_folded_into_a_summary(seeded):
     old = []
     for i in range(18):

@@ -105,6 +105,7 @@ async def chat(body: ChatBody, access: AIAccess = Depends(require_ai("chat")), d
             thread_id,
             chat_service.user_input(discord_id, body.message),
             expect="any" if new_thread else "idle",
+            reserved_day=access.day,
         )
     )
 
@@ -130,7 +131,12 @@ async def resume(
     return EventSourceResponse(
         # "pending" is re-checked under the thread lock, so a second concurrent Approve is rejected there.
         chat_service.stream_turn(
-            deps, access.discord_id, thread_id, Command(resume={"approved": body.approved}), expect="pending"
+            deps,
+            access.discord_id,
+            thread_id,
+            Command(resume={"approved": body.approved}),
+            expect="pending",
+            reserved_day=access.day,
         )
     )
 

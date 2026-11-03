@@ -47,11 +47,23 @@ describe("TaskCalendar", () => {
     const onAddOnDate = vi.fn();
     const { unmount } = render(<TaskCalendar items={[]} onToggle={() => {}} onEdit={() => {}} onAddOnDate={onAddOnDate} />);
     await userEvent.click(screen.getByRole("gridcell", { name: /Friday, January 18, 2030/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Add a task due Friday, January 18, 2030" }));
+    expect(screen.getByRole("heading", { name: "Friday, January 18, 2030" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add on this day, Friday, January 18, 2030" }));
     expect(onAddOnDate).toHaveBeenCalledWith("2030-01-18");
     unmount();
     render(<TaskCalendar items={[]} readOnly onToggle={() => {}} onEdit={() => {}} />);
-    expect(screen.queryByRole("button", { name: /Add a task due/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add on this day/ })).toBeNull();
+  });
+
+  it("jumps back to today's month and day", async () => {
+    render(<TaskCalendar items={[]} onToggle={() => {}} onEdit={() => {}} />);
+    const back = screen.getByRole("button", { name: "Today" });
+    expect(back).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Next month" }));
+    await userEvent.click(screen.getByRole("gridcell", { name: /February 14, 2030/ }));
+    await userEvent.click(back);
+    expect(screen.getByText("January 2030")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: /January 10, 2030, today/ })).toHaveAttribute("aria-selected", "true");
   });
 
   it("moves between months and mentions tasks without a date", async () => {

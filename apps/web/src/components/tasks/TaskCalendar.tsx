@@ -22,8 +22,23 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 /** A month grid of the quest's due dates. Pick a day to see (and tick off) its tasks below the grid. */
 export const TaskCalendar = ({ items, readOnly, onToggle, onEdit, onAddOnDate }: Props) => {
   const today = useLocalToday();
-  const [view, setView] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }));
+  const monthOf = (date: string) => ({ year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) });
+  const [view, setView] = useState(() => monthOf(today));
   const [picked, setPicked] = useState<string>(today);
+  // At midnight a calendar left on "today" moves on with it (and to the new month); a day someone picked stays picked.
+  const shownToday = useRef(today);
+  useEffect(() => {
+    const before = shownToday.current;
+    if (before === today) return;
+    shownToday.current = today;
+    setPicked((p) => (p === before ? today : p));
+    setView((v) => (v.year === monthOf(before).year && v.month === monthOf(before).month ? monthOf(today) : v));
+  }, [today]);
+  const onThisMonth = view.year === monthOf(today).year && view.month === monthOf(today).month;
+  const goToday = () => {
+    setView(monthOf(today));
+    setPicked(today);
+  };
   const byDate = useMemo(() => tasksByDate(items), [items]);
   const weeks = useMemo(() => monthGrid(view.year, view.month), [view]);
   const undated = items.filter((i) => !i.parent_id && !i.due_date && !i.completed).length;
@@ -57,7 +72,10 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit, onAddOnDate }:
       <div className="mb-3 flex items-center justify-between">
         <Button type="button" variant="outline" size="sm" aria-label="Previous month" onClick={() => setView((v) => shiftMonth(v.year, v.month, -1))}><ChevronLeft className="h-4 w-4" /></Button>
         <h3 className="font-heading font-semibold" aria-live="polite">{MONTHS[view.month - 1]} {view.year}</h3>
-        <Button type="button" variant="outline" size="sm" aria-label="Next month" onClick={() => setView((v) => shiftMonth(v.year, v.month, 1))}><ChevronRight className="h-4 w-4" /></Button>
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="outline" size="sm" disabled={onThisMonth && picked === today} onClick={goToday}>Today</Button>
+          <Button type="button" variant="outline" size="sm" aria-label="Next month" onClick={() => setView((v) => shiftMonth(v.year, v.month, 1))}><ChevronRight className="h-4 w-4" /></Button>
+        </div>
       </div>
       <div className="grid grid-cols-7 gap-1" role="grid" ref={gridRef} aria-label={`${MONTHS[view.month - 1]} ${view.year}`}>
         <div role="row" className="contents">
@@ -110,9 +128,9 @@ export const TaskCalendar = ({ items, readOnly, onToggle, onEdit, onAddOnDate }:
 
       <section className="mt-4 rounded-xl border border-border bg-card/60 p-3" aria-label={`Tasks due ${formatDayLabel(picked)}`}>
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h4 className="text-sm font-heading font-semibold">{picked === today ? "Today" : picked}</h4>
+          <h4 className="text-sm font-heading font-semibold">{picked === today ? "Today" : formatDayLabel(picked)}</h4>
           {onAddOnDate && (
-            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => onAddOnDate(picked)} aria-label={`Add a task due ${formatDayLabel(picked)}`}>
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => onAddOnDate(picked)} aria-label={`Add on this day, ${formatDayLabel(picked)}`}>
               <Plus className="h-3.5 w-3.5" aria-hidden /> Add on this day
             </Button>
           )}

@@ -32,12 +32,12 @@ flowchart TB
     end
     subgraph "Bot worker (apps/bot)"
         GW["discord.js client"]
-        CMD["commands: list · game · gamification · quests · review · prestige · shop · sharing · party · timezone · weekly · quick · ai"]
+        CMD["commands: list · game · gamification · today · focus · quests · review · prestige · shop · sharing · party · timezone · weekly · quick · ai"]
         JOBS["jobs: reminders (list + task) · weekly digest · streak warning · clean-up · session expiry"]
     end
     subgraph "@taskquest/shared"
         RULES["rules: constants · xp · achievements · games · validation"]
-        SVC["db services: users · tasks · access · sharing · parties · progression · quests · focus · review · stats · templates · transfer · cosmetics · push · games"]
+        SVC["db services: users · tasks · access · sharing · parties · progression · quests · focus · review · stats · today · goals · templates · transfer · cosmetics · push · games · activity · comments · assignees · extras · maintenance"]
         MIG["migrations"]
     end
     DB[(PostgreSQL / Supabase)]
@@ -216,7 +216,7 @@ See [SECURITY.md](../SECURITY.md) for the full list of fixed vulnerabilities.
 ## 7. Bot design
 
 - **Intents:** `Guilds` only while AI is off: commands arrive as interactions, and DMs are sent, never read. With `AI_ENABLED=true` the bot adds `GuildMessages` and `DirectMessages` to read mentions and DMs for the chat, and `MessageContent` (privileged) only with `AI_CHAT_MESSAGE_CONTENT=true`.
-- **Routing:** `index.js` dispatches by interaction type, command name and `customId` prefix to the modules in `commands/` (`list`, `game`, `gamification`, `quests`, `review`, `prestige`, `shop`, `sharing`, `party`, `timezone`, `weekly`, `quick`, `ai`); [COMMANDS.md](COMMANDS.md#interaction-ids-for-developers) lists the prefixes.
+- **Routing:** `index.js` dispatches by interaction type, command name and `customId` prefix to the modules in `commands/` (`list`, `game`, `gamification`, `today`, `focus`, `quests`, `review`, `prestige`, `shop`, `sharing`, `party`, `timezone`, `weekly`, `quick`, `ai`); [COMMANDS.md](COMMANDS.md#interaction-ids-for-developers) lists the prefixes.
 - **Ownership:** `/list` replies are public, so anyone in the channel can click their buttons. A click on a message that belongs to another user is refused up front, and every handler passes the clicking user's ID to the services, so clicks on a list they have no part in only ever return "not found". On a shared list the service also checks the clicker's role (a viewer's edit click is refused).
 - **Privacy:** XP, achievements, games and `/profile` are ephemeral. `/profile @user` never creates a row for the target.
 - **Errors:** `utils/respond.js#handleError` turns `TaskQuestError` into a friendly embed. Anything else is logged with its stack and shown as a generic message.

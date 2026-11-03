@@ -17,6 +17,7 @@ npm test                        # node:test (from the repo root: npm test -w @ta
 | `commands/list.js` | `/list`: lists and tasks |
 | `commands/game.js` | `/game`: Blackjack, RPS, Hangman |
 | `commands/gamification.js` | `/daily /freeze /profile /achievements /class /leaderboard /toggle /automation /help /app /ping` |
+| `commands/today.js`, `commands/focus.js` | `/today` (the web Today page: due and overdue tasks, the week ahead, streak and weekly goal) and `/focus start\|finish\|status` (the shared focus timer) |
 | `commands/quests.js`, `commands/review.js`, `commands/prestige.js` | `/quests`, `/review` (weekly bonus), `/prestige` (two-step reset) |
 | `commands/shop.js` | `/shop`: titles, frames and accents bought with XP |
 | `commands/sharing.js`, `commands/party.js` | `/share /invites /members /leave` (shared lists) and `/party` (parties and the weekly party quest) |

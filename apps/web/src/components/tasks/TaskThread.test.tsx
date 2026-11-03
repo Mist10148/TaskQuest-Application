@@ -1,7 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { dismiss: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
 const hooks = vi.hoisted(() => ({
   useItemComments: vi.fn(),
   useItemActivity: vi.fn(),
@@ -21,7 +23,8 @@ describe("TaskThread", () => {
     add.mockReset();
     remove.mockReset();
     hooks.useAddComment.mockReturnValue({ mutate: add, isPending: false });
-    hooks.useDeleteComment.mockReturnValue({ mutate: remove, isPending: false });
+    hooks.useDeleteComment.mockReturnValue({ mutateAsync: remove, isPending: false });
+    toast.mockReset();
     hooks.useItemComments.mockReturnValue(
       loaded({ comments: [{ id: 1, body: "On it", author: { name: "Sam", isYou: false }, createdAt: new Date().toISOString(), canDelete: true }] })
     );
@@ -34,8 +37,25 @@ describe("TaskThread", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "Write a comment" }), "Done tomorrow");
     await userEvent.click(screen.getByRole("button", { name: "Post comment" }));
     expect(add).toHaveBeenCalledWith("Done tomorrow", expect.anything());
+  });
+
+  it("hides a deleted comment with an Undo toast, and deletes it once the drawer closes", async () => {
+    remove.mockResolvedValue(undefined);
+    const { unmount } = render(<TaskThread itemId={7} canComment />);
     await userEvent.click(screen.getByRole("button", { name: "Delete comment from Sam" }));
+    expect(screen.queryByText("On it")).toBeNull();
+    expect(toast).toHaveBeenCalledWith("Comment deleted", expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) }));
+    expect(remove).not.toHaveBeenCalled();
+    unmount();
     expect(remove).toHaveBeenCalledWith(1);
+  });
+
+  it("brings a comment back on Undo", async () => {
+    render(<TaskThread itemId={7} canComment />);
+    await userEvent.click(screen.getByRole("button", { name: "Delete comment from Sam" }));
+    const undo = toast.mock.calls[0][1].action.onClick as () => void;
+    act(() => undo());
+    expect(screen.getByText("On it")).toBeInTheDocument();
   });
 
   it("hides the comment box from viewers", () => {

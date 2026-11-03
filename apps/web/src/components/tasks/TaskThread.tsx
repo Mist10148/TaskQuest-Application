@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorCard } from "@/components/feedback/ErrorCard";
 import { useAddComment, useDeleteComment, useItemActivity, useItemComments } from "@/hooks/useApi";
+import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { actorName, describeActivity, timeAgo } from "@/lib/activity";
 import { cn } from "@/lib/utils";
 
@@ -45,8 +46,10 @@ const Comments = ({ itemId, canComment }: { itemId: number; canComment: boolean 
   const { data, isLoading, isError, refetch, isFetching } = useItemComments(itemId);
   const add = useAddComment(itemId);
   const remove = useDeleteComment();
+  // A deleted comment disappears at once with an Undo toast, and is deleted for real when the toast ends (or the drawer closes).
+  const deletes = useUndoableDelete((id) => remove.mutateAsync(id));
   const [draft, setDraft] = useState("");
-  const comments = data?.comments ?? [];
+  const comments = (data?.comments ?? []).filter((c) => !deletes.hidden.has(c.id));
 
   const submit = () => {
     const body = draft.trim();
@@ -69,8 +72,7 @@ const Comments = ({ itemId, canComment }: { itemId: number; canComment: boolean 
                 <button
                   type="button"
                   aria-label={`Delete comment from ${actorName(c.author)}`}
-                  disabled={remove.isPending}
-                  onClick={() => remove.mutate(c.id)}
+                  onClick={() => deletes.request([c.id], "Comment deleted")}
                   className="ml-auto rounded p-1 hover:text-destructive-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" aria-hidden />

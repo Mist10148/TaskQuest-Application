@@ -73,4 +73,4 @@ These are not tests, but they read a real database (the one in `.env`) and are t
 
 ## What CI runs
 
-`.github/workflows/ci.yml`: lint, typecheck, build, syntax check, unit tests, integration tests on `pgvector/pgvector:pg16`, the AI service (`ruff`, `mypy`, `pytest`, Postgres SQL tests), Playwright, and `npm audit --omit=dev --audit-level=high`.
+`.github/workflows/ci.yml`: lint, typecheck, build, syntax check, unit tests, integration tests on `pgvector/pgvector:pg16`, the AI service (`ruff`, `mypy`, `pytest`, Postgres SQL tests), Playwright, and the dependency audit (`npm audit --omit=dev --audit-level=high`, and `pip-audit` on the AI service's dependencies as a fresh install resolves them).

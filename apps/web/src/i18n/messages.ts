@@ -4,9 +4,10 @@
  * showing a raw key. To add a language: add its code to LOCALES, add a catalog to
  * `catalogs` below, and give it a name in LOCALE_NAMES.
  *
- * Extracted so far: the NotFound and Review pages, the quest, task, template, delete and
- * invitation dialogs and the shared dialog buttons; the rest of the app still uses inline
- * English (see docs/ROADMAP.md). Placeholders are written `{name}`.
+ * Extracted so far: the NotFound and Review pages, the Tasks page's toasts, the quest, task,
+ * template, bulk-edit, delete, invitation and shortcuts dialogs, the quest calendar and the
+ * shared dialog buttons; the rest of the app still uses inline English (see docs/ROADMAP.md).
+ * Placeholders are written `{name}`; a count gets a One and a Many key.
  */
 
 export const en = {

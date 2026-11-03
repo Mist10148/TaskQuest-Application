@@ -135,7 +135,7 @@ Discord login needs a real application, which is overkill for checking a UI chan
 
 Check the page you changed in **both themes**, at a phone width, and with the keyboard only.
 
-User-facing text in the web app is moving into a typed message catalog (`apps/web/src/i18n/messages.ts`, read with `useT()`); the Review and Not-found pages, the quest, task, template, delete and invitation dialogs and the shared dialog buttons use it. Put new strings there when you touch a page, with `{name}` placeholders instead of string concatenation. A translation is a partial catalog, so a missing key shows English.
+User-facing text in the web app is moving into a typed message catalog (`apps/web/src/i18n/messages.ts`, read with `useT()`); the Review and Not-found pages, the Tasks page's messages (toasts and bulk progress), the quest, task, template, bulk-edit, delete, invitation and keyboard-shortcut dialogs, the quest calendar and the shared dialog buttons use it. Put new strings there when you touch a page, with `{name}` placeholders instead of string concatenation. A translation is a partial catalog, so a missing key shows English.
 
 ## Style
 
@@ -147,6 +147,6 @@ User-facing text in the web app is moving into a typed message catalog (`apps/we
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(bot): …`, `fix(shared): …`, `docs: …`, `test: …`, `chore(deploy): …`.
 - Keep commits focused, so one logical change per commit. A bug fix commit should contain the test that proves it.
-- PRs need green CI and updated docs if behaviour changed. The required checks are the jobs in [`.github/workflows/ci.yml`](.github/workflows/ci.yml): **Web** (lint, typecheck, build), **Node** (syntax, tests on PostgreSQL), **Browser tests** (Playwright e2e on PostgreSQL), **AI service** (ruff, mypy, pytest), **AI service on PostgreSQL** (migrated schema) and **Dependency audit** (`npm audit --omit=dev --audit-level=high`).
+- PRs need green CI and updated docs if behaviour changed. The required checks are the jobs in [`.github/workflows/ci.yml`](.github/workflows/ci.yml): **Web** (lint, typecheck, build), **Node** (syntax, tests on PostgreSQL), **Browser tests** (Playwright e2e on PostgreSQL), **AI service** (ruff, mypy, pytest), **AI service on PostgreSQL** (migrated schema) and **Dependency audit** (`npm audit --omit=dev --audit-level=high`, and `pip-audit ./apps/ai`).
 - Opening an issue or a PR fills in a template (`.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`); report vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in an issue. Dependabot (`.github/dependabot.yml`) opens weekly update PRs for npm, pip and GitHub Actions.
 - Never commit `.env` files, tokens or database dumps. If you leak a secret, rotate it immediately; deleting the commit is not enough.

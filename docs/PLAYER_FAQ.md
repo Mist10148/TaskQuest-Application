@@ -5,6 +5,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 ## Contents
 
 - [Streaks and freezes](#streaks-and-freezes)
+- [Focus sessions](#focus-sessions)
 - [Turning XP off](#turning-xp-off)
 - [Reminders](#reminders)
 - [Time zones and "your day"](#time-zones-and-your-day)
@@ -15,6 +16,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 - [Import and export](#import-and-export)
 - [Push notifications](#push-notifications)
 - [Blackjack and the other games](#blackjack-and-the-other-games)
+- [Keyboard shortcuts](#keyboard-shortcuts)
 
 ## Streaks and freezes
 
@@ -22,13 +24,23 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 **I missed a day. Is my streak gone?** Probably, unless something protects it. In order: the Tank's *Unstoppable* skill (free, always), a longer window (the *Streak Shield* skill or the Paladin class forgive one missed day; Paladin with Sanctuary forgives two), then a **streak freeze**. A freeze costs 150 XP (120 with *Freeze Cache*, which also lets you hold 5 instead of 3) and is used automatically at your next claim, only when a streak of 2 or more days would otherwise break. One freeze covers one missed day, so a longer gap needs one freeze per day. Buy one with `/freeze` or on your profile before you need it.
 
-**What is the Today page?** One screen for right now: the tasks that are overdue, due today or marked HIGH (tick them off from there), a warning (with a Claim button) when today is the last day to keep your streak, what is coming up later in the week, the week's bonus modifier, tasks someone assigned to you on their shared quests, a one-line reflection (+10 XP once a day) and your weekly goal (pick 3 to 60 tasks, claim 10 + 2 XP per task, at most 80, once a week).
+**What is the Today page?** One screen for right now: the tasks that are overdue, due today or marked HIGH (tick them off from there), a warning (with a Claim button) when today is the last day to keep your streak, what is coming up later in the week, the week's bonus modifier, tasks someone assigned to you on their shared quests, a one-line reflection (+10 XP once a day) and your weekly goal (pick 3 to 60 tasks, claim 10 + 2 XP per task, at most 80, once a week). **Change goal** raises or lowers a goal that is not claimed yet (it must stay above what you already finished this week). Each task has a **Focus** link that opens the focus timer with that task named and a **Mark done** button. On Discord, `/today` shows the same tasks, streak and goal; setting and claiming the goal stay on the web.
 
-**Will I be warned before I lose a streak?** If you have a streak of 3 or more days, reminders on (`/automation`) and XP on, the bot sends one DM on the evening (18:00 your time) of the last day you can still save it by claiming the daily reward, once the reward can be claimed again, with the time the streak ends (often not midnight: a streak lasts at least 48 hours from your last claim), and a web push if you turned push on. The Today page shows the same warning.
+**Will I be warned before I lose a streak?** If you have a streak of 3 or more days, reminders on (`/automation`) and XP on, the bot sends one DM on the evening (18:00 your time) of the last day you can still save it by claiming the daily reward, once the reward can be claimed again, with the time the streak ends (often not midnight: a streak lasts at least 48 hours from your last claim), and a web push if you turned push on. The Today page and `/today` on Discord show the same warning.
+
+**My streak shows although I missed a day.** When your streak freezes can still save it, Today, `/today`, `/profile` and Stats keep showing it, and Today says the freezes are holding it. Claim the daily reward to keep it: each extra day you wait uses one more freeze. Momentum and the streak leaderboard count only a streak inside its normal window.
 
 **Is the streak tied to midnight?** Yes, to your own midnight (your time zone setting): the streak needs a claim on each calendar day. The 24-hour cooldown between two claims is still counted from your last claim.
 
 **Does the Monk's Rhythm or the Assassin's streak work the same way?** No, they are class counters: Rhythm counts consecutive days of yours on which you finished a rewarded action, and the Assassin's streak resets after 48 hours (72 with Night Owl) without one.
+
+## Focus sessions
+
+**How does the focus timer work?** Start a session of 10 to 90 minutes on the Focus page or with `/focus start` on Discord, work, then finish it. You earn 0.6 XP for each minute that really passed (up to the length you picked), at most 100 focus XP and 8 sessions a day. It is one timer kept by the server, so you can start it on Discord and finish it on the web, or the other way round.
+
+**What if I finish early?** A session needs at least 10 minutes to pay. On the web, finishing sooner asks first and then cancels the session with no XP; `/focus finish` on Discord refuses instead and leaves the timer running. Starting a new session drops the running one, and a session left running for more than 3 hours expires with no XP.
+
+**Does focus count for my party?** Yes: in a party, your focus minutes count towards the weekly focus quest, and the Focus page links to it.
 
 ## Turning XP off
 
@@ -76,6 +88,8 @@ These are on the web app only; the Discord bot shows a shared quest's tasks but 
 
 **Moving a task.** "Move to another quest" in the details, or select several tasks and choose **Move to…**: the task moves with its subtasks to the end of another quest you can edit. A finished task that you move keeps its XP, but the quest it lands in does not pay its clear bonus for it.
 
+**Calendar and big batches.** In a quest's calendar view, pick a day and **Add on this day** to add a task due then; **Today** brings the calendar back to the current month. Completing, editing or moving three or more selected tasks shows a "Completing 3 of 12…" counter, and the bulk bar waits until the batch is done.
+
 **Filters.** The bar above a quest shows only open or finished, a priority, overdue / due today / next 7 days / no date, one tag, or "assigned to me" / "unassigned" tasks, and the list view can group by priority, due date or tag. Your choice is remembered in this browser; reordering is off while a filter or group is on.
 
 ## The AI assistant
@@ -105,3 +119,24 @@ Push sends your reminders to your browser as well as to Discord, and only exists
 **I closed the game in the middle of a hand.** An unfinished hand is settled after 30 minutes as if you had stood, and pays or loses normally; there are no refunds, because otherwise you could look at the deal and walk away from a bad hand. Come back to `/game` or the Games page to finish it sooner.
 
 **Why did a game pay nothing?** Free games (RPS, Hangman, arcade) share 500 XP a day and have a 3-second cooldown between rounds; the Games page shows how much allowance is left. A zero-score arcade run is a loss, an arcade run shorter than 5 seconds of play pays nothing, and a run the server cannot reproduce from its recorded inputs is rejected (refresh the page after an update). Free-game XP does not count for the public "this week" leaderboard.
+
+## Keyboard shortcuts
+
+On the web app, single keys work whenever you are not typing in a field and no dialog, menu or list is open. Press `?` on any page for this list.
+
+| Keys | Where | What it does |
+|---|---|---|
+| `?` | Any page | Show the shortcuts |
+| `g` then `d`, `t`, `q`, `f`, `s`, `p`, `l` or `c` | Any page | Go to Dashboard, Today, the quest log, Focus, Stats, Profile, Leaderboard or AI Chat (when the assistant is on) |
+| Ctrl+K (⌘K on a Mac) | Anywhere | Command palette: pages, new quest or task, your tasks, claim the daily reward, a 25-minute focus session, what is overdue, the theme |
+| `n` | Quest log, or inside a quest | New quest, or new task |
+| `/` | Quest log, or inside a quest | Search quests, or focus quick add |
+| `j` / `k` | Inside a quest | Move down or up the tasks |
+| `x`, `i`, `e`, `d` | Inside a quest | Complete or reopen, open the details of, edit, or delete (with Undo) the highlighted task |
+| `s`, then Shift+A | Inside a quest | Select mode, then select every task shown |
+| `1` / `2` / `3` | Inside a quest | List, board or calendar view |
+| Esc | Inside a quest | Leave select mode, or go back to the quest log |
+| Arrows, Home / End, PageUp / PageDown | Quest calendar | Move a day or a week, to the start or end of the week, or a month |
+| Ctrl+Enter (⌘Enter) | A task's comment box | Post the comment |
+| `H` / `S` / `D` | Blackjack | Hit, stand, double |
+| A letter | Hangman | Guess it |

@@ -16,7 +16,18 @@ let userZone: string | null = null;
  * date bonuses. Null (no account loaded, or no zone saved yet) falls back to the browser's zone.
  */
 export function setUserZone(zone: string | null | undefined): void {
-  userZone = zone || null;
+  const next = zone || null;
+  if (next === userZone) return;
+  userZone = next;
+  for (const listener of zoneListeners) listener();
+}
+
+const zoneListeners = new Set<() => void>();
+
+/** Call `listener` whenever the user's time zone setting changes; returns the unsubscribe. */
+export function onUserZoneChange(listener: () => void): () => void {
+  zoneListeners.add(listener);
+  return () => void zoneListeners.delete(listener);
 }
 
 /** YYYY-MM-DD from a Date's browser-local parts. */

@@ -99,3 +99,31 @@ test('/focus finish pays a session that ran long enough', async () => {
     await focus.execute(i);
     assert.match(text(i.calls.at(-1).payload), /15 minutes focused · \*\*\+9 XP\*\*/);
 });
+
+test('/today drops whole lines to fit a field and keeps the "in all" note', () => {
+    const long = Array.from({ length: 6 }, (_, k) => ({ id: k, name: `${'fix_user_profile_page.tsx '.repeat(4)}${k}`, listName: 'a.b_c'.repeat(8), dueDate: '2030-01-10', priority: 'HIGH', overdueDays: 0 }));
+    const json = today.render(day({ tasks: long, counts: { dueToday: 40, overdue: 0, doneToday: 0 } })).embeds[0].toJSON();
+    const todo = json.fields.find((f) => f.name === 'To do').value;
+    assert.ok(todo.length <= 1024, `field is ${todo.length} characters`);
+    assert.match(todo, /40 tasks are due or overdue in all/);
+    for (const line of todo.split('\n').slice(0, -1)) assert.match(line, /due today$/, 'no line is cut in the middle');
+    assert.equal(today.fitLines(['a', 'b'], '!'), 'a\nb!');
+});
+
+test('/today shows a claimed goal as claimed even with no target, and a streak held by freezes', () => {
+    const out = text(today.render(day({ goal: { target: null, progress: 0, claimed: true, claimable: false, min: 3, max: 60 }, streak: { live: 9, claimedToday: false, atRisk: true, frozen: true } })));
+    assert.match(out, /Claimed this week/);
+    assert.doesNotMatch(out, /Not set/);
+    assert.match(out, /held by your streak freezes/);
+});
+
+test('/focus finish with XP off says so instead of a daily limit', async () => {
+    const startedAt = new Date(Date.now() - (LIMITS.FOCUS_MIN_MINUTES + 5) * 60_000).toISOString();
+    db.focus.getFocusStatus = async () => status({ sessionId: 9, startedAt, minutes: 25, endsAt: new Date(Date.now() + 60_000).toISOString() });
+    db.focus.finishFocus = async (_id, sid) => ({ sessionId: sid, state: 'finished', minutesCredited: 15, xp: 0, capped: false, xpEnabled: false, balance: 0, achievements: [] });
+    const i = fake('finish');
+    await focus.execute(i);
+    const out = text(i.calls.at(-1).payload);
+    assert.match(out, /XP is turned off/);
+    assert.doesNotMatch(out, /limit/);
+});

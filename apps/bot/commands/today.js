@@ -20,6 +20,23 @@ function taskLine(t, day) {
     return `${PRIORITY_DOT[t.priority] || '▫️'} ${escapeDiscord(t.name, { max: 80 })} · *${escapeDiscord(t.listName, { max: 40 })}*${due}`;
 }
 
+/** Discord's limit for an embed field's value. */
+const FIELD_MAX = 1024;
+
+/**
+ * Whole lines joined while they fit in one field with `note` after them, so a long list loses its last lines rather than
+ * being cut in the middle of a name (escaping can make a name longer than its cut) or losing the note.
+ */
+function fitLines(lines, note = '') {
+    let out = '';
+    for (const line of lines) {
+        const next = out ? `${out}\n${line}` : line;
+        if (next.length + note.length > FIELD_MAX) break;
+        out = next;
+    }
+    return `${out}${note}`;
+}
+
 /** @param {object} d the result of db.today.getToday */
 function render(d) {
     const { counts, streak, goal } = d;
@@ -30,18 +47,18 @@ function render(d) {
     const total = counts.dueToday + counts.overdue;
     // The list stops at a few tasks (HIGH priority ones without a date included), so say how many are due in all.
     const more = total > shown ? `\n-# ${total} tasks are due or overdue in all: see them on the web Today page or with /list.` : '';
-    embed.addFields({ name: 'To do', value: shown ? `${d.tasks.map((t) => taskLine(t, d.day)).join('\n')}${more}`.slice(0, 1024) : 'Nothing due. Enjoy the day, or add something with /quick.' });
-    if (d.upcoming?.length) embed.addFields({ name: 'Coming up this week', value: d.upcoming.map((t) => taskLine(t, d.day)).join('\n').slice(0, 1024) });
+    embed.addFields({ name: 'To do', value: shown ? fitLines(d.tasks.map((t) => taskLine(t, d.day)), more) : 'Nothing due. Enjoy the day, or add something with /quick.' });
+    if (d.upcoming?.length) embed.addFields({ name: 'Coming up this week', value: fitLines(d.upcoming.map((t) => taskLine(t, d.day))) });
 
     if (d.xpEnabled) {
-        const streakText = streak.live > 0
-            ? `🔥 ${streak.live} ${streak.live === 1 ? 'day' : 'days'}${streak.claimedToday ? ' · claimed today' : streak.atRisk ? ' · **claim /daily today to keep it**' : ''}`
-            : 'No streak yet. Claim /daily to start one.';
+        const keep = streak.claimedToday ? ' · claimed today' : streak.frozen ? ' · **held by your streak freezes: claim /daily**' : streak.atRisk ? ' · **claim /daily today to keep it**' : '';
+        const streakText = streak.live > 0 ? `🔥 ${streak.live} ${streak.live === 1 ? 'day' : 'days'}${keep}` : 'No streak yet. Claim /daily to start one.';
         embed.addFields({ name: 'Streak', value: streakText, inline: true });
-        const goalText = !goal.target
-            ? `Not set. Set one on the web Today page (${goal.min} to ${goal.max} tasks).`
-            : goal.claimed
-              ? `✅ ${goal.progress}/${goal.target} · claimed`
+        // A claim made before a time zone change can leave this week claimed with no target on record: it is still claimed.
+        const goalText = goal.claimed
+            ? goal.target ? `✅ ${goal.progress}/${goal.target} · claimed` : '✅ Claimed this week'
+            : !goal.target
+              ? `Not set. Set one on the web Today page (${goal.min} to ${goal.max} tasks).`
               : `${goal.progress}/${goal.target} tasks${goal.claimable ? ' · 🎁 ready to claim on the web' : ''}`;
         embed.addFields({ name: 'Weekly goal', value: goalText, inline: true });
     }
@@ -58,4 +75,4 @@ async function execute(interaction) {
     }
 }
 
-module.exports = { data, execute, render };
+module.exports = { data, execute, render, fitLines };

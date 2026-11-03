@@ -35,6 +35,16 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **A Focus link on each Today task,** counts on the achievement filters, keyboard navigation in the calendar (arrows, Home/End, PageUp/PageDown), and the Focus page says before you start when today's focus XP is already used up.
 - **Templates** show how many of your 20 you have saved.
 
+## Steadier and smoother (November 2026)
+
+- **Your streak freezes count.** When a freeze can still save your streak, Today, `/today` and your profile keep showing it, and Today says the freezes are holding it: claim to keep it.
+- **The calendar** has a **Today** button and moves on by itself at midnight.
+- **Undo a deleted comment,** and **name the quest** you start from a template.
+- **The tab names your quest**, so several open tabs are easy to tell apart.
+- **AI:** a **Day recap** next to the weekly one, and **Show up to 10** in "What should I do next?".
+- **Fixes you might have hit:** "This interaction failed" on reminder Snooze and on saving a quest or task in Discord although it was saved; a letter typed in a menu that also triggered a shortcut; a second bulk action starting while the first was still running; Mark done on the Focus page vanishing; a focus session with XP off said to hit the daily limit.
+- **Keyboard shortcuts** are all in one table in the [Player FAQ](PLAYER_FAQ.md#keyboard-shortcuts).
+
 ## Discord catches up (30 October 2026)
 
 - **`/today`** shows what is due and overdue, what is coming up this week, your streak and your weekly goal, like the web Today page.

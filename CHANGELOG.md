@@ -36,6 +36,9 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Added
 
+- **Small web additions (November pass).** The quest calendar has a **Today** button and follows midnight; a deleted comment can be undone; an open quest's tab is named after it ("Garden · Tasks · TaskQuest") and the 404 page has a title; applying a template can name the new quest (the endpoint's `listName`); the AI briefing card has a **Day recap** (`mode: recap, range: day`), and a full ranking of five offers **Show up to 10**.
+- **`GET /api/today`'s `streak.frozen`** (a streak past its window that streak freezes would save) and **`POST /api/focus/finish`'s `xpEnabled`**.
+- **PLAYER_FAQ** sections on focus sessions and every keyboard shortcut, and GLOSSARY entries for the streak skills, bonus sources, class counters, party quests and the free-game cap.
 - **`/today` and `/focus` on Discord.** `/today` shows what the web Today page shows (due, overdue and done counts, the tasks that need doing, what is coming up this week, the live streak and the weekly goal); `/focus start|finish|status` drives the same server-timed focus timer as the web, and `finish` refuses rather than cancel a session that cannot pay yet. The bot now registers 32 commands.
 - **Change goal** on the Today page's weekly goal card (the server already allowed raising or lowering an unclaimed goal), and **Focus from a task**: a Today task's Focus link opens `/focus?task=<id>`, which names the task and offers Mark done.
 - **Add on this day** in a quest's calendar opens the task form with that due date, and bulk complete, edit and move count their progress in a toast ("Completing 3 of 12…") from three tasks on.
@@ -194,6 +197,9 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Changed
 
+- **The shown streak counts streak freezes.** Today, `/today`, `/profile`, Stats, the weekly review and the Monday digest show a streak that the player's streak freezes would save at the next claim (`liveStreak(user, skills, now, { freezes: true })`), and the Today warning says the freezes are holding it. Momentum and the streak leaderboard still count only a streak inside its window.
+- **More strings in the message catalog:** the keyboard shortcuts and bulk edit dialogs, the quest calendar, and the Tasks page's toasts and bulk progress.
+- **Bulk edit and bulk move refresh once** at the end of the batch instead of after every task.
 - **More of the web app reads from the message catalog:** the task form's quick due dates, priority names and tags placeholder, the delete-quest and invitation confirmations, the templates dialog and the default Cancel button.
 - **The daily AI quota refills at the user's own midnight.** `AI_DAILY_REQUEST_LIMIT` is now counted per day in the user's time zone (`users.timezone`, UTC until set) instead of per UTC day, like the daily caps and quests; `ai_usage.day` keeps its type and rows. The quota messages say "your midnight". The AI service gains a `tzdata` dependency (a Windows host has no zone database; an unknown zone falls back to UTC). Closes known issue #31.
 - **Arcade hardening (option B, in part).** Free-game XP no longer counts for the public weekly leaderboard (`WEEKLY_BOARD_XP_SOURCES`; your own review, Stats and digest still include it); a valid arcade run with under 5 seconds of play is accepted but pays 0 XP (`tooShort` in the result, with a toast); and `npm run arcade-report` prints how fast real players score per game so the plausibility bound can be calibrated. The bounds themselves and a per-game cooldown are deliberately unchanged (known issue #39).
@@ -247,6 +253,11 @@ All notable changes to TaskQuest. The format follows [Keep a Changelog](https://
 
 ### Fixed
 
+- **More bot answers come before the database work.** Reminder DM buttons (Snooze, Stop reminders), Return to Default in the class browser, and the new quest, edit quest, add task, rename, details and description modals wrote first and answered after, so on a slow database the change was saved but Discord said "This interaction failed" (and a second submit could add a duplicate task).
+- **`/today`** cuts a long list at whole lines and keeps the "N tasks are due in all" note (escaping could push six lines past Discord's 1,024 characters and cut one in half), and shows a week claimed before a time zone change as claimed instead of "Not set".
+- **Focus with XP off** is no longer reported as the daily cap on Discord and the web, and `/focus status` no longer says finishing early cancels the session (`/focus finish` refuses instead).
+- **A chat turn's refund** goes back to the day the request was booked on, like the summary and ranking refunds.
+- **Web:** single-key shortcuts ignore open menus, select lists and comboboxes (typing a letter to jump to an option could open a dialog or delete the highlighted task); the bulk toolbar waits for a running batch; Focus keeps the task it marked done (and focus on Done); Today's checkbox stays done until the row leaves; the goal form, the templates delete confirmation and Escape on a pending delete handle focus properly; due-today markers follow a time zone change at once; the streak warning names the weekday when the streak ends after tomorrow; the chat Copy timer is cleared.
 - **Bot buttons answer Discord before their database work.** Skill reset and unlock, class buy and equip, quest and task delete, category, priority and swap picks, member removal, leaving a list, list invitations and party invites and disband ran a transaction before acknowledging the click; on a cold database the change was made but the player saw "This interaction failed". They now defer first.
 - **The Focus timer follows the server's clock.** A device clock running fast turned Finish on early and the server then cancelled the session for 0 XP.
 - **A failed task tick or priority change puts back only that task.** It restored the whole saved quest, which also undid any other task changed meanwhile.

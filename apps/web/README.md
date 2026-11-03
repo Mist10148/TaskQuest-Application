@@ -37,6 +37,7 @@ Every page can be linked to. These addresses are what the command palette, the s
 | `/tasks?list=<id>&task=<id>` | One quest with a task's detail drawer open |
 | `/tasks?new=quest`, `/tasks?new=task` | The new-quest or new-task form (the command palette); the parameter is removed once used |
 | `/games`, `/games?play=<game>` | The games menu, or one game open (`blackjack`, `rps`, `hangman`, `snake`, `dino`, `invaders`), so Back returns to the menu |
+| `/focus?task=<id>` | The Focus page naming a task from Today, with Mark done (the Focus link on each Today task) |
 | `/chat`, `/chat/<threadId>` | A new AI conversation, or a saved one (AI on only; otherwise it redirects to `/dashboard`) |
 | `/chat?q=<text>` | A new conversation with the message box filled in (never sent by itself) |
 | `/dashboard`, `/focus`, `/review`, `/party`, `/stats`, `/profile`, `/classes`, `/skills`, `/shop`, `/achievements`, `/leaderboard`, `/settings` | That page |

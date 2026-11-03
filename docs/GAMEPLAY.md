@@ -369,7 +369,7 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 
 ## 5d. Focus sessions
 
-A server-timed work timer. `POST /api/focus/start {minutes}` (10 to 90) starts a session and `POST /api/focus/finish {sessionId}` ends it. The server credits **min(planned, elapsed) real minutes** and only when at least 10 minutes passed; the payout is `floor(minutes × 0.6)` XP. Finishing sooner than 10 minutes cancels the session with no XP, and a session left running for more than 3 hours expires with none. Each session settles once, starting a new session cancels the unfinished one, and a day pays at most **100 XP across 8 sessions** (the ninth start is refused).
+A server-timed work timer, on the web Focus page and on Discord (`/focus start|finish|status`). It is one timer: a session started on one can be finished on the other. `POST /api/focus/start {minutes}` (10 to 90) starts a session and `POST /api/focus/finish {sessionId}` ends it. The server credits **min(planned, elapsed) real minutes** and only when at least 10 minutes passed; the payout is `floor(minutes × 0.6)` XP. Finishing sooner than 10 minutes cancels the session with no XP (the web asks first; `/focus finish` refuses instead, so the session keeps running), and a session left running for more than 3 hours expires with none. Each session settles once, starting a new session cancels the unfinished one, and a day pays at most **100 XP across 8 sessions** (the ninth start is refused).
 
 ## 5e. Weekly review
 

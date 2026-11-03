@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ShortcutsDialog } from "@/components/tasks/ShortcutsDialog";
 import { GO_TO_WINDOW_MS, goToPath } from "@/lib/goTo";
-
-/** True while the user is typing somewhere a key should be a letter, not a command. */
-const isTyping = (target: EventTarget | null) =>
-  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+import { shortcutBlocked } from "@/lib/shortcutGuard";
 
 /**
  * Shortcuts on every page: "?" shows the list of shortcuts, and "g" then a letter goes to a page (g t Today, g q the quest log ...).
@@ -19,8 +16,7 @@ export const GlobalShortcuts = ({ aiEnabled }: { aiEnabled: boolean }) => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
-      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || shortcutBlocked(e)) return;
       if (pendingSince.current && Date.now() - pendingSince.current < GO_TO_WINDOW_MS) {
         if (e.key === "Shift") return; // still waiting for the letter
         pendingSince.current = 0;

@@ -83,7 +83,7 @@ export function showError(error: unknown) {
 }
 
 /** Refresh what a change to tasks or lists can alter: the lists, and the Today page and the stats that are derived from due dates and completions. */
-function invalidateTaskViews(qc: QueryClient) {
+export function invalidateTaskViews(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ['lists'] });
     qc.invalidateQueries({ queryKey: ['items'] }); // a task's history and comments in the detail drawer
     qc.invalidateQueries({ queryKey: ['today'] });
@@ -426,7 +426,8 @@ function rollBackItem(qc: QueryClient, itemId: number, previous: Array<[QueryKey
 export function useUpdateItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ itemId, data }: { itemId: number; data: Partial<ItemInput> & { position?: number } }) =>
+        // `quiet` is for a batch: the caller refreshes the task views once at the end instead of after every task.
+        mutationFn: ({ itemId, data }: { itemId: number; data: Partial<ItemInput> & { position?: number }; quiet?: boolean }) =>
             itemsApi.update(itemId, data),
         // A priority change on its own (a card dragged between board columns) shows at once and is put back if refused.
         onMutate: async ({ itemId, data }) => {
@@ -441,7 +442,9 @@ export function useUpdateItem() {
             }
             return { previous };
         },
-        onSuccess: () => invalidateTaskViews(qc),
+        onSuccess: (_result, { quiet }) => {
+            if (!quiet) invalidateTaskViews(qc);
+        },
         onError: (error, { itemId }, context) => {
             rollBackItem(qc, itemId, context?.previous);
             showError(error);
@@ -452,8 +455,10 @@ export function useUpdateItem() {
 export function useMoveItem() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ itemId, listId }: { itemId: number; listId: number }) => itemsApi.move(itemId, listId),
-        onSuccess: () => invalidateTaskViews(qc),
+        mutationFn: ({ itemId, listId }: { itemId: number; listId: number; quiet?: boolean }) => itemsApi.move(itemId, listId),
+        onSuccess: (_result, { quiet }) => {
+            if (!quiet) invalidateTaskViews(qc);
+        },
         onError: showError,
     });
 }

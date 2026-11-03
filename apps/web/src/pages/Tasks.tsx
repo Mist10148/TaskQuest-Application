@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { QuickAddResult } from "@/lib/quickAdd";
 import {
   useLists, useList, useCreateList, useUpdateList, useDeleteList,
-  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems, useMoveItem, useListMembers, invalidateProgress,
+  useCreateItem, useToggleItem, useUpdateItem, useDeleteItem, useReorderItems, useMoveItem, useListMembers, invalidateProgress, invalidateTaskViews,
 } from "@/hooks/useApi";
 import { ListOverview } from "@/components/tasks/ListOverview";
 import { ListDetail } from "@/components/tasks/ListDetail";
@@ -292,7 +292,7 @@ const Tasks = () => {
       const data = bulkPatch(values, current);
       if (!data) continue; // nothing would change for this task
       try {
-        await updateItem.mutateAsync({ itemId: id, data });
+        await updateItem.mutateAsync({ itemId: id, data, quiet: true });
         done += 1;
       } catch {
         break; // error toast shown by the mutation hook
@@ -301,6 +301,7 @@ const Tasks = () => {
     progress.end();
     if (done > 0) toast.success(`✏️ ${done} ${done === 1 ? "task" : "tasks"} updated${done < ids.length ? ` (${ids.length - done} not changed)` : ""}`);
     if (tooMany > 0) toast.warning(`${tooMany} ${tooMany === 1 ? "task was" : "tasks were"} skipped: a task can have at most ${MAX_TAGS} tags.`);
+    if (done > 0) invalidateTaskViews(qc); // once for the batch (each update was quiet)
     refetchList();
   };
 
@@ -338,13 +339,14 @@ const Tasks = () => {
     for (const [n, id] of ids.entries()) {
       progress.step(n);
       try {
-        await moveItem.mutateAsync({ itemId: id, listId });
+        await moveItem.mutateAsync({ itemId: id, listId, quiet: ids.length > 1 });
         done += 1;
       } catch {
         break; // error toast shown by the mutation hook
       }
     }
     progress.end();
+    if (done > 0 && ids.length > 1) invalidateTaskViews(qc); // once for the batch (each move was quiet)
     if (done > 0) toast.success(`📦 Moved ${done === 1 ? `"${nameOf(ids[0])}"` : `${done} tasks`} to ${target}`);
   };
 

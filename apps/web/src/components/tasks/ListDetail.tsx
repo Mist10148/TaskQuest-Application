@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Download, Eye, FilePlus, Keyboard, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCheck, CheckSquare, Download, Eye, FilePlus, Keyboard, Loader2, Pencil, SlidersHorizontal, Plus, Scroll, Trash2, Users, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { downloadText, exportFileName, listToCsv, listToMarkdown } from "@/lib/exportList";
 import { motion } from "framer-motion";
@@ -164,6 +164,19 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
   const [confirmBulk, setConfirmBulk] = useState<number[] | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkEditing, setBulkEditing] = useState(false);
+  // A batch runs one task at a time: the toolbar waits for it, so a second click cannot start a second batch beside it.
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const runBulk = async (batch: () => Promise<unknown>) => {
+    setBulkBusy(true);
+    try {
+      await batch();
+    } catch {
+      // The mutation hooks already showed the error.
+    } finally {
+      setBulkBusy(false);
+      leaveSelectMode();
+    }
+  };
   const quickAddRef = useRef<HTMLInputElement>(null);
   const lastSelectedRef = useRef<number | null>(null);
   // Rows in the order they are drawn (each task followed by its subtasks), for Shift-click ranges.
@@ -434,37 +447,24 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
       {selectMode && editable && (
         <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 mt-4 flex lg:bottom-4 flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-lg backdrop-blur-sm" role="toolbar" aria-label="Bulk actions">
           <span className="text-sm font-medium mr-auto" aria-live="polite">{selectedIds.length} selected</span>
-          <Button size="sm" variant="outline" className="gap-1" disabled={shownItems.every((i) => selected.has(i.id))} onClick={() => setSelected(new Set(shownItems.map((i) => i.id)))}>
+          <Button size="sm" variant="outline" className="gap-1" disabled={bulkBusy || shownItems.every((i) => selected.has(i.id))} onClick={() => setSelected(new Set(shownItems.map((i) => i.id)))}>
             Select all
           </Button>
-          <Button size="sm" className="gap-1" disabled={openIds.length === 0} onClick={async () => {
-            try {
-              await onBulkComplete(openIds);
-            } catch {
-              // The mutation hooks already showed the error.
-            }
-            leaveSelectMode();
-          }}>
-            <CheckCheck className="h-4 w-4" /> Complete{openIds.length ? ` (${openIds.length})` : ""}
+          <Button size="sm" className="gap-1" disabled={bulkBusy || openIds.length === 0} aria-busy={bulkBusy} onClick={() => void runBulk(() => onBulkComplete(openIds))}>
+            {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCheck className="h-4 w-4" />} Complete{openIds.length ? ` (${openIds.length})` : ""}
           </Button>
-          <Button size="sm" variant="outline" className="gap-1" disabled={selectedIds.length === 0} onClick={() => setBulkEditOpen(true)}>
+          <Button size="sm" variant="outline" className="gap-1" disabled={bulkBusy || selectedIds.length === 0} onClick={() => setBulkEditOpen(true)}>
             <SlidersHorizontal className="h-4 w-4" aria-hidden /> Edit{selectedIds.length ? ` (${selectedIds.length})` : ""}
           </Button>
           {onMove && moveTargets && moveTargets.length > 0 && (
             <select
               aria-label="Move selected tasks to another quest"
               title={movableIds.length < selectedIds.length ? "Subtasks move with their parent task" : undefined}
-              disabled={movableIds.length === 0}
+              disabled={bulkBusy || movableIds.length === 0}
               value=""
-              onChange={async (e) => {
+              onChange={(e) => {
                 const listId = Number(e.target.value);
-                if (!listId) return;
-                try {
-                  await onMove(movableIds, listId);
-                } catch {
-                  // The mutation hooks already showed the error.
-                }
-                leaveSelectMode();
+                if (listId) void runBulk(() => onMove(movableIds, listId));
               }}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
             >
@@ -472,7 +472,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
               {moveTargets.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
           )}
-          <Button size="sm" variant="destructive" className="gap-1" disabled={deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { if (deletableIds.length > BULK_DELETE_CONFIRM_ABOVE) setConfirmBulk(deletableIds); else { onBulkDelete(deletableIds); leaveSelectMode(); } }}>
+          <Button size="sm" variant="destructive" className="gap-1" disabled={bulkBusy || deletableIds.length === 0} title={deletableIds.length < selectedIds.length ? "Only tasks you added can be deleted by an editor" : undefined} onClick={() => { if (deletableIds.length > BULK_DELETE_CONFIRM_ABOVE) setConfirmBulk(deletableIds); else { onBulkDelete(deletableIds); leaveSelectMode(); } }}>
             <Trash2 className="h-4 w-4" /> Delete{deletableIds.length && deletableIds.length < selectedIds.length ? ` (${deletableIds.length})` : ""}
           </Button>
           <Button size="sm" variant="ghost" aria-label="Leave select mode" onClick={leaveSelectMode}><X className="h-4 w-4" /></Button>

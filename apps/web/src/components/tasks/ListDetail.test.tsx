@@ -233,3 +233,23 @@ describe("ListDetail empty quest", () => {
     expect(screen.getByText("Finish report fri !high #work")).toBeInTheDocument();
   });
 });
+
+describe("ListDetail bulk toolbar", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("holds the toolbar while a batch runs, so a second click cannot start another", async () => {
+    let finish: () => void = () => {};
+    const onBulkComplete = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    renderList([item(1), item(2), item(3)], { onBulkComplete });
+    await userEvent.click(screen.getByRole("button", { name: /^select$/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+    const complete = screen.getByRole("button", { name: /complete \(3\)/i });
+    await userEvent.click(complete);
+    expect(complete).toBeDisabled();
+    expect(within(screen.getByRole("toolbar", { name: "Bulk actions" })).getByRole("button", { name: /^delete/i })).toBeDisabled();
+    await userEvent.click(complete);
+    expect(onBulkComplete).toHaveBeenCalledTimes(1);
+    finish();
+    expect(await screen.findByRole("button", { name: /^select$/i })).toHaveAttribute("aria-pressed", "false");
+  });
+});

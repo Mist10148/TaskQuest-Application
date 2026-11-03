@@ -113,6 +113,25 @@ export const en = {
   "invite.body": " will get an invitation to {target}. Check this is the person you meant.",
   "invite.send": "Send invitation",
   "invite.notThem": "Not them",
+
+  "shortcuts.title": "Keyboard shortcuts",
+  "shortcuts.hint": "Shortcuts work when you are not typing in a field.",
+  "shortcuts.openPalette": "Open command palette",
+  "shortcuts.newItem": "New quest, or new task inside a quest",
+  "shortcuts.search": "Search quests, or focus quick add inside a quest",
+  "shortcuts.select": "Select several tasks (inside a quest)",
+  "shortcuts.move": "Move down or up the tasks (inside a quest)",
+  "shortcuts.complete": "Complete or reopen the highlighted task",
+  "shortcuts.details": "Open the details of the highlighted task",
+  "shortcuts.edit": "Edit the highlighted task",
+  "shortcuts.delete": "Delete the highlighted task (with Undo)",
+  "shortcuts.views": "Show the tasks as a list, a board or a calendar (inside a quest)",
+  "shortcuts.selectAll": "Select every task shown (in select mode)",
+  "shortcuts.escape": "Leave select mode or go back to the quest log",
+  "shortcuts.help": "Show this list (on any page)",
+  "shortcuts.palette": "Command palette: go to a page, new quest or task, switch theme (works anywhere)",
+  "shortcuts.goToKey": "g then a key",
+  "shortcuts.goTo": "Go to a page from anywhere: {keys}",
 } as const;
 
 export type MessageKey = keyof typeof en;

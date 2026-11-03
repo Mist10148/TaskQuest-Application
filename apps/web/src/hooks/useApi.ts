@@ -4,7 +4,7 @@
  * showing fake data.
  */
 
-import { useQuery, useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { toast } from 'sonner';
 import { formatDeadline } from '@/lib/dates';
@@ -988,13 +988,15 @@ export function useSummary() {
 
 /**
  * Prioritized quests. Not fetched automatically: every run costs AI quota, so the UI
- * calls `refetch()` on an explicit click. The result stays cached for 5 minutes.
+ * calls `refetch()` on an explicit click. The result stays cached for 5 minutes, and a
+ * longer list asked for (a new `limit`) keeps showing the shorter one until it arrives.
  */
 export function usePrioritize(limit = 5) {
     return useQuery({
         queryKey: ['ai', 'prioritize', limit],
         queryFn: () => aiApi.prioritize(limit),
         enabled: false,
+        placeholderData: keepPreviousData,
         staleTime: 5 * 60_000,
         retry: false,
     });

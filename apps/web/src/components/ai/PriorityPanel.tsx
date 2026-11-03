@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Flame, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,14 +10,19 @@ import { AiBadge } from "./SummaryCard";
 import { useSlow } from "./useSlow";
 
 /** "What should I do next?": ranked quests with reasons. Priority changes are suggestions the user accepts or rejects. */
+/** How many quests a ranking shows, and how many "Show more" asks for (the server allows up to 20). */
+const FIRST_LIMIT = 5;
+const MORE_LIMIT = 10;
+
 export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void }) {
   const { user } = useAuth();
-  const { data, refetch, isFetching, error } = usePrioritize(5);
+  const [limit, setLimit] = useState(FIRST_LIMIT);
+  const { data, refetch, isFetching, error } = usePrioritize(limit);
+  // "Show more" switches to the longer ranking's query, then runs it once that query is the one in use.
+  const rankMore = useRef(false);
   const updateList = useUpdateList();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const slow = useSlow(isFetching);
-
-  if (!user?.features?.ai) return null;
 
   // A click on Prioritize / Refresh: if the player switched tabs while the AI was thinking, say so when it is done.
   const run = async () => {
@@ -26,6 +31,15 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
       void announceResult({ title: "Your priorities are ready", body: result.data.focusMessage || `Start with ${result.data.ranked[0].name}` });
     }
   };
+  useEffect(() => {
+    if (!rankMore.current) return;
+    rankMore.current = false;
+    void refetch();
+  }, [limit, refetch]);
+
+  if (!user?.features?.ai) return null;
+  // A full first ranking may have more behind it; a shorter one already holds every open quest.
+  const canShowMore = limit < MORE_LIMIT && (data?.ranked.length ?? 0) >= FIRST_LIMIT;
 
   const accept = async (task: AiRankedTask, priority: Priority) => {
     try {
@@ -82,6 +96,11 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
               </li>
             ))}
           </ol>
+          {canShowMore && (
+            <Button size="sm" variant="ghost" disabled={isFetching} onClick={() => { rankMore.current = true; setLimit(MORE_LIMIT); }}>
+              Show up to {MORE_LIMIT}
+            </Button>
+          )}
         </div>
       )}
     </div>

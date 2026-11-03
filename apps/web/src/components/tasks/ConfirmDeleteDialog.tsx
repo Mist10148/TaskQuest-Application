@@ -18,13 +18,14 @@ interface Props {
 
 /**
  * Destructive confirmation used for deleting quests and tasks. An alert dialog: it is announced as one, and a click outside
- * does not dismiss it. The caller closes it once the delete has gone through, so it stays open while `pending`.
+ * does not dismiss it. The caller closes it once the delete has gone through, so it stays open while `pending`: Cancel is
+ * off then, and Escape is ignored too.
  */
 export const ConfirmDeleteDialog = ({ open, onOpenChange, title, description, confirmLabel, pending, onConfirm }: Props) => {
   const t = useT();
   return (
-  <AlertDialog open={open} onOpenChange={onOpenChange}>
-    <AlertDialogContent className="sm:max-w-md">
+  <AlertDialog open={open} onOpenChange={(next) => { if (next || !pending) onOpenChange(next); }}>
+    <AlertDialogContent className="sm:max-w-md" onEscapeKeyDown={(e) => { if (pending) e.preventDefault(); }}>
       <AlertDialogHeader>
         <AlertDialogTitle className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-destructive/20 flex items-center justify-center">

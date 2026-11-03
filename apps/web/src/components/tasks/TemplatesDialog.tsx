@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileStack, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ export const TemplatesDialog = ({ open, onOpenChange, onApplied }: Props) => {
   const remove = useDeleteTemplate();
   const saved = templates.data?.length ?? 0;
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  // The template whose trash button gets focus back once Keep closes its confirmation.
+  const refocusId = useRef<number | null>(null);
   const [applyingId, setApplyingId] = useState<number | null>(null);
 
   const use = async (id: number) => {
@@ -60,14 +62,28 @@ export const TemplatesDialog = ({ open, onOpenChange, onApplied }: Props) => {
                 {confirmId === t.id ? (
                   <div className="flex gap-1 shrink-0" role="group" aria-label={tr("template.confirmDelete", { name: t.name })}>
                     <Button type="button" size="sm" variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate(t.id, { onSuccess: () => toast.success(tr("template.deleted", { name: t.name })), onSettled: () => setConfirmId(null) })}>{tr("template.delete")}</Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmId(null)}>{tr("template.keep")}</Button>
+                    {/* Keep takes focus from the trash button this pair replaced, and Keep gives it back (refocusId). */}
+                    <Button type="button" size="sm" variant="ghost" autoFocus onClick={() => { refocusId.current = t.id; setConfirmId(null); }}>{tr("template.keep")}</Button>
                   </div>
                 ) : (
                   <div className="flex gap-1 shrink-0">
                     <Button type="button" size="sm" disabled={apply.isPending} onClick={() => void use(t.id)}>
                       {applyingId === t.id && <Loader2 className="h-4 w-4 mr-1 animate-spin" aria-hidden />}{tr("template.use")}
                     </Button>
-                    <Button type="button" size="icon" variant="ghost" className="text-destructive-text" aria-label={tr("template.deleteLabel", { name: t.name })} onClick={() => setConfirmId(t.id)}>
+                    <Button
+                      ref={(el) => {
+                        if (el && refocusId.current === t.id) {
+                          refocusId.current = null;
+                          el.focus();
+                        }
+                      }}
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive-text"
+                      aria-label={tr("template.deleteLabel", { name: t.name })}
+                      onClick={() => setConfirmId(t.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

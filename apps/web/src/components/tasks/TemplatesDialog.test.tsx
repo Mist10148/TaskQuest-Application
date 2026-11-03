@@ -50,6 +50,15 @@ describe("TemplatesDialog", () => {
     expect(toast.success).toHaveBeenCalledWith('Deleted the template "Plan 1"');
   });
 
+  it("moves focus to Keep when asking, and back to the trash button after Keep", async () => {
+    load([template(1)]);
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "Delete template Plan 1" }));
+    expect(screen.getByRole("button", { name: "Keep" })).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(screen.getByRole("button", { name: "Delete template Plan 1" })).toHaveFocus();
+  });
+
   it("shows no count when there are no templates", () => {
     load([]);
     show();

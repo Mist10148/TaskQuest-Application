@@ -150,6 +150,27 @@ describe("Today page", () => {
     expect(hooks.useSetGoal.mock.results.at(-1)?.value.mutate).toHaveBeenCalledWith(7, expect.anything());
   });
 
+  it("moves focus into the goal form and back to Change goal on Cancel", async () => {
+    load(day({ goal: { ...day().goal, target: 10, progress: 4, reward: 100 } }));
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "Change goal" }));
+    expect(screen.getByLabelText(/Tasks to finish this week/)).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Change goal" })).toHaveFocus();
+  });
+
+  it("keeps a finished task's box done until the list drops it, so it cannot be completed twice", async () => {
+    const mutate = vi.fn((_arg: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    hooks.useToggleItem.mockReturnValue({ mutate, mutateAsync: vi.fn(), isPending: false });
+    load(day());
+    show();
+    await userEvent.click(screen.getByRole("button", { name: 'Mark "Pay rent" done' }));
+    const box = screen.getByRole("button", { name: '"Pay rent" is done' });
+    expect(box).toBeDisabled();
+    await userEvent.click(box);
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
   it("offers no change once the goal is claimed", () => {
     load(day({ goal: { ...day().goal, target: 10, progress: 12, claimed: true, reward: 100 } }));
     show();

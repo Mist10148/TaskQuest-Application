@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlarmClock, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Hourglass, Loader2, PenLine, Target, Timer } from "lucide-react";
 import { useIsMutating } from "@tanstack/react-query";
@@ -24,6 +24,8 @@ const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "
 const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
   const toggle = useToggleItem();
   const update = useUpdateItem();
+  // Done stays done until the refetched list drops the row, so a second click cannot complete it (and toast) twice.
+  const [done, setDone] = useState(false);
   // The same task can be listed twice (due now and coming up): either line's click marks both busy.
   const finishing =
     useIsMutating({
@@ -41,12 +43,15 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
     <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
       <button
         type="button"
-        aria-label={`Mark "${task.name}" done`}
-        disabled={finishing}
-        onClick={() => toggle.mutate({ itemId: task.id, completed: true })}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 border-border transition-colors hover:border-success hover:bg-success/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={done ? `"${task.name}" is done` : `Mark "${task.name}" done`}
+        disabled={finishing || done}
+        onClick={() => toggle.mutate({ itemId: task.id, completed: true }, { onSuccess: () => setDone(true) })}
+        className={cn(
+          "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 border-border transition-colors hover:border-success hover:bg-success/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+          done && "border-success bg-success/10"
+        )}
       >
-        {finishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5 text-transparent hover:text-success" aria-hidden />}
+        {finishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className={cn("h-3.5 w-3.5", done ? "text-success" : "text-transparent hover:text-success")} aria-hidden />}
       </button>
       <div className="min-w-0 flex-1">
         <Link to={`/tasks?list=${task.listId}&task=${task.id}`} className="line-clamp-2 break-words text-sm font-medium hover:text-primary-text hover:underline underline-offset-2 sm:text-base">{task.name}</Link>
@@ -125,6 +130,15 @@ const GoalCard = ({ data }: { data: TodayData }) => {
   const noRoom = lowest > g.max;
   // An unclaimed goal can be raised or lowered (still above progress): the same form, opened from "Change goal".
   const [editing, setEditing] = useState(false);
+  // The form and "Change goal" replace each other: move focus across, so a keyboard user does not land on the page body.
+  const inputRef = useRef<HTMLInputElement>(null);
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+    else if (wasEditing.current) changeRef.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
   return (
     <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="goal-title">
       <h2 id="goal-title" className="flex items-center gap-2 font-heading font-semibold"><Target className="h-5 w-5 text-primary-text" aria-hidden /> Weekly goal</h2>
@@ -145,7 +159,7 @@ const GoalCard = ({ data }: { data: TodayData }) => {
                 {claim.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Gift className="h-4 w-4" aria-hidden />} Claim goal reward
               </Button>
               {!noRoom && (
-                <Button size="sm" variant="outline" onClick={() => { setTarget(String(Math.min(g.max, Math.max(lowest, g.target ?? lowest)))); setEditing(true); }}>
+                <Button ref={changeRef} size="sm" variant="outline" onClick={() => { setTarget(String(Math.min(g.max, Math.max(lowest, g.target ?? lowest)))); setEditing(true); }}>
                   Change goal
                 </Button>
               )}
@@ -163,6 +177,7 @@ const GoalCard = ({ data }: { data: TodayData }) => {
           <div>
             <label htmlFor="goal-target" className="mb-1 block text-sm text-foreground-muted">Tasks to finish this week ({lowest} to {g.max})</label>
             <Input
+              ref={inputRef}
               id="goal-target"
               type="number"
               inputMode="numeric"

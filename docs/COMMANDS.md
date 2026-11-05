@@ -29,7 +29,7 @@ All commands work in servers and DMs. Game words used below are explained in the
 | `/automation` | — | Ephemeral | Turn deadline reminder DMs on or off |
 | `/timezone` | `zone` (autocomplete, IANA name), `hour` (0–23, default 9) | Ephemeral | 🕒 Your time zone: when "today" starts for you (daily limits, quests, the weekly review, Stats) and when in the day reminders and the weekly digest arrive. A zone can change once every 24 hours. With no options it shows the current settings. |
 | `/weekly` | — | Ephemeral | 📅 Turn the Monday weekly summary DM on or off |
-| `/quick` | `text` (required, ≤ 300), `list` (autocomplete, required; lists you can edit, same-named ones told apart by owner) | Ephemeral | ⚡ Add a task from one line: dates (`today`, `tomorrow`, `fri`, `in 3 days`, `2030-05-04`, `jan 5`), `!high`/`!med`/`!low`, `#tags` (max 5) and repeats (`daily`, `every week`, `monthly`) are read from the text and the rest is the name. |
+| `/quick` | `text` (required, ≤ 300), `list` (autocomplete, required; lists you can edit, same-named ones told apart by owner) | Ephemeral | ⚡ Add a task from one line: dates (`today`, `tomorrow`, `fri`, `in 3 days`, `2030-05-04`, `jan 5`), `!high`/`!med`/`!low`, `#tags` (max 5), repeats (`daily`, `every week`, `monthly`) and a time estimate (`~30m`, `~1h30m`, `~1.5h`; up to 10 hours) are read from the text and the rest is the name. |
 | `/help` | — | Public | Command overview |
 | `/app` | — | Ephemeral | Link to the web app (`WEB_APP_URL`). It says "not configured" when unset. |
 | `/ping` | — | Ephemeral | Bot and API latency |

@@ -26,7 +26,7 @@ Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](G
 
 **What is the Today page?** One screen for right now: the tasks that are overdue, due today or marked HIGH (tick them off from there), a warning (with a Claim button) when today is the last day to keep your streak, what is coming up later in the week, the week's bonus modifier, tasks someone assigned to you on their shared quests, a one-line reflection (+10 XP once a day) and your weekly goal (pick 3 to 60 tasks, claim 10 + 2 XP per task, at most 80, once a week). **Change goal** raises or lowers a goal that is not claimed yet (it must stay above what you already finished this week). Each task has a **Focus** link that opens the focus timer with that task named and a **Mark done** button. On Discord, `/today` shows the same tasks, streak and goal; setting and claiming the goal stay on the web.
 
-**Will I be warned before I lose a streak?** If you have a streak of 3 or more days, reminders on (`/automation`) and XP on, the bot sends one DM on the evening (18:00 your time) of the last day you can still save it by claiming the daily reward, once the reward can be claimed again, with the time the streak ends (often not midnight: a streak lasts at least 48 hours from your last claim), and a web push if you turned push on. The Today page and `/today` on Discord show the same warning.
+**Will I be warned before I lose a streak?** If you have a streak of 3 or more days, reminders on (`/automation`) and XP on, the bot sends one DM on the evening (18:00 your time) of the last day you can still save it by claiming the daily reward, once the reward can be claimed again, with the time the streak ends (often not midnight: a streak lasts at least 48 hours from your last claim), and a web push if you turned push on. The Today page and `/today` on Discord show the same warning. While streak freezes are holding a streak that is past its window, you are warned each evening until you claim.
 
 **My streak shows although I missed a day.** When your streak freezes can still save it, Today, `/today`, `/profile` and Stats keep showing it, and Today says the freezes are holding it. Claim the daily reward to keep it: each extra day you wait uses one more freeze. Momentum and the streak leaderboard count only a streak inside its normal window.
 
@@ -86,7 +86,11 @@ These are on the web app only; the Discord bot shows a shared quest's tasks but 
 
 **Comments and history.** The details drawer has a **Comments** tab (anyone who can edit the quest can post; the author or a manager can delete, and there is no editing) and an **Activity** tab that lists who created, renamed, finished, reopened or moved the task and changed its priority, due date or assignee.
 
-**Moving a task.** "Move to another quest" in the details, or select several tasks and choose **Move to…**: the task moves with its subtasks to the end of another quest you can edit. A finished task that you move keeps its XP, but the quest it lands in does not pay its clear bonus for it.
+**Moving a task.** "Move to another quest" in the details, or select several tasks and choose **Move to…**: the task moves with its subtasks to the end of another quest you can edit. A finished task that you move keeps its XP, but the quest it lands in does not pay its clear bonus for it. The "Moved" message has **Undo**, which moves the tasks back.
+
+**Copy, link and snooze.** **Duplicate** (in the details, or the row's menu on a phone) adds a copy of a task with its description, date, priority, tags, repeat and estimate, but not its completion, assignee, comments or subtasks; a copy is a new task, so it counts towards the daily task-creation XP like any other. **Copy link** in the details copies an address that opens the task in its quest for anyone who can see the quest. **Snooze to tomorrow** is offered for a task with no date, due today or late (never one due later), and its message has **Undo**.
+
+**Sorting and quick add.** Inside a quest, **Sort by** orders the tasks by due date, priority or newest first (drag and the arrows only work in quest order). Quick add also reads a time estimate: `Write essay fri ~1h30m` (or `~45m`, `~2h`, `~1.5h`; up to 10 hours), on the web and in `/quick`.
 
 **Calendar and big batches.** In a quest's calendar view, pick a day and **Add on this day** to add a task due then; **Today** brings the calendar back to the current month. Completing, editing or moving three or more selected tasks shows a "Completing 3 of 12…" counter, and the bulk bar waits until the batch is done.
 
@@ -136,6 +140,7 @@ On the web app, single keys work whenever you are not typing in a field and no d
 | `s`, then Shift+A | Inside a quest | Select mode, then select every task shown |
 | `1` / `2` / `3` | Inside a quest | List, board or calendar view |
 | Esc | Inside a quest | Leave select mode, or go back to the quest log |
+| `j` / `k`, then `x` or `z` | Today page | Move through the tasks, then complete or snooze (to tomorrow) the highlighted one; Esc clears the highlight |
 | Arrows, Home / End, PageUp / PageDown | Quest calendar | Move a day or a week, to the start or end of the week, or a month |
 | Ctrl+Enter (⌘Enter) | A task's comment box | Post the comment |
 | `H` / `S` / `D` | Blackjack | Hit, stand, double |

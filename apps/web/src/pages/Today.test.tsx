@@ -114,6 +114,23 @@ describe("Today page", () => {
     expect(mutate).toHaveBeenLastCalledWith({ itemId: 1, data: { due_date: "2030-01-10" } });
   });
 
+  it("moves a cursor with j and k, completes with x and snoozes with z", async () => {
+    load(day({ tasks: [task(1, "Pay rent", "2030-01-10"), task(2, "Call bank", "2030-01-09", { overdueDays: 1 })] }));
+    show();
+    await userEvent.keyboard("j");
+    expect(screen.getByRole("link", { name: "Pay rent" }).closest("li")).toHaveClass("ring-2");
+    await userEvent.keyboard("j");
+    expect(screen.getByRole("link", { name: "Call bank" }).closest("li")).toHaveClass("ring-2");
+    expect(screen.getByRole("link", { name: "Pay rent" }).closest("li")).not.toHaveClass("ring-2");
+    await userEvent.keyboard("x");
+    const toggle = hooks.useToggleItem.mock.results.at(-1)?.value.mutate;
+    expect(toggle).toHaveBeenCalledWith({ itemId: 2, completed: true }, expect.anything());
+    await userEvent.keyboard("k");
+    await userEvent.keyboard("z");
+    const update = hooks.useUpdateItem.mock.results.at(-1)?.value.mutate;
+    expect(update).toHaveBeenCalledWith({ itemId: 1, data: { due_date: expect.any(String) } }, expect.anything());
+  });
+
   it("offers no snooze for a task that is only HIGH priority, with no date", () => {
     load(day({ tasks: [task(4, "Big thing", null, { priority: "HIGH" })] }));
     show();

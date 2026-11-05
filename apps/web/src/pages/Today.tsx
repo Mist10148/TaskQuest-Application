@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlarmClock, CalendarCheck, CalendarClock, CheckCircle2, Flame, Gift, Hourglass, Loader2, PenLine, Target, Timer } from "lucide-react";
 import { useIsMutating } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TOGGLE_ITEM_KEY, useClaimGoal, useSetGoal, useToday, useToggleItem, useUpdateItem, useWriteReflection } from "@/hooks/useApi";
 import { useLocalToday } from "@/hooks/useLocalToday";
+import { useHotkeys } from "@/hooks/useHotkeys";
 import { cn } from "@/lib/utils";
 import { formatDeadline, formatDue } from "@/lib/dates";
 import { todayHeadline, goalPercent } from "@/lib/today";
@@ -22,7 +23,10 @@ import { useT } from "@/i18n/useT";
 
 const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "bg-xp", LOW: "bg-success" };
 
-const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
+/** The keyboard cursor's position in Today's lists: one key per line, since a task can be both due and coming up. */
+const lineKey = (section: "due" | "upcoming", id: number) => `${section}:${id}`;
+
+const TaskLine = ({ task, today, cursorKey, focused = false }: { task: TodayTask; today: string; cursorKey?: string; focused?: boolean }) => {
   const t = useT();
   const toggle = useToggleItem();
   const update = useUpdateItem();
@@ -39,6 +43,10 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
     }) > 0;
   // Due today or late: push it to tomorrow without opening the quest.
   const canSnooze = Boolean(task.dueDate && task.dueDate <= today);
+  const complete = () => {
+    if (finishing || done) return;
+    toggle.mutate({ itemId: task.id, completed: true }, { onSuccess: () => setDone(true) });
+  };
   const snooze = () =>
     update.mutate(
       { itemId: task.id, data: { due_date: addDays(localToday(), 1) } },
@@ -49,13 +57,21 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
           }),
       }
     );
+  // The line under the keyboard cursor answers x (done) and z (snooze).
+  useHotkeys(
+    {
+      x: complete,
+      z: () => { if (canSnooze && !update.isPending) snooze(); },
+    },
+    focused
+  );
   return (
-    <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+    <li className={cn("flex items-center gap-3 rounded-lg border border-border bg-card p-3", focused && "ring-2 ring-primary/70")} data-today-line={cursorKey}>
       <button
         type="button"
         aria-label={done ? `"${task.name}" is done` : `Mark "${task.name}" done`}
         disabled={finishing || done}
-        onClick={() => toggle.mutate({ itemId: task.id, completed: true }, { onSuccess: () => setDone(true) })}
+        onClick={complete}
         className={cn(
           "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 border-border transition-colors hover:border-success hover:bg-success/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
           done && "border-success bg-success/10"
@@ -217,7 +233,28 @@ const TodayPriorities = () => {
   return <PriorityPanel onOpen={(listId) => navigate(`/tasks?list=${listId}`)} />;
 };
 
-const TodayView = ({ data }: { data: TodayData }) => (
+/** j and k move a cursor over Today's task lines (x then completes, z snoozes), like the keys inside a quest. */
+function useLineCursor(data: TodayData) {
+  const order = useMemo(
+    () => [...data.tasks.map((t) => lineKey("due", t.id)), ...(data.upcoming ?? []).map((t) => lineKey("upcoming", t.id))],
+    [data.tasks, data.upcoming]
+  );
+  const [cursor, setCursor] = useState<string | null>(null);
+  const step = (direction: 1 | -1) => {
+    if (order.length === 0) return;
+    const at = cursor === null ? -1 : order.indexOf(cursor);
+    const next = at === -1 ? (direction === 1 ? order[0] : order[order.length - 1]) : order[Math.min(order.length - 1, Math.max(0, at + direction))];
+    setCursor(next);
+    requestAnimationFrame(() => document.querySelector(`[data-today-line="${next}"]`)?.scrollIntoView?.({ block: "nearest" }));
+  };
+  useHotkeys({ j: () => step(1), k: () => step(-1), Escape: () => setCursor(null) });
+  // A line that left the list (done, snoozed) takes the cursor with it.
+  return cursor !== null && order.includes(cursor) ? cursor : null;
+}
+
+const TodayView = ({ data }: { data: TodayData }) => {
+  const cursor = useLineCursor(data);
+  return (
   <div className="space-y-4 sm:space-y-6">
     <div className="flex flex-wrap gap-2 text-sm" role="group" aria-label="Today at a glance">
       <span className="rounded-full border border-border bg-card px-3 py-1" data-testid="count-due"><strong>{data.counts.dueToday}</strong> due today</span>
@@ -243,14 +280,18 @@ const TodayView = ({ data }: { data: TodayData }) => (
           <Button asChild size="sm" className="mt-3"><Link to="/tasks">Go to your quests</Link></Button>
         </div>
       ) : (
-        <ul className="space-y-2">{data.tasks.map((t) => <TaskLine key={t.id} task={t} today={data.day} />)}</ul>
+        <ul className="space-y-2">
+          {data.tasks.map((t) => <TaskLine key={t.id} task={t} today={data.day} cursorKey={lineKey("due", t.id)} focused={cursor === lineKey("due", t.id)} />)}
+        </ul>
       )}
     </section>
 
     {data.upcoming && data.upcoming.length > 0 && (
       <section aria-labelledby="upcoming-title">
         <h2 id="upcoming-title" className="mb-2 flex items-center gap-2 font-heading font-semibold"><CalendarClock className="h-5 w-5 text-primary-text" aria-hidden /> Coming up this week</h2>
-        <ul className="space-y-2">{data.upcoming.map((t) => <TaskLine key={t.id} task={t} today={data.day} />)}</ul>
+        <ul className="space-y-2">
+          {data.upcoming.map((t) => <TaskLine key={t.id} task={t} today={data.day} cursorKey={lineKey("upcoming", t.id)} focused={cursor === lineKey("upcoming", t.id)} />)}
+        </ul>
       </section>
     )}
 
@@ -261,7 +302,8 @@ const TodayView = ({ data }: { data: TodayData }) => (
       <GoalCard data={data} />
     </div>
   </div>
-);
+  );
+};
 
 const Today = () => {
   const today = useToday();

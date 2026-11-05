@@ -5,8 +5,9 @@
  * `catalogs` below, and give it a name in LOCALE_NAMES.
  *
  * Extracted so far: the NotFound and Review pages, the Tasks page's toasts, the quest, task,
- * template, bulk-edit, delete, invitation and shortcuts dialogs, the quest calendar and the
- * shared dialog buttons; the rest of the app still uses inline English (see docs/ROADMAP.md).
+ * template, bulk-edit, delete, invitation and shortcuts dialogs, the quest calendar, the task
+ * row and board, the error card, the offline banner, the Undo toast and the shared dialog
+ * buttons; the rest of the app still uses inline English (see docs/ROADMAP.md).
  * Placeholders are written `{name}`; a count gets a One and a Many key.
  */
 

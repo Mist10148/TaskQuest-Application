@@ -135,7 +135,7 @@ Discord login needs a real application, which is overkill for checking a UI chan
 
 Check the page you changed in **both themes**, at a phone width, and with the keyboard only.
 
-User-facing text in the web app is moving into a typed message catalog (`apps/web/src/i18n/messages.ts`, read with `useT()`); the Review and Not-found pages, the Tasks page's messages (toasts and bulk progress), the quest, task, template, bulk-edit, delete, invitation and keyboard-shortcut dialogs, the quest calendar and the shared dialog buttons use it. Put new strings there when you touch a page, with `{name}` placeholders instead of string concatenation. A translation is a partial catalog, so a missing key shows English.
+User-facing text in the web app is moving into a typed message catalog (`apps/web/src/i18n/messages.ts`, read with `useT()`); the Review and Not-found pages, the Tasks page's messages (toasts and bulk progress), the quest, task, template, bulk-edit, delete, invitation and keyboard-shortcut dialogs, the quest calendar (its month and day names come from the browser for the chosen language), the task row and board, the error card, the offline banner, the Undo toast and the shared dialog buttons use it. Put new strings there when you touch a page, with `{name}` placeholders instead of string concatenation. A translation is a partial catalog, so a missing key shows English.
 
 ## Style
 

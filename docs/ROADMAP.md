@@ -24,7 +24,7 @@ Work that is understood and waits only for time, a key or a decision.
 | Item | Notes |
 |---|---|
 | Custom statuses, start dates with a timeline, task dependencies, simple automations, real-time updates on shared quests | Needs a data model; each is its own design note |
-| Full internationalisation | Extract the remaining strings (the toasts in `useApi.ts`, the members dialog, the task row, drawer and filter bar, the command palette and navigation, and most pages) into `apps/web/src/i18n/messages.ts`, then add a language picker once there is a second catalog |
+| Full internationalisation | Extract the remaining strings (the toasts in `useApi.ts`, the members dialog, the task drawer and filter bar, the command palette and navigation, and most pages) into `apps/web/src/i18n/messages.ts`, then add a language picker once there is a second catalog |
 | README screenshots (#26) and push delivery tested against real push services (#30) | The capture spec exists; see [CONTRIBUTING](../CONTRIBUTING.md#readme-screenshots) |
 
 ## Open product decisions

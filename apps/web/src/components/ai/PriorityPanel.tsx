@@ -26,6 +26,8 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
 
   // A click on Prioritize / Refresh: if the player switched tabs while the AI was thinking, say so when it is done.
   const run = async () => {
+    // A new ranking is a new set of suggestions: one rejected earlier may come back with a new reason.
+    setDismissed(new Set());
     const result = await refetch();
     if (result.data?.ranked.length) {
       void announceResult({ title: "Your priorities are ready", body: result.data.focusMessage || `Start with ${result.data.ranked[0].name}` });
@@ -67,10 +69,10 @@ export function PriorityPanel({ onOpen }: { onOpen?: (listId: number) => void })
       </div>
 
       {isFetching && slow && <p className="mt-3 text-xs text-foreground-muted">Waking up the AI… the first request can take a few seconds.</p>}
-      {error && !isFetching && <p className="mt-3 text-sm text-destructive-text">{(error as Error).message}</p>}
+      {error && !isFetching && <p role="alert" className="mt-3 text-sm text-destructive-text">{(error as Error).message}</p>}
 
       {data && (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3" aria-live="polite">
           {data.focusMessage && <p className="text-sm text-foreground-muted">{data.focusMessage}</p>}
           {data.usedFallback && (
             <p className="text-xs text-foreground-muted">The AI is resting, so this ranking uses deadlines and priorities only.</p>

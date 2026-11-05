@@ -47,4 +47,16 @@ describe("PriorityPanel", () => {
     expect(await screen.findByText("Quest 3")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Show up to 10" })).toBeNull();
   });
+
+  it("shows a rejected suggestion again after Refresh", async () => {
+    const suggesting = ranking(1);
+    suggesting.ranked[0].suggestedPriority = "HIGH";
+    api.prioritize.mockResolvedValue(suggesting);
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "Prioritize my quests" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Reject/ }));
+    expect(screen.queryByRole("button", { name: /Reject/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Refresh/ }));
+    expect(await screen.findByRole("button", { name: /Reject/ })).toBeInTheDocument();
+  });
 });

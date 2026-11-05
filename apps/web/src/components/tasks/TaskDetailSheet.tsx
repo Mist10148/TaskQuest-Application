@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { AlarmClock, Calendar, Check, ListPlus, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
+import { AlarmClock, Calendar, Check, Link2, ListPlus, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
+import { toast } from "sonner";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -7,6 +8,18 @@ import { canSnoozeTo, formatDeadline, formatDue, isPastDeadline } from "@/lib/da
 import { cn } from "@/lib/utils";
 import { parseTags } from "@/lib/tags";
 import { TaskThread } from "./TaskThread";
+
+/** The address that opens this task's details (in its quest) for anyone who can see the quest. */
+export const taskLink = (item: Pick<Item, "id" | "list_id">, origin = window.location.origin) => `${origin}/tasks?list=${item.list_id}&task=${item.id}`;
+
+async function copyTaskLink(item: Item) {
+  try {
+    await navigator.clipboard.writeText(taskLink(item));
+    toast.success("Link copied");
+  } catch {
+    toast.error("Could not copy the link. Your browser blocked the clipboard.");
+  }
+}
 
 interface Props {
   /** The task to show; null keeps the drawer closed. */
@@ -163,6 +176,11 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                 </div>
               </>
             )}
+            <div className="mt-2 flex justify-end">
+              <Button variant="ghost" size="sm" className="gap-1" onClick={() => void copyTaskLink(item)}>
+                <Link2 className="h-4 w-4" aria-hidden /> Copy link
+              </Button>
+            </div>
             {/* Keyed by task: a half-written comment must not carry over to the subtask opened from this drawer. */}
             {showThread && <TaskThread key={item.id} itemId={item.id} canComment={!readOnly} />}
           </>

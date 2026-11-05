@@ -2,7 +2,10 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Item } from "@/lib/api";
-import { TaskDetailSheet } from "./TaskDetailSheet";
+import { TaskDetailSheet, taskLink } from "./TaskDetailSheet";
+
+const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), toasts) }));
 
 const item = (over: Partial<Item> = {}) =>
   ({ id: 7, name: "Pay rent", completed: 0, created_at: "2026-10-01T10:00:00Z", ...over }) as unknown as Item;
@@ -117,5 +120,15 @@ describe("TaskDetailSheet", () => {
   it("a viewer gets none of them", () => {
     renderSheet({}, { readOnly: true, onDelete: vi.fn(), onSnooze: vi.fn(), onAddSubtask: vi.fn() });
     expect(screen.queryByRole("button", { name: /Delete|Snooze|Add subtask/ })).toBeNull();
+  });
+
+  it("copies a link that opens the task in its quest, also for a viewer", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderSheet({ list_id: 3 } as Partial<Item>, { readOnly: true });
+    await userEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/tasks?list=3&task=7`);
+    expect(toasts.success).toHaveBeenCalledWith("Link copied");
+    expect(taskLink({ id: 1, list_id: 2 }, "https://x.example")).toBe("https://x.example/tasks?list=2&task=1");
   });
 });

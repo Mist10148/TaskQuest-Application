@@ -14,7 +14,7 @@ const dates = require('./dates');
 const cosmetics = require('./cosmetics');
 const push = require('./push');
 const { MIXES: SIM_MIXES, FAVOURABLE, simulateAverage } = require('./simulate');
-const { questPeriod, isoWeek, activeRotatingQuest, currentSeason } = require('./quests');
+const { questPeriod, isoWeek, rotationWeek, activeRotatingQuest, currentSeason } = require('./quests');
 const tz = require('./tz');
 const { buildIcs } = require('./ics');
 const { parseQuickAdd } = require('./quickAdd');
@@ -41,6 +41,7 @@ module.exports = {
     tz,
     questPeriod,
     isoWeek,
+    rotationWeek,
     activeRotatingQuest,
     currentSeason,
     SIM_MIXES,

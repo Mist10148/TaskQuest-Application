@@ -24,14 +24,30 @@ function isoWeek(now = new Date(), zone = null) {
     return Math.floor((thursday.getTime() - jan1) / (7 * 86400e3)) + 1;
 }
 
-/** The rotating weekly quest that is live at `now` (its key), chosen by the local ISO week number mod 4. */
+/** Monday 2025-12-29, the first day of ISO week 1 of 2026. */
+const WEEK_EPOCH = Date.UTC(2025, 11, 29);
+
+/**
+ * A running week count for rotations: equal to the ISO week number for every week of 2026, and then simply counting on
+ * (2027's first week is 54). An ISO week number would give week 53 and the next week 1 the same slot in a rotation of 4.
+ */
+function rotationWeek(now = new Date(), zone = null) {
+    const [y, m, d] = tz.dayKey(zone, now).split('-').map(Number);
+    const day = Date.UTC(y, m - 1, d);
+    const monday = day - ((new Date(day).getUTCDay() + 6) % 7) * 86400e3;
+    return Math.round((monday - WEEK_EPOCH) / (7 * 86400e3)) + 1;
+}
+
+const slot = (list, week) => list[((week % list.length) + list.length) % list.length];
+
+/** The rotating weekly quest that is live at `now` (its key): one step along the rotation each local week. */
 function activeRotatingQuest(rotation, now = new Date(), zone = null) {
-    return rotation[isoWeek(now, zone) % rotation.length];
+    return slot(rotation, rotationWeek(now, zone));
 }
 
-/** The weekly modifier that is live at `now` (the UTC ISO week, the same for everybody): see SEASONS in constants. */
+/** The weekly modifier that is live at `now` (the UTC week, the same for everybody): see SEASONS in constants. */
 function currentSeason(seasons, now = new Date()) {
-    return seasons[isoWeek(now, null) % seasons.length];
+    return slot(seasons, rotationWeek(now, null));
 }
 
-module.exports = { questPeriod, isoWeek, activeRotatingQuest, currentSeason };
+module.exports = { questPeriod, isoWeek, rotationWeek, activeRotatingQuest, currentSeason };

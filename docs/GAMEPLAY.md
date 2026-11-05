@@ -310,7 +310,7 @@ A **streak freeze** costs 150 XP (hold at most 3). With Freeze Cache the price i
 
 ## 5b. Quests
 
-Daily, weekly and monthly quests, with periods in **your** time zone (daily: your day; weekly: Monday 00:00 to Monday 00:00 your time; monthly: the 1st to the 1st). The rotating weekly quest is picked by your local ISO week. Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers). A quest or the weekly review pays once per real period: a claim made earlier in the current period blocks another one even if a time zone change gave the period a different start date.
+Daily, weekly and monthly quests, with periods in **your** time zone (daily: your day; weekly: Monday 00:00 to Monday 00:00 your time; monthly: the 1st to the 1st). The rotating weekly quest moves one step each local week. Progress comes from what you actually did in the period, and each quest can be claimed once per period for a flat XP reward (no class or skill modifiers). A quest or the weekly review pays once per real period: a claim made earlier in the current period blocks another one even if a time zone change gave the period a different start date.
 
 | Quest | Period | Goal | Reward |
 |---|---|---|---|
@@ -321,7 +321,7 @@ Daily, weekly and monthly quests, with periods in **your** time zone (daily: you
 | 📆 Regular | Weekly | Claim the daily reward on 5 days | 80 XP |
 | 🐉 Monthly Boss | Monthly | Complete 50 tasks this month | 400 XP |
 
-**Rotating weekly quest.** Besides the fixed weekly quests, exactly one quest from a pool of four is live each ISO week (the ISO week number mod 4 picks it, so the pool cycles every four weeks). The other three are neither listed nor claimable that week.
+**Rotating weekly quest.** Besides the fixed weekly quests, exactly one quest from a pool of four is live each week (it moves one step a week, so the pool cycles every four weeks; a year with an ISO week 53 does not repeat a quest over New Year). The other three are neither listed nor claimable that week.
 
 | Quest | Goal | Reward |
 |---|---|---|
@@ -361,7 +361,7 @@ Every source below is **flat XP** (no class or skill modifiers, except the prest
 | `focus_session` | floor(minutes × 0.6) per [focus session](#5d-focus-sessions) | 100 XP and 8 sessions a day |
 | `weekly_review` | +40 ([weekly review](#5e-weekly-review)) | Once per week |
 
-**The weekly modifier.** Every UTC ISO week (the same week for everybody, like the weekly board) doubles one flat bonus source; the week number mod 4 picks it, so the four rotate: **Early-bird week** (`early_finish`), **Cleanup week** (`overdue_clear`), **Habit week** (`habit_bonus`) and **Tidy week** (`list_cleared`). The doubled amount still counts against the source's daily cap. Operators can turn the modifier off with `XP_WEEKLY_MODIFIER=off`.
+**The weekly modifier.** Every UTC ISO week (the same week for everybody, like the weekly board) doubles one flat bonus source; it moves one step a week (with no repeat over a week 53), so the four rotate: **Early-bird week** (`early_finish`), **Cleanup week** (`overdue_clear`), **Habit week** (`habit_bonus`) and **Tidy week** (`list_cleared`). The doubled amount still counts against the source's daily cap. Operators can turn the modifier off with `XP_WEEKLY_MODIFIER=off`.
 
 **Achievement rewards** are paid in the transaction that unlocks the achievement. The XP can itself unlock an XP or level achievement, which pays in turn; the check repeats until nothing new unlocks (it always ends, because every achievement unlocks once). With XP off, achievements still unlock but pay nothing.
 

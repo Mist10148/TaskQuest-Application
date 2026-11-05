@@ -847,13 +847,18 @@ test('quest periods: monthly runs from the first of the UTC month to the next fi
     assert.equal(shared.questPeriod('monthly', new Date('2030-03-01T00:00:00Z')).start, '2030-03-01');
 });
 
-test('quest rotation: ISO week numbers pick one of four weekly quests', () => {
+test('quest rotation: a running week count picks one of four weekly quests', () => {
     assert.equal(shared.isoWeek(new Date('2030-01-07T10:00:00Z')), 2);
     assert.equal(shared.isoWeek(new Date('2030-01-01T10:00:00Z')), 1, 'Dec 31 to Jan 6 is week 1');
     assert.equal(shared.isoWeek(new Date('2021-01-03T10:00:00Z')), 53, 'a Sunday in early January can still be week 53');
     assert.equal(shared.isoWeek(new Date('2026-12-28T00:00:00Z')), 53);
     const week = (day) => shared.activeRotatingQuest(shared.ROTATING_QUESTS, new Date(`${day}T12:00:00Z`));
-    assert.equal(week('2030-01-07'), shared.ROTATING_QUESTS[2], 'week 2 -> index 2');
+    assert.equal(week('2026-11-02'), shared.ROTATING_QUESTS[45 % 4], 'in 2026 the count is the ISO week (45)');
+    // 2026 has 53 ISO weeks: week 53 and the first week of 2027 must not share a quest.
+    assert.equal(shared.rotationWeek(new Date('2026-12-28T12:00:00Z')), 53);
+    assert.equal(shared.rotationWeek(new Date('2027-01-04T12:00:00Z')), 54);
+    assert.notEqual(week('2026-12-28'), week('2027-01-04'), 'no repeat over the turn of the year');
+    assert.notEqual(week('2026-12-21'), week('2026-12-28'));
     assert.equal(week('2030-01-10'), week('2030-01-07'), 'the whole week shares one quest');
     assert.equal(new Set([week('2030-01-07'), week('2030-01-14'), week('2030-01-21'), week('2030-01-28')]).size, 4);
     assert.equal(week('2030-02-04'), week('2030-01-07'), 'it repeats every four weeks');
@@ -919,9 +924,13 @@ test('the weekly modifier: one flat source is doubled each UTC ISO week, four in
     for (let week = 0; week < 8; week++) {
         const at = new Date(Date.UTC(2030, 0, 7 + week * 7, 12)); // Mondays
         seen.add(currentSeason(SEASONS, at).key);
-        assert.equal(currentSeason(SEASONS, at), SEASONS[isoWeek(at, null) % 4]);
+        assert.equal(currentSeason(SEASONS, at), SEASONS[shared.rotationWeek(at, null) % 4]);
     }
     assert.equal(seen.size, 4, 'all four come up');
+    const dec28 = new Date('2026-12-28T12:00:00Z');
+    assert.equal(isoWeek(dec28, null), 53);
+    assert.notEqual(currentSeason(SEASONS, dec28), currentSeason(SEASONS, new Date('2027-01-04T12:00:00Z')), 'week 53 is not repeated');
+    assert.equal(currentSeason(SEASONS, new Date('2026-11-05T12:00:00Z')), SEASONS[45 % 4], 'this week keeps its modifier');
 });
 
 test('the flat per-action skills (Valor, Fortify, Arcane Study, Multishot) only work with their own class', () => {

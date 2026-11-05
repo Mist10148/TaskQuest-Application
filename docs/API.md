@@ -224,7 +224,7 @@ Off unless the server has `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY` and `WEB
 
 ## Quests
 
-Daily, weekly and monthly quests (periods follow your time zone: your day; Monday 00:00 to Monday 00:00 your time; the 1st to the 1st; `periodStart` is that local date and `resetsAt` the next local boundary). Progress is computed from your real activity; a claim pays flat XP (no class or skill modifiers) once per period. Exactly one of the four rotating weekly quests (`WEEKLY_ROT_A`..`D`, chosen by ISO week number mod 4) is listed and claimable each week; the other three answer `404` and are not listed. `BOSS_COMPLETE_50` is the monthly boss.
+Daily, weekly and monthly quests (periods follow your time zone: your day; Monday 00:00 to Monday 00:00 your time; the 1st to the 1st; `periodStart` is that local date and `resetsAt` the next local boundary). Progress is computed from your real activity; a claim pays flat XP (no class or skill modifiers) once per period. Exactly one of the four rotating weekly quests (`WEEKLY_ROT_A`..`D`, one step along the rotation each week) is listed and claimable each week; the other three answer `404` and are not listed. `BOSS_COMPLETE_50` is the monthly boss.
 
 | Method | Path | Body | Response |
 |---|---|---|---|

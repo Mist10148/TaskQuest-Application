@@ -2,7 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Item } from "@/lib/api";
-import { TaskDetailSheet, taskLink } from "./TaskDetailSheet";
+import { TaskDetailSheet } from "./TaskDetailSheet";
+import { taskLink } from "@/lib/duplicate";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), toasts) }));

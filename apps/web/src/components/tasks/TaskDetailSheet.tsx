@@ -8,9 +8,7 @@ import { canSnoozeTo, formatDeadline, formatDue, isPastDeadline } from "@/lib/da
 import { cn } from "@/lib/utils";
 import { parseTags } from "@/lib/tags";
 import { TaskThread } from "./TaskThread";
-
-/** The address that opens this task's details (in its quest) for anyone who can see the quest. */
-export const taskLink = (item: Pick<Item, "id" | "list_id">, origin = window.location.origin) => `${origin}/tasks?list=${item.list_id}&task=${item.id}`;
+import { taskLink } from "@/lib/duplicate";
 
 async function copyTaskLink(item: Item) {
   try {

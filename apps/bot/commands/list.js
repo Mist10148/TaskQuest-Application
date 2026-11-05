@@ -336,10 +336,10 @@ async function routeSelect(interaction) {
         const items = await tasks.getItems(userId, listId);
         if (!items) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
         // The first pick travels in the second menu's custom ID, so the reorder survives a bot restart.
-        return interaction.update({
-            embeds: [ui.info('Reorder', 'Select the SECOND task:')],
-            components: [ui.itemSelect(items.filter((i) => i.id !== Number(val)), `sel_swap2_${listId}_${Number(val)}`)]
-        });
+        const menu = ui.itemSelect(items.filter((i) => i.id !== Number(val)), `sel_swap2_${listId}_${Number(val)}`);
+        // The other tasks were deleted elsewhere since the menu was opened: an empty menu cannot be sent.
+        if (!menu) return interaction.update({ embeds: [ui.info('Not enough tasks', 'You need at least 2 tasks.')], components: [] });
+        return interaction.update({ embeds: [ui.info('Reorder', 'Select the SECOND task:')], components: [menu] });
     }
 
     if (id.startsWith('sel_swap2_')) {
@@ -404,7 +404,9 @@ async function pageSelect(interaction, id, page) {
     let items = await tasks.getItems(userId, listId);
     if (!items) return interaction.update({ embeds: [ui.error('Not found')], components: [] });
     if (m[1] === 'sel_swap2') items = items.filter((i) => i.id !== Number(m[3]));
-    return interaction.update({ components: [ui.itemSelect(items, id, undefined, { page })] });
+    const menu = ui.itemSelect(items, id, undefined, { page });
+    if (!menu) return interaction.update({ embeds: [ui.info('Not enough tasks', 'This list has no tasks left to pick.')], components: [] });
+    return interaction.update({ components: [menu] });
 }
 
 // ─── Modals ──────────────────────────────────────────────────────────────────

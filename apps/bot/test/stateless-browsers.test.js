@@ -177,6 +177,15 @@ test('the first pick of a reorder travels in the second menu, so a restart does 
     assert.match(embedTitle(second.calls[1].payload), /Swapped/);
 });
 
+test('a reorder whose other tasks were deleted meanwhile says so instead of sending an empty menu', async () => {
+    db.tasks.getItems = async () => [{ id: 12, name: 'Two', completed: 0 }];
+    const first = fake({ customId: 'sel_swap1_5', values: ['12'] });
+    first.message = { embeds: [], components: [] };
+    await listCommand.handleSelectMenu(first);
+    assert.match(embedTitle(first.calls[0].payload), /Not enough tasks/);
+    assert.deepEqual(first.calls[0].payload.components, []);
+});
+
 test('a second reorder menu without the first pick says it expired', async () => {
     let swapped = false;
     db.tasks.swapItemPositions = async () => {

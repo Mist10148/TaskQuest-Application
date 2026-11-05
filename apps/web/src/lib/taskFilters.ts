@@ -19,6 +19,9 @@ export interface TaskFilter {
 
 export type GroupBy = "none" | "priority" | "due" | "tag";
 
+/** "manual" is the quest's own order (the one drag and the arrows change). */
+export type SortBy = "manual" | "due" | "priority" | "newest";
+
 export const DEFAULT_FILTER: TaskFilter = { status: "all", priority: "any", due: "any", tag: "", assignee: "any", text: "" };
 
 export const isFiltering = (f: TaskFilter): boolean => f.status !== "all" || f.priority !== "any" || f.due !== "any" || f.tag !== "" || f.assignee !== "any" || f.text.trim() !== "";
@@ -86,6 +89,27 @@ export function filterTasks(
 /** Every tag used in the quest, sorted, for the tag filter. */
 export const tagsIn = (items: readonly Item[]): string[] => [...new Set(items.flatMap((i) => parseTags(i.tags)))].sort();
 
+const PRIORITY_RANK: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+/**
+ * Top-level tasks in the chosen order (a copy; subtasks stay under their parent). Ties keep the quest's own order.
+ * due: soonest first, no date last. priority: high to none. newest: the most recently added first.
+ */
+export function sortTasks(topLevel: readonly Item[], by: SortBy, listPriority: Priority | null | undefined): Item[] {
+  const out = [...topLevel];
+  if (by === "manual") return out;
+  const key = (item: Item): string | number =>
+    by === "due" ? dueDay(item) ?? "9999-99-99"
+    : by === "priority" ? PRIORITY_RANK[effectivePriority(item, listPriority) ?? ""] ?? 3
+    : -item.id;
+  // Array.prototype.sort is stable, so equal keys keep their position order.
+  return out.sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+}
+
 export interface TaskGroup {
   key: string;
   label: string;
@@ -117,11 +141,12 @@ const PRIORITY = ["any", "none", "HIGH", "MEDIUM", "LOW"];
 const DUE = ["any", "overdue", "today", "week", "none"];
 const GROUPS = ["none", "priority", "due", "tag"];
 const ASSIGNEE = ["any", "me", "unassigned"];
+const SORTS = ["manual", "due", "priority", "newest"];
 
-/** The filter and grouping last used in this browser (a convenience: anything unreadable falls back to the defaults). */
-export function loadFilterPrefs(): { filter: TaskFilter; groupBy: GroupBy } {
+/** The filter, grouping and sort last used in this browser (a convenience: anything unreadable falls back to the defaults). */
+export function loadFilterPrefs(): { filter: TaskFilter; groupBy: GroupBy; sortBy: SortBy } {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<TaskFilter> & { groupBy?: string };
+    const saved = JSON.parse(window.localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<TaskFilter> & { groupBy?: string; sortBy?: string };
     const pick = <T extends string>(value: unknown, allowed: string[], fallback: T): T => (typeof value === "string" && allowed.includes(value) ? (value as T) : fallback);
     return {
       filter: {
@@ -133,15 +158,16 @@ export function loadFilterPrefs(): { filter: TaskFilter; groupBy: GroupBy } {
         text: "",
       },
       groupBy: pick(saved.groupBy, GROUPS, "none"),
+      sortBy: pick(saved.sortBy, SORTS, "manual"),
     };
   } catch {
-    return { filter: DEFAULT_FILTER, groupBy: "none" };
+    return { filter: DEFAULT_FILTER, groupBy: "none", sortBy: "manual" };
   }
 }
 
-export function saveFilterPrefs(filter: TaskFilter, groupBy: GroupBy): void {
+export function saveFilterPrefs(filter: TaskFilter, groupBy: GroupBy, sortBy: SortBy = "manual"): void {
   try {
-    window.localStorage.setItem(PREFS_KEY, JSON.stringify({ ...filter, text: "", groupBy }));
+    window.localStorage.setItem(PREFS_KEY, JSON.stringify({ ...filter, text: "", groupBy, sortBy }));
   } catch {
     /* the choice just is not remembered */
   }

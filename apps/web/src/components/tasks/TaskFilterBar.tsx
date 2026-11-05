@@ -1,6 +1,6 @@
 import { FilterX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_FILTER, isFiltering, type GroupBy, type TaskFilter } from "@/lib/taskFilters";
+import { DEFAULT_FILTER, isFiltering, type GroupBy, type SortBy, type TaskFilter } from "@/lib/taskFilters";
 
 interface Props {
   filter: TaskFilter;
@@ -12,6 +12,8 @@ interface Props {
   /** Grouping only applies to the list view; leave it out to hide the control. */
   groupBy?: GroupBy;
   onGroupBy?: (next: GroupBy) => void;
+  sortBy?: SortBy;
+  onSortBy?: (next: SortBy) => void;
   shown: number;
   total: number;
 }
@@ -20,7 +22,7 @@ const selectClass =
   "h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Narrow a quest's tasks by status, priority, due date and tag, and (in the list view) group them under headings. */
-export const TaskFilterBar = ({ filter, onFilter, tags, showAssignee, groupBy, onGroupBy, shown, total }: Props) => {
+export const TaskFilterBar = ({ filter, onFilter, tags, showAssignee, groupBy, onGroupBy, sortBy, onSortBy, shown, total }: Props) => {
   const set = (patch: Partial<TaskFilter>) => onFilter({ ...filter, ...patch });
   const active = isFiltering(filter);
   return (
@@ -74,6 +76,14 @@ export const TaskFilterBar = ({ filter, onFilter, tags, showAssignee, groupBy, o
           <option value="priority">Group by priority</option>
           <option value="due">Group by due date</option>
           <option value="tag">Group by tag</option>
+        </select>
+      )}
+      {sortBy !== undefined && onSortBy && (
+        <select aria-label="Sort by" className={selectClass} value={sortBy} onChange={(e) => onSortBy(e.target.value as SortBy)}>
+          <option value="manual">Quest order</option>
+          <option value="due">Sort by due date</option>
+          <option value="priority">Sort by priority</option>
+          <option value="newest">Newest first</option>
         </select>
       )}
       {active && (

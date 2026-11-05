@@ -15,7 +15,7 @@ import { QuickAddBar } from "./QuickAddBar";
 import { TaskRow } from "./TaskRow";
 import { TaskBoard } from "./TaskBoard";
 import { TaskFilterBar } from "./TaskFilterBar";
-import { DEFAULT_FILTER, filterTasks, groupTasks, isFiltering, loadFilterPrefs, saveFilterPrefs, tagsIn, type GroupBy, type TaskFilter } from "@/lib/taskFilters";
+import { DEFAULT_FILTER, filterTasks, groupTasks, isFiltering, loadFilterPrefs, saveFilterPrefs, sortTasks, tagsIn, type GroupBy, type SortBy, type TaskFilter } from "@/lib/taskFilters";
 import { useLocalToday } from "@/hooks/useLocalToday";
 import { TaskCalendar } from "./TaskCalendar";
 import { TaskDetailSheet } from "./TaskDetailSheet";
@@ -113,17 +113,21 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
     return f;
   }, [prefs.filter, questTags, showAssignee]);
   const groupBy = prefs.groupBy;
-  const updatePrefs = (next: { filter?: TaskFilter; groupBy?: GroupBy }) => {
-    const merged = { filter: next.filter ?? filter, groupBy: next.groupBy ?? groupBy };
+  const sortBy = prefs.sortBy;
+  const updatePrefs = (next: { filter?: TaskFilter; groupBy?: GroupBy; sortBy?: SortBy }) => {
+    const merged = { filter: next.filter ?? filter, groupBy: next.groupBy ?? groupBy, sortBy: next.sortBy ?? sortBy };
     setPrefs(merged);
-    saveFilterPrefs(merged.filter, merged.groupBy);
+    saveFilterPrefs(merged.filter, merged.groupBy, merged.sortBy);
   };
   const today = useLocalToday();
   const shown = useMemo(() => filterTasks(topLevel, childrenOf, filter, list.priority, today), [topLevel, childrenOf, filter, list.priority, today]);
   const shownItems = useMemo(() => shown.topLevel.flatMap((t) => [t, ...(shown.childrenOf.get(t.id) ?? [])]), [shown]);
-  const groups = useMemo(() => groupTasks(shown.topLevel, groupBy, list.priority, today), [shown.topLevel, groupBy, list.priority, today]);
-  // Reordering a partial or regrouped view would be guesswork, so it is only offered on the plain list.
-  const reorderable = !isFiltering(filter) && groupBy === "none";
+  const groups = useMemo(
+    () => groupTasks(sortTasks(shown.topLevel, sortBy, list.priority), groupBy, list.priority, today),
+    [shown.topLevel, sortBy, groupBy, list.priority, today]
+  );
+  // Reordering a partial, regrouped or re-sorted view would be guesswork, so it is only offered on the plain list.
+  const reorderable = !isFiltering(filter) && groupBy === "none" && sortBy === "manual";
 
   // Reordering moves whole groups: the parent order changes, subtasks keep their order under their parent.
   // The server needs every task id of the list, so tasks hidden by a pending undo-delete are appended last.
@@ -396,6 +400,8 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
           showAssignee={showAssignee}
           groupBy={view === "list" ? groupBy : undefined}
           onGroupBy={(next) => updatePrefs({ groupBy: next })}
+          sortBy={view === "list" ? sortBy : undefined}
+          onSortBy={(next) => updatePrefs({ sortBy: next })}
           shown={shownItems.length}
           total={items.length}
         />
@@ -424,7 +430,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         <div className="space-y-2">
           <p className="text-xs text-foreground-muted mb-3 flex items-center gap-2">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
-            {!editable ? "View only: you can read this quest but not change it." : reorderable ? "Drag the grip (or use the arrows) to reorder. Shift-click selects a range." : "Clear the filters and grouping to reorder. Shift-click selects a range."}
+            {!editable ? "View only: you can read this quest but not change it." : reorderable ? "Drag the grip (or use the arrows) to reorder. Shift-click selects a range." : "Clear the filters, grouping and sort to reorder. Shift-click selects a range."}
           </p>
           {groups.map((group) => (
             <section key={group.key} aria-label={group.label || undefined} className="space-y-2">

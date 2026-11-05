@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Item } from "./api";
-import { DEFAULT_FILTER, dueWindowOf, filterTasks, groupTasks, isFiltering, matchesFilter, tagsIn } from "./taskFilters";
+import { DEFAULT_FILTER, dueWindowOf, filterTasks, groupTasks, isFiltering, loadFilterPrefs, matchesFilter, saveFilterPrefs, sortTasks, tagsIn } from "./taskFilters";
 
 const TODAY = "2030-01-10";
 const item = (id: number, extra: Partial<Item> = {}): Item => ({ id, list_id: 1, name: `Task ${id}`, description: null, completed: false, position: id, created_at: "", ...extra }) as Item;
@@ -105,5 +105,44 @@ describe("text search in a quest", () => {
     const out = filterTasks([parent], new Map([[1, [child]]]), f("rent"), null, TODAY);
     expect(out.topLevel).toEqual([parent]);
     expect(out.childrenOf.get(1)).toEqual([child]);
+  });
+});
+
+describe("sortTasks", () => {
+  const tasks = [
+    item(1, { due_date: "2030-01-20", priority: "LOW" }),
+    item(2, { priority: "HIGH" }),
+    item(3, { due_date: "2030-01-12" }),
+    item(4, { due_date: "2030-01-12", priority: "HIGH" }),
+  ];
+  const ids = (list: Item[]) => list.map((i) => i.id);
+
+  it("keeps the quest's own order by default, as a copy", () => {
+    const sorted = sortTasks(tasks, "manual", null);
+    expect(ids(sorted)).toEqual([1, 2, 3, 4]);
+    expect(sorted).not.toBe(tasks);
+  });
+
+  it("puts the soonest due date first and undated tasks last, ties in quest order", () => {
+    expect(ids(sortTasks(tasks, "due", null))).toEqual([3, 4, 1, 2]);
+  });
+
+  it("orders by priority, counting the quest's own priority for tasks without one", () => {
+    expect(ids(sortTasks(tasks, "priority", null))).toEqual([2, 4, 1, 3]);
+    expect(ids(sortTasks(tasks, "priority", "MEDIUM"))).toEqual([2, 4, 3, 1]);
+  });
+
+  it("shows the newest first", () => {
+    expect(ids(sortTasks(tasks, "newest", null))).toEqual([4, 3, 2, 1]);
+  });
+});
+
+describe("filter prefs", () => {
+  it("remember the sort and fall back to quest order for anything unknown", () => {
+    saveFilterPrefs(DEFAULT_FILTER, "none", "due");
+    expect(loadFilterPrefs().sortBy).toBe("due");
+    window.localStorage.setItem("taskquest:task-filter", JSON.stringify({ sortBy: "sideways" }));
+    expect(loadFilterPrefs().sortBy).toBe("manual");
+    window.localStorage.removeItem("taskquest:task-filter");
   });
 });

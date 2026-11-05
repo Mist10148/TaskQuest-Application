@@ -93,3 +93,25 @@ export const utcToday = (now: Date = new Date()): string => now.toISOString().sl
 
 /** "task_complete" -> "Task complete", for an XP source with no label of its own. */
 export const humanizeSource = (source: string): string => source.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+export interface WeekTotals {
+  xp: number;
+  tasks: number;
+}
+
+/**
+ * The last 7 days (ending with the newest day in the history, the player's today) against the 7 days before them. A
+ * history shorter than 14 days counts the missing days as quiet ones.
+ */
+export function weekOverWeek(days: readonly XPHistoryDay[]): { thisWeek: WeekTotals; lastWeek: WeekTotals } {
+  const sorted = [...days].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const totals = (slice: readonly XPHistoryDay[]): WeekTotals => ({ xp: sumBy(slice, "xp"), tasks: sumBy(slice, "tasksCompleted") });
+  const end = sorted.length;
+  return { thisWeek: totals(sorted.slice(Math.max(0, end - 7), end)), lastWeek: totals(sorted.slice(Math.max(0, end - 14), Math.max(0, end - 7))) };
+}
+
+/** "+3", "−2" or "same" for a change between two totals. */
+export function changeLabel(now: number, before: number): string {
+  const d = now - before;
+  return d === 0 ? "same" : d > 0 ? `+${d.toLocaleString()}` : `−${Math.abs(d).toLocaleString()}`;
+}

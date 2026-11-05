@@ -41,6 +41,14 @@ describe("Stats page", () => {
     expect(screen.getByTestId("xp-chart")).toBeInTheDocument();
   });
 
+  it("compares the last 7 days with the week before", () => {
+    render(<Stats />);
+    const card = screen.getByTestId("week-compare");
+    expect(within(card).getByText("Tasks done")).toBeInTheDocument();
+    expect(within(card).getByText("+3")).toBeInTheDocument(); // one day with 3 tasks, nothing the week before
+    expect(within(card).getByText("+40")).toBeInTheDocument();
+  });
+
   it("says there is nothing to chart instead of drawing a flat line", () => {
     hooks.useXpHistory.mockReturnValue(ok(days(0, 0)));
     render(<Stats />);

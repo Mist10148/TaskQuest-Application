@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { BarChart3, CalendarDays, Flame, History, ListChecks, Sparkles } from "lucide-react";
-import type { HistoryRange } from "@/lib/api";
+import { BarChart3, CalendarDays, Flame, History, ListChecks, Sparkles, TrendingUp } from "lucide-react";
+import type { HistoryRange, XPHistoryDay } from "@/lib/api";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { QueryState } from "@/components/feedback/QueryState";
 import { XPChart } from "@/components/stats/XPChart";
 import { Heatmap } from "@/components/stats/Heatmap";
 import { useStatsSummary, useXpHistory, useXpLedger } from "@/hooks/useApi";
-import { humanizeSource, sumBy } from "@/lib/stats";
+import { changeLabel, humanizeSource, sumBy, weekOverWeek } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
 const RANGES: HistoryRange[] = [7, 30, 90];
@@ -46,6 +46,35 @@ const RecentXp = ({ labels }: { labels: Map<string, string> }) => {
         )
       }
     </QueryState>
+  );
+};
+
+/** This week against last week (rolling 7 days), from the 90-day history the heatmap already loads. */
+const WeekCompare = ({ days }: { days: readonly XPHistoryDay[] }) => {
+  const { thisWeek, lastWeek } = weekOverWeek(days);
+  const rows: Array<[string, number, number]> = [
+    ["Tasks done", thisWeek.tasks, lastWeek.tasks],
+    ["XP earned", thisWeek.xp, lastWeek.xp],
+  ];
+  return (
+    <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="week-compare-title" data-testid="week-compare">
+      <h2 id="week-compare-title" className="mb-2 flex items-center gap-2 font-heading font-semibold">
+        <TrendingUp className="h-4 w-4 text-primary-text" aria-hidden /> Last 7 days against the 7 before
+      </h2>
+      <dl className="grid grid-cols-2 gap-3">
+        {rows.map(([label, now, before]) => (
+          <div key={label}>
+            <dt className="text-xs text-foreground-muted">{label}</dt>
+            <dd className="flex items-baseline gap-2">
+              <span className="font-heading text-2xl font-bold">{now.toLocaleString()}</span>
+              <span className={cn("text-sm", now > before ? "text-success" : now < before ? "text-destructive-text" : "text-foreground-muted")}>
+                {changeLabel(now, before)} <span className="sr-only">compared with {before.toLocaleString()} the week before</span>
+              </span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 };
 
@@ -89,6 +118,8 @@ const Stats = () => {
             </div>
           )}
         </QueryState>
+
+        {heat.data && <WeekCompare days={heat.data} />}
 
         <Card title="XP per day" icon={<BarChart3 className="h-4 w-4 text-primary-text" aria-hidden />}>
           <div role="group" aria-label="Chart range" className="mb-3 flex gap-2">

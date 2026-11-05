@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barLayout, buildHeatmap, heatLevel, mondayIndex, shortDate, sumBy } from "./stats";
+import { barLayout, buildHeatmap, changeLabel, heatLevel, mondayIndex, shortDate, sumBy, weekOverWeek } from "./stats";
 import type { XPHistoryDay } from "./api";
 
 const day = (date: string, tasksCompleted: number, xp = 0): XPHistoryDay => ({ date, xp, tasksCompleted });
@@ -66,5 +66,23 @@ describe("formatters", () => {
   it("sums a field", () => {
     expect(sumBy([day("a", 1, 10), day("b", 2, 5)], "xp")).toBe(15);
     expect(sumBy([day("a", 1, 10), day("b", 2, 5)], "tasksCompleted")).toBe(3);
+  });
+});
+
+describe("weekOverWeek", () => {
+  const day = (n: number, xp: number, tasksCompleted: number): XPHistoryDay => ({ date: `2030-01-${String(n).padStart(2, "0")}`, xp, tasksCompleted });
+
+  it("compares the last 7 days with the 7 before, whatever order the days come in", () => {
+    const days = Array.from({ length: 14 }, (_, i) => day(i + 1, i < 7 ? 10 : 20, i < 7 ? 1 : 2)).reverse();
+    expect(weekOverWeek(days)).toEqual({ thisWeek: { xp: 140, tasks: 14 }, lastWeek: { xp: 70, tasks: 7 } });
+  });
+
+  it("counts missing days as quiet ones", () => {
+    expect(weekOverWeek([day(1, 5, 1), day(2, 5, 0)])).toEqual({ thisWeek: { xp: 10, tasks: 1 }, lastWeek: { xp: 0, tasks: 0 } });
+    expect(weekOverWeek([])).toEqual({ thisWeek: { xp: 0, tasks: 0 }, lastWeek: { xp: 0, tasks: 0 } });
+  });
+
+  it("labels the change", () => {
+    expect([changeLabel(5, 2), changeLabel(2, 5), changeLabel(3, 3)]).toEqual(["+3", "−3", "same"]);
   });
 });

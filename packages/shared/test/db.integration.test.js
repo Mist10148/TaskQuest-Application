@@ -1404,6 +1404,10 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.ok(!(await ids(20)).includes(W), 'XP off');
         await db.query('UPDATE users SET gamification_enabled = 1, last_daily_claim = CURRENT_TIMESTAMP - make_interval(days => 3) WHERE discord_id = ?', [W]);
         assert.ok(!(await ids(20)).includes(W), 'the streak already lapsed');
+        // ...unless streak freezes are holding it, as the Today page says
+        await db.query('UPDATE users SET streak_freezes = 5 WHERE discord_id = ?', [W]);
+        assert.ok((await ids(20)).includes(W), 'a streak held by freezes is warned too');
+        await db.query('UPDATE users SET streak_freezes = 0 WHERE discord_id = ?', [W]);
     });
 
     await t.test('maintenance: the XP log records the class, old rows move to the archive, and the class report reads real XP', async () => {

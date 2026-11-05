@@ -145,13 +145,14 @@ async function getToday(discordId, now = new Date()) {
 
 /**
  * Players to warn right now: a streak of at least 3 days that is alive and unclaimed today, today is its last day, and it is
- * evening where they live. Only people with XP and reminders on, and not already warned today.
+ * evening where they live (a streak that streak freezes are holding counts too, as on Today). Only people with XP and reminders
+ * on, and not already warned today.
  * @returns {Promise<Array<{ discord_id: string, streak: number, day: string, timezone: string|null, expiresAt: string|null }>>}
  */
 async function getStreakWarnings(now = new Date()) {
     const pool = getPool();
     const [rows] = await pool.query(
-        `SELECT discord_id, timezone, streak_count, last_daily_claim, player_class, streak_warned_day FROM users
+        `SELECT discord_id, timezone, streak_count, streak_freezes, last_daily_claim, player_class, streak_warned_day FROM users
           WHERE gamification_enabled = 1 AND automation_enabled = 1 AND streak_count >= ? AND last_daily_claim >= ?`,
         [STREAK_WARNING.MIN_STREAK, new Date(now.getTime() - 6 * 86400e3)]
     );

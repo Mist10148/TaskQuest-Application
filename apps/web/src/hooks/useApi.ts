@@ -143,9 +143,11 @@ export function useUpdateSettings() {
             if (context?.previous) qc.setQueryData(['auth', 'me'], context.previous);
             showError(error);
         },
-        onSettled: () => {
+        onSettled: (_data, _error, settings) => {
             qc.invalidateQueries({ queryKey: ['user'] });
             qc.invalidateQueries({ queryKey: ['auth', 'me'] });
+            // The player's day (time zone) and whether XP is shown change Today, Focus, Stats, quests and the review.
+            if ('timezone' in settings || 'gamification_enabled' in settings) void invalidateProgress(qc);
         },
     });
 }

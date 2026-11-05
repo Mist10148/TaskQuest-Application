@@ -43,4 +43,9 @@ describe("parseQuickAdd", () => {
     expect(parseQuickAdd("", TODAY).name).toBe("");
     expect(parseQuickAdd("constructor __proto__ toString", TODAY).name).toBe("constructor __proto__ toString");
   });
+
+  it("finds the next Feb 29 even when the next leap year is more than a year away", () => {
+    expect(parseQuickAdd("x feb 29", "2026-11-05")).toMatchObject({ due_date: "2028-02-29", name: "x" });
+    expect(parseQuickAdd("x feb 30", "2026-11-05").due_date).toBeNull();
+  });
 });

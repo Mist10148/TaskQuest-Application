@@ -46,12 +46,14 @@ function realDate(y: number, m: number, d: number): Date | null {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m && date.getUTCDate() === d ? date : null;
 }
 
-/** The next occurrence of month/day on or after `base` (this year, else next year). */
+/** The next occurrence of month/day on or after `base`: Feb 29 can be up to four years away; Feb 30 never comes. */
 function monthDay(base: Date, month: number, day: number): Date | null {
   const y = base.getUTCFullYear();
-  const thisYear = realDate(y, month, day);
-  if (thisYear && thisYear.getTime() >= base.getTime()) return thisYear;
-  return realDate(y + 1, month, day);
+  for (let year = y; year <= y + 4; year++) {
+    const date = realDate(year, month, day);
+    if (date && date.getTime() >= base.getTime()) return date;
+  }
+  return null;
 }
 
 const clean = (w: string | undefined) => (w || "").toLowerCase().replace(/[.,;:]+$/, "");

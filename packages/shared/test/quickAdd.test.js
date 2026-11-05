@@ -48,3 +48,10 @@ test('quick add handles empty and odd input', () => {
     assert.equal(parseQuickAdd(undefined, TODAY).name, '');
     assert.equal(parse('constructor __proto__ toString').name, 'constructor __proto__ toString');
 });
+
+test('quick add finds the next Feb 29 even when the next leap year is more than a year away', () => {
+    const r = parseQuickAdd('x feb 29', '2026-11-05');
+    assert.equal(r.due_date, '2028-02-29');
+    assert.equal(r.name, 'x');
+    assert.equal(parseQuickAdd('x feb 30', '2026-11-05').due_date, null, 'Feb 30 never comes');
+});

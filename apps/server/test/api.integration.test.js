@@ -549,6 +549,9 @@ test('web API', { skip: !enabled && 'set TEST_DB_NAME to run' }, async (t) => {
         // The per-user quota applies to CSV too, and oversized text is refused.
         await db.query("INSERT INTO lists (discord_id, name) SELECT '200000000000000020', 'filler' || seq FROM generate_series(1, 200) AS seq");
         assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task\nOne more,x\n' } })).status, 400);
+        const overDry = await (await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'list,task\nOne more,x\n', dryRun: true } })).json();
+        assert.equal(overDry.ok, false, 'the preview applies the account quota too');
+        assert.match(overDry.errors[0].message, /at most \d+ lists/);
         assert.equal((await call('POST', '/api/import/csv', { cookie: C, body: { csv: 'a'.repeat(1_000_001) } })).status, 400);
     });
 

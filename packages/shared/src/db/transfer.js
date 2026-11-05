@@ -188,6 +188,30 @@ function freeName(base, taken) {
     throw errors.conflict('Could not find a free list name.');
 }
 
+const QUOTA_SQL =
+    'SELECT COUNT(DISTINCT l.id) AS lists, COUNT(i.id) AS items FROM lists l LEFT JOIN items i ON i.list_id = l.id WHERE l.discord_id = ?';
+
+/** Throws when what the user already owns (`have`) plus the parsed `lists` would pass the per-user list or task limit. */
+function assertQuota(have, lists) {
+    const importedItems = lists.reduce((n, l) => n + l.items.length, 0);
+    if (Number(have.lists) + lists.length > USER_LIMITS.MAX_LISTS_PER_USER) {
+        throw errors.validation(`You can have at most ${USER_LIMITS.MAX_LISTS_PER_USER} lists; this import would exceed that.`);
+    }
+    if (Number(have.items) + importedItems > USER_LIMITS.MAX_ITEMS_PER_USER) {
+        throw errors.validation(`You can have at most ${USER_LIMITS.MAX_ITEMS_PER_USER} tasks; this import would exceed that.`);
+    }
+}
+
+/**
+ * The checks a real import makes before writing, without writing: the file's own limits and the user's quota. For a dry
+ * run, so a preview does not say OK for a file the import then refuses. (Unlocked: the import itself checks again.)
+ */
+async function checkImport(discordId, data) {
+    const lists = parseImport(data);
+    const [[have]] = await getPool().query(QUOTA_SQL, [String(discordId)]);
+    assertQuota(have, lists);
+}
+
 /**
  * Import lists and tasks. All or nothing. Existing lists are never touched;
  * a name clash gets an "(imported)" suffix.
@@ -201,17 +225,8 @@ async function importAll(discordId, data) {
         const taken = new Set(existing.map((l) => l.name.toLowerCase()));
 
         // Per-user quota: what the user already owns plus what this import adds.
-        const [[have]] = await conn.query(
-            'SELECT COUNT(DISTINCT l.id) AS lists, COUNT(i.id) AS items FROM lists l LEFT JOIN items i ON i.list_id = l.id WHERE l.discord_id = ?',
-            [user.discord_id]
-        );
-        const importedItems = lists.reduce((n, l) => n + l.items.length, 0);
-        if (Number(have.lists) + lists.length > USER_LIMITS.MAX_LISTS_PER_USER) {
-            throw errors.validation(`You can have at most ${USER_LIMITS.MAX_LISTS_PER_USER} lists; this import would exceed that.`);
-        }
-        if (Number(have.items) + importedItems > USER_LIMITS.MAX_ITEMS_PER_USER) {
-            throw errors.validation(`You can have at most ${USER_LIMITS.MAX_ITEMS_PER_USER} tasks; this import would exceed that.`);
-        }
+        const [[have]] = await conn.query(QUOTA_SQL, [user.discord_id]);
+        assertQuota(have, lists);
 
         let itemCount = 0;
         let orphaned = 0;
@@ -310,6 +325,7 @@ module.exports = {
     exportAll,
     toCsv,
     importAll,
+    checkImport,
     parseImport,
     regenerateCalendarToken,
     getCalendarToken,

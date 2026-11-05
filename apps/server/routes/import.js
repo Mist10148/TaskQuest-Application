@@ -18,12 +18,12 @@ router.post(
         const parsed = shared.csvToImport(csv);
         const summary = { rows: parsed.rows, lists: parsed.lists, items: parsed.items, preview: parsed.preview, errors: parsed.errors, errorCount: parsed.errorCount };
         if (dryRun) {
-            // The real import applies the shared limits (tasks per list, in total, lists) before writing, so the
-            // preview must too, or it says OK for a file the import then refuses.
+            // The real import applies the shared limits (tasks per list, in total, lists) and the account's quota before
+            // writing, so the preview must too, or it says OK for a file the import then refuses.
             let limitError = null;
             if (!parsed.errorCount) {
                 try {
-                    db.transfer.parseImport(parsed.data);
+                    await db.transfer.checkImport(uid(req), parsed.data);
                 } catch (err) {
                     if (!(err instanceof TaskQuestError)) throw err;
                     limitError = err.message;

@@ -351,12 +351,15 @@ const Tasks = () => {
 
   const moveItems = async (ids: number[], listId: number) => {
     const target = lists.find((l) => l.id === listId)?.name ?? t("tasks.otherQuest");
+    const from = detail ? { id: detail.id, name: detail.name } : null;
+    const moved: number[] = [];
     let done = 0;
     const progress = bulkProgress(ids.length, (n) => t("tasks.moving", { n, total: ids.length }));
     for (const [n, id] of ids.entries()) {
       progress.step(n);
       try {
         await moveItem.mutateAsync({ itemId: id, listId, quiet: ids.length > 1 });
+        moved.push(id);
         done += 1;
       } catch {
         break; // error toast shown by the mutation hook
@@ -364,7 +367,21 @@ const Tasks = () => {
     }
     progress.end();
     if (done > 0 && ids.length > 1) invalidateTaskViews(qc); // once for the batch (each move was quiet)
-    if (done > 0) toast.success(done === 1 ? t("tasks.movedOne", { name: nameOf(ids[0]), target }) : t("tasks.movedMany", { count: done, target }));
+    // Subtasks travel with their parent, so moving the moved tasks back restores the quest as it was (order aside).
+    const undo = async () => {
+      if (!from) return;
+      let failed = false;
+      for (const id of moved) await moveItem.mutateAsync({ itemId: id, listId: from.id, quiet: true }).catch(() => (failed = true));
+      invalidateTaskViews(qc);
+      if (failed) toast.error(t("tasks.moveBackFailed"));
+      else toast.success(t("tasks.movedBack", { target: from.name }));
+    };
+    if (done > 0) {
+      toast.success(done === 1 ? t("tasks.movedOne", { name: nameOf(ids[0]), target }) : t("tasks.movedMany", { count: done, target }), {
+        action: from ? { label: t("tasks.undo"), onClick: () => void undo() } : undefined,
+        duration: 6000,
+      });
+    }
   };
 
   return (
@@ -391,9 +408,19 @@ const Tasks = () => {
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
           onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
-          onSnooze={(itemId) =>
-            updateItem.mutate({ itemId, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success(t("tasks.snoozed")) })
-          }
+          onSnooze={(itemId) => {
+            const before = detail.items.find((i: Item) => i.id === itemId)?.due_date ?? null;
+            const previous = before ? String(before).slice(0, 10) : null;
+            updateItem.mutate(
+              { itemId, data: { due_date: addDays(localToday(), 1) } },
+              {
+                onSuccess: () =>
+                  toast.success(t("tasks.snoozed"), {
+                    action: { label: t("tasks.undo"), onClick: () => updateItem.mutate({ itemId, data: { due_date: previous } }) },
+                  }),
+              }
+            );
+          }}
           assignOptions={assignOptions}
           onAssign={(itemId, memberKey) => updateItem.mutateAsync({ itemId, data: { assignee: memberKey } })}
           moveTargets={moveTargets}

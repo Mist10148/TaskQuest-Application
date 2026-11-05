@@ -16,6 +16,8 @@ const hooks = vi.hoisted(() => ({
   useUpdateItem: vi.fn(),
 }));
 const daily = vi.hoisted(() => ({ claim: vi.fn(), pending: false, waitMs: 0, claimed: false, everClaimed: true }));
+const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), toasts) }));
 vi.mock("@/hooks/useApi", () => hooks);
 vi.mock("@/hooks/useDailyClaim", () => ({ useDailyClaim: () => daily }));
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
@@ -104,6 +106,12 @@ describe("Today page", () => {
     await userEvent.click(screen.getByRole("button", { name: 'Snooze "Pay rent" to tomorrow' }));
     const mutate = hooks.useUpdateItem.mock.results[0].value.mutate;
     expect(mutate).toHaveBeenCalledWith({ itemId: 1, data: { due_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) } }, expect.anything());
+    // Undo in the toast puts the old date back.
+    mutate.mock.calls[0][1].onSuccess();
+    const [text, options] = toasts.success.mock.calls.at(-1);
+    expect(text).toBe('Snoozed "Pay rent" to tomorrow');
+    options.action.onClick();
+    expect(mutate).toHaveBeenLastCalledWith({ itemId: 1, data: { due_date: "2030-01-10" } });
   });
 
   it("offers no snooze for a task that is only HIGH priority, with no date", () => {

@@ -18,10 +18,12 @@ import { StreakAtRisk } from "@/components/dashboard/StreakAtRisk";
 import { addDays, localToday } from "@/lib/dates";
 import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import type { TodayData, TodayTask } from "@/lib/api";
+import { useT } from "@/i18n/useT";
 
 const PRIORITY_DOT: Record<string, string> = { HIGH: "bg-destructive", MEDIUM: "bg-xp", LOW: "bg-success" };
 
 const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
+  const t = useT();
   const toggle = useToggleItem();
   const update = useUpdateItem();
   // Done stays done until the refetched list drops the row, so a second click cannot complete it (and toast) twice.
@@ -38,7 +40,15 @@ const TaskLine = ({ task, today }: { task: TodayTask; today: string }) => {
   // Due today or late: push it to tomorrow without opening the quest.
   const canSnooze = Boolean(task.dueDate && task.dueDate <= today);
   const snooze = () =>
-    update.mutate({ itemId: task.id, data: { due_date: addDays(localToday(), 1) } }, { onSuccess: () => toast.success(`Snoozed "${task.name}" to tomorrow`) });
+    update.mutate(
+      { itemId: task.id, data: { due_date: addDays(localToday(), 1) } },
+      {
+        onSuccess: () =>
+          toast.success(t("tasks.snoozedName", { name: task.name }), {
+            action: { label: t("tasks.undo"), onClick: () => update.mutate({ itemId: task.id, data: { due_date: task.dueDate } }) },
+          }),
+      }
+    );
   return (
     <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
       <button

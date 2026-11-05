@@ -1,6 +1,6 @@
 # Player FAQ
 
-Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](GAMEPLAY.md), every XP source is in [XP_GUIDE.md](XP_GUIDE.md), commands are in [COMMANDS.md](COMMANDS.md).
+Short answers for people using TaskQuest. The exact rules are in [GAMEPLAY.md](GAMEPLAY.md), every XP source is in [XP_GUIDE.md](XP_GUIDE.md), commands are in [COMMANDS.md](COMMANDS.md), and unfamiliar words are in the [glossary](GLOSSARY.md).
 
 ## Contents
 

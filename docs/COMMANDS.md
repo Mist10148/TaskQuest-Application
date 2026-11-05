@@ -2,7 +2,7 @@
 
 Register commands with `npm run deploy:commands`. Add `-- --guild=<id>` for instant registration in one server, or `-- --guild <id> --clear-global` to also remove global commands.
 
-All commands work in servers and DMs. Responses that show XP, achievements, games or profiles are **ephemeral** (only you see them).
+All commands work in servers and DMs. Game words used below are explained in the [glossary](GLOSSARY.md). Responses that show XP, achievements, games or profiles are **ephemeral** (only you see them).
 
 | Command | Options | Visibility | Description |
 |---|---|---|---|

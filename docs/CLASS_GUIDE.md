@@ -1,6 +1,6 @@
 # Choosing a class
 
-Seventeen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
+Seventeen classes change how the XP of every rewarded action is calculated: [GAMEPLAY §3](GAMEPLAY.md#3-classes) has the exact rules, [XP_GUIDE](XP_GUIDE.md) says which XP sources a class touches (creating lists, adding and completing tasks, the daily reward and the free games; never flat bonuses, quests or Blackjack). This page helps you pick one; the [glossary](GLOSSARY.md) explains terms such as counters, stacks and souls. Buying a class equips it, and switching class resets every class counter (streaks, stacks, Rhythm, progress, souls), though not your daily streak.
 
 ## How to read the numbers
 

@@ -1,6 +1,6 @@
 # How XP is earned
 
-One page that answers "where does my XP come from, how much, and what limits it?". Every number comes from [`packages/shared/src/constants.js`](../packages/shared/src/constants.js); the exact rules and edge cases are in [GAMEPLAY.md](GAMEPLAY.md). A test (`packages/shared/test/xpGuide.test.js`) fails if the table below disagrees with the code. Days, weeks and months below are **yours** (your time zone, UTC until you set one), except where noted.
+One page that answers "where does my XP come from, how much, and what limits it?". Every number comes from [`packages/shared/src/constants.js`](../packages/shared/src/constants.js); the exact rules and edge cases are in [GAMEPLAY.md](GAMEPLAY.md), and terms are in the [glossary](GLOSSARY.md). A test (`packages/shared/test/xpGuide.test.js`) fails if the table below disagrees with the code. Days, weeks and months below are **yours** (your time zone, UTC until you set one), except where noted.
 
 ## Two kinds of XP
 

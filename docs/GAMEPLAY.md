@@ -1,6 +1,6 @@
 # Gameplay reference
 
-Every number on this page comes from [`packages/shared/src/constants.js`](../packages/shared/src/constants.js) and [`xp.js`](../packages/shared/src/xp.js). The bot and the web app use the same code, so the rules are identical on both. Randomness uses Node's CSPRNG.
+Every number on this page comes from [`packages/shared/src/constants.js`](../packages/shared/src/constants.js) and [`xp.js`](../packages/shared/src/xp.js). The bot and the web app use the same code, so the rules are identical on both. Randomness uses Node's CSPRNG. Terms are defined in the [glossary](GLOSSARY.md).
 
 ## Contents
 

@@ -74,6 +74,16 @@ describe("TaskRow details button", () => {
     expect(screen.queryByRole("button", { name: 'Snooze "Pay rent" to tomorrow' })).toBeNull();
   });
 
+  it("does not pull a task due later forward to tomorrow", () => {
+    renderRow({ due_date: "2999-01-01" }, { onSnooze: vi.fn() });
+    expect(screen.queryByRole("button", { name: 'Snooze "Pay rent" to tomorrow' })).toBeNull();
+  });
+
+  it("snoozes a task that is late", () => {
+    renderRow({ due_date: "2000-01-01" }, { onSnooze: vi.fn() });
+    expect(screen.getByRole("button", { name: 'Snooze "Pay rent" to tomorrow' })).toBeInTheDocument();
+  });
+
   it("gathers the row actions in one menu for small screens", async () => {
     const onSnooze = vi.fn();
     const { onDelete } = renderRow({}, { onSnooze });

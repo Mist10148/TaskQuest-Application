@@ -1,6 +1,6 @@
 import { AlarmClock, ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Info, ListPlus, MessageSquare, MoreHorizontal, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
-import { formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
+import { canSnoozeTo, formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import { swipeAction, swipeOffset } from "@/lib/swipe";
@@ -55,7 +55,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
   const priority = item.priority || listPriority || null;
   const tags = parseTags(item.tags);
   const overdue = !completed && isPastDeadline(item.due_date);
-  const snoozable = Boolean(onSnooze) && !completed;
+  const snoozable = Boolean(onSnooze) && !completed && canSnoozeTo(item.due_date);
 
   // Touch: swipe a task to the right to complete it (the checkbox and the keyboard still work as before).
   const swipeable = !readOnly && !completed && !selectMode;

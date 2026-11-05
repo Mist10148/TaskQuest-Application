@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, compareDeadlines, daysBetween, formatDayLabel, formatDeadline, formatDue, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
+import { addDays, canSnoozeTo, compareDeadlines, daysBetween, formatDayLabel, formatDeadline, formatDue, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
 
 describe("deadline helpers", () => {
   it("does not treat a list due today as overdue", () => {
@@ -82,5 +82,14 @@ describe("deadline helpers", () => {
       { label: "task.due.nextWeek", value: "2030-02-05" },
       { label: "task.due.none", value: "" },
     ]);
+  });
+});
+
+describe("canSnoozeTo", () => {
+  it("snoozes undated, due-today and late tasks, never one due later", () => {
+    expect(canSnoozeTo(null, "2030-01-05")).toBe(true);
+    expect(canSnoozeTo("2030-01-05", "2030-01-05")).toBe(true);
+    expect(canSnoozeTo("2030-01-01", "2030-01-05")).toBe(true);
+    expect(canSnoozeTo("2030-01-06", "2030-01-05")).toBe(false);
   });
 });

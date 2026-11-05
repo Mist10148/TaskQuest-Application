@@ -78,6 +78,12 @@ export function isPastDeadline(deadline: string | null | undefined, today: strin
   return d !== "" && d < today;
 }
 
+/** Snooze to tomorrow makes sense for a task with no date, due today or late; a later due date would be pulled forward. */
+export function canSnoozeTo(due: string | null | undefined, today: string = localToday()): boolean {
+  const d = dateOnly(due);
+  return d === "" || d <= today;
+}
+
 /** "Dec 26", or "Jan 15, 2026" when the year differs from today's year. */
 export function formatDeadline(deadline: string | null | undefined, today: string = localToday()): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOnly(deadline));

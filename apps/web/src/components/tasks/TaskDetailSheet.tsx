@@ -3,7 +3,7 @@ import { AlarmClock, Calendar, Check, ListPlus, Pencil, Repeat, Timer, Trash2, U
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
+import { canSnoozeTo, formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { parseTags } from "@/lib/tags";
 import { TaskThread } from "./TaskThread";
@@ -151,7 +151,7 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                   <Button onClick={() => onToggle(item.id)}>{completed ? "Reopen" : "Mark done"}</Button>
                 </SheetFooter>
                 <div className="mt-2 flex flex-wrap justify-end gap-1">
-                  {onSnooze && !completed && (
+                  {onSnooze && !completed && canSnoozeTo(item.due_date) && (
                     <Button variant="ghost" size="sm" className="gap-1" onClick={() => onSnooze(item.id)}><AlarmClock className="h-4 w-4" aria-hidden /> Snooze to tomorrow</Button>
                   )}
                   {onAddSubtask && !item.parent_id && (

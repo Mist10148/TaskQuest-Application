@@ -71,6 +71,16 @@ describe("Dashboard page", () => {
     expect(screen.queryByText("XP to next level")).toBeNull();
   });
 
+  it("says when Today could not load, and retries", async () => {
+    lists({ data: [] });
+    const refetch = vi.fn();
+    hooks.useToday.mockReturnValue({ data: undefined, isError: true, error: new Error("down"), refetch, isFetching: false });
+    show();
+    expect(screen.getByText("Couldn't load your streak and today's tasks")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
   it("links the first three quests, or offers to create one", () => {
     lists({ data: [quest(1, "Home"), quest(2, "Work"), quest(3, "Garden"), quest(4, "Taxes")] });
     const { unmount } = show();

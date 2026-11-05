@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import { swipeAction, swipeOffset } from "@/lib/swipe";
 import { parseTags } from "@/lib/tags";
+import { useT } from "@/i18n/useT";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const DOT: Record<string, string> = { HIGH: "bg-red-500", MEDIUM: "bg-yellow-500", LOW: "bg-blue-500" };
@@ -53,6 +54,7 @@ const iconButton = "p-2.5 sm:p-1.5 rounded-md text-foreground-muted transition-c
 
 /** One task (or subtask): checkbox, details, and the row actions. */
 export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onSnooze, onDuplicate, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
+  const t = useT();
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
   const tags = parseTags(item.tags);
@@ -111,7 +113,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
             onDragStart={(e) => drag.onDragStart(e, item.id)}
             onDragEnd={drag.onDragEnd}
             className="mt-0.5 shrink-0 cursor-grab touch-none rounded p-0.5 text-foreground-muted hover:bg-background-secondary hover:text-foreground active:cursor-grabbing"
-            title="Drag to reorder"
+            title={t("row.dragToReorder")}
             aria-hidden
           >
             <GripVertical className="h-5 w-5" />
@@ -125,7 +127,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           checked={selected}
           onChange={() => undefined}
           onClick={(e) => onSelect(item.id, e.shiftKey)}
-          aria-label={`Select ${item.name}`}
+          aria-label={t("row.select", { name: item.name })}
           className="mt-1 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]"
         />
       )}
@@ -135,7 +137,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
         onClick={() => onToggle(item.id)}
         disabled={readOnly}
         aria-pressed={completed}
-        aria-label={`Mark "${item.name}" as done`}
+        aria-label={t("row.markDone", { name: item.name })}
         className={cn(
           // The ::after widens the hit area to 28px (WCAG 2.5.8) without growing the box.
           "relative after:absolute after:-inset-1 shrink-0 mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
@@ -151,18 +153,18 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           {priority && (
             <>
               <span className={cn("inline-block h-2 w-2 rounded-full mr-2 align-middle", DOT[priority], completed && "opacity-40")} aria-hidden />
-              <span className="sr-only">{priority.toLowerCase()} priority: </span>
+              <span className="sr-only">{t("row.priority", { priority: priority.toLowerCase() })}</span>
             </>
           )}
           {item.name}
         </p>
         {item.description && <p className="text-xs sm:text-sm mt-1 line-clamp-2 text-foreground-muted">{item.description}</p>}
-        {completed && item.completed_by_name && <p className="mt-1 text-xs text-foreground-muted">Done by {item.completed_by_name}</p>}
+        {completed && item.completed_by_name && <p className="mt-1 text-xs text-foreground-muted">{t("row.doneBy", { name: item.completed_by_name })}</p>}
         {(item.due_date || item.recurrence || item.estimate_minutes || tags.length > 0 || item.assignee || (item.comment_count ?? 0) > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
             {item.due_date && (
               <span title={formatDeadline(item.due_date)} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", overdue ? "border-destructive/40 text-destructive-text" : "border-border text-foreground-muted")}>
-                <Calendar className="h-3 w-3" aria-hidden /> {overdue && <span className="sr-only">Overdue: </span>}
+                <Calendar className="h-3 w-3" aria-hidden /> {overdue && <span className="sr-only">{t("row.overdue")}</span>}
                 {formatDue(item.due_date)}
               </span>
             )}
@@ -173,7 +175,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
             )}
             {item.estimate_minutes ? (
               <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 border border-border text-foreground-muted">
-                <Timer className="h-3 w-3" aria-hidden /> {item.estimate_minutes} min
+                <Timer className="h-3 w-3" aria-hidden /> {t("row.minutes", { n: item.estimate_minutes })}
               </span>
             ) : null}
             {tags.map((t) => (
@@ -181,12 +183,12 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
             ))}
             {item.assignee && (
               <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 border", item.assignee.isYou ? "border-primary/40 text-primary-text" : "border-border text-foreground-muted")}>
-                <UserRound className="h-3 w-3" aria-hidden /> <span className="sr-only">Assigned to </span>{item.assignee.isYou ? "You" : item.assignee.name ?? "Someone"}
+                <UserRound className="h-3 w-3" aria-hidden /> <span className="sr-only">{t("row.assignedTo")}</span>{item.assignee.isYou ? t("row.you") : item.assignee.name ?? t("row.someone")}
               </span>
             )}
             {(item.comment_count ?? 0) > 0 && (
               <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 border border-border text-foreground-muted">
-                <MessageSquare className="h-3 w-3" aria-hidden /> {item.comment_count}<span className="sr-only"> {item.comment_count === 1 ? "comment" : "comments"}</span>
+                <MessageSquare className="h-3 w-3" aria-hidden /> {item.comment_count}<span className="sr-only"> {item.comment_count === 1 ? t("row.commentOne") : t("row.commentMany")}</span>
               </span>
             )}
           </div>
@@ -194,7 +196,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       </div>
 
       {onOpenDetails && (
-        <button type="button" aria-label={`Details of "${item.name}"`} onClick={() => onOpenDetails(item.id)} className={cn(iconButton, "shrink-0 hover:bg-background-secondary hover:text-primary-text")}>
+        <button type="button" aria-label={t("row.details", { name: item.name })} onClick={() => onOpenDetails(item.id)} className={cn(iconButton, "shrink-0 hover:bg-background-secondary hover:text-primary-text")}>
           <Info className="h-3.5 w-3.5" />
         </button>
       )}
@@ -203,19 +205,19 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       {!readOnly && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" aria-label={`More actions for "${item.name}"`} className={cn(iconButton, "shrink-0 sm:hidden hover:bg-background-secondary hover:text-foreground")}>
+            <button type="button" aria-label={t("row.moreActions", { name: item.name })} className={cn(iconButton, "shrink-0 sm:hidden hover:bg-background-secondary hover:text-foreground")}>
               <MoreHorizontal className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {snoozable && <DropdownMenuItem onSelect={() => onSnooze?.(item.id)}><AlarmClock className="mr-2 h-4 w-4" aria-hidden /> Snooze to tomorrow</DropdownMenuItem>}
-            <DropdownMenuItem onSelect={() => onEdit(item.id)}><Pencil className="mr-2 h-4 w-4" aria-hidden /> Edit</DropdownMenuItem>
-            {onDuplicate && <DropdownMenuItem onSelect={() => onDuplicate(item.id)}><Copy className="mr-2 h-4 w-4" aria-hidden /> Duplicate</DropdownMenuItem>}
-            {onAddSubtask && !isSubtask && <DropdownMenuItem onSelect={() => onAddSubtask(item.id)}><ListPlus className="mr-2 h-4 w-4" aria-hidden /> Add a subtask</DropdownMenuItem>}
-            {onMove && canMoveUp && <DropdownMenuItem onSelect={() => onMove(item.id, -1)}><ArrowUp className="mr-2 h-4 w-4" aria-hidden /> Move up</DropdownMenuItem>}
-            {onMove && canMoveDown && <DropdownMenuItem onSelect={() => onMove(item.id, 1)}><ArrowDown className="mr-2 h-4 w-4" aria-hidden /> Move down</DropdownMenuItem>}
+            {snoozable && <DropdownMenuItem onSelect={() => onSnooze?.(item.id)}><AlarmClock className="mr-2 h-4 w-4" aria-hidden /> {t("row.snooze")}</DropdownMenuItem>}
+            <DropdownMenuItem onSelect={() => onEdit(item.id)}><Pencil className="mr-2 h-4 w-4" aria-hidden /> {t("row.edit")}</DropdownMenuItem>
+            {onDuplicate && <DropdownMenuItem onSelect={() => onDuplicate(item.id)}><Copy className="mr-2 h-4 w-4" aria-hidden /> {t("row.duplicate")}</DropdownMenuItem>}
+            {onAddSubtask && !isSubtask && <DropdownMenuItem onSelect={() => onAddSubtask(item.id)}><ListPlus className="mr-2 h-4 w-4" aria-hidden /> {t("row.addSubtask")}</DropdownMenuItem>}
+            {onMove && canMoveUp && <DropdownMenuItem onSelect={() => onMove(item.id, -1)}><ArrowUp className="mr-2 h-4 w-4" aria-hidden /> {t("row.moveUp")}</DropdownMenuItem>}
+            {onMove && canMoveDown && <DropdownMenuItem onSelect={() => onMove(item.id, 1)}><ArrowDown className="mr-2 h-4 w-4" aria-hidden /> {t("row.moveDown")}</DropdownMenuItem>}
             {item.can_delete !== false && (
-              <DropdownMenuItem onSelect={() => onDelete(item.id)} className="text-destructive-text focus:text-destructive-text"><Trash2 className="mr-2 h-4 w-4" aria-hidden /> Delete</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onDelete(item.id)} className="text-destructive-text focus:text-destructive-text"><Trash2 className="mr-2 h-4 w-4" aria-hidden /> {t("row.delete")}</DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -224,29 +226,29 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
       {!readOnly && <div className="shrink-0 hidden sm:flex items-center gap-0.5 sm:gap-1 [@media(hover:hover)]:sm:opacity-0 [@media(hover:hover)]:sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {onMove && (
           <>
-            <button type="button" aria-label={`Move "${item.name}" up`} disabled={!canMoveUp} onClick={() => onMove(item.id, -1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>
+            <button type="button" aria-label={t("row.moveUpNamed", { name: item.name })} disabled={!canMoveUp} onClick={() => onMove(item.id, -1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>
               <ArrowUp className="h-3.5 w-3.5" />
             </button>
-            <button type="button" aria-label={`Move "${item.name}" down`} disabled={!canMoveDown} onClick={() => onMove(item.id, 1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>
+            <button type="button" aria-label={t("row.moveDownNamed", { name: item.name })} disabled={!canMoveDown} onClick={() => onMove(item.id, 1)} className={cn(iconButton, "hover:bg-background-secondary hover:text-foreground")}>
               <ArrowDown className="h-3.5 w-3.5" />
             </button>
           </>
         )}
         {onAddSubtask && !isSubtask && (
-          <button type="button" aria-label={`Add a subtask to "${item.name}"`} onClick={() => onAddSubtask(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
+          <button type="button" aria-label={t("row.addSubtaskTo", { name: item.name })} onClick={() => onAddSubtask(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
             <ListPlus className="h-3.5 w-3.5" />
           </button>
         )}
         {snoozable && (
-          <button type="button" aria-label={`Snooze "${item.name}" to tomorrow`} title="Snooze to tomorrow" onClick={() => onSnooze?.(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
+          <button type="button" aria-label={t("row.snoozeNamed", { name: item.name })} title={t("row.snooze")} onClick={() => onSnooze?.(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
             <AlarmClock className="h-3.5 w-3.5" />
           </button>
         )}
-        <button type="button" aria-label={`Edit "${item.name}"`} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
+        <button type="button" aria-label={t("row.editNamed", { name: item.name })} onClick={() => onEdit(item.id)} className={cn(iconButton, "hover:bg-background-secondary hover:text-primary-text")}>
           <Pencil className="h-3.5 w-3.5" />
         </button>
         {item.can_delete !== false && (
-          <button type="button" aria-label={`Delete "${item.name}"`} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive-text")}>
+          <button type="button" aria-label={t("row.deleteNamed", { name: item.name })} onClick={() => onDelete(item.id)} className={cn(iconButton, "hover:bg-destructive/20 hover:text-destructive-text")}>
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         )}

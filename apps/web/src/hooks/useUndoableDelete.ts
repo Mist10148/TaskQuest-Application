@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useT } from "@/i18n/useT";
 
 interface Pending {
   timer: ReturnType<typeof setTimeout>;
@@ -14,6 +15,7 @@ interface Pending {
  * (`pagehide`) does the same through `flush`, which should send a keepalive request that outlives the page.
  */
 export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs = 6000, flush?: (id: number) => Promise<unknown>) {
+  const t = useT();
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const pending = useRef(new Map<string, Pending>());
   const runRef = useRef(run);
@@ -47,7 +49,7 @@ export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs
       const toastId = toast(label, {
         duration: delayMs,
         action: {
-          label: "Undo",
+          label: t("tasks.undo"),
           onClick: () => {
             const entry = pending.current.get(key);
             if (!entry) return;
@@ -59,7 +61,7 @@ export function useUndoableDelete(run: (id: number) => Promise<unknown>, delayMs
       });
       pending.current.set(key, { timer, ids, toastId });
     },
-    [delayMs, unhide]
+    [delayMs, unhide, t]
   );
 
   // Leaving the page commits what is pending.

@@ -1,5 +1,6 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n/useT";
 
 interface Props {
   /** What failed to load, e.g. "your quests". */
@@ -13,17 +14,18 @@ interface Props {
 
 /** Shown when a request fails: says what went wrong in plain words and offers a retry. */
 export const ErrorCard = ({ what, error, onRetry, retrying, hint }: Props) => {
+  const t = useT();
   const detail = error instanceof Error ? error.message : undefined;
   return (
     <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-6 text-center">
       <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive-text" aria-hidden />
-      <h3 className="font-heading text-lg font-semibold">Couldn't load {what}</h3>
+      <h3 className="font-heading text-lg font-semibold">{t("error.couldNotLoad", { what })}</h3>
       <p className="mt-1 text-sm text-foreground-muted">
-        {detail || "Something went wrong."} {hint ?? "Check your connection and try again."}
+        {detail || t("error.generic")} {hint ?? t("error.checkConnection")}
       </p>
       {onRetry && (
         <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={onRetry} disabled={retrying}>
-          <RefreshCw className={retrying ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden /> Try again
+          <RefreshCw className={retrying ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden /> {t("error.tryAgain")}
         </Button>
       )}
     </div>

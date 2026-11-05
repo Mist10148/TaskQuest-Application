@@ -3,6 +3,7 @@ import { Check, Circle } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { boardColumns, canMoveToColumn, columnPriority, effectivePriority, type BoardColumn } from "@/lib/taskViews";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 import { formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 
 interface Props {
@@ -32,6 +33,7 @@ const DRAG_TYPE = "application/x-taskquest-item";
  * change its priority.
  */
 export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onOpenDetails, onSetPriority }: Props) => {
+  const t = useT();
   const columns = boardColumns(items, listPriority);
   const movable = !readOnly && Boolean(onSetPriority);
   const [dragging, setDragging] = useState<Item | null>(null);
@@ -80,7 +82,7 @@ export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onO
             <span className="text-xs font-normal text-foreground-muted">{col.open.length} open</span>
           </h3>
           {col.open.length + col.done.length === 0 ? (
-            <p className="py-3 text-center text-xs text-foreground-muted">{accepts(col.key) ? "Drop here" : "Nothing here"}</p>
+            <p className="py-3 text-center text-xs text-foreground-muted">{accepts(col.key) ? t("board.dropHere") : t("board.empty")}</p>
           ) : (
             <ul className="space-y-2">
               {[...col.open, ...col.done].map((item) => {
@@ -110,7 +112,7 @@ export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onO
                       type="button"
                       disabled={readOnly}
                       onClick={() => onToggle(item.id)}
-                      aria-label={item.completed ? `Mark "${item.name}" not done` : `Mark "${item.name}" done`}
+                      aria-label={t(item.completed ? "board.markNotDone" : "board.markDone", { name: item.name })}
                       className="-m-2 mt-[-0.375rem] shrink-0 p-2 text-foreground-muted hover:text-success focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring rounded-full disabled:cursor-default disabled:hover:text-foreground-muted"
                     >
                       {item.completed ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Circle className="h-4 w-4" aria-hidden />}
@@ -127,14 +129,14 @@ export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onO
                           className={cn("block text-xs", !item.completed && isPastDeadline(item.due_date) ? "text-destructive-text" : "text-foreground-muted")}
                           title={formatDeadline(item.due_date)}
                         >
-                          {!item.completed && isPastDeadline(item.due_date) && <span className="sr-only">Overdue: </span>}
+                          {!item.completed && isPastDeadline(item.due_date) && <span className="sr-only">{t("row.overdue")}</span>}
                           {formatDue(item.due_date)}
                         </span>
                       )}
                     </button>
                     {canDrag && (
                       <select
-                        aria-label={`Priority of "${item.name}"`}
+                        aria-label={t("board.priorityOf", { name: item.name })}
                         value={col.key}
                         onChange={(e) => move(item, e.target.value as BoardColumn["key"])}
                         className="h-7 max-w-22 shrink-0 rounded-md border border-input bg-background px-1 text-xs text-foreground-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"

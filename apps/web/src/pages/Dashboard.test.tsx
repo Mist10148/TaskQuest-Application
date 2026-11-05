@@ -98,10 +98,11 @@ describe("Dashboard page", () => {
     expect(screen.getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
   });
 
-  it("shows the streak strip once Today has loaded", () => {
+  it("shows the streak strip and today's tasks once Today has loaded", () => {
     lists({ data: [] });
-    hooks.useToday.mockReturnValue({ data: { day: "2030-01-10", streak: { live: 3, claimedToday: true, atRisk: false, expiresAt: null } } });
+    hooks.useToday.mockReturnValue({ data: { day: "2030-01-10", streak: { live: 3, claimedToday: true, atRisk: false, expiresAt: null }, tasks: [] } });
     show();
     expect(screen.getByText("streak strip")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Needs doing today" })).toBeInTheDocument();
   });
 });

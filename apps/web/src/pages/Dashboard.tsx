@@ -13,6 +13,7 @@ import { useLists, useToday } from "@/hooks/useApi";
 import { useDailyClaim } from "@/hooks/useDailyClaim";
 import { StreakStrip } from "@/components/dashboard/StreakStrip";
 import { StreakAtRisk } from "@/components/dashboard/StreakAtRisk";
+import { DueTodayCard } from "@/components/dashboard/DueTodayCard";
 import { Link } from "react-router-dom";
 import { formatCountdown } from "@/lib/countdown";
 import { orderQuestsForDashboard } from "@/lib/questOrder";
@@ -129,6 +130,8 @@ const Dashboard = () => {
         )}
         {today.data && <StreakStrip day={today.data.day} live={today.data.streak.live} claimedToday={today.data.streak.claimedToday} />}
         {xpEnabled && today.data?.streak.atRisk && <StreakAtRisk live={today.data.streak.live} expiresAt={today.data.streak.expiresAt} frozen={today.data.streak.frozen} />}
+
+        {today.data && <DueTodayCard data={today.data} />}
 
         <QuestsCard />
 

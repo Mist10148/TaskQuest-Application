@@ -29,6 +29,7 @@ import { MembersDialog } from "@/components/tasks/MembersDialog";
 import { canEditTasks, idFromParam, isAccessLost, roleOf } from "@/lib/sharing";
 import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/i18n/useT";
+import { duplicateInput } from "@/lib/duplicate";
 import { pageTitle } from "@/lib/pageTitle";
 
 /** Batches go one task at a time; from this size on, a loading toast counts them so a long batch does not look stuck. */
@@ -408,6 +409,14 @@ const Tasks = () => {
           onDeleteList={() => setListToDelete(detail.id)}
           onToggleItem={handleToggleItem}
           onSetPriority={(itemId, priority) => updateItem.mutate({ itemId, data: { priority } })}
+          onDuplicate={(itemId) => {
+            const source = detail.items.find((i: Item) => i.id === itemId);
+            if (!source) return;
+            createItem.mutate(
+              { listId: detail.id, ...duplicateInput(source) },
+              { onSuccess: () => { refetchList(); toast.success(t("tasks.duplicated", { name: source.name })); } }
+            );
+          }}
           onSnooze={(itemId) => {
             const before = detail.items.find((i: Item) => i.id === itemId)?.due_date ?? null;
             const previous = before ? String(before).slice(0, 10) : null;

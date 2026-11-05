@@ -1,4 +1,4 @@
-import { AlarmClock, ArrowDown, ArrowUp, Calendar, Check, CornerDownRight, GripVertical, Info, ListPlus, MessageSquare, MoreHorizontal, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
+import { AlarmClock, ArrowDown, ArrowUp, Calendar, Check, Copy, CornerDownRight, GripVertical, Info, ListPlus, MessageSquare, MoreHorizontal, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { canSnoozeTo, formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,8 @@ interface Props {
   onAddSubtask?: (id: number) => void;
   /** Move an open task's due date to tomorrow. */
   onSnooze?: (id: number) => void;
+  /** Add a copy of the task (phone menu; the details drawer has it on every screen). */
+  onDuplicate?: (id: number) => void;
   onMove?: (id: number, direction: -1 | 1) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
@@ -50,7 +52,7 @@ interface Props {
 const iconButton = "p-2.5 sm:p-1.5 rounded-md text-foreground-muted transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none";
 
 /** One task (or subtask): checkbox, details, and the row actions. */
-export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onSnooze, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
+export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, onSelect, onToggle, onEdit, onDelete, onOpenDetails, onAddSubtask, onSnooze, onDuplicate, onMove, canMoveUp, canMoveDown, drag, readOnly, focused }: Props) => {
   const completed = Boolean(item.completed);
   const priority = item.priority || listPriority || null;
   const tags = parseTags(item.tags);
@@ -208,6 +210,7 @@ export const TaskRow = ({ item, listPriority, isSubtask, selectMode, selected, o
           <DropdownMenuContent align="end">
             {snoozable && <DropdownMenuItem onSelect={() => onSnooze?.(item.id)}><AlarmClock className="mr-2 h-4 w-4" aria-hidden /> Snooze to tomorrow</DropdownMenuItem>}
             <DropdownMenuItem onSelect={() => onEdit(item.id)}><Pencil className="mr-2 h-4 w-4" aria-hidden /> Edit</DropdownMenuItem>
+            {onDuplicate && <DropdownMenuItem onSelect={() => onDuplicate(item.id)}><Copy className="mr-2 h-4 w-4" aria-hidden /> Duplicate</DropdownMenuItem>}
             {onAddSubtask && !isSubtask && <DropdownMenuItem onSelect={() => onAddSubtask(item.id)}><ListPlus className="mr-2 h-4 w-4" aria-hidden /> Add a subtask</DropdownMenuItem>}
             {onMove && canMoveUp && <DropdownMenuItem onSelect={() => onMove(item.id, -1)}><ArrowUp className="mr-2 h-4 w-4" aria-hidden /> Move up</DropdownMenuItem>}
             {onMove && canMoveDown && <DropdownMenuItem onSelect={() => onMove(item.id, 1)}><ArrowDown className="mr-2 h-4 w-4" aria-hidden /> Move down</DropdownMenuItem>}

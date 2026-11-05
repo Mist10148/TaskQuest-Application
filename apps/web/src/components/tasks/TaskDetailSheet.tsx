@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlarmClock, Calendar, Check, Link2, ListPlus, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
+import { AlarmClock, Calendar, Check, Copy, Link2, ListPlus, Pencil, Repeat, Timer, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ interface Props {
   /** Delete (the caller offers Undo), push to tomorrow, or add a subtask under this task; each is left out when not given. */
   onDelete?: (id: number) => void;
   onSnooze?: (id: number) => void;
+  onDuplicate?: (id: number) => void;
   onAddSubtask?: (id: number) => void;
 }
 
@@ -57,7 +58,7 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 );
 
 /** A side drawer with everything about one task, so it can be read without opening the edit form. */
-export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onToggle, onEdit, onOpenSubtask, assignOptions, onAssign, moveTargets, onMove, showThread, onDelete, onSnooze, onAddSubtask }: Props) => {
+export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onToggle, onEdit, onOpenSubtask, assignOptions, onAssign, moveTargets, onMove, showThread, onDelete, onSnooze, onDuplicate, onAddSubtask }: Props) => {
   const completed = Boolean(item?.completed);
   const tags = parseTags(item?.tags);
   const overdue = item ? !completed && isPastDeadline(item.due_date) : false;
@@ -166,6 +167,9 @@ export const TaskDetailSheet = ({ item, subtasks, readOnly, onOpenChange, onTogg
                 <div className="mt-2 flex flex-wrap justify-end gap-1">
                   {onSnooze && !completed && canSnoozeTo(item.due_date) && (
                     <Button variant="ghost" size="sm" className="gap-1" onClick={() => onSnooze(item.id)}><AlarmClock className="h-4 w-4" aria-hidden /> Snooze to tomorrow</Button>
+                  )}
+                  {onDuplicate && (
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => onDuplicate(item.id)}><Copy className="h-4 w-4" aria-hidden /> Duplicate</Button>
                   )}
                   {onAddSubtask && !item.parent_id && (
                     <Button variant="ghost" size="sm" className="gap-1" onClick={() => onAddSubtask(item.id)}><ListPlus className="h-4 w-4" aria-hidden /> Add subtask</Button>

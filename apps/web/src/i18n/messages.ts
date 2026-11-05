@@ -160,6 +160,7 @@ export const en = {
   "tasks.movedOne": "📦 Moved \"{name}\" to {target}",
   "tasks.movedMany": "📦 Moved {count} tasks to {target}",
   "tasks.snoozed": "Snoozed to tomorrow",
+  "tasks.duplicated": "Added a copy of \"{name}\"",
   "tasks.snoozedName": "Snoozed \"{name}\" to tomorrow",
   "tasks.movedBack": "Moved back to {target}",
   "tasks.moveBackFailed": "Some tasks could not be moved back.",

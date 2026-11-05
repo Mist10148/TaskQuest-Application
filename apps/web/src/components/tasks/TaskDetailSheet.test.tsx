@@ -131,4 +131,11 @@ describe("TaskDetailSheet", () => {
     expect(toasts.success).toHaveBeenCalledWith("Link copied");
     expect(taskLink({ id: 1, list_id: 2 }, "https://x.example")).toBe("https://x.example/tasks?list=2&task=1");
   });
+
+  it("duplicates from the drawer, but not for a viewer", async () => {
+    const onDuplicate = vi.fn();
+    renderSheet({}, { onDuplicate });
+    await userEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    expect(onDuplicate).toHaveBeenCalledWith(7);
+  });
 });

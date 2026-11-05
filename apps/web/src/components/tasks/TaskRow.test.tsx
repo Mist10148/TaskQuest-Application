@@ -94,6 +94,14 @@ describe("TaskRow details button", () => {
     expect(onDelete).toHaveBeenCalledWith(7);
   });
 
+  it("duplicates from the phone menu", async () => {
+    const onDuplicate = vi.fn();
+    renderRow({}, { onDuplicate });
+    await userEvent.click(screen.getByRole("button", { name: 'More actions for "Pay rent"' }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    expect(onDuplicate).toHaveBeenCalledWith(7);
+  });
+
   it("has no action menu for a viewer", () => {
     renderRow({}, { readOnly: true });
     expect(screen.queryByRole("button", { name: 'More actions for "Pay rent"' })).toBeNull();

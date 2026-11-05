@@ -52,6 +52,7 @@ interface Props {
   onSetPriority: (itemId: number, priority: Priority | null) => void;
   /** Move an open task's due date to tomorrow. */
   onSnooze?: (itemId: number) => void;
+  onDuplicate?: (itemId: number) => void;
   /** A shared quest's owner and members, for assigning tasks (absent on a quest nobody shares). */
   assignOptions?: ReadonlyArray<{ memberKey: string; name: string | null; isYou: boolean }>;
   onAssign?: (itemId: number, memberKey: string | null) => void | Promise<unknown>;
@@ -78,7 +79,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 /** One quest: header, progress bar, quick add and its tasks (subtasks sit under their parent). */
-export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, onSnooze, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
+export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAddPending, hiddenIds, onBack, onOpenMembers, onAddItem, onQuickAdd, onEditList, onSaveTemplate, onDeleteList, onToggleItem, onEditItem, onSetPriority, onSnooze, onDuplicate, assignOptions, onAssign, moveTargets, onMove, onDeleteItem, onBulkComplete, onBulkDelete, onBulkEdit, onReorder }: Props) => {
   const role = roleOf(list);
   const editable = canEditTasks(role);
   const manageable = canManageList(role);
@@ -274,6 +275,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         focused={view === "list" && cursorId === item.id}
         onAddSubtask={(id) => onAddItem(id)}
         onSnooze={onSnooze}
+        onDuplicate={editable ? onDuplicate : undefined}
         onMove={reorderable ? (id, dir) => move(id, dir, siblings) : undefined}
         canMoveUp={index > 0}
         canMoveDown={index < siblings.length - 1}
@@ -532,6 +534,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
         onMove={onMove ? (id, listId) => { setDetailId(null); void onMove([id], listId); } : undefined}
         onDelete={(id) => { setDetailId(null); onDeleteItem(id); }}
         onSnooze={onSnooze}
+        onDuplicate={editable ? onDuplicate : undefined}
         onAddSubtask={(id) => { setDetailId(null); onAddItem(id); }}
         showThread
       />

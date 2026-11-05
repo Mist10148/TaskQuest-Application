@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, canSnoozeTo, compareDeadlines, daysBetween, formatDayLabel, formatDeadline, formatDue, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
+import { addDays, calendarNames, canSnoozeTo, compareDeadlines, daysBetween, formatDayLabel, formatDeadline, formatDue, isPastDeadline, localToday, quickDueDates, setUserZone } from "./dates";
 
 describe("deadline helpers", () => {
   it("does not treat a list due today as overdue", () => {
@@ -91,5 +91,13 @@ describe("canSnoozeTo", () => {
     expect(canSnoozeTo("2030-01-05", "2030-01-05")).toBe(true);
     expect(canSnoozeTo("2030-01-01", "2030-01-05")).toBe(true);
     expect(canSnoozeTo("2030-01-06", "2030-01-05")).toBe(false);
+  });
+});
+
+describe("calendarNames", () => {
+  it("starts the week on Monday and names the months, in English by default", () => {
+    const { weekdays, months } = calendarNames("en");
+    expect(weekdays).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect([months[0], months[11]]).toEqual(["January", "December"]);
   });
 });

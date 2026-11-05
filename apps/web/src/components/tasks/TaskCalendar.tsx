@@ -3,10 +3,11 @@ import { ChevronLeft, ChevronRight, Check, Circle, Plus } from "lucide-react";
 import type { Item } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { calendarKeyTarget, monthGrid, shiftMonth, tasksByDate } from "@/lib/taskViews";
-import { formatDayLabel } from "@/lib/dates";
+import { calendarNames, formatDayLabel } from "@/lib/dates";
 import { useLocalToday } from "@/hooks/useLocalToday";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+import { useLocale } from "@/contexts/PreferencesContext";
 
 interface Props {
   items: readonly Item[];
@@ -17,12 +18,11 @@ interface Props {
   onAddOnDate?: (date: string) => void;
 }
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
 /** A month grid of the quest's due dates. Pick a day to see (and tick off) its tasks below the grid. */
 export const TaskCalendar = ({ items, readOnly, onToggle, onEdit, onAddOnDate }: Props) => {
   const t = useT();
+  const locale = useLocale();
+  const { weekdays: WEEKDAYS, months: MONTHS } = useMemo(() => calendarNames(locale), [locale]);
   const today = useLocalToday();
   const monthOf = (date: string) => ({ year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) });
   const [view, setView] = useState(() => monthOf(today));

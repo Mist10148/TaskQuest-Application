@@ -133,3 +133,13 @@ export function formatDue(due: string | null | undefined, today: string = localT
   if (days < -1 && days > -7) return `${-days} days ago`;
   return formatDeadline(due, today);
 }
+
+/** Monday-first short weekday names and full month names in the player's language (2024-01-01 was a Monday). */
+export function calendarNames(locale: string): { weekdays: string[]; months: string[] } {
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
+  const month = new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" });
+  return {
+    weekdays: Array.from({ length: 7 }, (_, i) => weekday.format(new Date(Date.UTC(2024, 0, 1 + i)))),
+    months: Array.from({ length: 12 }, (_, i) => month.format(new Date(Date.UTC(2024, i, 1)))),
+  };
+}

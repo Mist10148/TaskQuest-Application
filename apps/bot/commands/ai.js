@@ -210,10 +210,11 @@ async function forget(interaction) {
 async function aiFormat(interaction) {
     try {
         const format = interaction.options.getString('format');
+        // Answer Discord first: a slow database must not run past its 3 second limit after the format is saved.
+        await interaction.deferReply(EPHEMERAL);
         await users.setAiChatFormat(interaction.user.id, format);
-        await interaction.reply({
-            embeds: [ui.success('Saved', format === 'embed' ? 'I will reply with embeds.' : 'I will reply with plain messages.')],
-            ...EPHEMERAL
+        await interaction.editReply({
+            embeds: [ui.success('Saved', format === 'embed' ? 'I will reply with embeds.' : 'I will reply with plain messages.')]
         });
     } catch (err) {
         await handleError(interaction, err);

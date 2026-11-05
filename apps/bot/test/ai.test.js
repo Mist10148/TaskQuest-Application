@@ -386,6 +386,8 @@ test('/forget wipes this channel and /ai-format saves the style', async () => {
     const f = fake({ options: { format: 'embed' } });
     await aiCommands.aiFormat(f);
     assert.deepEqual(saved, [['42', 'embed']]);
+    assert.equal(f.sent[0].type, 'deferReply', 'acknowledged before the write');
+    assert.match(lastEdit(f).embeds[0].description, /embeds/);
 });
 
 test('AI embeds make task names, links and mentions in model text inert', () => {

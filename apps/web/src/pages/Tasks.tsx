@@ -268,8 +268,9 @@ const Tasks = () => {
       for (const id of finished) await itemsApi.toggle(id, false).catch(() => (failed = true));
       if (failed) toast.error(t("tasks.reopenFailed"));
       refetchList();
-      // Quests, the weekly review, Today, the party and the profile totals count finished tasks too.
-      qc.invalidateQueries({ queryKey: ["lists"] });
+      // Quests, the weekly review, Today, the party and the profile totals count finished tasks too, and each task's history
+      // in the details drawer now has a reopen.
+      invalidateTaskViews(qc);
       invalidateProgress(qc);
     };
     const doneText = done === 1 ? t("tasks.doneOne") : t("tasks.doneMany", { count: done });

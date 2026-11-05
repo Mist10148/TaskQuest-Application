@@ -124,6 +124,9 @@ const Dashboard = () => {
           </motion.div>
         </div>
 
+        {today.isError && !today.data && (
+          <ErrorCard what="your streak and today's tasks" error={today.error} onRetry={() => void today.refetch()} retrying={today.isFetching} />
+        )}
         {today.data && <StreakStrip day={today.data.day} live={today.data.streak.live} claimedToday={today.data.streak.claimedToday} />}
         {xpEnabled && today.data?.streak.atRisk && <StreakAtRisk live={today.data.streak.live} expiresAt={today.data.streak.expiresAt} frozen={today.data.streak.frozen} />}
 

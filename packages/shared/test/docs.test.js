@@ -182,9 +182,10 @@ test('GAMEPLAY §5b quest tables match QUESTS (period, target, reward)', () => {
     check('The quest tables', problems);
 });
 
-test('GAMEPLAY rotates four weekly quests by ISO week mod 4', () => {
+test('GAMEPLAY rotates four weekly quests one step a week, with no repeat over a week 53', () => {
     assert.equal(C.ROTATING_QUESTS.length, 4);
-    assert.match(text, /ISO week number mod 4/, `${DOC}: the rotation rule "ISO week number mod 4" is missing`);
+    assert.match(text, /pool of four is live each week \(it moves one step a week/, `${DOC}: the rotation rule "moves one step a week" is missing`);
+    assert.match(text, /ISO week 53 does not repeat/, `${DOC}: the week 53 note is missing`);
 });
 
 // ─── Achievements ─────────────────────────────────────────────────────────────

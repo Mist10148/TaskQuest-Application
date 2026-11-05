@@ -417,7 +417,7 @@ export const ListDetail = ({ list, openTaskId, onTaskOpened, aiEnabled, quickAdd
           <Button variant="outline" size="sm" className="mt-3" onClick={() => updatePrefs({ filter: DEFAULT_FILTER })}>Clear filters</Button>
         </div>
       ) : view === "board" ? (
-        <TaskBoard items={shownItems} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onSetPriority={onSetPriority} />
+        <TaskBoard items={shownItems} listPriority={list.priority} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onOpenDetails={setDetailId} onSetPriority={onSetPriority} />
       ) : view === "calendar" ? (
         <TaskCalendar items={shownItems} readOnly={!editable} onToggle={onToggleItem} onEdit={onEditItem} onAddOnDate={editable ? (date) => onAddItem(undefined, date) : undefined} />
       ) : (

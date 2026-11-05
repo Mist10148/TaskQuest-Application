@@ -30,6 +30,20 @@ describe("TaskBoard", () => {
     expect(screen.getByRole("button", { name: 'Mark "Task 1" done' })).toBeDisabled();
   });
 
+  it("lets a viewer open a card's details", async () => {
+    const onOpenDetails = vi.fn();
+    const onEdit = vi.fn();
+    render(<TaskBoard items={[item(1)]} readOnly onToggle={() => {}} onEdit={onEdit} onOpenDetails={onOpenDetails} />);
+    await userEvent.click(screen.getByRole("button", { name: "Task 1" }));
+    expect(onOpenDetails).toHaveBeenCalledWith(1);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it("marks a late open task as overdue", () => {
+    render(<TaskBoard items={[item(1, { due_date: "2000-01-01" }), item(2, { due_date: "2000-01-01", completed: true })]} onToggle={() => {}} onEdit={() => {}} />);
+    expect(screen.getAllByText("Overdue:")).toHaveLength(1);
+  });
+
   it("moves a card to another column with its priority menu", async () => {
     const onSetPriority = vi.fn();
     render(<TaskBoard items={[item(1, { priority: "LOW" })]} onToggle={() => {}} onEdit={() => {}} onSetPriority={onSetPriority} />);

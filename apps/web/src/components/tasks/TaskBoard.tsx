@@ -3,7 +3,7 @@ import { Check, Circle } from "lucide-react";
 import type { Item, Priority } from "@/lib/api";
 import { boardColumns, canMoveToColumn, columnPriority, effectivePriority, type BoardColumn } from "@/lib/taskViews";
 import { cn } from "@/lib/utils";
-import { formatDeadline, formatDue } from "@/lib/dates";
+import { formatDeadline, formatDue, isPastDeadline } from "@/lib/dates";
 
 interface Props {
   items: readonly Item[];
@@ -11,6 +11,8 @@ interface Props {
   readOnly?: boolean;
   onToggle: (itemId: number) => void;
   onEdit: (itemId: number) => void;
+  /** A viewer cannot edit, so the card's name opens the read-only details instead. */
+  onOpenDetails?: (itemId: number) => void;
   /** Moving a card to another column sets the task's priority. Without it the board is view-only. */
   onSetPriority?: (itemId: number, priority: Priority | null) => void;
 }
@@ -29,7 +31,7 @@ const DRAG_TYPE = "application/x-taskquest-item";
  * edit. Drag an open card to another column (or use its priority menu, which also works by keyboard and touch) to
  * change its priority.
  */
-export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onSetPriority }: Props) => {
+export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onOpenDetails, onSetPriority }: Props) => {
   const columns = boardColumns(items, listPriority);
   const movable = !readOnly && Boolean(onSetPriority);
   const [dragging, setDragging] = useState<Item | null>(null);
@@ -113,9 +115,22 @@ export const TaskBoard = ({ items, listPriority, readOnly, onToggle, onEdit, onS
                     >
                       {item.completed ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Circle className="h-4 w-4" aria-hidden />}
                     </button>
-                    <button type="button" onClick={() => onEdit(item.id)} disabled={readOnly} className="min-w-0 flex-1 text-left text-sm disabled:cursor-default">
+                    <button
+                      type="button"
+                      onClick={() => (readOnly ? onOpenDetails?.(item.id) : onEdit(item.id))}
+                      disabled={readOnly && !onOpenDetails}
+                      className="min-w-0 flex-1 text-left text-sm disabled:cursor-default"
+                    >
                       <span className={cn("line-clamp-2 break-words font-medium", item.completed && "line-through")}>{item.name}</span>
-                      {item.due_date && <span className="block text-xs text-foreground-muted" title={formatDeadline(item.due_date)}>{formatDue(item.due_date)}</span>}
+                      {item.due_date && (
+                        <span
+                          className={cn("block text-xs", !item.completed && isPastDeadline(item.due_date) ? "text-destructive-text" : "text-foreground-muted")}
+                          title={formatDeadline(item.due_date)}
+                        >
+                          {!item.completed && isPastDeadline(item.due_date) && <span className="sr-only">Overdue: </span>}
+                          {formatDue(item.due_date)}
+                        </span>
+                      )}
                     </button>
                     {canDrag && (
                       <select

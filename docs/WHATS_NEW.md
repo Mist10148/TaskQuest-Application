@@ -35,6 +35,17 @@ A player's view of what changed since the separate Discord bot (3.x) and web app
 - **A Focus link on each Today task,** counts on the achievement filters, keyboard navigation in the calendar (arrows, Home/End, PageUp/PageDown), and the Focus page says before you start when today's focus XP is already used up.
 - **Templates** show how many of your 20 you have saved.
 
+## Small helpers (November 2026, second pass)
+
+- **Undo more.** Snoozing a task and moving tasks to another quest both have **Undo** now.
+- **Sort a quest** by due date, priority or newest first.
+- **Duplicate** a task, and **Copy link** to send someone straight to it.
+- **Estimates in quick add:** `Write essay fri ~1h30m` sets a 90-minute estimate, on the web and in `/quick`.
+- **Today by keyboard:** `j` and `k` move, `x` completes, `z` snoozes.
+- **Needs doing today** on the dashboard, and **this week against last week** on Stats.
+- **Focus tells you when time is up,** even on another tab, if push notifications are on.
+- **Fixes you might have hit:** Snooze offered on a task due next week (it moved the date earlier); no streak warning while freezes were holding your streak; a quest and weekly modifier that would have repeated over New Year 2027; the board not showing overdue tasks; Today and Stats keeping the old day for a minute after a time zone change.
+
 ## Steadier and smoother (November 2026)
 
 - **Your streak freezes count.** When a freeze can still save your streak, Today, `/today` and your profile keep showing it, and Today says the freezes are holding it: claim to keep it.

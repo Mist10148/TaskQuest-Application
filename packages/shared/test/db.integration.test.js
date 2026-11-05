@@ -2712,8 +2712,9 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         assert.equal(find(kq, 'DAILY_COMPLETE_3').periodStart, '2030-06-03');
         assert.equal(find(pq, 'DAILY_COMPLETE_3').periodStart, '2030-06-02');
         assert.equal(find(kq, 'BOSS_COMPLETE_50').periodStart, '2030-06-01');
-        assert.ok(find(kq, 'WEEKLY_ROT_D') && !find(kq, 'WEEKLY_ROT_C'), 'ISO week 23 locally in Kiritimati');
-        assert.ok(find(pq, 'WEEKLY_ROT_C') && !find(pq, 'WEEKLY_ROT_D'), 'still ISO week 22 in Pago Pago');
+        // The rotation moves one step a week (a running count, not the ISO week number): week 232 is ROT_A, 231 ROT_D.
+        assert.ok(find(kq, 'WEEKLY_ROT_A') && !find(kq, 'WEEKLY_ROT_D'), 'the new week locally in Kiritimati');
+        assert.ok(find(pq, 'WEEKLY_ROT_D') && !find(pq, 'WEEKLY_ROT_A'), 'still the week before in Pago Pago');
         // Rolling over at local Monday: Pago Pago's week ends 06-03 11:00Z exactly.
         assert.equal(find(await db.quests.getQuests(PAGO, new Date('2030-06-03T10:59:59Z')), 'WEEKLY_COMPLETE_15').periodStart, '2030-05-27');
         const rolled = find(await db.quests.getQuests(PAGO, new Date('2030-06-03T11:00:00Z')), 'WEEKLY_COMPLETE_15');
@@ -3027,7 +3028,7 @@ test('database services', { skip: !enabled && 'set TEST_DB_NAME to run' }, async
         const withoutId = {
             tasks: ['getLists', 'createList', 'createListWithItems', 'searchLists', 'searchItems', 'search', 'SEARCH_LIMIT', 'getListsDueOn', 'getReminderCandidates', 'markReminderSent', 'getTaskReminderCandidates', 'markTaskReminderSent', 'markDeadlineNotified', 'cleanupOldLists', 'asOwner', 'completionContext', 'mayDelete'],
             templates: ['MAX_TEMPLATES', 'MAX_ITEMS', 'parseTemplateInput', 'listTemplates', 'createTemplate'],
-            transfer: ['LIMITS', 'exportAll', 'toCsv', 'importAll', 'parseImport', 'regenerateCalendarToken', 'getCalendarToken', 'clearCalendarToken', 'findUserByCalendarToken', 'getCalendarData'],
+            transfer: ['LIMITS', 'exportAll', 'toCsv', 'importAll', 'checkImport', 'parseImport', 'regenerateCalendarToken', 'getCalendarToken', 'clearCalendarToken', 'findUserByCalendarToken', 'getCalendarData'],
             quests: ['getQuests', 'claimQuest']
         };
         for (const mod of ['tasks', 'templates', 'transfer', 'quests']) {

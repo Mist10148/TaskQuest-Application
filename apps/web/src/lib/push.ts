@@ -82,13 +82,13 @@ export function shouldAnnounceResult(input: { hidden: boolean; permission: Notif
 }
 
 /**
- * Tell the player a slow AI result (a summary, a ranking) has arrived while they were on another tab. It is a local
+ * Tell the player a slow AI result (a summary, a ranking) has arrived, or a focus session has run out, while they were on another tab. It is a local
  * notification shown through the service worker that "Push notifications" in Settings registered, so it needs no server push:
  * the request is still running in this page, which is the only time it is useful. It never asks for permission and never shows
  * anything while the page is visible or when push was not turned on; it never throws.
  * @returns whether a notification was shown
  */
-export async function announceResult(message: { title: string; body: string }): Promise<boolean> {
+export async function announceResult(message: { title: string; body: string; tag?: string }): Promise<boolean> {
   try {
     if (typeof document === "undefined") return false;
     if (!shouldAnnounceResult({ hidden: document.visibilityState === "hidden", permission: currentPermission() })) return false;
@@ -97,7 +97,7 @@ export async function announceResult(message: { title: string; body: string }): 
     await registration.showNotification(message.title.slice(0, 100), {
       body: message.body.slice(0, 300),
       icon: "/taskquest-icon.svg",
-      tag: "ai-result", // a second result replaces the first instead of stacking
+      tag: message.tag ?? "ai-result", // a second result replaces the first instead of stacking
       data: { url: window.location.href }, // absolute and ours: the service worker only opens pages of this origin
     });
     return true;

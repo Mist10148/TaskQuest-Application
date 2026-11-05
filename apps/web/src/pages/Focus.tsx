@@ -12,6 +12,7 @@ import { useFinishFocus, useFocus, useParty, useStartFocus, useToday, useToggleI
 import { idFromParam } from "@/lib/sharing";
 import { FOCUS_PRESETS, canFinish, focusTitle, formatClock, minutesUntilPayable, parseMinutes, remainingMs } from "@/lib/focus";
 import { playSound } from "@/lib/sound";
+import { announceResult } from "@/lib/push";
 import { cn } from "@/lib/utils";
 
 const Meter = ({ label, value, max }: { label: string; value: number; max: number }) => {
@@ -161,8 +162,10 @@ const Running = ({ active, status, onFinish, finishing }: { active: FocusActive;
       wasRunning.current = false;
       playSound("win");
       finishRef.current?.focus();
+      // On another tab the chime is easy to miss: a notification (only when push is on and the tab is hidden).
+      void announceResult({ title: "Time's up!", body: `Your ${active.minutes} minute focus session is done. Finish it to collect your XP.`, tag: "focus-done" });
     }
-  }, [left]);
+  }, [left, active.minutes]);
 
   const run = () => onFinish(active.sessionId);
   const waitMinutes = minutesUntilPayable(startedAt, now, status.config.minMinutes);

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -16,6 +16,8 @@ const hooks = vi.hoisted(() => ({
 vi.mock("@/hooks/useApi", () => hooks);
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/lib/sound", () => ({ playSound: vi.fn() }));
+const push = vi.hoisted(() => ({ announceResult: vi.fn(async () => true) }));
+vi.mock("@/lib/push", () => push);
 
 import Focus from "./Focus";
 
@@ -71,6 +73,21 @@ describe("Focus page", () => {
     expect(screen.getByRole("button", { name: "25 min" })).toBeDisabled();
     expect(screen.getByText(/You finished all 6 sessions for today/)).toBeInTheDocument();
     expect(screen.queryByText(/You have earned today's/)).toBeNull();
+  });
+
+  it("sends a notice when the time runs out (shown only on another tab with push on)", () => {
+    vi.useFakeTimers();
+    try {
+      const startedAt = new Date(Date.now() - 24 * 60_000 - 58_000).toISOString();
+      const endsAt = new Date(Date.now() + 2_000).toISOString();
+      load(status({ active: { sessionId: 3, startedAt, minutes: 25, endsAt } }));
+      show();
+      expect(push.announceResult).not.toHaveBeenCalled();
+      act(() => void vi.advanceTimersByTime(3_000));
+      expect(push.announceResult).toHaveBeenCalledWith(expect.objectContaining({ title: "Time's up!", tag: "focus-done" }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("puts the countdown in the tab title once, without repeating Focus", () => {

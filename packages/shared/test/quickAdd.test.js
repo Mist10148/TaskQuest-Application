@@ -27,12 +27,16 @@ const CASES = [
     ['Just a plain task', { name: 'Just a plain task', due_date: null, priority: null, tags: [], recurrence: null }],
     ['!high', { name: '', due_date: null, priority: 'HIGH', tags: [], recurrence: null }],
     ['  spaced   out   tomorrow  ', { name: 'spaced out', due_date: '2030-03-14', priority: null, tags: [], recurrence: null }],
-    ['Email Sam tomorrow, then friday', { name: 'Email Sam then friday', due_date: '2030-03-14', priority: null, tags: [], recurrence: null }]
+    ['Email Sam tomorrow, then friday', { name: 'Email Sam then friday', due_date: '2030-03-14', priority: null, tags: [], recurrence: null }],
+    ['Read chapter ~30m fri', { name: 'Read chapter', due_date: '2030-03-15', priority: null, tags: [], recurrence: null, estimate_minutes: 30 }],
+    ['Write essay ~1h30m !high', { name: 'Write essay', due_date: null, priority: 'HIGH', tags: [], recurrence: null, estimate_minutes: 90 }],
+    ['Clean garage ~1.5h', { name: 'Clean garage', due_date: null, priority: null, tags: [], recurrence: null, estimate_minutes: 90 }],
+    ['Sleep ~11h ~0m', { name: 'Sleep ~11h ~0m', due_date: null, priority: null, tags: [], recurrence: null }] // over 10 hours, and zero
 ];
 
 for (const [input, expected] of CASES) {
     test(`quick add: ${JSON.stringify(input)}`, () => {
-        assert.deepEqual(parse(input), expected);
+        assert.deepEqual(parse(input), { estimate_minutes: null, ...expected });
     });
 }
 

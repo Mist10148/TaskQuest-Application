@@ -1,5 +1,5 @@
 import { forwardRef, useState } from "react";
-import { Calendar, Loader2, Repeat, Sparkles, Zap } from "lucide-react";
+import { Calendar, Loader2, Repeat, Sparkles, Timer, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ interface Props {
 export const QuickAddBar = forwardRef<HTMLInputElement, Props>(({ pending, aiEnabled, onAdd }, ref) => {
   const [text, setText] = useState("");
   const parsed = parseQuickAdd(text, localToday());
-  const understood = parsed.due_date || parsed.priority || parsed.tags.length > 0 || parsed.recurrence;
+  const understood = parsed.due_date || parsed.priority || parsed.tags.length > 0 || parsed.recurrence || parsed.estimate_minutes;
 
   const submit = async () => {
     if (!parsed.name || pending) return;
@@ -68,6 +68,7 @@ export const QuickAddBar = forwardRef<HTMLInputElement, Props>(({ pending, aiEna
             {parsed.due_date && <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" aria-hidden /> {formatDeadline(parsed.due_date)}</span>}
             {parsed.priority && <span>❗ {parsed.priority.toLowerCase()}</span>}
             {parsed.recurrence && <span className="inline-flex items-center gap-1"><Repeat className="h-3 w-3" aria-hidden /> {parsed.recurrence}</span>}
+            {parsed.estimate_minutes && <span className="inline-flex items-center gap-1"><Timer className="h-3 w-3" aria-hidden /> {parsed.estimate_minutes} min</span>}
             {parsed.tags.map((t) => <span key={t} className="text-primary-text">#{t}</span>)}
           </p>
         )}

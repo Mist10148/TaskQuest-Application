@@ -25,11 +25,15 @@ const CASES: Array<[string, Record<string, unknown>]> = [
   ["!high", { ...none, name: "", priority: "HIGH" }],
   ["  spaced   out   tomorrow  ", { ...none, name: "spaced out", due_date: "2030-03-14" }],
   ["Email Sam tomorrow, then friday", { ...none, name: "Email Sam then friday", due_date: "2030-03-14" }],
+  ["Read chapter ~30m fri", { ...none, name: "Read chapter", due_date: "2030-03-15", estimate_minutes: 30 }],
+  ["Write essay ~1h30m !high", { ...none, name: "Write essay", priority: "HIGH", estimate_minutes: 90 }],
+  ["Clean garage ~1.5h", { ...none, name: "Clean garage", estimate_minutes: 90 }],
+  ["Sleep ~11h ~0m", { ...none, name: "Sleep ~11h ~0m" }],
 ];
 
 describe("parseQuickAdd", () => {
   it.each(CASES)("%s", (input, expected) => {
-    expect(parseQuickAdd(input, TODAY)).toEqual(expected);
+    expect(parseQuickAdd(input, TODAY)).toEqual({ estimate_minutes: null, ...expected });
   });
 
   it("keeps at most five tags and ignores a second priority", () => {

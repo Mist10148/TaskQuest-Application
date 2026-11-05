@@ -19,7 +19,7 @@ const safe = (name) => escapeDiscord(name, { max: 200 });
 
 const data = new SlashCommandBuilder()
     .setName('quick')
-    .setDescription('⚡ Add a task from one line: dates, !priority, #tags and repeats are understood')
+    .setDescription('⚡ Add a task from one line: dates, !priority, #tags, repeats and ~estimates are understood')
     .addStringOption((o) => o.setName('text').setDescription('e.g. Finish report fri !high #work every week').setRequired(true).setMaxLength(300))
     .addStringOption((o) => o.setName('list').setDescription('The list to add it to').setRequired(true).setAutocomplete(true));
 
@@ -40,7 +40,8 @@ async function execute(interaction) {
             due_date: parsed.due_date,
             priority: parsed.priority,
             tags: parsed.tags,
-            recurrence: parsed.recurrence
+            recurrence: parsed.recurrence,
+            estimate_minutes: parsed.estimate_minutes
         });
         aiSync.reindex(userId, list.id);
 
@@ -48,7 +49,8 @@ async function execute(interaction) {
             parsed.due_date ? `📅 ${formatDeadline(parsed.due_date, today)}` : null,
             parsed.priority ? `❗ ${parsed.priority.toLowerCase()}` : null,
             parsed.tags.length ? parsed.tags.map((t) => `#${t}`).join(' ') : null,
-            parsed.recurrence ? `🔁 ${parsed.recurrence}` : null
+            parsed.recurrence ? `🔁 ${parsed.recurrence}` : null,
+            parsed.estimate_minutes ? `⏱️ ${parsed.estimate_minutes} min` : null
         ].filter(Boolean);
         await interaction.editReply({ embeds: [ui.success('Task added', `**${safe(result.item.name)}** in **${safe(list.name)}**${details.length ? `\n${details.join(' · ')}` : ''}`)] });
         await sendRewards(interaction, result);

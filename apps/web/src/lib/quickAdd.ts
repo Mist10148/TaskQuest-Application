@@ -6,6 +6,7 @@
  *   priority    !high !h  !medium !med !m  !low !l
  *   tags        #work #home (up to 5)
  *   repeat      daily, every day, weekly, every week, monthly, every month
+ *   estimate    ~30m ~1h ~1h30m ~1.5h (1 minute to 10 hours)
  *
  * Mirrors packages/shared/src/quickAdd.js (used by the Discord bot); both are
  * tested against the same examples.
@@ -19,6 +20,7 @@ export interface QuickAddResult {
   priority: Priority | null;
   tags: string[];
   recurrence: Recurrence | null;
+  estimate_minutes: number | null;
 }
 
 // Only whole words count ("sun" and "sat" are left alone: "buy sun cream" is not a date).
@@ -34,6 +36,17 @@ const MONTHS: Record<string, number> = {
 const PRIORITIES: Record<string, Priority> = { h: "HIGH", high: "HIGH", m: "MEDIUM", med: "MEDIUM", medium: "MEDIUM", l: "LOW", low: "LOW" };
 const REPEATS: Record<string, Recurrence> = { daily: "daily", weekly: "weekly", monthly: "monthly" };
 const EVERY: Record<string, Recurrence> = { day: "daily", week: "weekly", month: "monthly" };
+
+/** The most a quick-add estimate may be, as on the server (LIMITS.ESTIMATE_MAX_MINUTES). */
+const ESTIMATE_MAX_MINUTES = 600;
+
+/** "~30m", "~2h", "~1h30m" or "~1.5h" in minutes, or null when the word is not an estimate (or out of range). */
+export function parseEstimate(word: string): number | null {
+  const m = /^~(?:(\d{1,2}(?:\.\d)?)h)?(?:(\d{1,3})m)?$/.exec(word);
+  if (!m || (m[1] === undefined && m[2] === undefined)) return null;
+  const minutes = Math.round(Number(m[1] ?? 0) * 60) + Number(m[2] ?? 0);
+  return minutes >= 1 && minutes <= ESTIMATE_MAX_MINUTES ? minutes : null;
+}
 
 const has = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -63,7 +76,7 @@ export function parseQuickAdd(input: string, today: string): QuickAddResult {
   const base = new Date(`${today}T00:00:00Z`);
   const words = String(input || "").trim().split(/\s+/).filter(Boolean);
   const keep: string[] = [];
-  const out: QuickAddResult = { name: "", due_date: null, priority: null, tags: [], recurrence: null };
+  const out: QuickAddResult = { name: "", due_date: null, priority: null, tags: [], recurrence: null, estimate_minutes: null };
 
   for (let i = 0; i < words.length; i++) {
     const raw = words[i];
@@ -74,6 +87,13 @@ export function parseQuickAdd(input: string, today: string): QuickAddResult {
     if (/^!(high|h|medium|med|m|low|l)$/.test(w) && !out.priority) {
       out.priority = PRIORITIES[w.slice(1)];
       continue;
+    }
+    if (out.estimate_minutes === null && w.startsWith("~")) {
+      const minutes = parseEstimate(w);
+      if (minutes !== null) {
+        out.estimate_minutes = minutes;
+        continue;
+      }
     }
     if (/^#[\p{L}\p{N}_-]{1,20}$/u.test(w) && out.tags.length < 5) {
       const tag = w.slice(1);

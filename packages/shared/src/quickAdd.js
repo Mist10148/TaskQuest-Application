@@ -6,12 +6,15 @@
  *   priority    !high !h  !medium !med !m  !low !l
  *   tags        #work #home (up to 5)
  *   repeat      daily, every day, weekly, every week, monthly, every month
+ *   estimate    ~30m ~1h ~1h30m ~1.5h (1 minute to 10 hours)
  *
  * A copy lives in apps/web/src/lib/quickAdd.ts (the browser cannot load this CommonJS file);
  * both are tested against the same examples.
  */
 
 'use strict';
+
+const { LIMITS } = require('./constants');
 
 // Only whole words count ("sun" and "sat" are left alone: "buy sun cream" is not a date).
 const WEEKDAYS = {
@@ -28,6 +31,14 @@ const REPEATS = { daily: 'daily', weekly: 'weekly', monthly: 'monthly' };
 const EVERY = { day: 'daily', week: 'weekly', month: 'monthly' };
 
 const pad = (n) => String(n).padStart(2, '0');
+
+/** "~30m", "~2h", "~1h30m" or "~1.5h" in minutes, or null when the word is not an estimate (or out of range). */
+function parseEstimate(word) {
+    const m = /^~(?:(\d{1,2}(?:\.\d)?)h)?(?:(\d{1,3})m)?$/.exec(word);
+    if (!m || (m[1] === undefined && m[2] === undefined)) return null;
+    const minutes = Math.round(Number(m[1] ?? 0) * 60) + Number(m[2] ?? 0);
+    return minutes >= 1 && minutes <= LIMITS.ESTIMATE_MAX_MINUTES ? minutes : null;
+}
 const ymd = (date) => `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 const addDays = (date, n) => new Date(date.getTime() + n * 86400e3);
 
@@ -40,13 +51,13 @@ function realDate(y, m, d) {
 /**
  * @param {string} input
  * @param {string} today  YYYY-MM-DD "today" for the person typing (their own time zone)
- * @returns {{ name: string, due_date: string|null, priority: string|null, tags: string[], recurrence: string|null }}
+ * @returns {{ name: string, due_date: string|null, priority: string|null, tags: string[], recurrence: string|null, estimate_minutes: number|null }}
  */
 function parseQuickAdd(input, today) {
     const base = new Date(`${today}T00:00:00Z`);
     const words = String(input || '').trim().split(/\s+/).filter(Boolean);
     const keep = [];
-    const out = { name: '', due_date: null, priority: null, tags: [], recurrence: null };
+    const out = { name: '', due_date: null, priority: null, tags: [], recurrence: null, estimate_minutes: null };
 
     for (let i = 0; i < words.length; i++) {
         const raw = words[i];
@@ -57,6 +68,13 @@ function parseQuickAdd(input, today) {
         if (/^!(high|h|medium|med|m|low|l)$/.test(w) && !out.priority) {
             out.priority = PRIORITIES[w.slice(1)];
             continue;
+        }
+        if (out.estimate_minutes === null && w.startsWith('~')) {
+            const minutes = parseEstimate(w);
+            if (minutes !== null) {
+                out.estimate_minutes = minutes;
+                continue;
+            }
         }
         if (/^#[\p{L}\p{N}_-]{1,20}$/u.test(w) && out.tags.length < 5) {
             const tag = w.slice(1);
@@ -118,4 +136,4 @@ function monthDay(base, month, day) {
     return null;
 }
 
-module.exports = { parseQuickAdd };
+module.exports = { parseQuickAdd, parseEstimate };

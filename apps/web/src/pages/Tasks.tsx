@@ -219,7 +219,7 @@ const Tasks = () => {
   const handleQuickAdd = async (parsed: QuickAddResult): Promise<boolean> => {
     if (!selectedListId) return false;
     try {
-      await createItem.mutateAsync({ listId: selectedListId, name: parsed.name, due_date: parsed.due_date, priority: parsed.priority, tags: parsed.tags, recurrence: parsed.recurrence });
+      await createItem.mutateAsync({ listId: selectedListId, name: parsed.name, due_date: parsed.due_date, priority: parsed.priority, tags: parsed.tags, recurrence: parsed.recurrence, estimate_minutes: parsed.estimate_minutes });
       refetchList();
       return true;
     } catch {

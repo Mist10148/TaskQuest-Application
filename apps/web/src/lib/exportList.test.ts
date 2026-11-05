@@ -24,6 +24,7 @@ describe("listToCsv", () => {
   it("defuses formulas and quotes what needs quoting, like the server", () => {
     expect(csvCell("=SUM(A1)")).toBe("'=SUM(A1)");
     expect(csvCell('say "hi", ok')).toBe('"say ""hi"", ok"');
+    expect(csvCell("''=x")).toBe("'''=x"); // the import takes exactly one apostrophe off again
     expect(csvCell(null)).toBe("");
   });
 });

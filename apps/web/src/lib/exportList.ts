@@ -10,7 +10,7 @@ const CSV_HEADER = ["list", "task", "subtask_of", "done", "due_date", "priority"
 /** Like the server's export: a cell a spreadsheet could run as a formula gets a leading apostrophe (the importer takes it off). */
 export function csvCell(value: unknown): string {
   let s = value === null || value === undefined ? "" : String(value);
-  if (/^'?[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (/^'*[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

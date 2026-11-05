@@ -133,7 +133,9 @@ test('toCsv and csvToImport round-trip names that start with an apostrophe, and 
             name: 'L', description: null, category: null, priority: null, deadline: null,
             items: [
                 { id: 1, parent_id: null, name: "'=x", description: 'a note, with comma', completed: false, due_date: null, priority: null, tags: null, recurrence: null },
-                { id: 2, parent_id: null, name: '=SUM(1)', description: null, completed: false, due_date: null, priority: null, tags: null, recurrence: null }
+                { id: 2, parent_id: null, name: '=SUM(1)', description: null, completed: false, due_date: null, priority: null, tags: null, recurrence: null },
+                { id: 3, parent_id: null, name: "''=x", description: null, completed: false, due_date: null, priority: null, tags: null, recurrence: null },
+                { id: 4, parent_id: null, name: "'''+y", description: null, completed: false, due_date: null, priority: null, tags: null, recurrence: null }
             ]
         }]
     };
@@ -143,4 +145,6 @@ test('toCsv and csvToImport round-trip names that start with an apostrophe, and 
     assert.equal(items[0].name, "'=x");
     assert.equal(items[0].description, 'a note, with comma');
     assert.equal(items[1].name, '=SUM(1)');
+    assert.equal(items[2].name, "''=x", 'any number of apostrophes survives the round trip');
+    assert.equal(items[3].name, "'''+y");
 });

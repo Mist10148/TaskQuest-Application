@@ -66,11 +66,11 @@ async function exportAll(discordId) {
 
 /**
  * A cell that a spreadsheet could execute as a formula gets a leading apostrophe. So does one that already starts
- * with an apostrophe before such a character, because the importer strips exactly one apostrophe there.
+ * with apostrophes before such a character, because the importer strips exactly one apostrophe there.
  */
 function csvCell(value) {
     let s = value === null || value === undefined ? '' : String(value);
-    if (/^'?[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    if (/^'*[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
